@@ -4,20 +4,13 @@
 #![feature(trivial_bounds)]
 #![feature(trait_alias)]
 
-use std::{
-    collections::HashMap,
-    fs::File,
-    sync::{Arc, Mutex},
-};
+use std::{cell::RefCell, collections::HashMap, fs::File, rc::Rc, sync::Arc};
 
 use cgmath::{point3, Rad};
 
 use registry::init::InitData;
 
-use game::{
-    player::control::{MainClickListener, MainHoldListener, MainMoveListener},
-    render::data::{UniformBufferObject, Vertex},
-};
+use game::render::data::{UniformBufferObject, Vertex};
 use tokio::{
     sync::OnceCell,
     time::{self, Instant, Interval},
@@ -85,9 +78,7 @@ async fn load_resources() -> Vec<(&'static str, Resource)> {
 }
 
 fn render(
-    game: &Game,
-    player: &Player,
-    camera: &Arc<Mutex<Camera>>,
+    game: &mut Game,
     device: &Arc<Device>,
     queue: &Arc<Queue>,
     surface: &Surface<Window>,
@@ -157,7 +148,7 @@ fn render(
         queue.clone(),
     );
 
-    let camera = camera.lock().unwrap();
+    let camera = game.player.camera.borrow();
 
     let ubo = UniformBufferObject {
         view: camera.view().into(),
@@ -227,9 +218,7 @@ fn render(
 }
 
 fn handle_window(
-    game: &Game,
-    player: &Player,
-    camera: &Arc<Mutex<Camera>>,
+    game: &mut Game,
     event: Event<()>,
     control_flow: &mut ControlFlow,
     device: &Arc<Device>,
@@ -247,9 +236,6 @@ fn handle_window(
     uniform_buffers: &mut Vec<Arc<CpuAccessibleBuffer<UniformBufferObject>>>,
     instance_buffer: &[InstanceData],
     init_data: &mut InitData,
-    main_hold_listeners: &mut Vec<Arc<Mutex<dyn MainHoldListener>>>,
-    main_click_listeners: &mut Vec<Arc<Mutex<dyn MainClickListener>>>,
-    main_move_listeners: &mut Vec<Arc<Mutex<dyn MainMoveListener>>>,
 ) {
     let mut window_event = None;
     let mut device_event = None;
@@ -269,8 +255,6 @@ fn handle_window(
         }
         Event::RedrawEventsCleared => render(
             game,
-            player,
-            camera,
             device,
             queue,
             surface,
@@ -296,14 +280,7 @@ fn handle_window(
         _ => (),
     };
 
-    game.window_event(
-        window_event,
-        device_event,
-        init_data,
-        main_hold_listeners,
-        main_click_listeners,
-        main_move_listeners,
-    );
+    game.window_event(window_event, device_event);
 }
 
 pub async fn main_game_tick(game_time: Instant) {
@@ -356,22 +333,7 @@ async fn main() {
     // --- resources & data ---
 
     let resources = load_resources().await;
-
     let mut init_data = InitData::new(resources);
-
-    let mut id_pool: IdPool = IdPool::default();
-    id_pool.data[0] = Id::new("automancy".to_string(), "uwu".to_string());
-
-    let chunk = Chunk {
-        chunk_pos: Pos(0, 0),
-        data_pool: DataPool::default(),
-        id_pool,
-        tiles: Tiles::default(),
-    };
-
-    chunk.unload();
-
-    let chunk = Chunk::load(Pos(0, 0));
 
     // --- instance ---
     let required_extensions = vulkano_win::required_extensions();
@@ -522,23 +484,20 @@ async fn main() {
     // --- loop ---
 
     // game
-    let pos = Arc::new(Mutex::new(point3(0.0, 0.0, 1.0)));
+    let pos = Rc::new(RefCell::new(point3(0.0, 0.0, 1.0)));
 
-    let mut player = Player { pos: pos.clone() };
-
-    let mut camera = Arc::new(Mutex::new(Camera {
+    let camera = Rc::new(RefCell::new(Camera {
         pos: pos.clone(),
         rotation: Rad(0.0),
         holding_main: false,
     }));
 
-    let game = Game {
-        loaded_chunks: HashMap::new(),
-    };
+    let player = Player::new(pos.clone(), camera.clone());
 
-    let mut main_hold_listeners: Vec<Arc<Mutex<dyn MainHoldListener>>> = vec![camera.clone()];
-    let mut main_click_listeners: Vec<Arc<Mutex<dyn MainClickListener>>> = vec![];
-    let mut main_move_listeners: Vec<Arc<Mutex<dyn MainMoveListener>>> = vec![camera.clone()];
+    let mut game = Game {
+        loaded_chunks: HashMap::new(),
+        player,
+    };
 
     tokio::spawn(async {
         let mut game_ticker = time::interval(TICK_INTERVAL);
@@ -566,9 +525,7 @@ async fn main() {
         ];
 
         handle_window(
-            &game,
-            &player,
-            &camera.clone(),
+            &mut game,
             event,
             control_flow,
             &device,
@@ -586,9 +543,6 @@ async fn main() {
             &mut uniform_buffers,
             &instance_buffer,
             &mut init_data,
-            &mut main_hold_listeners,
-            &mut main_click_listeners,
-            &mut main_move_listeners,
         );
     });
 }

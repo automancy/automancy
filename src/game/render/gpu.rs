@@ -1,12 +1,8 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::sync::Arc;
 
 use vulkano::{
     buffer::{BufferContents, BufferUsage, CpuAccessibleBuffer, ImmutableBuffer},
     command_buffer::DrawIndexedIndirectCommand,
-    descriptor_set::layout::{
-        DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo,
-        DescriptorType,
-    },
     device::{
         physical::{PhysicalDevice, PhysicalDeviceType, QueueFamily},
         Device, DeviceExtensions, Queue,
@@ -20,8 +16,7 @@ use vulkano::{
             vertex_input::BuffersDefinition,
             viewport::{Viewport, ViewportState},
         },
-        layout::PipelineLayoutCreateInfo,
-        GraphicsPipeline, PipelineLayout,
+        GraphicsPipeline,
     },
     render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass, Subpass},
     shader::ShaderModule,

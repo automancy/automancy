@@ -4,7 +4,7 @@ use bytemuck::{Pod, Zeroable};
 use ply_rs::ply::{Property, PropertyAccess};
 use vulkano::impl_vertex;
 
-use crate::math::data::{Matrix4, Num, Vector2};
+use crate::math::data::{Num, Vector2};
 
 fn color_to_f32(color: u8) -> f32 {
     color as f32 / 255.0
