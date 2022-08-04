@@ -20,15 +20,35 @@ macro_rules! impl_cmp {
     };
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Id {
     pub namespace: String,
     pub name: String,
 }
 
+impl Default for Id {
+    fn default() -> Self {
+        Self::none()
+    }
+}
+
 impl Id {
+    pub fn none() -> Self {
+        Self::new("automancy".to_string(), "none".to_string())
+    }
+
     pub fn automancy(name: String) -> Self {
         Self::new("automancy".to_string(), name)
+    }
+
+    pub fn from_str(string: &str) -> Self {
+        let (namespace, name) = string.split_once(':').expect("invalid id");
+        let (namespace, name) = (namespace.to_string(), name.to_string());
+
+        assert!(!namespace.contains(':'));
+        assert!(!name.contains(':'));
+
+        Self { namespace, name }
     }
 
     pub fn new(namespace: String, name: String) -> Self {

@@ -1,14 +1,19 @@
-use std::{fs, io};
+use std::{fs::File, io::BufReader, path::PathBuf};
 
+use json::JsonValue;
 use ply_rs::parser::Parser;
 
-use crate::game::render::data::{Face, Model, Vertex};
+use crate::game::{
+    data::id::Id,
+    render::data::{Face, Model, Vertex},
+};
 
 #[derive(Clone, Debug)]
 pub struct Resource {
     registry_index: Option<usize>,
 
-    pub mesh: Model,
+    pub id: Id,
+    pub model: Option<Model>,
 }
 
 impl Resource {
@@ -17,39 +22,49 @@ impl Resource {
     }
 }
 
-pub async fn load_resource(path: &str) -> Resource {
-    log::info!("loading resource at {}", path);
+// TODO do not panic
+pub async fn load_resource(json: JsonValue, path: &PathBuf) -> Resource {
+    let parent = path.parent().unwrap();
 
-    let file = fs::File::open(path).unwrap();
-    let mut file = io::BufReader::new(file);
+    let id = Id::from_str(json["id"].as_str().expect("found no id"));
 
-    let vertex_parser = Parser::<Vertex>::new();
-    let face_parser = Parser::<Face>::new();
+    let model;
 
-    let header = vertex_parser.read_header(&mut file).unwrap();
+    if let Some(model_path) = json["model"].as_str().and_then(|m| Some(parent.join(m))) {
+        let model_file = File::open(model_path).unwrap();
+        let mut model_reader = BufReader::new(model_file);
 
-    let mut vertices = Vec::new();
-    let mut faces = Vec::new();
-    for (_, element) in &header.elements {
-        match element.name.as_ref() {
-            "vertex" => {
-                vertices = vertex_parser
-                    .read_payload_for_element(&mut file, &element, &header)
-                    .unwrap();
+        let vertex_parser = Parser::<Vertex>::new();
+        let face_parser = Parser::<Face>::new();
+
+        let header = vertex_parser.read_header(&mut model_reader).unwrap();
+
+        let mut vertices = Vec::new();
+        let mut faces = Vec::new();
+        for (_, element) in &header.elements {
+            match element.name.as_ref() {
+                "vertex" => {
+                    vertices = vertex_parser
+                        .read_payload_for_element(&mut model_reader, &element, &header)
+                        .unwrap();
+                }
+                "face" => {
+                    faces = face_parser
+                        .read_payload_for_element(&mut model_reader, &element, &header)
+                        .unwrap();
+                }
+                _ => {}
             }
-            "face" => {
-                faces = face_parser
-                    .read_payload_for_element(&mut file, &element, &header)
-                    .unwrap();
-            }
-            _ => {}
         }
-    }
 
-    let mesh = Model { vertices, faces };
+        model = Some(Model { vertices, faces });
+    } else {
+        model = None;
+    }
 
     Resource {
         registry_index: None,
-        mesh,
+        id,
+        model,
     }
 }

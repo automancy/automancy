@@ -2,6 +2,16 @@ use crate::game::data::pos::Pos;
 
 pub type Num = f32;
 
+pub type Rad = cgmath::Rad<Num>;
+pub fn rad(n: Num) -> Rad {
+    cgmath::Rad(n)
+}
+
+pub type Deg = cgmath::Deg<Num>;
+pub fn deg(n: Num) -> Deg {
+    cgmath::Deg(n)
+}
+
 pub type Point1 = cgmath::Point1<Num>;
 pub type Point2 = cgmath::Point2<Num>;
 pub type Point3 = cgmath::Point3<Num>;

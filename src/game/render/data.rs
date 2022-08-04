@@ -6,8 +6,8 @@ use vulkano::impl_vertex;
 
 use crate::math::data::{Num, Vector2};
 
-fn color_to_f32(color: u8) -> f32 {
-    color as f32 / 255.0
+fn color_to_num(color: u8) -> Num {
+    color as Num / 255.0
 }
 
 // vertex
@@ -36,10 +36,10 @@ impl PropertyAccess for Vertex {
             ("x", Property::Float(v)) => self.pos[0] = v,
             ("y", Property::Float(v)) => self.pos[1] = v,
             ("z", Property::Float(v)) => self.pos[2] = v,
-            ("red", Property::UChar(v)) => self.color[0] = color_to_f32(v),
-            ("green", Property::UChar(v)) => self.color[1] = color_to_f32(v),
-            ("blue", Property::UChar(v)) => self.color[2] = color_to_f32(v),
-            ("alpha", Property::UChar(v)) => self.color[3] = color_to_f32(v),
+            ("red", Property::UChar(v)) => self.color[0] = color_to_num(v),
+            ("green", Property::UChar(v)) => self.color[1] = color_to_num(v),
+            ("blue", Property::UChar(v)) => self.color[2] = color_to_num(v),
+            ("alpha", Property::UChar(v)) => self.color[3] = color_to_num(v),
             (_, _) => {}
         }
     }
@@ -65,7 +65,7 @@ impl Div<Vector2> for Vertex {
 #[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
 pub struct InstanceData {
     pub position_offset: VertexPos,
-    pub scale: f32,
+    pub scale: Num,
     pub faces_index: usize,
 }
 impl_vertex!(InstanceData, position_offset, scale);
@@ -74,7 +74,7 @@ impl_vertex!(InstanceData, position_offset, scale);
 
 // UBO
 
-type RawMat4 = [[f32; 4]; 4];
+type RawMat4 = [[Num; 4]; 4];
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]

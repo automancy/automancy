@@ -2,9 +2,13 @@ use std::{any::type_name, marker::PhantomData};
 
 use super::raw::{CanBeRaw, Raw};
 
-pub const GRID_SIZE: usize = 16 * 16 * 16;
+pub const X_SIZE: usize = 16;
+pub const Y_SIZE: usize = 16;
+pub const Z_SIZE: usize = 4;
 
-#[derive(Debug)]
+pub const GRID_SIZE: usize = X_SIZE * Y_SIZE * Z_SIZE;
+
+#[derive(Debug, Clone)]
 pub struct Grid<T, R>
 where
     T: CanBeRaw<R>,
@@ -13,6 +17,14 @@ where
     __phantom: PhantomData<R>,
 
     pub data: Vec<T>,
+}
+
+pub fn to_xyz(idx: usize) -> (usize, usize, usize) {
+    (
+        idx % X_SIZE,
+        idx / X_SIZE % Y_SIZE,
+        idx / X_SIZE / Y_SIZE % Z_SIZE,
+    )
 }
 
 impl<T, R> Grid<T, R>
@@ -57,19 +69,19 @@ where
         if !(data.len() == GRID_SIZE) {
             // todo try from
             log::error!(
-                "[{}] array vec is not full before converting to bytes",
-                type_name::<Self>()
+                "[{}] data doesn't match the size of {} before converting to bytes",
+                type_name::<Self>(),
+                GRID_SIZE
             );
-            let mut new = Grid::default().data;
-            new.clone_from(&data);
-            data = new;
+
+            data.resize_with(GRID_SIZE, T::default);
         }
 
         data.into_iter()
             .flat_map(|v| {
                 let raw: R = v.into();
 
-                raw.to_bytes().to_vec()
+                raw.to_bytes()
             })
             .collect()
     }

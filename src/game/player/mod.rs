@@ -1,2 +1,4 @@
+#[macro_use]
 pub mod control;
-pub mod player;
+
+pub mod input_handler;

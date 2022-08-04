@@ -7,16 +7,24 @@ use vulkano::{
         physical::{PhysicalDevice, PhysicalDeviceType, QueueFamily},
         Device, DeviceExtensions, Queue,
     },
-    image::{view::ImageView, SwapchainImage},
+    format::Format,
+    image::{
+        view::{ImageView, ImageViewCreateInfo},
+        AttachmentImage, SwapchainImage,
+    },
     instance::Instance,
     pipeline::{
         graphics::{
+            depth_stencil::{
+                CompareOp, DepthState, DepthStencilState, StencilOpState, StencilState,
+            },
             input_assembly::InputAssemblyState,
             multisample::MultisampleState,
+            rasterization::{CullMode, RasterizationState},
             vertex_input::BuffersDefinition,
             viewport::{Viewport, ViewportState},
         },
-        GraphicsPipeline,
+        GraphicsPipeline, StateMode,
     },
     render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass, Subpass},
     shader::ShaderModule,
@@ -29,14 +37,14 @@ use crate::{game::render::data::Vertex, registry::init::InitData};
 
 use super::data::{InstanceData, UniformBufferObject};
 
-pub mod vs {
+pub mod vert_shader {
     vulkano_shaders::shader! {
         ty: "vertex",
         path: "src/vert.glsl"
     }
 }
 
-pub mod fs {
+pub mod frag_shader {
     vulkano_shaders::shader! {
         ty: "fragment",
         path: "src/frag.glsl"
@@ -88,10 +96,7 @@ pub fn pipeline(
         .viewport_state(ViewportState::viewport_dynamic_scissor_irrelevant())
         .fragment_shader(fs.entry_point("main").unwrap(), ())
         .render_pass(Subpass::from(render_pass.clone(), 0).unwrap())
-        .multisample_state(MultisampleState {
-            sample_shading: Some(1.0),
-            ..Default::default()
-        });
+        .depth_stencil_state(DepthStencilState::simple_depth_test());
 
     pipeline.build(device.clone()).unwrap()
 }
@@ -133,7 +138,10 @@ pub fn uniform_buffers(
 pub fn framebuffers(
     images: &[Arc<SwapchainImage<Window>>],
     render_pass: Arc<RenderPass>,
+    depth_buffer: Arc<AttachmentImage>,
 ) -> Vec<Arc<Framebuffer>> {
+    let depth_buffer = ImageView::new_default(depth_buffer).unwrap();
+
     images
         .iter()
         .map(|image| {
@@ -142,7 +150,7 @@ pub fn framebuffers(
             Framebuffer::new(
                 render_pass.clone(),
                 FramebufferCreateInfo {
-                    attachments: vec![view],
+                    attachments: vec![view, depth_buffer.clone()],
                     ..Default::default()
                 },
             )
@@ -151,10 +159,22 @@ pub fn framebuffers(
         .collect()
 }
 
-pub fn viewport() -> Viewport {
+pub fn window_size(surface: &Surface<Window>) -> (f32, f32) {
+    surface.window().inner_size().cast::<f32>().into()
+}
+
+pub fn window_size_u32(surface: &Surface<Window>) -> [u32; 2] {
+    let size = surface.window().inner_size();
+
+    [size.width, size.height]
+}
+
+pub fn viewport(surface: &Surface<Window>) -> Viewport {
+    let (width, height) = window_size(surface);
+
     Viewport {
         origin: [0.0, 0.0],
-        dimensions: [1024.0, 1024.0],
+        dimensions: [width, height],
         depth_range: 0.0..1.0,
     }
 }
@@ -176,19 +196,21 @@ pub fn indirect_buffer(
         .fold(0, |first_instance, instances| {
             let len = instances.len() as u32;
 
-            let index_ranges = &init_data.all_index_ranges[instances[0].faces_index];
-            let commands = index_ranges
-                .iter()
-                .map(|range| DrawIndexedIndirectCommand {
-                    first_index: range.start,
-                    index_count: range.end - range.start,
-                    first_instance,
-                    instance_count: len,
-                    vertex_offset: 0,
-                })
-                .collect();
+            if let Some(index_ranges) = &init_data.all_index_ranges[instances[0].faces_index] {
+                let commands = index_ranges
+                    .iter()
+                    .map(|range| DrawIndexedIndirectCommand {
+                        first_index: range.start,
+                        index_count: range.end - range.start,
+                        first_instance,
+                        instance_count: len,
+                        vertex_offset: 0,
+                    })
+                    .collect();
 
-            indirect_commands.push(commands);
+                indirect_commands.push(commands);
+            }
+
             first_instance + len
         });
 

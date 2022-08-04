@@ -1,32 +1,78 @@
 use std::{fs::File, path::Path};
 
+use cgmath::point3;
 use zstd::stream::{copy_decode, copy_encode};
 
-use crate::game::data::raw::CanBeRaw;
+use crate::{
+    game::{data::raw::CanBeRaw, game::world_pos_to_screen, render::data::InstanceData},
+    registry::init::InitData,
+};
 
 use super::{
     data::{Data, RawData},
-    grid::Grid,
+    grid::{to_xyz, Grid},
     id::{Id, RawId},
     pos::Pos,
     raw::Raw,
     tile::{RawTile, Tile},
 };
 
+pub struct UsableTile {
+    pub id: Id,
+    pub data: Data,
+}
+
 pub type Tiles = Grid<Tile, RawTile>;
 
 pub type IdPool = Grid<Id, RawId>;
 pub type DataPool = Grid<Data, RawData>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Chunk {
-    pub chunk_pos: Pos,
+    pub pos: Pos,
     pub tiles: Tiles,
     pub id_pool: IdPool,
     pub data_pool: DataPool,
 }
 
+impl Tiles {
+    pub fn to_usable(&self, chunk: &Chunk) -> Vec<UsableTile> {
+        self.data
+            .iter()
+            .map(|v| UsableTile {
+                id: chunk.id_pool.data[v.id_handle as usize].clone(),
+                data: chunk.data_pool.data[v.data_handle as usize].clone(),
+            })
+            .collect()
+    }
+}
+
 impl Chunk {
+    pub fn to_instances(&self, init_data: &InitData) -> Vec<InstanceData> {
+        let pos = self.pos;
+        let (gx, gy) = (pos.0 * 16, pos.1 * 16);
+
+        self.tiles
+            .to_usable(self)
+            .into_iter()
+            .enumerate()
+            .map(|(idx, v)| {
+                let (x, y, z) = to_xyz(idx);
+
+                let (x, y, z) = (x as i32, y as i32, z as f32);
+                let (x, y, z) = (x + gx, y + gy, z);
+                let pos = world_pos_to_screen(Pos(x, y));
+                let pos = point3(pos.x, pos.y, z);
+
+                InstanceData {
+                    position_offset: [pos.x, pos.y, pos.z],
+                    scale: 1.0,
+                    faces_index: init_data.resources_map[&v.id],
+                }
+            })
+            .collect()
+    }
+
     pub fn tiles_path(pos: &Pos) -> String {
         format!("map/{}.tiles", pos)
     }
@@ -88,9 +134,9 @@ impl Chunk {
     pub fn unload(self) {
         std::fs::create_dir_all(Path::new("map")).unwrap();
 
-        Self::unload_tiles(&self.chunk_pos, self.tiles);
-        Self::unload_data_pool(&self.chunk_pos, self.data_pool);
-        Self::unload_id_pool(&self.chunk_pos, self.id_pool);
+        Self::unload_tiles(&self.pos, self.tiles);
+        Self::unload_data_pool(&self.pos, self.data_pool);
+        Self::unload_id_pool(&self.pos, self.id_pool);
     }
 
     pub fn load(chunk_pos: Pos) -> Self {
@@ -99,7 +145,7 @@ impl Chunk {
         let data_pool = Self::load_data_pool(&chunk_pos);
 
         Self {
-            chunk_pos,
+            pos: chunk_pos,
             tiles,
             id_pool,
             data_pool,
