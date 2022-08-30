@@ -25,6 +25,11 @@ pub type Matrix2 = cgmath::Matrix2<Num>;
 pub type Matrix3 = cgmath::Matrix3<Num>;
 pub type Matrix4 = cgmath::Matrix4<Num>;
 
+pub type Aabb2 = collision::Aabb2<Num>;
+pub type Aabb3 = collision::Aabb3<Num>;
+
+pub type Ray3 = collision::Ray3<Num>;
+
 pub type Quaternion = cgmath::Quaternion<Num>;
 
 pub const RENDER_CENTER: Point3 = Point3::new(0.0, 0.0, 0.0);

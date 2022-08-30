@@ -2,24 +2,6 @@ use std::mem::size_of_val;
 
 use super::raw::{CanBeRaw, Raw};
 
-pub trait Identifiable {
-    fn id(&self) -> Id;
-}
-
-pub trait Comparable: Identifiable + PartialOrd<Id> {}
-
-macro_rules! impl_cmp {
-    ($Type: ty) => {
-        impl crate::game::data::id::Comparable for $Type {}
-
-        impl PartialEq<crate::game::data::id::Id> for $Type {
-            fn eq(&self, other: &crate::game::data::id::Id) -> bool {
-                self.id() == *other
-            }
-        }
-    };
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Id {
     pub namespace: String,

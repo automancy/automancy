@@ -66,9 +66,55 @@ impl Div<Vector2> for Vertex {
 pub struct InstanceData {
     pub position_offset: VertexPos,
     pub scale: Num,
+    pub color_offset: VertexColor,
+
     pub faces_index: usize,
 }
-impl_vertex!(InstanceData, position_offset, scale);
+
+impl_vertex!(InstanceData, position_offset, scale, color_offset);
+
+impl InstanceData {
+    pub fn new() -> Self {
+        InstanceData {
+            position_offset: [0.0, 0.0, 0.0],
+            scale: 1.0,
+            faces_index: 0,
+            color_offset: [0.0, 0.0, 0.0, 0.0],
+        }
+    }
+
+    pub fn position_offset(mut self, position_offset: VertexPos) -> Self {
+        self.position_offset = position_offset;
+
+        self
+    }
+
+    pub fn add_position_offset(mut self, position_offset: VertexPos) -> Self {
+        self.position_offset[0] += position_offset[0];
+        self.position_offset[1] += position_offset[1];
+        self.position_offset[2] += position_offset[2];
+
+        self
+    }
+
+    pub fn scale(mut self, scale: Num) -> Self {
+        self.scale = scale;
+
+        self
+    }
+
+    pub fn faces_index(mut self, faces_index: usize) -> Self {
+        self.faces_index = faces_index;
+
+        self
+    }
+
+    pub fn color_offset(mut self, color_offset: VertexColor) -> Self {
+        self.color_offset = color_offset;
+
+        self
+    }
+}
 
 // instance
 
@@ -79,8 +125,7 @@ type RawMat4 = [[Num; 4]; 4];
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
 pub struct UniformBufferObject {
-    pub view: RawMat4,
-    //pub projection: RawMat4,
+    pub matrix: RawMat4,
 }
 
 // UBO
@@ -117,35 +162,3 @@ pub struct Model {
 }
 
 // model
-
-/*
-#[derive(Clone, Copy, Debug)]
-pub struct Color {
-    pub r: Num,
-    pub g: Num,
-    pub b: Num,
-    pub a: Num,
-}
-
-impl From<[Num; 3]> for Color {
-    fn from(n: [Num; 3]) -> Self {
-        Self {
-            r: n[0],
-            g: n[1],
-            b: n[2],
-            a: 1.0,
-        }
-    }
-}
-
-impl From<[Num; 4]> for Color {
-    fn from(n: [Num; 4]) -> Self {
-        Self {
-            r: n[0],
-            g: n[1],
-            b: n[2],
-            a: n[3],
-        }
-    }
-}
-*/

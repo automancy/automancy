@@ -4,13 +4,13 @@ use super::raw::{CanBeRaw, Raw};
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Tile {
-    pub id_handle: u16,
-    pub data_handle: u16,
+    pub id_handle: u8,
+    pub data_handle: u8,
 }
 
 impl CanBeRaw<RawTile> for Tile {}
 
-const SIZE: usize = 3;
+const SIZE: usize = 2;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Zeroable, Pod)]
@@ -25,7 +25,7 @@ impl Raw for RawTile {
 
     fn from_bytes(bytes: &[u8]) -> Self {
         Self {
-            bytes: *bytes.split_array_ref::<3>().0,
+            bytes: *bytes.split_array_ref::<SIZE>().0,
         }
     }
 
@@ -42,29 +42,18 @@ impl Raw for RawTile {
 
 impl Into<RawTile> for Tile {
     fn into(self) -> RawTile {
-        let first = self.id_handle.to_le_bytes();
-        let second = self.data_handle.to_le_bytes();
+        let a = self.id_handle;
+        let b = self.data_handle;
 
-        let a = first[0];
-        let b = second[0];
-        let c = (first[1] << 4) | second[1];
-
-        RawTile { bytes: [a, b, c] }
+        RawTile { bytes: [a, b] }
     }
 }
 
 impl From<RawTile> for Tile {
     fn from(val: RawTile) -> Self {
-        let a = val.bytes[0];
-        let b = val.bytes[1];
-        let c = val.bytes[2];
-
-        let first = u16::from_be_bytes([(c >> 4), a]);
-        let second = u16::from_be_bytes([((c << 4) >> 4), b]);
-
         Self {
-            id_handle: first,
-            data_handle: second,
+            id_handle: val.bytes[0],
+            data_handle: val.bytes[1],
         }
     }
 }

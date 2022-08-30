@@ -7,7 +7,7 @@ pub fn remap(value: Num, source_min: Num, source_max: Num, dest_min: Num, dest_m
 }
 
 #[rustfmt::skip]
-pub fn perspective(fovy: f32, a: f32, n: f32, f: f32) -> Matrix4 {
+pub fn perspective(fovy: Num, a: Num, n: Num, f: Num) -> Matrix4 {
     let t = fovy.div(2.0).tan();
     let d = f - n;
     let m = -(f * n);

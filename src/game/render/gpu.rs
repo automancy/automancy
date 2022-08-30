@@ -18,9 +18,9 @@ use vulkano::{
             depth_stencil::{
                 CompareOp, DepthState, DepthStencilState, StencilOpState, StencilState,
             },
-            input_assembly::InputAssemblyState,
+            input_assembly::{InputAssemblyState, PrimitiveTopology},
             multisample::MultisampleState,
-            rasterization::{CullMode, RasterizationState},
+            rasterization::{CullMode, PolygonMode, RasterizationState},
             vertex_input::BuffersDefinition,
             viewport::{Viewport, ViewportState},
         },
@@ -31,9 +31,9 @@ use vulkano::{
     swapchain::Surface,
     sync::GpuFuture,
 };
-use winit::window::Window;
+use winit::{dpi::LogicalSize, window::Window};
 
-use crate::{game::render::data::Vertex, registry::init::InitData};
+use crate::{game::render::data::Vertex, math::data::Num, registry::init::InitData};
 
 use super::data::{InstanceData, UniformBufferObject};
 
@@ -44,10 +44,24 @@ pub mod vert_shader {
     }
 }
 
+pub mod dbg_vert_shader {
+    vulkano_shaders::shader! {
+        ty: "vertex",
+        path: "src/dbg_vert.glsl"
+    }
+}
+
 pub mod frag_shader {
     vulkano_shaders::shader! {
         ty: "fragment",
         path: "src/frag.glsl"
+    }
+}
+
+pub mod dbg_frag_shader {
+    vulkano_shaders::shader! {
+        ty: "fragment",
+        path: "src/dbg_frag.glsl"
     }
 }
 
@@ -84,18 +98,24 @@ pub fn pipeline(
     vs: Arc<ShaderModule>,
     fs: Arc<ShaderModule>,
     render_pass: Arc<RenderPass>,
+    topology: PrimitiveTopology,
+    rasterization: RasterizationState,
+    instanced: bool,
 ) -> Arc<GraphicsPipeline> {
+    let mut vertex_input_state = BuffersDefinition::new().vertex::<Vertex>();
+
+    if instanced {
+        vertex_input_state = vertex_input_state.instance::<InstanceData>();
+    }
+
     let pipeline = GraphicsPipeline::start()
-        .vertex_input_state(
-            BuffersDefinition::new()
-                .vertex::<Vertex>()
-                .instance::<InstanceData>(),
-        )
+        .vertex_input_state(vertex_input_state)
         .vertex_shader(vs.entry_point("main").unwrap(), ())
-        .input_assembly_state(InputAssemblyState::new())
+        .input_assembly_state(InputAssemblyState::new().topology(topology))
         .viewport_state(ViewportState::viewport_dynamic_scissor_irrelevant())
         .fragment_shader(fs.entry_point("main").unwrap(), ())
         .render_pass(Subpass::from(render_pass.clone(), 0).unwrap())
+        .rasterization_state(rasterization)
         .depth_stencil_state(DepthStencilState::simple_depth_test());
 
     pipeline.build(device.clone()).unwrap()
@@ -159,12 +179,18 @@ pub fn framebuffers(
         .collect()
 }
 
-pub fn window_size(surface: &Surface<Window>) -> (f32, f32) {
-    surface.window().inner_size().cast::<f32>().into()
+fn get_window_size(surface: &Surface<Window>) -> LogicalSize<u32> {
+    let window = surface.window();
+
+    window.inner_size().to_logical(window.scale_factor())
+}
+
+pub fn window_size(surface: &Surface<Window>) -> (Num, Num) {
+    get_window_size(surface).cast::<Num>().into()
 }
 
 pub fn window_size_u32(surface: &Surface<Window>) -> [u32; 2] {
-    let size = surface.window().inner_size();
+    let size = get_window_size(surface);
 
     [size.width, size.height]
 }

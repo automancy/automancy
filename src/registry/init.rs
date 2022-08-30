@@ -1,10 +1,14 @@
 use std::{collections::HashMap, ops::Range};
 
+use cgmath::Bounded;
+use collision::Aabb;
+
 use crate::{
     game::{
         data::id::Id,
         render::data::{Face, Vertex},
     },
+    math::data::{Aabb3, Point3},
     util::resource::Resource,
 };
 
@@ -12,6 +16,7 @@ pub struct InitData {
     pub resources: Vec<Resource>,
     pub resources_map: HashMap<Id, usize>,
 
+    pub all_bounding_boxes: Vec<Option<Aabb3>>,
     pub all_faces: Vec<Option<Vec<Face>>>,
     pub all_index_ranges: Vec<Option<Vec<Range<u32>>>>,
     pub combined_vertices: Vec<Vertex>,
@@ -98,9 +103,45 @@ impl InitData {
             }
         });
 
+        let all_bounding_boxes = all_faces
+            .iter()
+            .map(|f| {
+                f.as_ref().and_then(|faces| {
+                    let bounds = faces.iter().fold(
+                        (Point3::max_value(), Point3::min_value()),
+                        |init1, face| {
+                            let vertex_indices = face.vertex_indices.clone();
+
+                            let (min, max) = vertex_indices
+                                .into_iter()
+                                .map(|index| {
+                                    let pos = &combined_vertices[index as usize].pos;
+
+                                    Point3::new(pos[0], pos[1], pos[2])
+                                })
+                                .fold((Point3::max_value(), Point3::min_value()), |init2, pos| {
+                                    (
+                                        init2.0.zip(pos.clone(), |a, b| a.min(b)),
+                                        init2.1.zip(pos.clone(), |a, b| a.max(b)),
+                                    )
+                                });
+
+                            (
+                                init1.0.zip(min, |a, b| a.min(b)),
+                                init1.1.zip(max, |a, b| a.max(b)),
+                            )
+                        },
+                    );
+
+                    Some(Aabb3::new(bounds.0, bounds.1))
+                })
+            })
+            .collect::<Vec<_>>();
+
         log::debug!("combined_vertices: {:?}", combined_vertices);
         log::debug!("all_index_ranges: {:?}", all_index_ranges);
         log::debug!("all_faces: {:?}", all_faces);
+        log::debug!("all_bounding_boxes: {:?}", all_bounding_boxes);
         log::debug!("all registered resources: {:?}", resources_map.keys());
 
         InitData {
@@ -109,6 +150,7 @@ impl InitData {
             all_faces,
             all_index_ranges,
             combined_vertices,
+            all_bounding_boxes,
         }
     }
 }

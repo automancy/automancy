@@ -1,11 +1,11 @@
 use actix::{Actor, Addr, Context, Handler, Message, MessageResponse, ResponseFuture};
 
-use futures::FutureExt;
+use futures::{future::join, FutureExt};
 use serde::{Deserialize, Serialize};
 
 use crate::math::data::{Matrix4, Num, Point3};
 
-use super::camera::{Camera, CameraRequest, CameraState};
+use super::camera::{Camera, CameraPos, CameraPosRequest, View, ViewRequest};
 
 #[derive(Message)]
 #[rtype(result = "DrawInfo")]
@@ -13,17 +13,17 @@ pub struct Redraw {
     pub aspect: Num,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, MessageResponse)]
+#[derive(Debug, Clone, MessageResponse)]
 pub struct DrawInfo {
     pub pos: Point3,
     pub view: Matrix4,
 }
 
 impl DrawInfo {
-    fn from_camera(state: CameraState) -> Self {
+    fn from(view: View, camera_pos: CameraPos) -> Self {
         Self {
-            pos: state.pos,
-            view: state.view,
+            pos: camera_pos.0,
+            view: view.0,
         }
     }
 }
@@ -40,9 +40,15 @@ impl Handler<Redraw> for Renderer {
     type Result = ResponseFuture<DrawInfo>;
 
     fn handle(&mut self, msg: Redraw, _ctx: &mut Self::Context) -> Self::Result {
-        self.camera
-            .send(CameraRequest { aspect: msg.aspect })
-            .map(|v| DrawInfo::from_camera(v.unwrap()))
+        let view = self
+            .camera
+            .send(ViewRequest { aspect: msg.aspect })
+            .map(|v| v.unwrap());
+
+        let camera_pos = self.camera.send(CameraPosRequest).map(|v| v.unwrap());
+
+        join(view, camera_pos)
+            .map(|(view, camera_pos)| DrawInfo::from(view, camera_pos))
             .boxed_local()
     }
 }

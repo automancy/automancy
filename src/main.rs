@@ -13,21 +13,20 @@ mod registry;
 
 use crate::game::{
     data::pos::Pos,
-    game::{Game, LoadChunk, WorldRenderContextRequest},
-    player::input_handler::{convert_input, InputHandler},
+    game::{Game, LoadChunkRange, WorldRenderContextRequest},
+    player::input_handler::{convert_input, CursorStateRequest, InputHandler},
     render::{
-        camera::Camera,
+        camera::{Camera, CameraPosRequest, CameraRayRequest, MAX_CAMERA_Z},
         data::InstanceData,
-        gpu::{self, frag_shader, vert_shader},
+        gpu::{self, dbg_frag_shader, dbg_vert_shader, frag_shader, vert_shader},
         renderer::{DrawInfo, Redraw, Renderer},
     },
     ticking::{TICK_INTERVAL, TPS},
 };
-use actix::{clock::interval, Actor, Addr, Recipient, System};
+use actix::{clock::interval, Actor, Recipient, System};
 
-use cgmath::point3;
+use cgmath::point2;
 use game::{
-    data::id::Id,
     game::Tick,
     render::{
         data::{UniformBufferObject, Vertex},
@@ -39,30 +38,34 @@ use registry::init::InitData;
 use util::resource::{load_resource, Resource};
 use walkdir::WalkDir;
 
-use std::{
-    ffi::{OsStr, OsString},
-    fs::{File, FileType},
-    sync::Arc,
-    thread,
-    time::Instant,
-};
+use std::{fs::File, sync::Arc, thread, time::Instant};
 
 use tokio::{
-    fs::{self, read_to_string},
+    fs::read_to_string,
     runtime::Runtime,
     sync::{oneshot, OnceCell},
 };
 use tokio::{sync::watch, time::Interval};
 
 use vulkano::{
-    buffer::{BufferUsage, CpuAccessibleBuffer, ImmutableBuffer},
+    buffer::{
+        cpu_pool::CpuBufferPoolChunk, BufferAccess, BufferSlice, BufferUsage, CpuAccessibleBuffer,
+        CpuBufferPool, ImmutableBuffer,
+    },
     command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, SubpassContents},
     descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet},
     device::{Device, DeviceCreateInfo, DeviceExtensions, Features, Queue, QueueCreateInfo},
     format::{ClearValue, Format},
     image::{AttachmentImage, ImageAccess, ImageUsage},
     instance::{Instance, InstanceCreateInfo},
-    pipeline::{GraphicsPipeline, Pipeline, PipelineBindPoint},
+    memory::pool::StdMemoryPool,
+    pipeline::{
+        graphics::{
+            input_assembly::PrimitiveTopology,
+            rasterization::{PolygonMode, RasterizationState},
+        },
+        GraphicsPipeline, Pipeline, PipelineBindPoint, StateMode,
+    },
     render_pass::{Framebuffer, RenderPass},
     swapchain::{
         acquire_next_image, AcquireError, Surface, Swapchain, SwapchainCreateInfo,
@@ -73,6 +76,7 @@ use vulkano::{
 use vulkano_win::VkSurfaceBuild;
 
 use winit::{
+    dpi::PhysicalSize,
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::{Icon, Window, WindowBuilder},
@@ -126,6 +130,8 @@ fn render(
     pipeline: Arc<GraphicsPipeline>,
     vertex_buffer: Arc<ImmutableBuffer<[Vertex]>>,
     index_buffer: Arc<ImmutableBuffer<[u32]>>,
+    debug_pipeline: Arc<GraphicsPipeline>,
+    debug_vertex_buffer: Arc<BufferSlice<[Vertex], CpuBufferPoolChunk<Vertex, Arc<StdMemoryPool>>>>,
     depth_buffer: &mut Arc<AttachmentImage>,
     uniform_buffers: &mut Vec<Arc<CpuAccessibleBuffer<UniformBufferObject>>>,
     instance_buffer: &[InstanceData],
@@ -200,7 +206,7 @@ fn render(
     };
 
     let ubo = UniformBufferObject {
-        view: draw_info.view.into(),
+        matrix: draw_info.view.into(),
     };
 
     *uniform_buffers[image_num].write().unwrap() = ubo;
@@ -215,6 +221,19 @@ fn render(
         )],
     )
     .unwrap();
+
+    /*
+    let debug_pipeline_layout = debug_pipeline.layout();
+    let debug_ubo_layout = debug_pipeline_layout.set_layouts()[0].clone();
+    let debug_ubo_set = PersistentDescriptorSet::new(
+        debug_ubo_layout.clone(),
+        [WriteDescriptorSet::buffer(
+            0,
+            uniform_buffers[image_num].clone(),
+        )],
+    )
+    .unwrap();
+     */
 
     let mut builder = AutoCommandBufferBuilder::primary(
         device.clone(),
@@ -237,7 +256,6 @@ fn render(
 
     if let Some((indirect_buffer, instance_buffer)) = indirect_instance {
         builder
-            .bind_pipeline_graphics(pipeline.clone())
             .bind_vertex_buffers(0, (vertex_buffer.clone(), instance_buffer.clone()))
             .bind_index_buffer(index_buffer.clone())
             .bind_descriptor_sets(
@@ -246,7 +264,25 @@ fn render(
                 0,
                 ubo_set,
             )
+            .bind_pipeline_graphics(pipeline.clone())
             .draw_indexed_indirect(indirect_buffer)
+            .unwrap();
+    }
+
+    let debug_vertex_buffer_size = debug_vertex_buffer.len() as u32;
+    if debug_vertex_buffer_size != 0 {
+        builder
+            .bind_vertex_buffers(0, debug_vertex_buffer)
+            .bind_pipeline_graphics(debug_pipeline.clone())
+            /*
+            .bind_descriptor_sets(
+                PipelineBindPoint::Graphics,
+                debug_pipeline_layout.clone(),
+                0,
+                debug_ubo_set,
+            )
+            */
+            .draw(debug_vertex_buffer_size, 1, 0, 0)
             .unwrap();
     }
 
@@ -323,12 +359,12 @@ pub async fn game_tick(
     Some(())
 }
 
-async fn init() -> InitData {
-    let mut resources = load_resources().await;
+async fn init() -> Arc<InitData> {
+    let resources = load_resources().await;
 
     let init_data = InitData::new(resources);
 
-    init_data
+    Arc::new(init_data)
 }
 
 fn main() {
@@ -366,6 +402,7 @@ fn main() {
     let surface = WindowBuilder::new()
         .with_title("automancy")
         .with_window_icon(Some(icon))
+        .with_inner_size(PhysicalSize::new(800, 800))
         .build_vk_surface(&event_loop, instance.clone())
         .unwrap();
 
@@ -393,6 +430,8 @@ fn main() {
             enabled_extensions: physical.required_extensions().union(&device_extensions),
             enabled_features: Features {
                 sample_rate_shading: true,
+                wide_lines: true,
+                fill_mode_non_solid: true,
                 ..Default::default()
             },
             ..Default::default()
@@ -490,12 +529,37 @@ fn main() {
     )
     .unwrap();
 
+    let debug_vertex_pool = CpuBufferPool::<Vertex>::vertex_buffer(device.clone());
+
     // --- shaders ---
     let vs = vert_shader::load(device.clone()).unwrap();
     let fs = frag_shader::load(device.clone()).unwrap();
+    let dbg_vs = dbg_vert_shader::load(device.clone()).unwrap();
+    let dbg_fs = dbg_frag_shader::load(device.clone()).unwrap();
+    // TODO only activate when debugging
 
     // --- pipeline ---
-    let pipeline = gpu::pipeline(device.clone(), vs.clone(), fs.clone(), render_pass.clone());
+    let pipeline = gpu::pipeline(
+        device.clone(),
+        vs.clone(),
+        fs.clone(),
+        render_pass.clone(),
+        PrimitiveTopology::TriangleList,
+        RasterizationState::new(),
+        true,
+    );
+    let mut debug_rasterization_state = RasterizationState::new();
+    debug_rasterization_state.line_width = StateMode::Fixed(5.0);
+
+    let debug_pipeline = gpu::pipeline(
+        device.clone(),
+        dbg_vs.clone(),
+        dbg_fs.clone(),
+        render_pass.clone(),
+        PrimitiveTopology::LineList,
+        debug_rasterization_state,
+        false,
+    );
 
     // --- framebuffers ---
     let mut framebuffers = gpu::framebuffers(&images, render_pass.clone(), depth_buffer.clone());
@@ -504,10 +568,10 @@ fn main() {
 
     // --- loop ---
 
-    let (tx_render, rx_render) = oneshot::channel::<(Addr<InputHandler>, Addr<Renderer>)>();
-    let (tx_game, rx_game) = oneshot::channel::<Addr<Game>>();
+    let (tx_render, rx_render) = oneshot::channel();
+    let (tx_game, rx_game) = oneshot::channel();
 
-    let (tx_system, rx_system) = oneshot::channel::<System>();
+    let (tx_system, rx_system) = oneshot::channel();
 
     let (tx_stop, rx_stop) = watch::channel(false);
 
@@ -525,7 +589,7 @@ fn main() {
             let game = Game::new(vec![camera.clone().recipient()]).start();
 
             tx_render
-                .send((input_handler.clone(), renderer.clone()))
+                .send((input_handler.clone(), renderer.clone(), camera.clone()))
                 .unwrap();
 
             tx_game.send(game.clone()).unwrap();
@@ -537,13 +601,20 @@ fn main() {
     });
 
     // game
+    let system = rx_system.blocking_recv().unwrap();
+
+    let (input_handler, renderer, camera) = rx_render.blocking_recv().unwrap();
     let game = rx_game.blocking_recv().unwrap();
 
     let g_rx_stop = rx_stop.clone();
 
+    let g_camera = camera.clone();
     let g_game_recipient_load = game.clone().recipient();
     let g_game_recipient_tick = game.clone().recipient();
-    let mut game_handle = Some(thread::spawn(|| {
+
+    let range = 2;
+
+    let mut game_handle = Some(thread::spawn(move || {
         let rt = Runtime::new().unwrap();
 
         rt.block_on(async move {
@@ -551,12 +622,18 @@ fn main() {
             let mut start = None;
             let mut counter = 0;
 
-            g_game_recipient_load
-                .send(LoadChunk(Pos(0, 0)))
-                .await
-                .unwrap();
-
             while !*g_rx_stop.borrow() {
+                let pos = g_camera.send(CameraPosRequest).await.unwrap().0;
+                let pos = Camera::camera_pos_to_real(pos);
+
+                g_game_recipient_load
+                    .send(LoadChunkRange(
+                        pos - Pos(range, range),
+                        pos + Pos(range, range),
+                    ))
+                    .await
+                    .unwrap();
+
                 game_tick(
                     &g_game_recipient_tick,
                     &mut game_ticker,
@@ -569,14 +646,12 @@ fn main() {
     }));
 
     // render
-    let system = rx_system.blocking_recv().unwrap();
-    let (input_handler, renderer) = rx_render.blocking_recv().unwrap();
-
     let e_rx_stop = rx_stop.clone();
 
     let e_handle = handle.clone();
 
     let e_game = game.clone();
+
     event_loop.run(move |event, _, control_flow| {
         if let Event::WindowEvent {
             event: WindowEvent::CloseRequested,
@@ -602,45 +677,69 @@ fn main() {
             let mut window_event = None;
             let mut device_event = None;
 
-            match event {
+            match &event {
                 Event::WindowEvent {
                     event: WindowEvent::Resized(_),
                     ..
                 } => {
                     *&mut recreate_swapchain = true;
                 }
+                Event::WindowEvent { event, .. } => {
+                    window_event = Some(event);
+                }
+                Event::DeviceEvent { event, .. } => {
+                    device_event = Some(event);
+                }
                 Event::RedrawEventsCleared => {
                     let (width, height) = gpu::window_size(&surface);
+                    let size = point2(width, height);
                     let aspect = width / height;
 
                     let draw_info = e_handle.block_on(renderer.send(Redraw { aspect })).unwrap();
-                    let pos = draw_info.pos;
-                    let pos = point3(pos.x / width, pos.y / height, pos.z);
+
+                    let pos = Camera::camera_pos_to_real(draw_info.pos);
 
                     let world_render_context = e_handle
-                        .block_on(e_game.send(WorldRenderContextRequest { pos }))
+                        .block_on(e_game.send(WorldRenderContextRequest { pos, range }))
                         .unwrap();
 
-                    let instance_buffer = world_render_context
-                        .visible_chunks
-                        .into_iter()
+                    let visible_chunks = world_render_context.visible_chunks;
+
+                    let mut instance_buffer = visible_chunks
+                        .iter()
                         .flat_map(|chunk| chunk.to_instances(&init_data))
                         .collect::<Vec<_>>();
 
-                    /*
-                    let instance_buffer = [
-                        InstanceData {
-                            position_offset: [-1.0, 0.0, 0.0],
-                            scale: 0.5,
-                            faces_index: init_data.resources_map[RESOURCE_TILE],
-                        },
-                        InstanceData {
-                            position_offset: [0.5, 0.0, 0.0],
-                            scale: 0.5,
-                            faces_index: init_data.resources_map[RESOURCE_TILE_PURPLE],
-                        },
-                    ];
-                     */
+                    let cursor_state = e_handle
+                        .block_on(input_handler.send(CursorStateRequest))
+                        .unwrap();
+
+                    let camera_ray = e_handle
+                        .block_on(camera.send(CameraRayRequest {
+                            aspect,
+                            size,
+                            pos: cursor_state.pos,
+                            visible_chunks: visible_chunks.clone(),
+                            init_data: init_data.clone(),
+                        }))
+                        .unwrap();
+
+                    camera_ray
+                        .result
+                        .into_iter()
+                        .for_each(|(chunk, index, tile)| {
+                            instance_buffer.push(
+                                chunk
+                                    .tile_to_instance(index, &tile, &init_data)
+                                    .add_position_offset([0.0, 0.0, 0.001])
+                                    .color_offset([1.0, 0.745, 0.447, 0.5]),
+                            );
+                        });
+
+                    let debug = [];
+
+                    let debug_vertex_buffer =
+                        debug_vertex_pool.chunk(debug).unwrap().into_buffer_slice();
 
                     render(
                         &draw_info,
@@ -655,17 +754,13 @@ fn main() {
                         pipeline.clone(),
                         vertex_buffer.clone(),
                         index_buffer.clone(),
+                        debug_pipeline.clone(),
+                        debug_vertex_buffer.clone(),
                         &mut depth_buffer,
                         &mut uniform_buffers,
                         &instance_buffer,
                         &init_data,
                     );
-                }
-                Event::WindowEvent { event, .. } => {
-                    window_event = Some(event);
-                }
-                Event::DeviceEvent { event, .. } => {
-                    device_event = Some(event);
                 }
                 _ => (),
             };

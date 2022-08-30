@@ -1,41 +1,22 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use actix::{Actor, Context, Handler, Message, MessageResponse, Recipient, ResponseFuture};
 
-use cgmath::point2;
 use futures::{future::try_join_all, FutureExt};
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    game::data::{chunk::Chunk, pos::Pos},
-    math::data::{Num, Point2, Point3},
-};
+use crate::game::data::{chunk::RawChunk, pos::Pos};
 
-use super::data::pos::Real;
+use super::data::{chunk::Chunk, grid::to_xyz, id::Id};
 
-#[derive(Message)]
-#[rtype(result = "Result<Vec<()>, ()>")]
-pub struct Tick();
-
-#[derive(MessageResponse)]
-pub struct WorldRenderContext {
-    pub visible_chunks: Vec<Chunk>,
-}
-
-#[derive(Message)]
-#[rtype(result = "WorldRenderContext")]
-pub struct WorldRenderContextRequest {
-    pub pos: Point3,
-}
-
-#[derive(Debug, Default, Clone, Serialize, Deserialize, Message)]
+#[derive(Debug, Default, Clone, Message)]
 #[rtype(result = "Option<()>")]
 pub struct GameState {
     pub tick_count: usize,
 }
 
 pub struct Game {
-    pub loaded_chunks: HashMap<Pos, Chunk>,
+    pub loaded_chunks: HashMap<Pos, Arc<Chunk>>,
 
     tick_count: usize,
 
@@ -69,27 +50,6 @@ impl Handler<Tick> for Game {
     }
 }
 
-const SQRT_3: Num = 1.732050807568877293527446341505;
-
-/// assuming size = 1.0
-pub fn world_pos_to_screen(pos: Pos) -> Point2 {
-    let x = pos.0 as Num;
-    let y = pos.1 as Num;
-    let odd_row = pos.1 % 2;
-    let w = SQRT_3 / 2.0;
-    let h = 3.0 / 4.0;
-
-    point2(x * w + (odd_row as f32 * w / 2.0), y * h)
-}
-
-/// assuming size = 1.0
-pub fn screen_pos_to_world(pos: Point2) -> Pos {
-    Pos(
-        (pos.x / SQRT_3).round() as Real,
-        (pos.y / 2.0).round() as Real,
-    )
-}
-
 #[derive(Message)]
 #[rtype(result = "()")]
 pub struct LoadChunk(pub Pos);
@@ -98,12 +58,36 @@ impl Handler<LoadChunk> for Game {
     type Result = ();
 
     fn handle(&mut self, msg: LoadChunk, _ctx: &mut Self::Context) -> Self::Result {
-        let pos = msg.0;
-
-        if !self.loaded_chunks.contains_key(&pos) {
-            self.loaded_chunks.insert(pos, Chunk::load(pos));
-        }
+        self.load_chunk(msg.0)
     }
+}
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct LoadChunkRange(pub Pos, pub Pos);
+
+impl Handler<LoadChunkRange> for Game {
+    type Result = ();
+
+    fn handle(&mut self, msg: LoadChunkRange, _ctx: &mut Self::Context) -> Self::Result {
+        self.load_chunk_range(msg.0, msg.1);
+    }
+}
+
+#[derive(Message)]
+#[rtype(result = "Result<Vec<()>, ()>")]
+pub struct Tick();
+
+#[derive(MessageResponse)]
+pub struct WorldRenderContext {
+    pub visible_chunks: Vec<Arc<Chunk>>,
+}
+
+#[derive(Message)]
+#[rtype(result = "WorldRenderContext")]
+pub struct WorldRenderContextRequest {
+    pub pos: Pos,
+    pub range: isize,
 }
 
 impl Handler<WorldRenderContextRequest> for Game {
@@ -111,14 +95,15 @@ impl Handler<WorldRenderContextRequest> for Game {
 
     fn handle(&mut self, msg: WorldRenderContextRequest, _ctx: &mut Self::Context) -> Self::Result {
         let pos = msg.pos;
-        let pos = screen_pos_to_world(point2(pos.x, pos.y));
-        let (min_pos, max_pos) = (pos - Pos(1, 1), pos + Pos(1, 1));
+        let range = msg.range;
+
+        let (min_pos, max_pos) = (pos - Pos(range, range), pos + Pos(range, range));
 
         let visible_chunks = self
             .loaded_chunks
             .values()
-            .filter(|chunk| chunk.pos > min_pos && chunk.pos < max_pos)
-            .map(Chunk::clone)
+            .filter(|chunk| chunk.pos >= min_pos && chunk.pos <= max_pos)
+            .map(Arc::clone)
             .collect::<Vec<_>>();
 
         WorldRenderContext { visible_chunks }
@@ -126,6 +111,37 @@ impl Handler<WorldRenderContextRequest> for Game {
 }
 
 impl Game {
+    pub fn load_chunk_range(&mut self, min: Pos, max: Pos) {
+        let (min, max) = (min.min(max), min.max(max));
+
+        for i in min.0..=max.0 {
+            for j in min.1..=max.1 {
+                self.load_chunk(Pos(i, j));
+            }
+        }
+    }
+
+    fn gen_chunk(&mut self, chunk: &mut Chunk) {
+        chunk.tiles.iter_mut().enumerate().for_each(|(idx, tile)| {
+            if to_xyz(idx as isize).2 == 0 {
+                tile.id = Id::automancy("tile".to_string());
+            }
+        });
+    }
+
+    pub fn load_chunk(&mut self, pos: Pos) {
+        if !self.loaded_chunks.contains_key(&pos) {
+            let raw_chunk = RawChunk::load(pos);
+            let mut chunk = Chunk::from_raw(raw_chunk);
+
+            self.gen_chunk(&mut chunk);
+
+            let chunk = Arc::new(chunk);
+
+            self.loaded_chunks.insert(pos, chunk);
+        }
+    }
+
     pub fn tick(&mut self) {
         self.tick_count = self.tick_count.overflowing_add(1).0;
     }

@@ -5,9 +5,7 @@ use super::raw::{CanBeRaw, Raw};
 pub type SingleData = u32;
 
 #[derive(Debug, Clone, Default)]
-pub struct Data {
-    pub data: Vec<SingleData>,
-}
+pub struct Data(pub Vec<SingleData>);
 
 impl CanBeRaw<RawData> for Data {}
 
@@ -58,10 +56,10 @@ impl Raw for RawData {
 
 impl Into<RawData> for Data {
     fn into(self) -> RawData {
-        let size = (self.data.len() * size_of::<SingleData>()) as u32;
+        let size = (self.0.len() * size_of::<SingleData>()) as u32;
 
         let bytes = self
-            .data
+            .0
             .into_iter()
             .flat_map(|v| v.to_le_bytes())
             .collect::<Vec<_>>();
@@ -78,6 +76,6 @@ impl From<RawData> for Data {
             .map(|v| u32::from_le_bytes([v[0], v[1], v[2], v[3]]))
             .collect::<Vec<_>>();
 
-        Self { data }
+        Self(data)
     }
 }

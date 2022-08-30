@@ -23,8 +23,10 @@ zstd = "*"
 lazy_static = "*"
 
 bytemuck = "1.8.0"
-cgmath = { version = "0.18", features = ["serde"] }
+cgmath = "0.18.0"
+collision = { git = "https://github.com/rustgd/collision-rs" }
 rand = "0.8.5"
+
 
 serde = "*"
 json = "0.12.4"
