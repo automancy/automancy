@@ -1,49 +1,69 @@
+#![feature(unzip_option)]
 #![feature(split_array)]
 #![feature(array_chunks)]
 #![feature(slice_group_by)]
 #![feature(duration_consts_float)]
+#![feature(variant_count)]
 
 #[macro_use]
 mod util;
 #[macro_use]
 mod game;
-mod actor;
 mod math;
 mod registry;
 
-use crate::game::{
-    data::pos::Pos,
-    game::{Game, LoadChunkRange, WorldRenderContextRequest},
-    player::input_handler::{convert_input, CursorStateRequest, InputHandler},
-    render::{
-        camera::{Camera, CameraPosRequest, CameraRayRequest, MAX_CAMERA_Z},
-        data::InstanceData,
-        gpu::{self, dbg_frag_shader, dbg_vert_shader, frag_shader, vert_shader},
-        renderer::{DrawInfo, Redraw, Renderer},
+use crate::{
+    game::{
+        data::{id::RawId, map::Map, tile::TileCoord},
+        game::Game,
+        player::input::{handler::InputHandler, primitive::convert_input},
+        render::{
+            camera::Camera,
+            data::InstanceData,
+            gpu::{self, dbg_frag_shader, dbg_vert_shader, frag_shader, vert_shader},
+            renderer::Renderer,
+        },
+        ticking::{TICK_INTERVAL, TPS},
     },
-    ticking::{TICK_INTERVAL, TPS},
+    math::{
+        cg::Num,
+        hex::{cube::CubeCoord, offset::OffsetCoord},
+    },
 };
-use actix::{clock::interval, Actor, Recipient, System};
 
 use cgmath::point2;
 use game::{
-    game::Tick,
+    data::id::Id,
+    game::Ticked,
     render::{
-        data::{UniformBufferObject, Vertex},
+        data::{Model, UniformBufferObject, Vertex},
         gpu::window_size_u32,
     },
     ticking::MAX_ALLOWED_TICK_INTERVAL,
 };
+use json::JsonValue;
+use math::cg::{DisplayCoord, Matrix4};
 use registry::init::InitData;
-use util::resource::{load_resource, Resource};
+use util::resource::{Resource, ResourceManager};
 use walkdir::WalkDir;
 
-use std::{fs::File, sync::Arc, thread, time::Instant};
+use std::{
+    borrow::Borrow,
+    ffi::OsStr,
+    fs::{read_to_string, File},
+    path::Path,
+    sync::Arc,
+    thread,
+    time::Instant,
+};
 
 use tokio::{
-    fs::read_to_string,
-    runtime::Runtime,
-    sync::{oneshot, OnceCell},
+    runtime::{Builder, Runtime},
+    sync::{
+        broadcast::{channel, Sender},
+        oneshot, OnceCell,
+    },
+    time::interval,
 };
 use tokio::{sync::watch, time::Interval};
 
@@ -60,10 +80,7 @@ use vulkano::{
     instance::{Instance, InstanceCreateInfo},
     memory::pool::StdMemoryPool,
     pipeline::{
-        graphics::{
-            input_assembly::PrimitiveTopology,
-            rasterization::{PolygonMode, RasterizationState},
-        },
+        graphics::{input_assembly::PrimitiveTopology, rasterization::RasterizationState},
         GraphicsPipeline, Pipeline, PipelineBindPoint, StateMode,
     },
     render_pass::{Framebuffer, RenderPass},
@@ -87,38 +104,48 @@ pub const ASSET_LOGO: &str = "assets/logo.png";
 // TODO: use metadata file + directory scan
 pub const RESOURCE: &str = "resources";
 
-pub type Re = OnceCell<Resource>;
+fn load_resources() -> (ResourceManager, Vec<Option<(Id, Option<Model>)>>) {
+    let mut resource_man = ResourceManager::default();
 
-async fn load_resources() -> Vec<Resource> {
-    let mut resources = vec![];
+    // TODO: just use serde?
 
-    for entry in WalkDir::new(RESOURCE) {
-        if let Ok(entry) = entry {
+    let resources = WalkDir::new(RESOURCE)
+        .into_iter()
+        .flatten()
+        .map(|entry| {
             let path = entry.into_path();
-            let extension = path.extension().and_then(|v| v.to_str());
+            let working_dir = path.parent().unwrap_or_else(|| Path::new("")).to_path_buf();
+
+            let extension = path.extension().and_then(OsStr::to_str);
 
             if let Some("json") = extension {
                 log::info!("loading resource at {:?}", path);
 
-                let json = json::parse(read_to_string(&path).await.unwrap().as_str());
+                let json = json::parse(read_to_string(&path).unwrap().as_str());
 
-                if let Err(err) = json {
-                    log::warn!("error while reading resource: {:?}. error: {}", path, err);
-
-                    continue;
+                match json {
+                    Ok(JsonValue::Object(json)) => return Some((json, working_dir)),
+                    Err(err) => {
+                        log::warn!("error while reading resource: {:?}. error: {}", path, err);
+                    }
+                    _ => (),
                 }
-                let json = json.unwrap();
-
-                resources.push(load_resource(json, &path).await);
             }
-        }
-    }
 
-    resources
+            return None;
+        })
+        .flatten()
+        .map(|(json, working_dir)| {
+            return resource_man.load_resource(json, &working_dir);
+        })
+        .collect::<Vec<_>>();
+
+    println!("{:?}", resources);
+
+    (resource_man, resources)
 }
 
 fn render(
-    draw_info: &DrawInfo,
     device: Arc<Device>,
     queue: Arc<Queue>,
     surface: Arc<Surface<Window>>,
@@ -136,6 +163,7 @@ fn render(
     uniform_buffers: &mut Vec<Arc<CpuAccessibleBuffer<UniformBufferObject>>>,
     instance_buffer: &[InstanceData],
     init_data: &InitData,
+    matrix: Matrix4,
 ) {
     let size = window_size_u32(&surface);
 
@@ -206,7 +234,7 @@ fn render(
     };
 
     let ubo = UniformBufferObject {
-        matrix: draw_info.view.into(),
+        matrix: matrix.into(),
     };
 
     *uniform_buffers[image_num].write().unwrap() = ubo;
@@ -315,21 +343,14 @@ fn render(
     }
 }
 
-pub async fn game_tick(
-    game: &Recipient<Tick>,
-    interval: &mut Interval,
-    counter: &mut u64,
-    start: &mut Option<Instant>,
-) -> Option<()> {
-    let game_tick_start = Instant::now();
+pub async fn game_tick(game: &mut Game, counter: &mut u64, cycle_start: &mut Option<Instant>) {
+    let start = Instant::now();
+    game.tick();
+    let finish = Instant::now();
 
-    let _ = game.send(Tick()).await.unwrap();
+    let tick_time = finish - start;
 
-    let game_tick_end = Instant::now();
-
-    let tick_time = game_tick_end.duration_since(game_tick_start);
-
-    if tick_time > MAX_ALLOWED_TICK_INTERVAL {
+    if tick_time >= MAX_ALLOWED_TICK_INTERVAL {
         log::warn!(
             "tick took longer than allowed maximum! tick_time: {:?}, maximum: {:?}",
             tick_time,
@@ -341,37 +362,67 @@ pub async fn game_tick(
     if *counter >= TPS {
         // todo: what to do when the TPS is low?
         {
-            if let Some(start) = start {
+            if let Some(start) = cycle_start.replace(Instant::now()) {
                 let elapsed = start.elapsed();
+
                 let tps = (*counter * 1_000_000_000) as f64 / elapsed.as_nanos() as f64;
                 let tps = (tps * 100.0).round() / 100.0;
 
                 log::debug!("TPS: {:.1}, elapsed time: {:?}", tps, elapsed);
             }
-            start.replace(Instant::now());
         }
 
         *counter -= TPS;
     }
-
-    interval.tick().await;
-
-    Some(())
 }
 
 async fn init() -> Arc<InitData> {
-    let resources = load_resources().await;
+    let (resource_man, resources) = load_resources();
 
-    let init_data = InitData::new(resources);
+    let init_data = InitData::new(resource_man, resources);
 
     Arc::new(init_data)
+}
+
+fn coord_to_instance(
+    map_ref: &Map,
+    init_data: &InitData,
+    pos: TileCoord,
+    none: Option<Id>,
+) -> Option<InstanceData> {
+    let map_id_pool = &map_ref.id_pool;
+    let resource_id_pool = &init_data.resource_man.id_pool;
+
+    map_ref
+        .tiles
+        .get(&pos)
+        .map_or(none, |tile| {
+            tile.id
+                .to_raw_id(map_id_pool)
+                .to_id(resource_id_pool)
+                .as_ref()
+                .copied()
+        })
+        .and_then(|id| init_data.resource_man.resources.get(&id))
+        .and_then(|v| {
+            v.faces_index.map(|face| {
+                // TODO into
+
+                let pos = CubeCoord::new(pos.q() as Num, pos.r() as Num);
+                let pos = DisplayCoord::from_cube_as_pointy_top(&pos).to_point2();
+
+                InstanceData::new()
+                    .faces_index(face)
+                    .position_offset([pos.x, pos.y, 0.0])
+            })
+        })
 }
 
 fn main() {
     env_logger::init();
 
     // --- resources & data ---
-    let runtime = Runtime::new().unwrap();
+    let runtime = Builder::new_current_thread().enable_all().build().unwrap();
     let handle = runtime.handle();
 
     let init_data = handle.block_on(init());
@@ -566,175 +617,161 @@ fn main() {
     let mut recreate_swapchain = false;
     let mut previous_frame_end = Some(sync::now(device.clone()).boxed_send_sync());
 
+    // --- load map ---
+
+    let map = Map::load("test".to_owned());
+
     // --- loop ---
+    let (send_stop, recv_stop) = watch::channel(false);
 
-    let (tx_render, rx_render) = oneshot::channel();
-    let (tx_game, rx_game) = oneshot::channel();
+    let (game, recv_game_state) = Game::new(map);
 
-    let (tx_system, rx_system) = oneshot::channel();
+    let (send_map_ref, recv_map_ref) = oneshot::channel();
 
-    let (tx_stop, rx_stop) = watch::channel(false);
+    let (mut input_handler, recv_input_state) = InputHandler::new();
 
-    // actor
-    handle.spawn_blocking(|| {
-        let system = System::new();
+    let (mut renderer, recv_renderer_state) = Renderer::new(recv_input_state.clone());
 
-        system.block_on(async {
-            let camera = Camera::new().start();
-
-            let renderer = Renderer::new(camera.clone()).start();
-
-            let input_handler = InputHandler::new(camera.clone().recipient()).start();
-
-            let game = Game::new(vec![camera.clone().recipient()]).start();
-
-            tx_render
-                .send((input_handler.clone(), renderer.clone(), camera.clone()))
-                .unwrap();
-
-            tx_game.send(game.clone()).unwrap();
-        });
-
-        tx_system.send(System::current()).unwrap();
-
-        system.run().unwrap();
-    });
+    let (camera, recv_camera_state) = Camera::new(
+        recv_input_state.clone(),
+        recv_game_state.resubscribe(),
+        recv_renderer_state.resubscribe(),
+    );
 
     // game
-    let system = rx_system.blocking_recv().unwrap();
+    {
+        let recv_stop = recv_stop.clone();
 
-    let (input_handler, renderer, camera) = rx_render.blocking_recv().unwrap();
-    let game = rx_game.blocking_recv().unwrap();
+        thread::spawn(move || {
+            let mut game = game;
+            let mut camera = camera;
 
-    let g_rx_stop = rx_stop.clone();
+            send_map_ref.send(game.map_ref()).unwrap();
 
-    let g_camera = camera.clone();
-    let g_game_recipient_load = game.clone().recipient();
-    let g_game_recipient_tick = game.clone().recipient();
+            Runtime::new().unwrap().block_on(async move {
+                let mut ticker = interval(TICK_INTERVAL);
+                let mut start = Some(Instant::now());
+                let mut counter = 0;
 
-    let range = 2;
+                while false == *recv_stop.borrow() {
+                    game_tick(&mut game, &mut counter, &mut start).await;
 
-    let mut game_handle = Some(thread::spawn(move || {
-        let rt = Runtime::new().unwrap();
+                    camera.recv().await;
+                    camera.send();
 
-        rt.block_on(async move {
-            let mut game_ticker = interval(TICK_INTERVAL);
-            let mut start = None;
-            let mut counter = 0;
-
-            while !*g_rx_stop.borrow() {
-                let pos = g_camera.send(CameraPosRequest).await.unwrap().0;
-                let pos = Camera::camera_pos_to_real(pos);
-
-                g_game_recipient_load
-                    .send(LoadChunkRange(
-                        pos - Pos(range, range),
-                        pos + Pos(range, range),
-                    ))
-                    .await
-                    .unwrap();
-
-                game_tick(
-                    &g_game_recipient_tick,
-                    &mut game_ticker,
-                    &mut counter,
-                    &mut start,
-                )
-                .await;
-            }
+                    ticker.tick().await;
+                }
+            });
         });
-    }));
+    }
 
-    // render
-    let e_rx_stop = rx_stop.clone();
+    let map_ref = recv_map_ref.blocking_recv().unwrap();
 
-    let e_handle = handle.clone();
+    {
+        let pos = CubeCoord::new(0 as Num, 0 as Num);
+        let pos = DisplayCoord::from_cube_as_pointy_top(&pos).to_point2();
 
-    let e_game = game.clone();
+        println!("{:?}", pos)
+    }
 
-    event_loop.run(move |event, _, control_flow| {
-        if let Event::WindowEvent {
-            event: WindowEvent::CloseRequested,
-            ..
-        } = &event
-        {
-            tx_stop.send(true).unwrap();
+    {
+        let pos = CubeCoord::new(1 as Num, 1 as Num);
+        let pos = DisplayCoord::from_cube_as_pointy_top(&pos).to_point2();
 
-            game_handle
-                .take()
-                .expect("failed to take game_handle")
-                .join()
-                .expect("failed to close game thread");
+        println!("{:?}", pos)
+    }
 
-            system.stop();
+    {
+        let recv_stop = recv_stop.clone();
+        let mut recv_camera_state = recv_camera_state.resubscribe();
+        let handle = handle.clone();
 
-            *control_flow = ControlFlow::Exit;
+        // render
+        event_loop.run(move |event, _, control_flow| {
+            if true == *recv_stop.borrow() {
+                return;
+            }
 
-            return;
-        }
-
-        if !*e_rx_stop.borrow() {
             let mut window_event = None;
             let mut device_event = None;
 
-            match &event {
+            match event {
+                Event::WindowEvent {
+                    event: WindowEvent::CloseRequested,
+                    ..
+                } => {
+                    *control_flow = ControlFlow::Exit;
+
+                    send_stop.send(true).unwrap();
+
+                    return;
+                }
+
                 Event::WindowEvent {
                     event: WindowEvent::Resized(_),
                     ..
                 } => {
                     *&mut recreate_swapchain = true;
                 }
+
                 Event::WindowEvent { event, .. } => {
                     window_event = Some(event);
                 }
+
                 Event::DeviceEvent { event, .. } => {
                     device_event = Some(event);
                 }
+
                 Event::RedrawEventsCleared => {
                     let (width, height) = gpu::window_size(&surface);
-                    let size = point2(width, height);
+                    let window_size = point2(width, height);
                     let aspect = width / height;
 
-                    let draw_info = e_handle.block_on(renderer.send(Redraw { aspect })).unwrap();
+                    renderer.update(aspect, window_size);
+                    renderer.recv();
+                    renderer.send();
 
-                    let pos = Camera::camera_pos_to_real(draw_info.pos);
+                    let camera_state = handle.block_on(recv_camera_state.recv()).unwrap(); // TODO unwrap
 
-                    let world_render_context = e_handle
-                        .block_on(e_game.send(WorldRenderContextRequest { pos, range }))
-                        .unwrap();
+                    let none = init_data.resource_man.id_pool.id(&RawId::none());
 
-                    let visible_chunks = world_render_context.visible_chunks;
+                    let instance_buffer = {
+                        let pos = Camera::point3_to_tile_coord(camera_state.pos);
 
-                    let mut instance_buffer = visible_chunks
-                        .iter()
-                        .flat_map(|chunk| chunk.to_instances(&init_data))
-                        .collect::<Vec<_>>();
+                        // TODO move this constant
+                        const RANGE: isize = 32;
+                        let point = TileCoord::new(RANGE, RANGE);
 
-                    let cursor_state = e_handle
-                        .block_on(input_handler.send(CursorStateRequest))
-                        .unwrap();
+                        let min = pos - point;
+                        let max = pos + point;
+                        let q = min.q()..max.q();
+                        let r = min.r()..max.r();
 
-                    let camera_ray = e_handle
-                        .block_on(camera.send(CameraRayRequest {
-                            aspect,
-                            size,
-                            pos: cursor_state.pos,
-                            visible_chunks: visible_chunks.clone(),
-                            init_data: init_data.clone(),
-                        }))
-                        .unwrap();
+                        let iter = q
+                            .into_iter()
+                            .map(|q| r.clone().into_iter().map(move |r| (q, r)))
+                            .flatten();
 
-                    camera_ray
-                        .result
-                        .into_iter()
-                        .for_each(|(chunk, index, tile)| {
-                            instance_buffer.push(
-                                chunk
-                                    .tile_to_instance(index, &tile, &init_data)
+                        // TODO make conversion pool
+
+                        let map_ref = map_ref.lock().unwrap();
+
+                        iter.map(|(q, r)| TileCoord::new(q, r))
+                            .map(|coord| coord_to_instance(&map_ref, &init_data, coord, none))
+                            .chain([coord_to_instance(
+                                &map_ref,
+                                &init_data,
+                                camera_state.pointing_at,
+                                none,
+                            )
+                            .map(|instance| {
+                                instance
                                     .add_position_offset([0.0, 0.0, 0.001])
-                                    .color_offset([1.0, 0.745, 0.447, 0.5]),
-                            );
-                        });
+                                    .color_offset([1.0, 0.745, 0.447, 0.5])
+                            })])
+                            .flatten()
+                            .collect::<Vec<_>>()
+                    };
 
                     let debug = [];
 
@@ -742,7 +779,6 @@ fn main() {
                         debug_vertex_pool.chunk(debug).unwrap().into_buffer_slice();
 
                     render(
-                        &draw_info,
                         device.clone(),
                         queue.clone(),
                         surface.clone(),
@@ -760,16 +796,15 @@ fn main() {
                         &mut uniform_buffers,
                         &instance_buffer,
                         &init_data,
+                        camera_state.matrix,
                     );
                 }
                 _ => (),
             };
 
             if window_event.is_some() || device_event.is_some() {
-                e_handle
-                    .block_on(input_handler.send(convert_input(window_event, device_event)))
-                    .unwrap();
+                input_handler.send(convert_input(window_event, device_event));
             }
-        }
-    });
+        });
+    }
 }

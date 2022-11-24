@@ -1,60 +1,72 @@
-use actix::{Actor, Addr, Context, Handler, Message, MessageResponse, ResponseFuture};
-
+use cgmath::point2;
 use futures::{future::join, FutureExt};
-use serde::{Deserialize, Serialize};
+use tokio::sync::{
+    broadcast::{channel, Receiver, Sender},
+    watch,
+};
 
-use crate::math::data::{Matrix4, Num, Point3};
+use crate::{
+    game::player::input::handler::InputState,
+    math::cg::{Num, Point2},
+};
 
-use super::camera::{Camera, CameraPos, CameraPosRequest, View, ViewRequest};
-
-#[derive(Message)]
-#[rtype(result = "DrawInfo")]
-pub struct Redraw {
+#[derive(Debug, Clone, Copy)]
+pub struct RendererState {
     pub aspect: Num,
-}
 
-#[derive(Debug, Clone, MessageResponse)]
-pub struct DrawInfo {
-    pub pos: Point3,
-    pub view: Matrix4,
-}
-
-impl DrawInfo {
-    fn from(view: View, camera_pos: CameraPos) -> Self {
-        Self {
-            pos: camera_pos.0,
-            view: view.0,
-        }
-    }
+    pub window_size: Point2,
+    pub cursor_pos: Point2,
 }
 
 pub struct Renderer {
-    camera: Addr<Camera>,
+    aspect: Num,
+    window_size: Point2,
+
+    main_pos: Point2,
+
+    send_renderer_state: Sender<RendererState>,
+    recv_input_state: watch::Receiver<Option<InputState>>,
 }
 
-impl Actor for Renderer {
-    type Context = Context<Self>;
-}
+impl Renderer {
+    pub fn new(
+        recv_input_state: watch::Receiver<Option<InputState>>,
+    ) -> (Self, Receiver<RendererState>) {
+        let (send_renderer_state, recv_renderer_state) = channel(2);
 
-impl Handler<Redraw> for Renderer {
-    type Result = ResponseFuture<DrawInfo>;
+        let it = Self {
+            aspect: 1.0,
+            window_size: point2(1.0, 1.0),
 
-    fn handle(&mut self, msg: Redraw, _ctx: &mut Self::Context) -> Self::Result {
-        let view = self
-            .camera
-            .send(ViewRequest { aspect: msg.aspect })
-            .map(|v| v.unwrap());
+            main_pos: point2(0.0, 0.0),
 
-        let camera_pos = self.camera.send(CameraPosRequest).map(|v| v.unwrap());
+            send_renderer_state,
+            recv_input_state,
+        };
 
-        join(view, camera_pos)
-            .map(|(view, camera_pos)| DrawInfo::from(view, camera_pos))
-            .boxed_local()
+        (it, recv_renderer_state)
     }
 }
 
 impl Renderer {
-    pub fn new(camera: Addr<Camera>) -> Self {
-        Self { camera }
+    pub fn send(&self) {
+        self.send_renderer_state
+            .send(RendererState {
+                aspect: self.aspect,
+                window_size: self.window_size,
+                cursor_pos: self.main_pos,
+            })
+            .unwrap();
+    }
+
+    pub fn recv(&mut self) {
+        if let Some(state) = *self.recv_input_state.borrow_and_update() {
+            self.main_pos = state.main_pos;
+        }
+    }
+
+    pub fn update(&mut self, aspect: Num, window_size: Point2) {
+        self.aspect = aspect;
+        self.window_size = window_size;
     }
 }

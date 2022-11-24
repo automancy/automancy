@@ -1,11 +1,11 @@
-use std::mem::size_of_val;
+use serde::{Deserialize, Serialize};
 
-use super::raw::{CanBeRaw, Raw};
+use super::id_pool::IdPool;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Id {
-    pub namespace: String,
-    pub name: String,
+    pub namespace: usize,
+    pub name: usize,
 }
 
 impl Default for Id {
@@ -14,34 +14,58 @@ impl Default for Id {
     }
 }
 
-impl Id {
-    pub fn none() -> Self {
-        Self::new("automancy".to_string(), "none".to_string())
-    }
-
-    pub fn automancy(name: String) -> Self {
-        Self::new("automancy".to_string(), name)
-    }
-
-    pub fn from_str(string: &str) -> Self {
-        let (namespace, name) = string.split_once(':').expect("invalid id");
-        let (namespace, name) = (namespace.to_string(), name.to_string());
-
-        assert!(!namespace.contains(':'));
-        assert!(!name.contains(':'));
-
-        Self { namespace, name }
-    }
-
-    pub fn new(namespace: String, name: String) -> Self {
-        assert!(!namespace.contains(':'));
-        assert!(!name.contains(':'));
-
-        Self { namespace, name }
-    }
+#[derive(Debug)]
+pub enum IdError {
+    NotFound,
+    ParseError(Option<RawId>, &'static str),
 }
 
-impl CanBeRaw<RawId> for Id {}
+impl Id {
+    pub fn new(namespace: usize, name: usize) -> Self {
+        Self { namespace, name }
+    }
+
+    pub fn none() -> Self {
+        Self::new(0, 0)
+    }
+
+    pub fn automancy(name: usize) -> Self {
+        Self::new(0, name)
+    }
+
+    pub fn from_str(id_pool: &mut IdPool, string: &str) -> Result<Self, IdError> {
+        let (namespace, name) = string.split_once(':').ok_or(IdError::ParseError(
+            None,
+            "invalid id: no delimiter ':' found",
+        ))?;
+
+        let raw_id = RawId::new(namespace, name);
+
+        Self::from_raw_id(id_pool, raw_id)
+    }
+
+    pub fn from_raw_id(id_pool: &mut IdPool, raw_id: RawId) -> Result<Self, IdError> {
+        if raw_id.namespace.contains(':') {
+            return Err(IdError::ParseError(
+                Some(raw_id),
+                "namespace contained ':' ... this must mean something is horribly wrong.",
+            ));
+        }
+
+        if raw_id.name.contains(':') {
+            return Err(IdError::ParseError(
+                Some(raw_id),
+                "name contained ':', please change the name to not have ':' in it!",
+            ));
+        }
+
+        Ok(raw_id.to_id_mut(id_pool))
+    }
+
+    pub fn to_raw_id(self, id_pool: &IdPool) -> RawId {
+        id_pool.raw_id(self)
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct RawId {
@@ -49,59 +73,29 @@ pub struct RawId {
     pub name: String,
 }
 
-impl Raw for RawId {
-    fn to_bytes(self) -> Vec<u8> {
-        let it = self.namespace.to_owned() + ":" + &self.name + "\0";
-        it.into_bytes()
-    }
+pub const AUTOMANCY_NAMESPACE: &str = "automancy";
+pub const NONE_NAME: &str = "none";
 
-    fn from_bytes(bytes: &[u8]) -> Self {
-        let null = bytes.iter().position(|v| *v == b'\0').unwrap();
-
-        let whole = String::from_utf8_lossy(&bytes[..null]);
-        let split = whole.split(':').collect::<Vec<_>>();
-        let (namespace, name) = (split[0].to_string(), split[1].to_string());
-
-        Self { namespace, name }
-    }
-
-    fn convert(bytes: &[u8]) -> Vec<Self>
-    where
-        Self: Sized,
-    {
-        let len = bytes.len();
-
-        let mut pos = 0;
-        let mut vec = Vec::new();
-        loop {
-            if pos >= len {
-                break;
-            }
-
-            let r = Self::from_bytes(&bytes[pos..]);
-            pos += size_of_val(&r);
-
-            vec.push(r);
+impl RawId {
+    pub fn none() -> Self {
+        Self {
+            namespace: AUTOMANCY_NAMESPACE.to_owned(),
+            name: NONE_NAME.to_owned(),
         }
-
-        vec
     }
-}
 
-impl Into<RawId> for Id {
-    fn into(self) -> RawId {
-        let namespace = self.namespace;
-        let name = self.name;
-
-        RawId { namespace, name }
+    pub fn new(namespace: &str, name: &str) -> Self {
+        Self {
+            namespace: namespace.to_owned(),
+            name: name.to_owned(),
+        }
     }
-}
 
-impl From<RawId> for Id {
-    fn from(val: RawId) -> Self {
-        let namespace = val.namespace;
-        let name = val.name;
+    pub fn to_id(self, id_pool: &IdPool) -> Option<Id> {
+        id_pool.id(&self)
+    }
 
-        Self { namespace, name }
+    pub fn to_id_mut(self, id_pool: &mut IdPool) -> Id {
+        id_pool.id_mut(&self)
     }
 }

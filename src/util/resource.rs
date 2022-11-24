@@ -1,70 +1,88 @@
-use std::{fs::File, io::BufReader, path::PathBuf};
+use std::{collections::HashMap, ffi::OsStr, fs::File, io::BufReader, path::Path};
 
-use json::JsonValue;
+use json::{object::Object, JsonValue};
 use ply_rs::parser::Parser;
 
 use crate::game::{
-    data::id::Id,
+    data::{id::Id, id_pool::IdPool},
     render::data::{Face, Model, Vertex},
 };
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Default, Clone)]
 pub struct Resource {
-    registry_index: Option<usize>,
-
-    pub id: Id,
-    pub model: Option<Model>,
+    pub faces_index: Option<usize>,
 }
 
-impl Resource {
-    pub fn register(&mut self, index: usize) {
-        self.registry_index = Some(index);
-    }
+#[derive(Debug, Default)]
+pub struct ResourceManager {
+    pub resources: HashMap<Id, Resource>,
+    pub id_pool: IdPool,
 }
 
-// TODO do not panic
-pub async fn load_resource(json: JsonValue, path: &PathBuf) -> Resource {
-    let parent = path.parent().unwrap();
+impl ResourceManager {
+    fn parse_model(&self, json: Object, working_dir: &Path) -> Option<Model> {
+        json.get("model")?
+            .as_str()
+            .map(|v| working_dir.join(v))
+            .map(File::open)
+            .and_then(Result::ok)
+            .and_then(|file| {
+                let mut model_reader = BufReader::new(file);
 
-    let id = Id::from_str(json["id"].as_str().expect("found no id"));
+                let vertex_parser = Parser::<Vertex>::new();
+                let face_parser = Parser::<Face>::new();
 
-    let model;
+                let header = vertex_parser.read_header(&mut model_reader).unwrap();
 
-    if let Some(model_path) = json["model"].as_str().and_then(|m| Some(parent.join(m))) {
-        let model_file = File::open(model_path).unwrap();
-        let mut model_reader = BufReader::new(model_file);
+                let mut vertices = None;
+                let mut faces = None;
 
-        let vertex_parser = Parser::<Vertex>::new();
-        let face_parser = Parser::<Face>::new();
-
-        let header = vertex_parser.read_header(&mut model_reader).unwrap();
-
-        let mut vertices = Vec::new();
-        let mut faces = Vec::new();
-        for (_, element) in &header.elements {
-            match element.name.as_ref() {
-                "vertex" => {
-                    vertices = vertex_parser
-                        .read_payload_for_element(&mut model_reader, &element, &header)
-                        .unwrap();
+                for (_, element) in &header.elements {
+                    match element.name.as_ref() {
+                        "vertex" => {
+                            vertices = vertex_parser
+                                .read_payload_for_element(&mut model_reader, &element, &header)
+                                .ok();
+                        }
+                        "face" => {
+                            faces = face_parser
+                                .read_payload_for_element(&mut model_reader, &element, &header)
+                                .ok();
+                        }
+                        _ => (),
+                    }
                 }
-                "face" => {
-                    faces = face_parser
-                        .read_payload_for_element(&mut model_reader, &element, &header)
-                        .unwrap();
-                }
-                _ => {}
-            }
-        }
 
-        model = Some(Model { vertices, faces });
-    } else {
-        model = None;
+                vertices
+                    .zip(faces)
+                    .map(|(vertices, faces)| Model::new(vertices, faces))
+            })
     }
 
-    Resource {
-        registry_index: None,
-        id,
-        model,
+    // TODO naming!!!!!
+
+    pub fn load_resource(
+        &mut self,
+        json: Object,
+        working_dir: &Path,
+    ) -> Option<(Id, Option<Model>)> {
+        let id = json.get("id")?.as_str()?;
+        let id = format!(
+            "{}:{}",
+            working_dir
+                .file_name()
+                .and_then(OsStr::to_str)
+                .unwrap_or("automancy"),
+            id
+        );
+        let id = Id::from_str(&mut self.id_pool, &id).ok()?;
+
+        println!("{:?}", id);
+
+        self.resources.insert(id, Resource { faces_index: None });
+
+        let model = self.parse_model(json, working_dir);
+
+        Some((id, model))
     }
 }

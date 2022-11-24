@@ -4,7 +4,7 @@ use bytemuck::{Pod, Zeroable};
 use ply_rs::ply::{Property, PropertyAccess};
 use vulkano::impl_vertex;
 
-use crate::math::data::{Num, Vector2};
+use crate::math::cg::{Num, Vector2};
 
 fn color_to_num(color: u8) -> Num {
     color as Num / 255.0
@@ -16,7 +16,7 @@ pub type VertexPos = [Num; 3];
 pub type VertexColor = [Num; 4];
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
+#[derive(Debug, Clone, Copy, Default, Zeroable, Pod)]
 pub struct Vertex {
     pub pos: VertexPos,
     pub color: VertexColor,
@@ -137,6 +137,14 @@ pub struct Face {
     pub vertex_indices: Vec<u32>,
 }
 
+impl Face {
+    pub fn with_offset(mut self, offset: u32) -> Self {
+        self.vertex_indices.iter_mut().for_each(|v| *v += offset);
+
+        self
+    }
+}
+
 impl PropertyAccess for Face {
     fn new() -> Self {
         Face {
@@ -155,10 +163,16 @@ impl PropertyAccess for Face {
 
 // model
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct Model {
     pub vertices: Vec<Vertex>,
     pub faces: Vec<Face>,
+}
+
+impl Model {
+    pub fn new(vertices: Vec<Vertex>, faces: Vec<Face>) -> Self {
+        Self { vertices, faces }
+    }
 }
 
 // model

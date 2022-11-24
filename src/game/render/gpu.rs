@@ -7,24 +7,17 @@ use vulkano::{
         physical::{PhysicalDevice, PhysicalDeviceType, QueueFamily},
         Device, DeviceExtensions, Queue,
     },
-    format::Format,
-    image::{
-        view::{ImageView, ImageViewCreateInfo},
-        AttachmentImage, SwapchainImage,
-    },
+    image::{view::ImageView, AttachmentImage, SwapchainImage},
     instance::Instance,
     pipeline::{
         graphics::{
-            depth_stencil::{
-                CompareOp, DepthState, DepthStencilState, StencilOpState, StencilState,
-            },
+            depth_stencil::DepthStencilState,
             input_assembly::{InputAssemblyState, PrimitiveTopology},
-            multisample::MultisampleState,
-            rasterization::{CullMode, PolygonMode, RasterizationState},
+            rasterization::RasterizationState,
             vertex_input::BuffersDefinition,
             viewport::{Viewport, ViewportState},
         },
-        GraphicsPipeline, StateMode,
+        GraphicsPipeline,
     },
     render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass, Subpass},
     shader::ShaderModule,
@@ -33,7 +26,7 @@ use vulkano::{
 };
 use winit::{dpi::LogicalSize, window::Window};
 
-use crate::{game::render::data::Vertex, math::data::Num, registry::init::InitData};
+use crate::{game::render::data::Vertex, math::cg::Num, registry::init::InitData};
 
 use super::data::{InstanceData, UniformBufferObject};
 
@@ -222,17 +215,22 @@ pub fn indirect_buffer(
         .fold(0, |first_instance, instances| {
             let len = instances.len() as u32;
 
-            if let Some(index_ranges) = &init_data.all_index_ranges[instances[0].faces_index] {
-                let commands = index_ranges
-                    .iter()
-                    .map(|range| DrawIndexedIndirectCommand {
-                        first_index: range.start,
-                        index_count: range.end - range.start,
+            if let Some(faces) = &init_data.all_faces[instances[0].faces_index] {
+                let mut commands = Vec::with_capacity(faces.len());
+
+                faces.iter().fold(0, |init, face| {
+                    let face_len = face.vertex_indices.len() as u32;
+
+                    commands.push(DrawIndexedIndirectCommand {
+                        first_index: init,
+                        index_count: face_len,
                         first_instance,
                         instance_count: len,
                         vertex_offset: 0,
-                    })
-                    .collect();
+                    });
+
+                    init + face_len
+                });
 
                 indirect_commands.push(commands);
             }
