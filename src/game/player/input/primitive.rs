@@ -5,6 +5,7 @@ use winit::event::{
 
 use crate::math::cg::{Num, Point2, Vector2};
 
+#[derive(Debug, Copy, Clone)]
 pub enum GameWindowEvent {
     MainPressed,
     MainReleased,
@@ -13,18 +14,20 @@ pub enum GameWindowEvent {
     CursorPos { pos: Point2 },
 }
 
+#[derive(Debug, Copy, Clone)]
 pub enum GameDeviceEvent {
     MainMove { delta: Vector2 },
 }
 
+#[derive(Debug, Copy, Clone)]
 pub struct GameInputEvent {
     pub window: Option<GameWindowEvent>,
     pub device: Option<GameDeviceEvent>,
 }
 
-pub fn convert_input<'a>(
-    window_event: Option<WindowEvent<'a>>,
-    device_event: Option<DeviceEvent>,
+pub fn convert_input(
+    window_event: Option<&WindowEvent>,
+    device_event: Option<&DeviceEvent>,
 ) -> GameInputEvent {
     let mut window = None;
     let mut device = None;
@@ -36,7 +39,7 @@ pub fn convert_input<'a>(
             WindowEvent::MouseWheel { delta, .. } => {
                 window = Some(match delta {
                     MouseScrollDelta::LineDelta(x, y) => {
-                        let delta = vec2(x, y);
+                        let delta = vec2(*x, *y);
 
                         MouseWheel { delta }
                     }
@@ -50,17 +53,17 @@ pub fn convert_input<'a>(
             WindowEvent::MouseInput { state, button, .. } => {
                 match button {
                     MouseButton::Left => {
-                        window = Some(if state == ElementState::Pressed {
+                        window = Some(if state == &ElementState::Pressed {
                             MainPressed
                         } else {
                             MainReleased
                         });
-                    }
-                    _ => (),
+                    },
+                    _ => {}
                 };
             }
             WindowEvent::ModifiersChanged(modifier) => {
-                window = Some(ModifierChanged { modifier });
+                window = Some(ModifierChanged { modifier: *modifier });
             }
             WindowEvent::CursorMoved { position, .. } => {
                 window = Some(CursorPos {
@@ -71,18 +74,15 @@ pub fn convert_input<'a>(
         }
     }
 
-    if let Some(event) = &device_event {
+    if let Some(event) = device_event {
         use GameDeviceEvent::*;
 
-        match event {
-            DeviceEvent::MouseMotion { delta } => {
-                let (x, y) = *delta;
+        if let DeviceEvent::MouseMotion { delta } = event {
+            let (x, y) = delta;
 
-                let delta = vec2(x as Num, y as Num);
+            let delta = vec2(*x as Num, *y as Num);
 
-                device = Some(MainMove { delta });
-            }
-            _ => (),
+            device = Some(MainMove { delta });
         }
     }
 

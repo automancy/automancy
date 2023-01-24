@@ -1,11 +1,12 @@
 use crate::{
-    game::{
-        data::id::Id,
-        render::data::{Face, Model, Vertex},
+    game::render::data::{Face, Model, Vertex},
+    util::{
+        id::{Id},
+        resource::ResourceManager,
     },
-    util::resource::ResourceManager,
 };
 
+#[derive(Debug)]
 pub struct InitData {
     pub resource_man: ResourceManager,
 

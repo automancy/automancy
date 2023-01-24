@@ -1,15 +1,20 @@
-use crate::math::hex::cube::CubeCoord;
+use hexagon_tiles::hexagon::Hex;
+use crate::{
+    util::id::{id_static, Id},
+};
 
-use super::{data::Data, id::Id};
+use super::data::Data;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub const NONE: Id = id_static("automancy", "none");
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tile {
     pub id: Id,
     pub data: Data,
 }
 
-pub type TileUnit = isize;
+pub type TileUnit = i32;
 
-pub type TileCoord = CubeCoord<TileUnit>;
+pub type TileCoord = Hex;

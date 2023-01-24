@@ -4,6 +4,7 @@
 #![feature(slice_group_by)]
 #![feature(duration_consts_float)]
 #![feature(variant_count)]
+#![feature(result_option_inspect)]
 
 #[macro_use]
 mod util;
@@ -14,90 +15,70 @@ mod registry;
 
 use crate::{
     game::{
-        data::{id::RawId, map::Map, tile::TileCoord},
+        data::{
+            map::{Map},
+        },
         game::Game,
         player::input::{handler::InputHandler, primitive::convert_input},
         render::{
             camera::Camera,
-            data::InstanceData,
-            gpu::{self, dbg_frag_shader, dbg_vert_shader, frag_shader, vert_shader},
+            gpu::{self, frag_shader, vert_shader},
             renderer::Renderer,
         },
-        ticking::{TICK_INTERVAL, TPS},
-    },
-    math::{
-        cg::Num,
-        hex::{cube::CubeCoord, offset::OffsetCoord},
-    },
+        ticking::{TICK_INTERVAL},
+    }
 };
 
-use cgmath::point2;
 use game::{
-    data::id::Id,
-    game::Ticked,
     render::{
-        data::{Model, UniformBufferObject, Vertex},
+        data::{Model},
         gpu::window_size_u32,
     },
-    ticking::MAX_ALLOWED_TICK_INTERVAL,
 };
 use json::JsonValue;
-use math::cg::{DisplayCoord, Matrix4};
+
 use registry::init::InitData;
-use util::resource::{Resource, ResourceManager};
+use util::{
+    id::{Id},
+    resource::ResourceManager,
+};
 use walkdir::WalkDir;
 
 use std::{
-    borrow::Borrow,
     ffi::OsStr,
     fs::{read_to_string, File},
     path::Path,
     sync::Arc,
-    thread,
-    time::Instant,
 };
+use futures::executor::block_on;
 
-use tokio::{
-    runtime::{Builder, Runtime},
-    sync::{
-        broadcast::{channel, Sender},
-        oneshot, OnceCell,
-    },
-    time::interval,
-};
-use tokio::{sync::watch, time::Interval};
+use riker::actors::{ActorRefFactory, SystemBuilder, Timer};
 
-use vulkano::{
-    buffer::{
-        cpu_pool::CpuBufferPoolChunk, BufferAccess, BufferSlice, BufferUsage, CpuAccessibleBuffer,
-        CpuBufferPool, ImmutableBuffer,
-    },
-    command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, SubpassContents},
-    descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet},
-    device::{Device, DeviceCreateInfo, DeviceExtensions, Features, Queue, QueueCreateInfo},
-    format::{ClearValue, Format},
-    image::{AttachmentImage, ImageAccess, ImageUsage},
-    instance::{Instance, InstanceCreateInfo},
-    memory::pool::StdMemoryPool,
-    pipeline::{
-        graphics::{input_assembly::PrimitiveTopology, rasterization::RasterizationState},
-        GraphicsPipeline, Pipeline, PipelineBindPoint, StateMode,
-    },
-    render_pass::{Framebuffer, RenderPass},
-    swapchain::{
-        acquire_next_image, AcquireError, Surface, Swapchain, SwapchainCreateInfo,
-        SwapchainCreationError,
-    },
-    sync::{self, FlushError, GpuFuture},
-};
-use vulkano_win::VkSurfaceBuild;
+use vulkano::buffer::BufferUsage;
+
+use vulkano::command_buffer::PrimaryCommandBufferAbstract;
+use vulkano::device::{Device, DeviceCreateInfo, DeviceExtensions, Features, QueueCreateInfo};
+use vulkano::device::physical::{PhysicalDeviceType};
+use vulkano::format::Format;
+use vulkano::image::{AttachmentImage, ImageUsage};
+use vulkano::instance::{Instance, InstanceCreateInfo};
+use vulkano::memory::allocator::{FastMemoryAllocator};
+use vulkano::pipeline::graphics::input_assembly::PrimitiveTopology;
+use vulkano::pipeline::graphics::rasterization::RasterizationState;
+use vulkano::pipeline::StateMode;
+use vulkano::swapchain::{Swapchain, SwapchainCreateInfo};
+use vulkano::sync::GpuFuture;
+use vulkano::VulkanLibrary;
+use vulkano_win::{create_surface_from_winit};
 
 use winit::{
     dpi::PhysicalSize,
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
-    window::{Icon, Window, WindowBuilder},
+    window::{Icon, WindowBuilder},
 };
+use crate::game::game::{GameMsg};
+use crate::game::render::gpu::Gpu;
 
 pub const ASSET_LOGO: &str = "assets/logo.png";
 
@@ -112,7 +93,7 @@ fn load_resources() -> (ResourceManager, Vec<Option<(Id, Option<Model>)>>) {
     let resources = WalkDir::new(RESOURCE)
         .into_iter()
         .flatten()
-        .map(|entry| {
+        .filter_map(|entry| {
             let path = entry.into_path();
             let working_dir = path.parent().unwrap_or_else(|| Path::new("")).to_path_buf();
 
@@ -132,248 +113,16 @@ fn load_resources() -> (ResourceManager, Vec<Option<(Id, Option<Model>)>>) {
                 }
             }
 
-            return None;
+            None
         })
-        .flatten()
         .map(|(json, working_dir)| {
-            return resource_man.load_resource(json, &working_dir);
+            resource_man.load_resource(json, &working_dir)
         })
         .collect::<Vec<_>>();
 
     println!("{:?}", resources);
 
     (resource_man, resources)
-}
-
-fn render(
-    device: Arc<Device>,
-    queue: Arc<Queue>,
-    surface: Arc<Surface<Window>>,
-    render_pass: Arc<RenderPass>,
-    swapchain: &mut Arc<Swapchain<Window>>,
-    recreate_swapchain: &mut bool,
-    framebuffers: &mut Vec<Arc<Framebuffer>>,
-    previous_frame_end: &mut Option<Box<dyn GpuFuture + Send + Sync>>,
-    pipeline: Arc<GraphicsPipeline>,
-    vertex_buffer: Arc<ImmutableBuffer<[Vertex]>>,
-    index_buffer: Arc<ImmutableBuffer<[u32]>>,
-    debug_pipeline: Arc<GraphicsPipeline>,
-    debug_vertex_buffer: Arc<BufferSlice<[Vertex], CpuBufferPoolChunk<Vertex, Arc<StdMemoryPool>>>>,
-    depth_buffer: &mut Arc<AttachmentImage>,
-    uniform_buffers: &mut Vec<Arc<CpuAccessibleBuffer<UniformBufferObject>>>,
-    instance_buffer: &[InstanceData],
-    init_data: &InitData,
-    matrix: Matrix4,
-) {
-    let size = window_size_u32(&surface);
-
-    if size[0] == 0 || size[1] == 0 {
-        return;
-    }
-
-    if ImageAccess::dimensions(depth_buffer).width_height() != size {
-        *recreate_swapchain = true;
-
-        *depth_buffer = AttachmentImage::with_usage(
-            device.clone(),
-            size,
-            Format::D24_UNORM_S8_UINT,
-            ImageUsage::depth_stencil_attachment(),
-        )
-        .unwrap();
-    }
-
-    previous_frame_end.as_mut().unwrap().cleanup_finished();
-
-    if *recreate_swapchain {
-        let (new_swapchain, new_images) = match swapchain.recreate(SwapchainCreateInfo {
-            image_extent: size.into(),
-            ..swapchain.create_info()
-        }) {
-            Ok(r) => r,
-            Err(SwapchainCreationError::ImageExtentNotSupported { .. }) => return,
-            Err(e) => panic!("failed to recreate swapchain: {:?}", e),
-        };
-
-        *swapchain = new_swapchain;
-
-        *framebuffers = gpu::framebuffers(&new_images, render_pass.clone(), depth_buffer.clone());
-        *recreate_swapchain = false;
-    }
-
-    let (image_num, suboptimal, acquire_future) = match acquire_next_image(swapchain.clone(), None)
-    {
-        Ok(r) => r,
-        Err(AcquireError::OutOfDate) => {
-            *recreate_swapchain = true;
-            return;
-        }
-        Err(e) => panic!("failed to acquire next image: {:?}", e),
-    };
-
-    if suboptimal {
-        *recreate_swapchain = true;
-    }
-
-    let indirect_instance = if !instance_buffer.is_empty() {
-        let (instance_buffer, commands) =
-            gpu::indirect_buffer(queue.clone(), init_data, instance_buffer);
-
-        if !commands.is_empty() {
-            let indirect_buffer = gpu::immutable_buffer(
-                commands.into_iter(),
-                BufferUsage::indirect_buffer(),
-                queue.clone(),
-            );
-            Some((indirect_buffer, instance_buffer))
-        } else {
-            None
-        }
-    } else {
-        None
-    };
-
-    let ubo = UniformBufferObject {
-        matrix: matrix.into(),
-    };
-
-    *uniform_buffers[image_num].write().unwrap() = ubo;
-
-    let pipeline_layout = pipeline.layout();
-    let ubo_layout = pipeline_layout.set_layouts()[0].clone();
-    let ubo_set = PersistentDescriptorSet::new(
-        ubo_layout.clone(),
-        [WriteDescriptorSet::buffer(
-            0,
-            uniform_buffers[image_num].clone(),
-        )],
-    )
-    .unwrap();
-
-    /*
-    let debug_pipeline_layout = debug_pipeline.layout();
-    let debug_ubo_layout = debug_pipeline_layout.set_layouts()[0].clone();
-    let debug_ubo_set = PersistentDescriptorSet::new(
-        debug_ubo_layout.clone(),
-        [WriteDescriptorSet::buffer(
-            0,
-            uniform_buffers[image_num].clone(),
-        )],
-    )
-    .unwrap();
-     */
-
-    let mut builder = AutoCommandBufferBuilder::primary(
-        device.clone(),
-        queue.family(),
-        CommandBufferUsage::OneTimeSubmit,
-    )
-    .unwrap();
-
-    builder
-        .begin_render_pass(
-            framebuffers[image_num].clone(),
-            SubpassContents::Inline,
-            [
-                ClearValue::Float([0.0, 0.0, 0.0, 1.0]),
-                ClearValue::DepthStencil((1.0, 0)),
-            ],
-        )
-        .unwrap()
-        .set_viewport(0, [gpu::viewport(&surface)]);
-
-    if let Some((indirect_buffer, instance_buffer)) = indirect_instance {
-        builder
-            .bind_vertex_buffers(0, (vertex_buffer.clone(), instance_buffer.clone()))
-            .bind_index_buffer(index_buffer.clone())
-            .bind_descriptor_sets(
-                PipelineBindPoint::Graphics,
-                pipeline_layout.clone(),
-                0,
-                ubo_set,
-            )
-            .bind_pipeline_graphics(pipeline.clone())
-            .draw_indexed_indirect(indirect_buffer)
-            .unwrap();
-    }
-
-    let debug_vertex_buffer_size = debug_vertex_buffer.len() as u32;
-    if debug_vertex_buffer_size != 0 {
-        builder
-            .bind_vertex_buffers(0, debug_vertex_buffer)
-            .bind_pipeline_graphics(debug_pipeline.clone())
-            /*
-            .bind_descriptor_sets(
-                PipelineBindPoint::Graphics,
-                debug_pipeline_layout.clone(),
-                0,
-                debug_ubo_set,
-            )
-            */
-            .draw(debug_vertex_buffer_size, 1, 0, 0)
-            .unwrap();
-    }
-
-    builder.end_render_pass().unwrap();
-
-    let command_buffer = builder.build().unwrap();
-
-    let future = previous_frame_end
-        .take()
-        .unwrap()
-        .join(acquire_future)
-        .then_execute(queue.clone(), command_buffer)
-        .unwrap()
-        .then_swapchain_present(queue.clone(), swapchain.clone(), image_num)
-        .then_signal_fence_and_flush();
-
-    match future {
-        Ok(future) => {
-            future.wait(None).unwrap();
-            *previous_frame_end = Some(future.boxed_send_sync());
-        }
-        Err(FlushError::OutOfDate) => {
-            *recreate_swapchain = true;
-            *previous_frame_end = Some(sync::now(device.clone()).boxed_send_sync());
-        }
-        Err(e) => {
-            log::error!("failed to flush future: {:?}", e);
-            *previous_frame_end = Some(sync::now(device.clone()).boxed_send_sync());
-        }
-    }
-}
-
-pub async fn game_tick(game: &mut Game, counter: &mut u64, cycle_start: &mut Option<Instant>) {
-    let start = Instant::now();
-    game.tick();
-    let finish = Instant::now();
-
-    let tick_time = finish - start;
-
-    if tick_time >= MAX_ALLOWED_TICK_INTERVAL {
-        log::warn!(
-            "tick took longer than allowed maximum! tick_time: {:?}, maximum: {:?}",
-            tick_time,
-            MAX_ALLOWED_TICK_INTERVAL
-        );
-    }
-
-    *counter += 1;
-    if *counter >= TPS {
-        // todo: what to do when the TPS is low?
-        {
-            if let Some(start) = cycle_start.replace(Instant::now()) {
-                let elapsed = start.elapsed();
-
-                let tps = (*counter * 1_000_000_000) as f64 / elapsed.as_nanos() as f64;
-                let tps = (tps * 100.0).round() / 100.0;
-
-                log::debug!("TPS: {:.1}, elapsed time: {:?}", tps, elapsed);
-            }
-        }
-
-        *counter -= TPS;
-    }
 }
 
 async fn init() -> Arc<InitData> {
@@ -384,56 +133,22 @@ async fn init() -> Arc<InitData> {
     Arc::new(init_data)
 }
 
-fn coord_to_instance(
-    map_ref: &Map,
-    init_data: &InitData,
-    pos: TileCoord,
-    none: Option<Id>,
-) -> Option<InstanceData> {
-    let map_id_pool = &map_ref.id_pool;
-    let resource_id_pool = &init_data.resource_man.id_pool;
-
-    map_ref
-        .tiles
-        .get(&pos)
-        .map_or(none, |tile| {
-            tile.id
-                .to_raw_id(map_id_pool)
-                .to_id(resource_id_pool)
-                .as_ref()
-                .copied()
-        })
-        .and_then(|id| init_data.resource_man.resources.get(&id))
-        .and_then(|v| {
-            v.faces_index.map(|face| {
-                // TODO into
-
-                let pos = CubeCoord::new(pos.q() as Num, pos.r() as Num);
-                let pos = DisplayCoord::from_cube_as_pointy_top(&pos).to_point2();
-
-                InstanceData::new()
-                    .faces_index(face)
-                    .position_offset([pos.x, pos.y, 0.0])
-            })
-        })
-}
-
 fn main() {
     env_logger::init();
 
     // --- resources & data ---
-    let runtime = Builder::new_current_thread().enable_all().build().unwrap();
-    let handle = runtime.handle();
-
-    let init_data = handle.block_on(init());
+    let init_data = block_on(init());
 
     // --- instance ---
-    let required_extensions = vulkano_win::required_extensions();
-    let instance = Instance::new(InstanceCreateInfo {
-        enabled_extensions: required_extensions,
-        ..Default::default()
-    })
-    .expect("failed to create instance");
+    let library = VulkanLibrary::new().expect("no local Vulkan library");
+    let required_extensions = vulkano_win::required_extensions(&library);
+    let instance = Instance::new(
+        library,
+        InstanceCreateInfo {
+            enabled_extensions: required_extensions,
+            ..Default::default()
+        }
+    ).expect("failed to create instance");
 
     // --- surface ---
     let (bytes, width, height) = {
@@ -450,57 +165,86 @@ fn main() {
     let icon = Icon::from_rgba(bytes, width, height).unwrap();
 
     let event_loop = EventLoop::new();
-    let surface = WindowBuilder::new()
-        .with_title("automancy")
-        .with_window_icon(Some(icon))
-        .with_inner_size(PhysicalSize::new(800, 800))
-        .build_vk_surface(&event_loop, instance.clone())
-        .unwrap();
 
-    let device_extensions = DeviceExtensions {
-        khr_swapchain: true,
-        khr_storage_buffer_storage_class: true,
-        khr_depth_stencil_resolve: true,
-        ..DeviceExtensions::none()
-    };
+    let window = Arc::new(
+        WindowBuilder::new()
+            .with_title("automancy")
+            .with_window_icon(Some(icon))
+            .with_inner_size(PhysicalSize::new(800, 800))
+            .build(&event_loop)
+            .expect("could not build window")
+    );
+
+    let surface = create_surface_from_winit(window.clone(), instance.clone()).expect("could not create surface");
 
     // --- physical device ---
-    let (physical, queue_family) =
-        gpu::select_physical_device(&instance, surface.clone(), &device_extensions);
+    let device_extensions = DeviceExtensions {
+        khr_swapchain: true,
+        khr_depth_stencil_resolve: true,
+        ..DeviceExtensions::empty()
+    };
+
+    let (physical_device, queue_family_index) = instance
+        .enumerate_physical_devices()
+        .expect("could not enumerate devices")
+        .filter(|p| p.supported_extensions().contains(&device_extensions))
+        .filter_map(|p| {
+            p.queue_family_properties()
+                .iter()
+                .enumerate()
+                .position(|(i, q)| {
+                    q.queue_flags.graphics && p.surface_support(i as u32, &surface).unwrap_or(false)
+                })
+                .map(|q| (p, q as u32))
+        })
+        .min_by_key(|(p, _)| match p.properties().device_type {
+            PhysicalDeviceType::DiscreteGpu => 0,
+            PhysicalDeviceType::IntegratedGpu => 1,
+            PhysicalDeviceType::VirtualGpu => 2,
+            PhysicalDeviceType::Cpu => 3,
+            _ => 4,
+        })
+        .expect("no devices available");
+
     log::info!(
         "Using device: {} (type: {:?})",
-        physical.properties().device_name,
-        physical.properties().device_type
+        physical_device.properties().device_name,
+        physical_device.properties().device_type
     );
 
     // --- logical device ---
     let (device, mut queues) = Device::new(
-        physical,
+        physical_device.clone(),
         DeviceCreateInfo {
-            queue_create_infos: vec![QueueCreateInfo::family(queue_family)],
-            enabled_extensions: physical.required_extensions().union(&device_extensions),
+            queue_create_infos: vec![QueueCreateInfo {
+                queue_family_index,
+                ..Default::default()
+            }],
+            enabled_extensions: device_extensions,
             enabled_features: Features {
-                sample_rate_shading: true,
-                wide_lines: true,
+                multi_draw_indirect: true,
                 fill_mode_non_solid: true,
                 ..Default::default()
             },
             ..Default::default()
         },
-    )
-    .expect("failed to create device");
+    ).expect("failed to create device");
 
     // --- queue ---
     let queue = queues.next().unwrap();
 
     // --- swapchain ---
-    let (mut swapchain, images) = {
-        let surface_capabilities = physical
+    let caps = physical_device
+        .surface_capabilities(&surface, Default::default())
+        .expect("failed to get surface capabilities");
+
+    let (swapchain, images) = {
+        let surface_capabilities = physical_device
             .surface_capabilities(&surface, Default::default())
             .expect("failed to get surface capabilities");
 
         let image_format = Some(
-            physical
+            physical_device
                 .surface_formats(&surface, Default::default())
                 .unwrap()[0]
                 .0,
@@ -513,9 +257,12 @@ fn main() {
                 min_image_count: surface_capabilities.min_image_count,
 
                 image_format,
-                image_extent: surface.window().inner_size().into(),
+                image_extent: window.inner_size().into(),
 
-                image_usage: ImageUsage::color_attachment(),
+                image_usage: ImageUsage {
+                    color_attachment: true,
+                        ..Default::default()
+                },
                 composite_alpha: surface_capabilities
                     .supported_composite_alpha
                     .iter()
@@ -552,15 +299,24 @@ fn main() {
     )
     .unwrap();
 
-    let size = window_size_u32(&surface);
+    let size = window_size_u32(&window);
 
     // --- buffers ---
+    let allocator = FastMemoryAllocator::new_default(device.clone());
+
+    let mut command_buffer_builder = gpu::command_buffer_builder(device.clone(), queue.clone());
+
     let vertex_buffer = gpu::immutable_buffer(
+        &allocator,
         init_data.combined_vertices.clone(),
-        BufferUsage::vertex_buffer(),
-        queue.clone(),
+        BufferUsage {
+            vertex_buffer: true,
+            ..Default::default()
+        },
+        &mut command_buffer_builder,
     );
     let index_buffer = gpu::immutable_buffer(
+        &allocator,
         init_data
             .all_faces
             .iter()
@@ -568,32 +324,51 @@ fn main() {
             .flatten()
             .flat_map(|v| v.vertex_indices.clone())
             .collect::<Vec<_>>(),
-        BufferUsage::index_buffer(),
-        queue.clone(),
+        BufferUsage {
+            index_buffer: true,
+            ..Default::default()
+        },
+        &mut command_buffer_builder,
     );
-    let mut uniform_buffers = gpu::uniform_buffers(&device, swapchain.image_count());
-    let mut depth_buffer = AttachmentImage::with_usage(
-        device.clone(),
+    let uniform_buffers = gpu::uniform_buffers(&allocator, swapchain.image_count());
+    let depth_buffer = AttachmentImage::with_usage(
+        &allocator,
         size,
         Format::D24_UNORM_S8_UINT,
-        ImageUsage::depth_stencil_attachment(),
+        ImageUsage {
+            depth_stencil_attachment: true,
+            ..Default::default()
+        },
     )
     .unwrap();
 
+    let command_buffer = command_buffer_builder.build().unwrap();
+    block_on(
+        command_buffer
+            .execute(queue.clone())
+            .unwrap()
+            .then_signal_fence_and_flush()
+            .unwrap()
+    ).unwrap();
+
+    /*
     let debug_vertex_pool = CpuBufferPool::<Vertex>::vertex_buffer(device.clone());
+     */
 
     // --- shaders ---
     let vs = vert_shader::load(device.clone()).unwrap();
     let fs = frag_shader::load(device.clone()).unwrap();
+    /*
     let dbg_vs = dbg_vert_shader::load(device.clone()).unwrap();
     let dbg_fs = dbg_frag_shader::load(device.clone()).unwrap();
     // TODO only activate when debugging
+     */
 
     // --- pipeline ---
     let pipeline = gpu::pipeline(
         device.clone(),
-        vs.clone(),
-        fs.clone(),
+        vs,
+        fs,
         render_pass.clone(),
         PrimitiveTopology::TriangleList,
         RasterizationState::new(),
@@ -602,208 +377,113 @@ fn main() {
     let mut debug_rasterization_state = RasterizationState::new();
     debug_rasterization_state.line_width = StateMode::Fixed(5.0);
 
+    /*
     let debug_pipeline = gpu::pipeline(
         device.clone(),
-        dbg_vs.clone(),
-        dbg_fs.clone(),
+        dbg_vs,
+        dbg_fs,
         render_pass.clone(),
         PrimitiveTopology::LineList,
         debug_rasterization_state,
         false,
     );
+     */
 
     // --- framebuffers ---
-    let mut framebuffers = gpu::framebuffers(&images, render_pass.clone(), depth_buffer.clone());
-    let mut recreate_swapchain = false;
-    let mut previous_frame_end = Some(sync::now(device.clone()).boxed_send_sync());
+    let framebuffers = gpu::framebuffers(&images, render_pass.clone(), depth_buffer.clone());
+
+    // --- gpu ---
+    let gpu = Gpu {
+        device,
+        queue,
+        surface: surface.clone(),
+        render_pass,
+
+        window,
+        swapchain,
+        framebuffers,
+
+        vertex_buffer,
+        index_buffer,
+        depth_buffer,
+        uniform_buffers,
+
+        pipeline,
+    };
 
     // --- load map ---
+    //let map = Map::load("test".to_owned());
+    let map = Map::new_empty("test".to_owned());
 
-    let map = Map::load("test".to_owned());
+    // --- init actors ---
+    let sys = SystemBuilder::new().name("automancy").create().unwrap();
 
-    // --- loop ---
-    let (send_stop, recv_stop) = watch::channel(false);
+    let game = sys.actor_of_args::<Game, Map>("game", map).unwrap();
 
-    let (game, recv_game_state) = Game::new(map);
+    let mut input_handler = InputHandler::new();
+    let mut camera = Camera::new();
+    let mut renderer = Renderer::new(game.clone(), init_data.clone(), gpu);
 
-    let (send_map_ref, recv_map_ref) = oneshot::channel();
+    // --- game ---
+    let tick = GameMsg::Tick {};
 
-    let (mut input_handler, recv_input_state) = InputHandler::new();
+    sys.schedule(TICK_INTERVAL, TICK_INTERVAL, game.clone(), None, tick);
 
-    let (mut renderer, recv_renderer_state) = Renderer::new(recv_input_state.clone());
 
-    let (camera, recv_camera_state) = Camera::new(
-        recv_input_state.clone(),
-        recv_game_state.resubscribe(),
-        recv_renderer_state.resubscribe(),
-    );
-
-    // game
+    // --- event-loop ---
     {
-        let recv_stop = recv_stop.clone();
+        let mut closed = false;
 
-        thread::spawn(move || {
-            let mut game = game;
-            let mut camera = camera;
-
-            send_map_ref.send(game.map_ref()).unwrap();
-
-            Runtime::new().unwrap().block_on(async move {
-                let mut ticker = interval(TICK_INTERVAL);
-                let mut start = Some(Instant::now());
-                let mut counter = 0;
-
-                while false == *recv_stop.borrow() {
-                    game_tick(&mut game, &mut counter, &mut start).await;
-
-                    camera.recv().await;
-                    camera.send();
-
-                    ticker.tick().await;
-                }
-            });
-        });
-    }
-
-    let map_ref = recv_map_ref.blocking_recv().unwrap();
-
-    {
-        let pos = CubeCoord::new(0 as Num, 0 as Num);
-        let pos = DisplayCoord::from_cube_as_pointy_top(&pos).to_point2();
-
-        println!("{:?}", pos)
-    }
-
-    {
-        let pos = CubeCoord::new(1 as Num, 1 as Num);
-        let pos = DisplayCoord::from_cube_as_pointy_top(&pos).to_point2();
-
-        println!("{:?}", pos)
-    }
-
-    {
-        let recv_stop = recv_stop.clone();
-        let mut recv_camera_state = recv_camera_state.resubscribe();
-        let handle = handle.clone();
-
-        // render
         event_loop.run(move |event, _, control_flow| {
-            if true == *recv_stop.borrow() {
+            if closed {
                 return;
             }
 
             let mut window_event = None;
             let mut device_event = None;
 
-            match event {
+            match &event {
                 Event::WindowEvent {
                     event: WindowEvent::CloseRequested,
                     ..
                 } => {
+                    block_on(sys.shutdown()).unwrap();
+
                     *control_flow = ControlFlow::Exit;
 
-                    send_stop.send(true).unwrap();
+                    closed = true;
 
                     return;
-                }
+                },
 
                 Event::WindowEvent {
                     event: WindowEvent::Resized(_),
                     ..
                 } => {
-                    *&mut recreate_swapchain = true;
-                }
+                    renderer.recreate_swapchain = true;
+                },
 
                 Event::WindowEvent { event, .. } => {
                     window_event = Some(event);
-                }
+                },
 
                 Event::DeviceEvent { event, .. } => {
                     device_event = Some(event);
-                }
+                },
 
-                Event::RedrawEventsCleared => {
-                    let (width, height) = gpu::window_size(&surface);
-                    let window_size = point2(width, height);
-                    let aspect = width / height;
-
-                    renderer.update(aspect, window_size);
-                    renderer.recv();
-                    renderer.send();
-
-                    let camera_state = handle.block_on(recv_camera_state.recv()).unwrap(); // TODO unwrap
-
-                    let none = init_data.resource_man.id_pool.id(&RawId::none());
-
-                    let instance_buffer = {
-                        let pos = Camera::point3_to_tile_coord(camera_state.pos);
-
-                        // TODO move this constant
-                        const RANGE: isize = 32;
-                        let point = TileCoord::new(RANGE, RANGE);
-
-                        let min = pos - point;
-                        let max = pos + point;
-                        let q = min.q()..max.q();
-                        let r = min.r()..max.r();
-
-                        let iter = q
-                            .into_iter()
-                            .map(|q| r.clone().into_iter().map(move |r| (q, r)))
-                            .flatten();
-
-                        // TODO make conversion pool
-
-                        let map_ref = map_ref.lock().unwrap();
-
-                        iter.map(|(q, r)| TileCoord::new(q, r))
-                            .map(|coord| coord_to_instance(&map_ref, &init_data, coord, none))
-                            .chain([coord_to_instance(
-                                &map_ref,
-                                &init_data,
-                                camera_state.pointing_at,
-                                none,
-                            )
-                            .map(|instance| {
-                                instance
-                                    .add_position_offset([0.0, 0.0, 0.001])
-                                    .color_offset([1.0, 0.745, 0.447, 0.5])
-                            })])
-                            .flatten()
-                            .collect::<Vec<_>>()
-                    };
-
-                    let debug = [];
-
-                    let debug_vertex_buffer =
-                        debug_vertex_pool.chunk(debug).unwrap().into_buffer_slice();
-
-                    render(
-                        device.clone(),
-                        queue.clone(),
-                        surface.clone(),
-                        render_pass.clone(),
-                        &mut swapchain,
-                        &mut recreate_swapchain,
-                        &mut framebuffers,
-                        &mut previous_frame_end,
-                        pipeline.clone(),
-                        vertex_buffer.clone(),
-                        index_buffer.clone(),
-                        debug_pipeline.clone(),
-                        debug_vertex_buffer.clone(),
-                        &mut depth_buffer,
-                        &mut uniform_buffers,
-                        &instance_buffer,
-                        &init_data,
-                        camera_state.matrix,
-                    );
-                }
-                _ => (),
+                _ => {},
             };
 
-            if window_event.is_some() || device_event.is_some() {
-                input_handler.send(convert_input(window_event, device_event));
+            let input_event = convert_input(window_event, device_event);
+            if input_event.device.is_some() || input_event.window.is_some() {
+                let input_state = input_handler.update(input_event);
+                camera.input_state(input_state);
+            }
+
+            if event == Event::RedrawEventsCleared {
+                camera.update_pos();
+
+                block_on(renderer.render(&sys, camera.get_camera_state()));
             }
         });
     }

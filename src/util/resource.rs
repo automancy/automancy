@@ -1,12 +1,14 @@
 use std::{collections::HashMap, ffi::OsStr, fs::File, io::BufReader, path::Path};
 
-use json::{object::Object, JsonValue};
+use json::object::Object;
 use ply_rs::parser::Parser;
 
-use crate::game::{
-    data::{id::Id, id_pool::IdPool},
-    render::data::{Face, Model, Vertex},
+use crate::{
+    game::render::data::{Face, Model, Vertex},
+    util::id::{id},
 };
+
+use super::id::{Id};
 
 #[derive(Debug, Default, Clone)]
 pub struct Resource {
@@ -16,7 +18,6 @@ pub struct Resource {
 #[derive(Debug, Default)]
 pub struct ResourceManager {
     pub resources: HashMap<Id, Resource>,
-    pub id_pool: IdPool,
 }
 
 impl ResourceManager {
@@ -66,20 +67,18 @@ impl ResourceManager {
         json: Object,
         working_dir: &Path,
     ) -> Option<(Id, Option<Model>)> {
-        let id = json.get("id")?.as_str()?;
-        let id = format!(
-            "{}:{}",
-            working_dir
-                .file_name()
-                .and_then(OsStr::to_str)
-                .unwrap_or("automancy"),
-            id
-        );
-        let id = Id::from_str(&mut self.id_pool, &id).ok()?;
+        let namespace = working_dir
+            .file_name()
+            .and_then(OsStr::to_str)
+            .unwrap_or("automancy");
+        let name = json.get("id")?.as_str()?;
 
-        println!("{:?}", id);
+        let id = id(namespace, name);
 
-        self.resources.insert(id, Resource { faces_index: None });
+        println!("{}", id);
+
+        self.resources
+            .insert(id.clone(), Resource { faces_index: None });
 
         let model = self.parse_model(json, working_dir);
 

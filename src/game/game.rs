@@ -1,11 +1,18 @@
-use std::sync::{Arc, Mutex, MutexGuard, Weak};
+use std::time::Instant;
 
-use tokio::sync::broadcast::{channel, Receiver, Sender};
+use riker::actors::{Actor, Context, Sender, ActorFactoryArgs};
+use crate::game::data::map::{RenderContext};
 
-use super::data::map::Map;
+use crate::game::ticking::{MAX_ALLOWED_TICK_INTERVAL};
 
-#[derive(Debug, Clone, Copy)]
+use super::{data::map::Map};
+
+
+
+#[derive(Debug, Clone)]
 pub struct Ticked;
+
+
 
 #[derive(Debug, Clone, Copy)]
 pub struct GameState {
@@ -13,43 +20,66 @@ pub struct GameState {
 }
 
 pub struct Game {
-    map: Arc<Mutex<Map>>,
-
     tick_count: usize,
 
-    send_game_state: Sender<GameState>,
+    map: Map,
+}
+
+impl ActorFactoryArgs<Map> for Game { // TODO dont clone Map
+    fn create_args(args: Map) -> Self {
+        Self::new(args)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum GameMsg {
+    Tick,
+    RenderInfoRequest {
+        context: RenderContext,
+    },
+}
+
+impl Actor for Game {
+    type Msg = GameMsg;
+
+    fn recv(&mut self, ctx: &Context<Self::Msg>, msg: Self::Msg, sender: Sender) {
+        match msg {
+            GameMsg::Tick { .. } => {
+                let start = Instant::now();
+                self.tick();
+                let finish = Instant::now();
+
+                let tick_time = finish - start;
+
+                if tick_time >= MAX_ALLOWED_TICK_INTERVAL {
+                    log::warn!(
+                        "tick took longer than allowed maximum! tick_time: {:?}, maximum: {:?}",
+                        tick_time,
+                        MAX_ALLOWED_TICK_INTERVAL
+                    );
+                }
+            }
+            GameMsg::RenderInfoRequest { context } => {
+                let render_info = self.map.render_info(&context);
+
+                sender.inspect(|v| v.try_tell(render_info, Some(ctx.myself().into())).unwrap());
+            }
+        }
+    }
 }
 
 impl Game {
-    fn map(&mut self) -> MutexGuard<Map> {
-        self.map.lock().unwrap()
-    }
-
-    pub fn map_ref(&self) -> Arc<Mutex<Map>> {
-        self.map.clone()
-    }
-
-    pub fn tick(&mut self) {
-        self.tick_count = self.tick_count.overflowing_add(1).0;
-
-        let state = GameState {
-            tick_count: self.tick_count,
-        };
-
-        self.send_game_state.send(state).unwrap();
-    }
-
-    pub fn new(map: Map) -> (Self, Receiver<GameState>) {
-        let (send_game_state, recv_game_state) = channel(2);
-
-        let it = Self {
-            map: Arc::new(Mutex::new(map)),
-
+    pub fn new(
+        map: Map,
+    ) -> Self {
+         Self {
             tick_count: 0,
 
-            send_game_state,
-        };
+            map,
+        }
+    }
 
-        (it, recv_game_state)
+    fn tick(&mut self) {
+        self.tick_count = self.tick_count.overflowing_add(1).0;
     }
 }

@@ -1,4 +1,7 @@
 /target
-/.vscode
 /.fleet
 *.spv
+/.vscode
+/.cargo
+
+*.blend1

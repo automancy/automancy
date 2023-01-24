@@ -2,15 +2,9 @@ use std::ops::Div;
 
 use super::cg::{Matrix4, Num};
 
-/*
-pub fn remap(value: Num, source_min: Num, source_max: Num, dest_min: Num, dest_max: Num) -> Num {
-    dest_min + ((value - source_min) / (source_max - source_min)) * (dest_max - dest_min)
-}
- */
-
 #[rustfmt::skip]
-pub fn perspective(fovy: Num, a: Num, n: Num, f: Num) -> Matrix4 {
-    let t = fovy.div(2.0).tan();
+pub fn perspective(fov_y: Num, a: Num, n: Num, f: Num) -> Matrix4 {
+    let t = fov_y.div(2.0).tan();
     let d = f - n;
     let m = -(f * n);
 

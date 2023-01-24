@@ -2,38 +2,68 @@ use std::{
     collections::HashMap,
     fs::File,
     io::{BufReader, BufWriter},
-    path::{Path, PathBuf},
+    path::PathBuf,
+    sync::Arc,
 };
+use std::fmt::{Debug, Formatter};
+use hexagon_tiles::hexagon::Hex;
 
 use zstd::{Decoder, Encoder};
 
-use super::{
-    id_pool::IdPool,
-    tile::{Tile, TileCoord},
-};
+use crate::{game::render::data::InstanceData, registry::init::InitData};
 
-use serde::{Deserialize, Serialize};
-
-// TODO chunk-ize the map again, but just for faster searching
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Map {
-    pub map_name: String,
-
-    pub tiles: HashMap<TileCoord, Tile>,
-    pub id_pool: IdPool,
-}
+use super::tile::{Tile, TileCoord};
 
 pub const MAP_PATH: &str = "map";
 
 const MAP_BUFFER_SIZE: usize = 128 * 1024;
 
+
+
+#[derive(Clone, Debug)]
+pub struct RenderContext {
+    pub init_data: Arc<InitData>,
+}
+
+#[derive(Clone, Debug)]
+pub struct MapRenderInfo {
+    pub instances: HashMap<TileCoord, InstanceData>,
+}
+
+
+
+
+#[derive(Debug, Clone)]
+pub struct Map {
+    pub map_name: String,
+
+    pub tiles: HashMap<TileCoord, Tile>,
+}
+
 impl Map {
+    pub fn render_info(
+        &self,
+        RenderContext {
+            init_data,
+        }: &RenderContext,
+    ) -> MapRenderInfo {
+        let instances = self.tiles
+            .iter()
+            .map(|(a, b)| (a.clone(), b))
+            .flat_map(|(pos, tile)| {
+                InstanceData::from_tile(tile, pos, init_data.clone())
+            })
+            .collect();
+
+        MapRenderInfo {
+            instances,
+        }
+    }
+
     pub fn new_empty(map_name: String) -> Self {
         Self {
             map_name,
             tiles: HashMap::new(),
-            id_pool: IdPool::new(),
         }
     }
 
@@ -41,7 +71,6 @@ impl Map {
         Self {
             map_name,
             tiles: HashMap::from_iter(tiles),
-            id_pool: IdPool::new(),
         }
     }
 
@@ -49,6 +78,7 @@ impl Map {
         PathBuf::from(format!("{}/{}.bin", MAP_PATH, map_name))
     }
 
+    /*
     pub fn unload(self) {
         drop(std::fs::create_dir(MAP_PATH));
 
@@ -78,4 +108,5 @@ impl Map {
 
         serde_json::from_reader(decoder).unwrap()
     }
+     */
 }

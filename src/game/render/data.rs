@@ -1,10 +1,20 @@
-use std::ops::Div;
+use std::{ops::Div, sync::Arc};
 
 use bytemuck::{Pod, Zeroable};
+use hexagon_tiles::hexagon::Hex;
+use hexagon_tiles::layout::{Layout, LAYOUT_ORIENTATION_POINTY, LayoutTool};
+use hexagon_tiles::point::Point;
 use ply_rs::ply::{Property, PropertyAccess};
 use vulkano::impl_vertex;
 
-use crate::math::cg::{Num, Vector2};
+use crate::{
+    game::data::tile::{Tile, TileCoord},
+    math::{
+        cg::{Num, Vector2},
+    },
+    registry::init::InitData,
+};
+
 
 fn color_to_num(color: u8) -> Num {
     color as Num / 255.0
@@ -73,7 +83,28 @@ pub struct InstanceData {
 
 impl_vertex!(InstanceData, position_offset, scale, color_offset);
 
+pub const RENDER_LAYOUT: Layout = Layout {
+    orientation: LAYOUT_ORIENTATION_POINTY,
+    size: Point { x: 1.0, y: 1.0 },
+    origin: Point { x: 0.0, y: 0.0 },
+};
+
+pub const FAR: Num = 0.0;
+
 impl InstanceData {
+    pub fn from_tile(tile: &Tile, pos: TileCoord, init_data: Arc<InitData>) -> Option<(TileCoord, Self)> {
+        init_data
+            .resource_man
+            .resources
+            .get(&tile.id)
+            .and_then(|r| r.faces_index)
+            .map(|face| {
+                let p = LayoutTool::hex_to_pixel(RENDER_LAYOUT, pos);
+
+                (pos, Self::new().position_offset([p.x as Num, p.y as Num, FAR]).faces_index(face))
+            })
+    }
+
     pub fn new() -> Self {
         InstanceData {
             position_offset: [0.0, 0.0, 0.0],

@@ -1,3 +1,3 @@
 pub mod cube;
-pub mod offset;
+pub mod doubled;
 pub mod traits;

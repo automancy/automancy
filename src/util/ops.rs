@@ -1,3 +1,4 @@
+/*
 macro_rules! forward_ref_binop {
     (impl $op: ident, $fun: ident for
         $type: ident$(<$( $gen: ident $(: $first: ident $(+ $trailing: ident )* )? ),+>)?,
@@ -188,3 +189,5 @@ macro_rules! impl_self_op {
         );
     };
 }
+
+*/
