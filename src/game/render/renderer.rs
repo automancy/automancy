@@ -1,15 +1,15 @@
-use std::collections::HashMap;
-use std::ops::{Add, Div, Sub};
+use std::f64::consts::PI;
+use std::ops::{Div, Sub};
 use std::sync::Arc;
-use cgmath::{EuclideanSpace, point2, point3, SquareMatrix, Transform, vec2};
-use hexagon_tiles::hexagon::{Hex, HexMath, HexRound, OffsetCoord};
-use hexagon_tiles::layout::{Layout, LayoutTool};
+use cgmath::{EuclideanSpace, point3, vec2};
+use hexagon_tiles::hexagon::{FractionalHex, Hex, HexMath, HexRound};
+use hexagon_tiles::layout::{LayoutTool};
 use hexagon_tiles::point::Point;
-use hexagon_tiles::tools::{HEX_ODD, HexOffset};
+
 
 use riker::actors::{ActorRef, ActorSystem};
 use riker_patterns::ask::ask;
-use serde_json::to_vec;
+
 
 use vulkano::buffer::{BufferUsage};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, RenderPassBeginInfo, SubpassContents};
@@ -25,13 +25,13 @@ use vulkano::sync::GpuFuture;
 
 use crate::game::data::map::{MapRenderInfo, RenderContext};
 use crate::game::data::tile;
-use crate::game::data::tile::{TileCoord, TileUnit};
+use crate::game::data::tile::{TileUnit};
 use crate::game::game::GameMsg;
-use crate::game::render::camera::{CameraState};
-use crate::game::render::data::{FAR, InstanceData, RENDER_LAYOUT, UniformBufferObject};
+use crate::game::render::camera::{CameraState, FAR};
+use crate::game::render::data::{InstanceData, RENDER_LAYOUT, UniformBufferObject};
 use crate::game::render::gpu;
 use crate::game::render::gpu::{Gpu, window_size_u32};
-use crate::math::cg::{Matrix4, Num, Point3, Vector2};
+use crate::math::cg::{Double, matrix, Matrix4, Num};
 use crate::registry::init::InitData;
 
 
@@ -82,8 +82,9 @@ impl Renderer {
         let camera_pos = camera_state.pos;
 
         self.instances = {
-            let pos = Point { x: camera_pos.x as f64, y: camera_pos.y as f64 };
-            let pos = LayoutTool::pixel_to_hex(RENDER_LAYOUT, pos).round();
+            let pos = Point { x: camera_pos.x as Double, y: camera_pos.y as Double };
+            let pos_frac = LayoutTool::pixel_to_hex(RENDER_LAYOUT, pos);
+            let pos = pos_frac.round();
 
             // TODO move this constant
             const RANGE: TileUnit = 32;
@@ -112,32 +113,33 @@ impl Renderer {
                     let pos = Hex::new(q, r);
                     let p = LayoutTool::hex_to_pixel(RENDER_LAYOUT, pos);
 
-                    instances.entry(pos).or_insert_with(|| none.position_offset([p.x as Num, p.y as Num, FAR]));
+                    instances.entry(pos).or_insert_with(|| none.position_offset([p.x as Num, p.y as Num, FAR as Num]));
                 }
             }
 
-            if 1.0 - camera_pos.z < 0.99 {
-                let size = vec2(width as f64, height as f64) / 2.0;
+            if camera_pos.z > 0.98 {
+                let size = vec2(width as Double, height as Double) / 2.0;
 
-                let c = camera_state.main_pos.to_vec();
-                let c = c.cast::<f64>().unwrap();
+                let c = camera_state.main_pos;
+                let c = vec2(c.x, c.y);
                 let c = c.zip(size, Sub::sub);
                 let c = c.zip(size, Div::div);
-                let c = point3(c.x, c.y, FAR as f64);
+                let c = point3(c.x, c.y, FAR as Double);
 
-                let matrix = CameraState::matrix(point3(0.0, 0.0, camera_state.pos.z), aspect).cast::<f64>().unwrap();
+                let matrix = matrix(point3(0.0, 0.0, camera_state.pos.z), aspect, PI);
 
                 let v = c.to_vec();
                 let v = matrix * v.extend(1.0);
                 let v = v.truncate().truncate() * v.w;
 
-                let pointing = Point { x: v.x, y: v.y };
-                let pointing = LayoutTool::pixel_to_hex(RENDER_LAYOUT, pointing).round();
-                let pointing = pointing.add(pos);
+                let pointing = Point { x: v.x, y: v.y }; // TODO move to camera
+                let pointing = LayoutTool::pixel_to_hex(RENDER_LAYOUT, pointing);
+                let pointing = FractionalHex::new(pointing.q() + pos_frac.q(), pointing.r() + pos_frac.r());
+                let pointing = pointing.round();
 
                 instances.get_mut(&pointing).map(|instance| {
                     *instance = instance
-                        .add_position_offset([0.0, 0.0, 0.001])
+                        .add_position_offset([0.0, 0.0, 0.0001])
                         .color_offset([1.0, 0.745, 0.447, 0.5])
                 });
             }
@@ -149,7 +151,7 @@ impl Renderer {
             instances
         };
 
-        self.inner_render(CameraState::matrix(camera_pos, aspect))
+        self.inner_render(matrix(camera_pos, aspect, PI).cast::<Num>().unwrap())
     }
 
     fn inner_render(&mut self, matrix: Matrix4) {

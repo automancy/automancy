@@ -1,7 +1,7 @@
 use std::{ops::Div, sync::Arc};
 
 use bytemuck::{Pod, Zeroable};
-use hexagon_tiles::hexagon::Hex;
+
 use hexagon_tiles::layout::{Layout, LAYOUT_ORIENTATION_POINTY, LayoutTool};
 use hexagon_tiles::point::Point;
 use ply_rs::ply::{Property, PropertyAccess};
@@ -14,6 +14,8 @@ use crate::{
     },
     registry::init::InitData,
 };
+use crate::game::render::camera::FAR;
+
 
 
 fn color_to_num(color: u8) -> Num {
@@ -89,8 +91,6 @@ pub const RENDER_LAYOUT: Layout = Layout {
     origin: Point { x: 0.0, y: 0.0 },
 };
 
-pub const FAR: Num = 0.0;
-
 impl InstanceData {
     pub fn from_tile(tile: &Tile, pos: TileCoord, init_data: Arc<InitData>) -> Option<(TileCoord, Self)> {
         init_data
@@ -101,7 +101,7 @@ impl InstanceData {
             .map(|face| {
                 let p = LayoutTool::hex_to_pixel(RENDER_LAYOUT, pos);
 
-                (pos, Self::new().position_offset([p.x as Num, p.y as Num, FAR]).faces_index(face))
+                (pos, Self::new().position_offset([p.x as Num, p.y as Num, FAR as Num]).faces_index(face))
             })
     }
 

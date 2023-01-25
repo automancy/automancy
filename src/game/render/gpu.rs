@@ -23,6 +23,7 @@ use vulkano::sync::{FlushError};
 use winit::{dpi::LogicalSize, window::Window};
 
 use crate::{game::render::data::Vertex, math::cg::Num, registry::init::InitData};
+use crate::math::cg::{Double};
 
 use super::data::{InstanceData, UniformBufferObject};
 
@@ -147,8 +148,8 @@ fn get_window_size(window: &Window) -> LogicalSize<u32> {
     window.inner_size().to_logical(window.scale_factor())
 }
 
-pub fn window_size(window: &Window) -> (Num, Num) {
-    get_window_size(window).cast::<Num>().into()
+pub fn window_size(window: &Window) -> (Double, Double) {
+    get_window_size(window).cast::<Double>().into()
 }
 
 pub fn window_size_u32(window: &Window) -> [u32; 2] {
@@ -162,7 +163,7 @@ pub fn viewport(window: &Window) -> Viewport {
 
     Viewport {
         origin: [0.0, 0.0],
-        dimensions: [width, height],
+        dimensions: [width as Num, height as Num],
         depth_range: 0.0..1.0,
     }
 }

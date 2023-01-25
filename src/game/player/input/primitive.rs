@@ -3,20 +3,20 @@ use winit::event::{
     DeviceEvent, ElementState, ModifiersState, MouseButton, MouseScrollDelta, WindowEvent,
 };
 
-use crate::math::cg::{Num, Point2, Vector2};
+use crate::math::cg::{Double, DPoint2, DVector2};
 
 #[derive(Debug, Copy, Clone)]
 pub enum GameWindowEvent {
     MainPressed,
     MainReleased,
-    MouseWheel { delta: Vector2 },
+    MouseWheel { delta: DVector2 },
     ModifierChanged { modifier: ModifiersState },
-    CursorPos { pos: Point2 },
+    CursorPos { pos: DPoint2 },
 }
 
 #[derive(Debug, Copy, Clone)]
 pub enum GameDeviceEvent {
-    MainMove { delta: Vector2 },
+    MainMove { delta: DVector2 },
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -39,12 +39,12 @@ pub fn convert_input(
             WindowEvent::MouseWheel { delta, .. } => {
                 window = Some(match delta {
                     MouseScrollDelta::LineDelta(x, y) => {
-                        let delta = vec2(*x, *y);
+                        let delta = vec2(*x as Double, *y as Double);
 
                         MouseWheel { delta }
                     }
                     MouseScrollDelta::PixelDelta(delta) => {
-                        let delta = vec2(delta.x as Num, delta.y as Num);
+                        let delta = vec2(delta.x, delta.y);
 
                         MouseWheel { delta }
                     }
@@ -67,7 +67,7 @@ pub fn convert_input(
             }
             WindowEvent::CursorMoved { position, .. } => {
                 window = Some(CursorPos {
-                    pos: point2(position.x as f32, position.y as f32),
+                    pos: point2(position.x, position.y),
                 });
             }
             _ => (),
@@ -80,7 +80,7 @@ pub fn convert_input(
         if let DeviceEvent::MouseMotion { delta } = event {
             let (x, y) = delta;
 
-            let delta = vec2(*x as Num, *y as Num);
+            let delta = vec2(*x, *y);
 
             device = Some(MainMove { delta });
         }

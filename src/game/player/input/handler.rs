@@ -3,18 +3,18 @@ use winit::event::ModifiersState;
 
 use crate::{
     game::player::input::primitive::{GameDeviceEvent, GameWindowEvent},
-    math::cg::{Point2, Vector2},
 };
+use crate::math::cg::{DPoint2, DVector2};
 
 use super::primitive::GameInputEvent;
 
 #[derive(Debug, Clone, Copy)]
 pub struct InputState {
-    pub main_pos: Point2,
+    pub main_pos: DPoint2,
     pub main_pressed: bool,
-    pub main_move: Option<Vector2>,
+    pub main_move: Option<DVector2>,
 
-    pub scroll: Option<Vector2>,
+    pub scroll: Option<DVector2>,
     pub modifier_shift: bool,
 }
 
@@ -32,7 +32,7 @@ impl Default for InputState {
 }
 
 pub struct InputHandler {
-    main_pos: Point2,
+    main_pos: DPoint2,
     main_pressed: bool,
     main_last_clicked: u32,
 
@@ -42,7 +42,7 @@ pub struct InputHandler {
 impl InputHandler {
     pub fn new() -> Self {
         Self {
-            main_pos: Point2::new(0.0, 0.0),
+            main_pos: point2(0.0, 0.0),
             main_pressed: false,
             main_last_clicked: 0,
 
@@ -69,7 +69,7 @@ impl InputHandler {
                     self.modifier = modifier;
                 }
                 CursorPos { pos } => {
-                    self.main_pos = point2(pos.x, pos.y);
+                    self.main_pos = pos;
                 }
                 MouseWheel { delta } => {
                     scroll = Some(delta);

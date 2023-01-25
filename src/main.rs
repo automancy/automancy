@@ -82,7 +82,6 @@ use crate::game::render::gpu::Gpu;
 
 pub const ASSET_LOGO: &str = "assets/logo.png";
 
-// TODO: use metadata file + directory scan
 pub const RESOURCE: &str = "resources";
 
 fn load_resources() -> (ResourceManager, Vec<Option<(Id, Option<Model>)>>) {
@@ -234,10 +233,6 @@ fn main() {
     let queue = queues.next().unwrap();
 
     // --- swapchain ---
-    let caps = physical_device
-        .surface_capabilities(&surface, Default::default())
-        .expect("failed to get surface capabilities");
-
     let (swapchain, images) = {
         let surface_capabilities = physical_device
             .surface_capabilities(&surface, Default::default())
@@ -462,6 +457,13 @@ fn main() {
                 } => {
                     renderer.recreate_swapchain = true;
                 },
+
+                Event::WindowEvent {
+                    event: WindowEvent::ScaleFactorChanged { .. },
+                    ..
+                } => {
+                    renderer.recreate_swapchain = true;
+                }
 
                 Event::WindowEvent { event, .. } => {
                     window_event = Some(event);
