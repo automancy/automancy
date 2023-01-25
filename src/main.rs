@@ -391,7 +391,7 @@ fn main() {
     let gpu = Gpu {
         device,
         queue,
-        surface: surface.clone(),
+        surface,
         render_pass,
 
         window,
@@ -416,7 +416,7 @@ fn main() {
     let game = sys.actor_of_args::<Game, Map>("game", map).unwrap();
 
     let mut input_handler = InputHandler::new();
-    let mut camera = Camera::new();
+    let mut camera = Camera::new(gpu::window_size(&gpu.window));
     let mut renderer = Renderer::new(game.clone(), init_data.clone(), gpu);
 
     // --- game ---
@@ -456,6 +456,8 @@ fn main() {
                     ..
                 } => {
                     renderer.recreate_swapchain = true;
+                    camera.window_size = gpu::window_size(&renderer.gpu.window);
+                    println!("{:?}", camera.window_size);
                 },
 
                 Event::WindowEvent {
@@ -463,6 +465,7 @@ fn main() {
                     ..
                 } => {
                     renderer.recreate_swapchain = true;
+                    camera.window_size = gpu::window_size(&renderer.gpu.window);
                 }
 
                 Event::WindowEvent { event, .. } => {
@@ -484,6 +487,7 @@ fn main() {
 
             if event == Event::RedrawEventsCleared {
                 camera.update_pos();
+                camera.update_pointing_at();
 
                 block_on(renderer.render(&sys, camera.get_camera_state()));
             }

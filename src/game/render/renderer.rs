@@ -42,9 +42,9 @@ pub struct Renderer {
 
     init_data: Arc<InitData>,
 
-    gpu: Gpu,
-    previous_frame_end: Option<Box<dyn GpuFuture + Send + Sync>>,
+    pub gpu: Gpu,
     pub recreate_swapchain: bool,
+    previous_frame_end: Option<Box<dyn GpuFuture + Send + Sync>>,
 
     instances: Vec<InstanceData>,
 }
@@ -65,8 +65,8 @@ impl Renderer {
             init_data,
 
             gpu,
-            previous_frame_end: Some(sync::now(device).boxed_send_sync()),
             recreate_swapchain: false,
+            previous_frame_end: Some(sync::now(device).boxed_send_sync()),
 
             instances: vec![],
         }
@@ -82,9 +82,8 @@ impl Renderer {
         let camera_pos = camera_state.pos;
 
         self.instances = {
-            let pos = Point { x: camera_pos.x as Double, y: camera_pos.y as Double };
-            let pos_frac = LayoutTool::pixel_to_hex(RENDER_LAYOUT, pos);
-            let pos = pos_frac.round();
+            let pos = Point { x: camera_pos.x, y: camera_pos.y };
+            let pos = LayoutTool::pixel_to_hex(RENDER_LAYOUT, pos).round();
 
             // TODO move this constant
             const RANGE: TileUnit = 32;
@@ -118,30 +117,13 @@ impl Renderer {
             }
 
             if camera_pos.z > 0.98 {
-                let size = vec2(width as Double, height as Double) / 2.0;
-
-                let c = camera_state.main_pos;
-                let c = vec2(c.x, c.y);
-                let c = c.zip(size, Sub::sub);
-                let c = c.zip(size, Div::div);
-                let c = point3(c.x, c.y, FAR as Double);
-
-                let matrix = matrix(point3(0.0, 0.0, camera_state.pos.z), aspect, PI);
-
-                let v = c.to_vec();
-                let v = matrix * v.extend(1.0);
-                let v = v.truncate().truncate() * v.w;
-
-                let pointing = Point { x: v.x, y: v.y }; // TODO move to camera
-                let pointing = LayoutTool::pixel_to_hex(RENDER_LAYOUT, pointing);
-                let pointing = FractionalHex::new(pointing.q() + pos_frac.q(), pointing.r() + pos_frac.r());
-                let pointing = pointing.round();
-
-                instances.get_mut(&pointing).map(|instance| {
-                    *instance = instance
-                        .add_position_offset([0.0, 0.0, 0.0001])
-                        .color_offset([1.0, 0.745, 0.447, 0.5])
-                });
+                instances
+                    .get_mut(&camera_state.pointing_at)
+                    .map(|instance| {
+                        *instance = instance
+                            .add_position_offset([0.0, 0.0, 0.0001])
+                            .color_offset([1.0, 0.745, 0.447, 0.5])
+                    });
             }
 
             let mut instances = instances.into_values().collect::<Vec<_>>();
