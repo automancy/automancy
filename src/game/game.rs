@@ -1,11 +1,11 @@
 use std::time::Instant;
 
 use riker::actors::{Actor, Context, Sender, ActorFactoryArgs};
-use crate::game::data::map::{RenderContext};
+use crate::data::map::{RenderContext};
 
 use crate::game::ticking::{MAX_ALLOWED_TICK_INTERVAL};
 
-use super::{data::map::Map};
+use crate::data::map::Map;
 
 
 

@@ -1,15 +1,14 @@
 use std::f64::consts::PI;
 use std::ops::{Div, Sub};
-use cgmath::{Zero, point3, point2, vec2, EuclideanSpace};
+use cgmath::{EuclideanSpace, point2, point3, vec2, Zero};
 use cgmath::num_traits::clamp;
-use hexagon_tiles::hexagon::{FractionalHex, Hex, HexRound};
-use hexagon_tiles::layout::LayoutTool;
-use hexagon_tiles::point::Point;
+use hexagon_tiles::layout::pixel_to_hex;
+use hexagon_tiles::point::{point};
+use hexagon_tiles::traits::HexRound;
+use crate::data::tile::TileCoord;
 
-use crate::{
-    game::{player::input::handler::InputState},
-};
-use crate::game::render::data::RENDER_LAYOUT;
+use crate::render::data::RENDER_LAYOUT;
+use crate::input::handler::InputState;
 use crate::math::cg::{Double, DPoint2, DPoint3, DVector2, matrix};
 
 pub const FAR: Double = 0.0;
@@ -21,7 +20,7 @@ pub struct CameraState {
     pub move_vel: DVector2,
     pub scroll_vel: Double,
     pub main_pos: DPoint2,
-    pub pointing_at: Hex,
+    pub pointing_at: TileCoord,
 }
 
 impl Default for CameraState {
@@ -32,7 +31,7 @@ impl Default for CameraState {
             move_vel: vec2(0.0, 0.0),
             scroll_vel: 0.0,
             main_pos: point2(0.0, 0.0),
-            pointing_at: Hex::new(0, 0),
+            pointing_at: TileCoord::new(0, 0),
         }
     }
 }
@@ -128,8 +127,8 @@ impl Camera {
         let aspect = width / height;
 
         let camera_pos = self.camera_state.pos;
-        let pos = Point { x: camera_pos.x, y: camera_pos.y };
-        let pos = LayoutTool::pixel_to_hex(RENDER_LAYOUT, pos);
+        let pos = point(camera_pos.x, camera_pos.y);
+        let pos = pixel_to_hex(RENDER_LAYOUT, pos);
 
         let c = self.camera_state.main_pos;
         let c = vec2(c.x, c.y);
@@ -144,10 +143,10 @@ impl Camera {
         let v = v.truncate().truncate() * v.w;
 
         let aspect_squared = aspect.powi(2);
-        let p = Point { x: v.x * aspect_squared, y: v.y };
-        let p = LayoutTool::pixel_to_hex(RENDER_LAYOUT, p);
-        let p = FractionalHex::new(p.q() + pos.q(), p.r() + pos.r());
+        let p = point(v.x * aspect_squared, v.y);
+        let p = pixel_to_hex(RENDER_LAYOUT, p);
+        let p = p + pos;
 
-        self.camera_state.pointing_at = p.round();
+        self.camera_state.pointing_at = TileCoord(p.round());
     }
 }

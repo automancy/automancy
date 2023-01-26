@@ -1,52 +1,30 @@
-#![feature(unzip_option)]
-#![feature(split_array)]
-#![feature(array_chunks)]
-#![feature(slice_group_by)]
-#![feature(duration_consts_float)]
-#![feature(variant_count)]
-#![feature(result_option_inspect)]
-
-#[macro_use]
-mod util;
-#[macro_use]
-mod game;
-mod math;
-mod registry;
-
-use crate::{
+use automancy::{
+    data::map::Map,
     game::{
-        data::{
-            map::{Map},
-        },
         game::Game,
-        player::input::{handler::InputHandler, primitive::convert_input},
-        render::{
-            camera::Camera,
-            gpu::{self, frag_shader, vert_shader},
-            renderer::Renderer,
-        },
-        ticking::{TICK_INTERVAL},
+        ticking::TICK_INTERVAL,
+    },
+    render::{
+        camera::Camera,
+        data::Model,
+        gpu::{self, frag_shader, vert_shader},
+        gpu::window_size_u32,
+        renderer::Renderer,
     }
 };
 
-use game::{
-    render::{
-        data::{Model},
-        gpu::window_size_u32,
-    },
-};
 use json::JsonValue;
 
-use registry::init::InitData;
-use util::{
-    id::{Id},
+use automancy::registry::init::InitData;
+use automancy::util::{
+    id::Id,
     resource::ResourceManager,
 };
 use walkdir::WalkDir;
 
 use std::{
     ffi::OsStr,
-    fs::{read_to_string, File},
+    fs::{File, read_to_string},
     path::Path,
     sync::Arc,
 };
@@ -58,18 +36,18 @@ use vulkano::buffer::BufferUsage;
 
 use vulkano::command_buffer::PrimaryCommandBufferAbstract;
 use vulkano::device::{Device, DeviceCreateInfo, DeviceExtensions, Features, QueueCreateInfo};
-use vulkano::device::physical::{PhysicalDeviceType};
+use vulkano::device::physical::PhysicalDeviceType;
 use vulkano::format::Format;
 use vulkano::image::{AttachmentImage, ImageUsage};
 use vulkano::instance::{Instance, InstanceCreateInfo};
-use vulkano::memory::allocator::{FastMemoryAllocator};
+use vulkano::memory::allocator::FastMemoryAllocator;
 use vulkano::pipeline::graphics::input_assembly::PrimitiveTopology;
 use vulkano::pipeline::graphics::rasterization::RasterizationState;
 use vulkano::pipeline::StateMode;
 use vulkano::swapchain::{Swapchain, SwapchainCreateInfo};
 use vulkano::sync::GpuFuture;
 use vulkano::VulkanLibrary;
-use vulkano_win::{create_surface_from_winit};
+use vulkano_win::create_surface_from_winit;
 
 use winit::{
     dpi::PhysicalSize,
@@ -77,8 +55,9 @@ use winit::{
     event_loop::{ControlFlow, EventLoop},
     window::{Icon, WindowBuilder},
 };
-use crate::game::game::{GameMsg};
-use crate::game::render::gpu::Gpu;
+use automancy::input::{handler::InputHandler, primitive::convert_input};
+use automancy::game::game::GameMsg;
+use automancy::render::gpu::Gpu;
 
 pub const ASSET_LOGO: &str = "assets/logo.png";
 
@@ -457,7 +436,6 @@ fn main() {
                 } => {
                     renderer.recreate_swapchain = true;
                     camera.window_size = gpu::window_size(&renderer.gpu.window);
-                    println!("{:?}", camera.window_size);
                 },
 
                 Event::WindowEvent {

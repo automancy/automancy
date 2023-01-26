@@ -1,15 +1,13 @@
 use std::f64::consts::PI;
-use std::ops::{Div, Sub};
 use std::sync::Arc;
-use cgmath::{EuclideanSpace, point3, vec2};
-use hexagon_tiles::hexagon::{FractionalHex, Hex, HexMath, HexRound};
-use hexagon_tiles::layout::{LayoutTool};
-use hexagon_tiles::point::Point;
+use hexagon_tiles::hex::Hex;
+use hexagon_tiles::layout::{hex_to_pixel, pixel_to_hex};
 
+use hexagon_tiles::point::{point};
+use hexagon_tiles::traits::HexRound;
 
 use riker::actors::{ActorRef, ActorSystem};
 use riker_patterns::ask::ask;
-
 
 use vulkano::buffer::{BufferUsage};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, RenderPassBeginInfo, SubpassContents};
@@ -23,19 +21,16 @@ use vulkano::swapchain::{acquire_next_image, AcquireError};
 use vulkano::sync;
 use vulkano::sync::GpuFuture;
 
-use crate::game::data::map::{MapRenderInfo, RenderContext};
-use crate::game::data::tile;
-use crate::game::data::tile::{TileUnit};
+use crate::data::map::{MapRenderInfo, RenderContext};
+use crate::data::tile;
+use crate::data::tile::{TileCoord, TileUnit};
 use crate::game::game::GameMsg;
-use crate::game::render::camera::{CameraState, FAR};
-use crate::game::render::data::{InstanceData, RENDER_LAYOUT, UniformBufferObject};
-use crate::game::render::gpu;
-use crate::game::render::gpu::{Gpu, window_size_u32};
-use crate::math::cg::{Double, matrix, Matrix4, Num};
+use crate::render::camera::{CameraState, FAR};
+use crate::render::data::{InstanceData, RENDER_LAYOUT, UniformBufferObject};
+use crate::render::gpu;
+use crate::render::gpu::{Gpu, window_size_u32};
+use crate::math::cg::{matrix, Matrix4, Num};
 use crate::registry::init::InitData;
-
-
-
 
 pub struct Renderer {
     game: ActorRef<GameMsg>,
@@ -82,16 +77,16 @@ impl Renderer {
         let camera_pos = camera_state.pos;
 
         self.instances = {
-            let pos = Point { x: camera_pos.x, y: camera_pos.y };
-            let pos = LayoutTool::pixel_to_hex(RENDER_LAYOUT, pos).round();
+            let pos = point(camera_pos.x, camera_pos.y);
+            let pos = pixel_to_hex(RENDER_LAYOUT, pos).round();
 
             // TODO move this constant
             const RANGE: TileUnit = 32;
 
             let o = Hex::new(RANGE, RANGE);
 
-            let min = pos.sub(o);
-            let max = pos.add(o);
+            let min = pos - o;
+            let max = pos + o;
 
             let none = InstanceData::new().faces_index(
                 self.init_data.resource_man.resources[&tile::NONE]
@@ -110,9 +105,9 @@ impl Renderer {
             for q in min.q()..max.q() {
                 for r in min.r()..max.r() {
                     let pos = Hex::new(q, r);
-                    let p = LayoutTool::hex_to_pixel(RENDER_LAYOUT, pos);
+                    let p = hex_to_pixel(RENDER_LAYOUT, pos);
 
-                    instances.entry(pos).or_insert_with(|| none.position_offset([p.x as Num, p.y as Num, FAR as Num]));
+                    instances.entry(TileCoord(pos)).or_insert_with(|| none.position_offset([p.x as Num, p.y as Num, FAR as Num]));
                 }
             }
 

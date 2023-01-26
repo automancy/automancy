@@ -3,5 +3,6 @@
 *.spv
 /.vscode
 /.cargo
+Cargo.lock
 
 *.blend1

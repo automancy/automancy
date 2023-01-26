@@ -4,7 +4,6 @@ use flexstr::{SharedStr};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
-
 pub struct Id(SharedStr, SharedStr);
 
 impl Display for Id {

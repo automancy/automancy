@@ -4,7 +4,7 @@ use json::object::Object;
 use ply_rs::parser::Parser;
 
 use crate::{
-    game::render::data::{Face, Model, Vertex},
+    render::data::{Face, Model, Vertex},
     util::id::{id},
 };
 

@@ -1,5 +1,5 @@
 use crate::{
-    game::render::data::{Face, Model, Vertex},
+    render::data::{Face, Model, Vertex},
     util::{
         id::{Id},
         resource::ResourceManager,

@@ -22,7 +22,7 @@ use vulkano::swapchain::{Swapchain, SwapchainAcquireFuture, SwapchainCreateInfo,
 use vulkano::sync::{FlushError};
 use winit::{dpi::LogicalSize, window::Window};
 
-use crate::{game::render::data::Vertex, math::cg::Num, registry::init::InitData};
+use crate::{render::data::Vertex, math::cg::Num, registry::init::InitData};
 use crate::math::cg::{Double};
 
 use super::data::{InstanceData, UniformBufferObject};
@@ -30,28 +30,28 @@ use super::data::{InstanceData, UniformBufferObject};
 pub mod vert_shader {
     vulkano_shaders::shader! {
         ty: "vertex",
-        path: "src/vert.glsl"
+        path: "game/shaders/vert.glsl"
     }
 }
 
 pub mod dbg_vert_shader {
     vulkano_shaders::shader! {
         ty: "vertex",
-        path: "src/dbg_vert.glsl"
+        path: "game/shaders/dbg_vert.glsl"
     }
 }
 
 pub mod frag_shader {
     vulkano_shaders::shader! {
         ty: "fragment",
-        path: "src/frag.glsl"
+        path: "game/shaders/frag.glsl"
     }
 }
 
 pub mod dbg_frag_shader {
     vulkano_shaders::shader! {
         ty: "fragment",
-        path: "src/dbg_frag.glsl"
+        path: "game/shaders/dbg_frag.glsl"
     }
 }
 

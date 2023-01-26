@@ -8,15 +8,13 @@ use std::fmt::{Debug};
 
 
 
-use crate::{game::render::data::InstanceData, registry::init::InitData};
+use crate::{render::data::InstanceData, registry::init::InitData};
 
 use super::tile::{Tile, TileCoord};
 
 pub const MAP_PATH: &str = "map";
 
 const MAP_BUFFER_SIZE: usize = 128 * 1024;
-
-
 
 #[derive(Clone, Debug)]
 pub struct RenderContext {
@@ -27,9 +25,6 @@ pub struct RenderContext {
 pub struct MapRenderInfo {
     pub instances: HashMap<TileCoord, InstanceData>,
 }
-
-
-
 
 #[derive(Debug, Clone)]
 pub struct Map {

@@ -2,19 +2,19 @@ use std::{ops::Div, sync::Arc};
 
 use bytemuck::{Pod, Zeroable};
 
-use hexagon_tiles::layout::{Layout, LAYOUT_ORIENTATION_POINTY, LayoutTool};
+use hexagon_tiles::layout::{hex_to_pixel, Layout, LAYOUT_ORIENTATION_POINTY};
 use hexagon_tiles::point::Point;
 use ply_rs::ply::{Property, PropertyAccess};
 use vulkano::impl_vertex;
 
 use crate::{
-    game::data::tile::{Tile, TileCoord},
+    data::tile::{Tile, TileCoord},
     math::{
         cg::{Num, Vector2},
     },
     registry::init::InitData,
 };
-use crate::game::render::camera::FAR;
+use crate::render::camera::FAR;
 
 
 
@@ -99,7 +99,7 @@ impl InstanceData {
             .get(&tile.id)
             .and_then(|r| r.faces_index)
             .map(|face| {
-                let p = LayoutTool::hex_to_pixel(RENDER_LAYOUT, pos);
+                let p = hex_to_pixel(RENDER_LAYOUT, pos.0);
 
                 (pos, Self::new().position_offset([p.x as Num, p.y as Num, FAR as Num]).faces_index(face))
             })

@@ -1,9 +1,7 @@
 use cgmath::{point2, vec2};
 use winit::event::ModifiersState;
 
-use crate::{
-    game::player::input::primitive::{GameDeviceEvent, GameWindowEvent},
-};
+use crate::input::primitive::{GameDeviceEvent, GameWindowEvent};
 use crate::math::cg::{DPoint2, DVector2};
 
 use super::primitive::GameInputEvent;
