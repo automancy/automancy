@@ -1,7 +1,6 @@
 use cgmath::{point2, vec2};
-use winit::event::{
-    DeviceEvent, ElementState, ModifiersState, MouseButton, MouseScrollDelta, WindowEvent,
-};
+use winit::event::{DeviceEvent, ElementState, KeyboardInput, ModifiersState, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent};
+use winit::event::ElementState::Pressed;
 
 use crate::math::cg::{Double, DPoint2, DVector2};
 
@@ -17,6 +16,7 @@ pub enum GameWindowEvent {
 #[derive(Debug, Copy, Clone)]
 pub enum GameDeviceEvent {
     MainMove { delta: DVector2 },
+    ExitPressed,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -53,7 +53,7 @@ pub fn convert_input(
             WindowEvent::MouseInput { state, button, .. } => {
                 match button {
                     MouseButton::Left => {
-                        window = Some(if state == &ElementState::Pressed {
+                        window = Some(if state == &Pressed {
                             MainPressed
                         } else {
                             MainReleased
@@ -77,12 +77,25 @@ pub fn convert_input(
     if let Some(event) = device_event {
         use GameDeviceEvent::*;
 
-        if let DeviceEvent::MouseMotion { delta } = event {
-            let (x, y) = delta;
+        match event {
+            DeviceEvent::MouseMotion { delta } => {
+                let (x, y) = delta;
 
-            let delta = vec2(*x, *y);
+                let delta = vec2(*x, *y);
 
-            device = Some(MainMove { delta });
+                device = Some(MainMove { delta });
+            }
+            DeviceEvent::Key(keyboard_input)=> {
+                if keyboard_input.state == Pressed {
+                    match keyboard_input.virtual_keycode {
+                        Some(VirtualKeyCode::Escape) => {
+                            device = Some(ExitPressed);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
         }
     }
 

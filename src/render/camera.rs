@@ -3,7 +3,7 @@ use std::ops::{Div, Sub};
 use cgmath::{EuclideanSpace, point2, point3, vec2, Zero};
 use cgmath::num_traits::clamp;
 use hexagon_tiles::layout::pixel_to_hex;
-use hexagon_tiles::point::{point};
+use hexagon_tiles::point::{point, Point};
 use hexagon_tiles::traits::HexRound;
 use crate::data::tile::TileCoord;
 
@@ -33,6 +33,12 @@ impl Default for CameraState {
             main_pos: point2(0.0, 0.0),
             pointing_at: TileCoord::new(0, 0),
         }
+    }
+}
+
+impl CameraState {
+    pub fn is_at_max_height(&self) -> bool {
+        self.pos.z > 0.98
     }
 }
 
@@ -77,7 +83,7 @@ impl Camera {
         clamp(z, FAR, 1.0)
     }
 
-    pub fn get_camera_state(&self) -> CameraState {
+    pub fn camera_state(&self) -> CameraState {
         self.camera_state
     }
 
@@ -121,14 +127,10 @@ impl Camera {
         self.camera_state.move_vel += delta / 250.0;
     }
 
-    pub fn update_pointing_at(&mut self) {
+    pub fn cursor_to_pos(&self, pos: DPoint3) -> DPoint2 {
         let (width, height) = self.window_size;
         let size = vec2(width, height) / 2.0;
         let aspect = width / height;
-
-        let camera_pos = self.camera_state.pos;
-        let pos = point(camera_pos.x, camera_pos.y);
-        let pos = pixel_to_hex(RENDER_LAYOUT, pos);
 
         let c = self.camera_state.main_pos;
         let c = vec2(c.x, c.y);
@@ -136,14 +138,24 @@ impl Camera {
         let c = c.zip(size, Div::div);
         let c = point3(c.x, c.y, FAR);
 
-        let matrix = matrix(point3(0.0, 0.0, camera_pos.z), aspect, PI);
+        let matrix = matrix(pos, aspect, PI);
 
         let v = c.to_vec();
         let v = matrix * v.extend(1.0);
         let v = v.truncate().truncate() * v.w;
 
         let aspect_squared = aspect.powi(2);
-        let p = point(v.x * aspect_squared, v.y);
+
+        point2(v.x * aspect_squared, v.y)
+    }
+
+    pub fn update_pointing_at(&mut self) {
+        let camera_pos = self.camera_state.pos;
+        let pos = point(camera_pos.x, camera_pos.y);
+        let pos = pixel_to_hex(RENDER_LAYOUT, pos);
+
+        let p = self.cursor_to_pos(point3(0.0, 0.0, self.camera_state.pos.z));
+        let p = point(p.x, p.y);
         let p = pixel_to_hex(RENDER_LAYOUT, p);
         let p = p + pos;
 

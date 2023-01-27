@@ -1,4 +1,5 @@
 #![feature(result_option_inspect)]
+#![feature(is_some_with)]
 
 use automancy::{
     data::map::Map,
@@ -29,15 +30,18 @@ use std::{
     path::Path,
     sync::Arc,
 };
+use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::f32::consts::{FRAC_PI_4, FRAC_PI_8, PI};
 use std::sync::Mutex;
-use cgmath::{point3, SquareMatrix, vec3};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use cgmath::{EuclideanSpace, point3, SquareMatrix, vec3};
 use egui::panel::{Side, TopBottomSide};
 use egui::{Align, Align2, Area, Color32, Frame, Layout, PaintCallback, Rect, Rounding, ScrollArea, Sense, Shape, Stroke, Style, TopBottomPanel, Vec2, vec2, Visuals, Window};
 use egui::epaint::Shadow;
-use egui::style::Margin;
+use egui::style::{default_text_styles, Margin};
 use egui_winit_vulkano::{CallbackFn, Gui};
+use futures::channel::{mpsc, oneshot};
 use futures::executor::block_on;
 
 use riker::actors::{ActorRefFactory, SystemBuilder, Timer};
@@ -75,7 +79,8 @@ use winit::{
 use automancy::data::tile::{Tile, TileCoord};
 use automancy::input::{handler::InputHandler, primitive::convert_input};
 use automancy::game::game::GameMsg;
-use automancy::math::cg::{eye, matrix, Matrix4, Num, perspective, projection, Vector3, view};
+use automancy::input::primitive::GameDeviceEvent;
+use automancy::math::cg::{Double, eye, matrix, Matrix4, Num, perspective, projection, Vector3, view};
 use automancy::render::data::{InstanceData, UniformBufferObject, Vertex};
 use automancy::render::gpu::{Gpu, gui_frag_shader, gui_vert_shader, indirect_buffer};
 use automancy::render::gui;
@@ -452,9 +457,22 @@ fn main() {
         gui_subpass,
     );
 
+    gui.context().set_style(
+        Style {
+            override_text_style: None,
+            override_font_id: None,
+            text_styles: default_text_styles(),
+            wrap: None,
+            visuals: Visuals::light(),
+            ..Default::default()
+        }
+    );
+
     // --- event-loop ---
     {
         let mut closed = false;
+
+        let mut selected_id: Option<Id> = None;
 
         event_loop.run(move |event, _, control_flow| {
             if closed {
@@ -464,6 +482,7 @@ fn main() {
             let mut window_event = None;
             let mut device_event = None;
 
+            let mut extra_instances = vec![];
             let init_data = init_data.clone();
 
             match &event {
@@ -505,10 +524,14 @@ fn main() {
                 _ => {},
             };
 
-            let input_event = convert_input(window_event, device_event);
-            if input_event.device.is_some() || input_event.window.is_some() {
-                let input_state = input_handler.update(input_event);
+            let game_event = convert_input(window_event, device_event);
+            if game_event.device.is_some() || game_event.window.is_some() {
+                let input_state = input_handler.update(game_event);
                 camera.input_state(input_state);
+
+                if let Some(GameDeviceEvent::ExitPressed) = game_event.device {
+                    selected_id = None;
+                }
             }
 
             if event == Event::RedrawRequested(gpu.window.id()) {
@@ -517,38 +540,70 @@ fn main() {
                 camera.update_pos();
                 camera.update_pointing_at();
 
-                gui.begin_frame();
+                let (selection_send, mut selection_recv) = mpsc::channel(1);
 
-                TopBottomPanel::bottom("tiles")
-                    .show_separator_line(false)
-                    .resizable(false)
-                    .frame(
-                        Frame::none()
-                            .fill(Color::WHITE.with_alpha(0.5).into())
-                            .shadow(Shadow {
-                                extrusion: 12.0,
-                                color: Color::GRAY.with_alpha(0.5).into(),
-                            })
-                            .outer_margin(Margin::same(10.0))
-                            .rounding(Rounding::same(5.0))
-                    )
-                    .show(&gui.context(), |ui| {
-                        let style = ui.style_mut();
+                gui.immediate_ui(|ui| {
+                    TopBottomPanel::bottom("tile_selection")
+                        .show_separator_line(false)
+                        .resizable(false)
+                        .frame(
+                            Frame::none()
+                                .fill(Color::WHITE.with_alpha(0.5).into())
+                                .shadow(Shadow {
+                                    extrusion: 12.0,
+                                    color: Color::GRAY.with_alpha(0.5).into(),
+                                })
+                                .outer_margin(Margin::same(10.0))
+                                .rounding(Rounding::same(5.0))
+                        )
+                        .show(&ui.context(), |ui| {
+                            let spacing = ui.spacing_mut();
 
-                        style.spacing.interact_size.y = 70.0;
-                        style.spacing.scroll_bar_width = 0.0;
-                        style.spacing.scroll_bar_outer_margin = 0.0;
+                            spacing.interact_size.y = 70.0;
+                            spacing.scroll_bar_width = 0.0;
+                            spacing.scroll_bar_outer_margin = 0.0;
 
-                        ScrollArea::horizontal()
-                            .always_show_scroll(true)
-                            .show_viewport(ui, |ui, _viewport| {
-                                ui.horizontal(|ui| {
-                                    gui::render_tile_selection(ui, init_data.clone(), gpu.clone(), gui_pipeline.clone());
+                            ScrollArea::horizontal()
+                                .always_show_scroll(true)
+                                .show_viewport(ui, |ui, _viewport| {
+                                    ui.horizontal(|ui| {
+                                        gui::render_tile_selection(ui, init_data.clone(), selection_send, gpu.clone(), gui_pipeline.clone());
+                                    });
                                 });
-                            });
-                    });
+                        });
+                });
 
-                block_on(renderer.render(&sys, camera.get_camera_state(), subpass.clone(), &mut gui));
+                if let Ok(Some(id)) = selection_recv.try_next() {
+                    if selected_id.is_some_and(|v| v == &id) {
+                        selected_id = None;
+                    } else {
+                        selected_id = Some(id);
+                    }
+                }
+
+                let camera_state = camera.camera_state();
+                if camera_state.is_at_max_height() {
+                    if let Some(ref id) = selected_id {
+                        if let Some(faces_index) = init_data.resource_man.resources.get(id).and_then(|v| v.faces_index) {
+                            let p = camera.cursor_to_pos(point3(0.0, 0.0, 1.0));
+                            let p = p + camera_state.pos.to_vec().truncate();
+
+                            let time = SystemTime::now()
+                                .duration_since(UNIX_EPOCH)
+                                .unwrap();
+
+                            let glow = (time.as_secs_f64() * 3.0).sin() / 10.0;
+
+                            let instance = InstanceData::new()
+                                .faces_index(faces_index)
+                                .position_offset([p.x as Num, p.y as Num, 0.2])
+                                .color_offset(Color::TRANSPARENT.with_alpha(glow as Num).into());
+                            extra_instances.push(instance);
+                        }
+                    }
+                }
+
+                block_on(renderer.render(&sys, camera.camera_state(), subpass.clone(), extra_instances, &mut gui));
             }
         });
     }

@@ -90,6 +90,7 @@ impl InputHandler {
                 MainMove { delta } => {
                     main_move = Some(vec2(delta.x, -delta.y));
                 }
+                _ => {}
             }
         }
 

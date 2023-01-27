@@ -92,6 +92,7 @@ impl Renderer {
         sys: &ActorSystem,
         camera_state: CameraState,
         subpass: Subpass,
+        mut extra_instances: Vec<InstanceData>,
         gui: &mut Gui
     ) {
         let (width, height) = gpu::window_size(&self.gpu.window);
@@ -134,7 +135,7 @@ impl Renderer {
                 }
             }
 
-            if camera_pos.z > 0.98 {
+            if camera_state.is_at_max_height() {
                 instances
                     .get_mut(&camera_state.pointing_at)
                     .map(|instance| {
@@ -147,6 +148,8 @@ impl Renderer {
             let mut instances = instances.into_values().collect::<Vec<_>>();
 
             instances.sort_by_key(|v| v.faces_index);
+
+            instances.append(&mut extra_instances);
 
             instances
         };

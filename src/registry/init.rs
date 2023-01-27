@@ -71,19 +71,6 @@ impl InitData {
             })
             .collect();
 
-        log::debug!(
-            "all registered resources: {:?}",
-            resource_man.resources
-        );
-
-        log::debug!("combined_vertices ({}): {:?}", combined_vertices.len(), combined_vertices);
-        log::debug!("all_faces:");
-        resource_man.resources.iter().for_each(|(id, resource)| {
-            resource.faces_index.map(|faces_index| {
-                log::debug!("{} ({}):\n{:?}\n", id, faces_index, all_faces[faces_index]);
-            });
-        });
-
         InitData {
             resource_man,
 
