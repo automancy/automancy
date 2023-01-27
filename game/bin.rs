@@ -1,3 +1,5 @@
+#![feature(result_option_inspect)]
+
 use automancy::{
     data::map::Map,
     game::{
@@ -8,7 +10,6 @@ use automancy::{
         camera::Camera,
         data::Model,
         gpu::{self, frag_shader, vert_shader},
-        gpu::window_size_u32,
         renderer::Renderer,
     }
 };
@@ -28,22 +29,38 @@ use std::{
     path::Path,
     sync::Arc,
 };
+use std::collections::HashMap;
+use std::f32::consts::{FRAC_PI_4, FRAC_PI_8, PI};
+use std::sync::Mutex;
+use cgmath::{point3, SquareMatrix, vec3};
+use egui::panel::{Side, TopBottomSide};
+use egui::{Align, Align2, Area, Color32, Frame, Layout, PaintCallback, Rect, Rounding, ScrollArea, Sense, Shape, Stroke, Style, TopBottomPanel, Vec2, vec2, Visuals, Window};
+use egui::epaint::Shadow;
+use egui::style::Margin;
+use egui_winit_vulkano::{CallbackFn, Gui};
 use futures::executor::block_on;
 
 use riker::actors::{ActorRefFactory, SystemBuilder, Timer};
 
 use vulkano::buffer::BufferUsage;
 
-use vulkano::command_buffer::PrimaryCommandBufferAbstract;
+use vulkano::command_buffer::{DrawIndexedIndirectCommand, PrimaryCommandBufferAbstract};
+use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
+use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::device::{Device, DeviceCreateInfo, DeviceExtensions, Features, QueueCreateInfo};
 use vulkano::device::physical::PhysicalDeviceType;
 use vulkano::format::Format;
 use vulkano::image::{AttachmentImage, ImageUsage};
 use vulkano::instance::{Instance, InstanceCreateInfo};
-use vulkano::memory::allocator::FastMemoryAllocator;
-use vulkano::pipeline::graphics::input_assembly::PrimitiveTopology;
+use vulkano::instance::debug::ValidationFeatureEnable;
+use vulkano::memory::allocator::{FastMemoryAllocator, StandardMemoryAllocator};
+use vulkano::pipeline::graphics::input_assembly::{InputAssemblyState, PrimitiveTopology};
 use vulkano::pipeline::graphics::rasterization::RasterizationState;
-use vulkano::pipeline::StateMode;
+use vulkano::pipeline::{GraphicsPipeline, Pipeline, PipelineBindPoint};
+use vulkano::pipeline::graphics::depth_stencil::DepthStencilState;
+use vulkano::pipeline::graphics::vertex_input::BuffersDefinition;
+use vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
+use vulkano::render_pass::Subpass;
 use vulkano::swapchain::{Swapchain, SwapchainCreateInfo};
 use vulkano::sync::GpuFuture;
 use vulkano::VulkanLibrary;
@@ -55,9 +72,14 @@ use winit::{
     event_loop::{ControlFlow, EventLoop},
     window::{Icon, WindowBuilder},
 };
+use automancy::data::tile::{Tile, TileCoord};
 use automancy::input::{handler::InputHandler, primitive::convert_input};
 use automancy::game::game::GameMsg;
-use automancy::render::gpu::Gpu;
+use automancy::math::cg::{eye, matrix, Matrix4, Num, perspective, projection, Vector3, view};
+use automancy::render::data::{InstanceData, UniformBufferObject, Vertex};
+use automancy::render::gpu::{Gpu, gui_frag_shader, gui_vert_shader, indirect_buffer};
+use automancy::render::gui;
+use automancy::util::colors::Color;
 
 pub const ASSET_LOGO: &str = "assets/logo.png";
 
@@ -98,12 +120,10 @@ fn load_resources() -> (ResourceManager, Vec<Option<(Id, Option<Model>)>>) {
         })
         .collect::<Vec<_>>();
 
-    println!("{:?}", resources);
-
     (resource_man, resources)
 }
 
-async fn init() -> Arc<InitData> {
+fn init() -> Arc<InitData> {
     let (resource_man, resources) = load_resources();
 
     let init_data = InitData::new(resource_man, resources);
@@ -115,11 +135,12 @@ fn main() {
     env_logger::init();
 
     // --- resources & data ---
-    let init_data = block_on(init());
+    let init_data = init();
 
     // --- instance ---
     let library = VulkanLibrary::new().expect("no local Vulkan library");
     let required_extensions = vulkano_win::required_extensions(&library);
+
     let instance = Instance::new(
         library,
         InstanceCreateInfo {
@@ -224,6 +245,8 @@ fn main() {
                 .0,
         );
 
+        log::debug!("image_format: {:?}", image_format);
+
         Swapchain::new(
             device.clone(),
             surface.clone(),
@@ -231,11 +254,11 @@ fn main() {
                 min_image_count: surface_capabilities.min_image_count,
 
                 image_format,
-                image_extent: window.inner_size().into(),
+                image_extent: gpu::window_size_u32(&window),
 
                 image_usage: ImageUsage {
                     color_attachment: true,
-                        ..Default::default()
+                    ..Default::default()
                 },
                 composite_alpha: surface_capabilities
                     .supported_composite_alpha
@@ -245,12 +268,11 @@ fn main() {
 
                 ..Default::default()
             },
-        )
-        .unwrap()
+        ).unwrap()
     };
 
     // --- render pass ---
-    let render_pass = vulkano::single_pass_renderpass!(
+    let render_pass = vulkano::ordered_passes_renderpass!(
         device.clone(),
         attachments: {
             color: {
@@ -264,19 +286,24 @@ fn main() {
                 store: DontCare,
                 format: Format::D24_UNORM_S8_UINT,
                 samples: 1,
+            },
+            depth_gui: {
+                load: Clear,
+                store: DontCare,
+                format: Format::D24_UNORM_S8_UINT,
+                samples: 1,
             }
         },
-        pass: {
-            color: [color],
-            depth_stencil: {depth}
-        }
-    )
-    .unwrap();
-
-    let size = window_size_u32(&window);
+        passes: [
+            { color: [color], depth_stencil: { depth }, input: [] },
+            { color: [color], depth_stencil: { depth_gui }, input: [] }
+        ]
+    ).unwrap();
+    let subpass = Subpass::from(render_pass.clone(), 0).unwrap();
+    let gui_subpass = Subpass::from(render_pass.clone(), 1).unwrap();
 
     // --- buffers ---
-    let allocator = FastMemoryAllocator::new_default(device.clone());
+    let allocator = StandardMemoryAllocator::new_default(device.clone());
 
     let mut command_buffer_builder = gpu::command_buffer_builder(device.clone(), queue.clone());
 
@@ -296,7 +323,7 @@ fn main() {
             .iter()
             .flatten()
             .flatten()
-            .flat_map(|v| v.vertex_indices.clone())
+            .flat_map(|v| v.indices.clone())
             .collect::<Vec<_>>(),
         BufferUsage {
             index_buffer: true,
@@ -304,17 +331,27 @@ fn main() {
         },
         &mut command_buffer_builder,
     );
-    let uniform_buffers = gpu::uniform_buffers(&allocator, swapchain.image_count());
+    let uniform_buffer = gpu::uniform_buffer(&allocator);
+
     let depth_buffer = AttachmentImage::with_usage(
         &allocator,
-        size,
+        gpu::window_size_u32(&window),
         Format::D24_UNORM_S8_UINT,
         ImageUsage {
             depth_stencil_attachment: true,
             ..Default::default()
         },
-    )
-    .unwrap();
+    ).unwrap();
+
+    let depth_buffer_gui = AttachmentImage::with_usage(
+        &allocator,
+        gpu::window_size_u32(&window),
+        Format::D24_UNORM_S8_UINT,
+        ImageUsage {
+            depth_stencil_attachment: true,
+            ..Default::default()
+        },
+    ).unwrap();
 
     let command_buffer = command_buffer_builder.build().unwrap();
     block_on(
@@ -325,65 +362,60 @@ fn main() {
             .unwrap()
     ).unwrap();
 
-    /*
-    let debug_vertex_pool = CpuBufferPool::<Vertex>::vertex_buffer(device.clone());
-     */
+    drop(allocator);
 
     // --- shaders ---
     let vs = vert_shader::load(device.clone()).unwrap();
     let fs = frag_shader::load(device.clone()).unwrap();
-    /*
-    let dbg_vs = dbg_vert_shader::load(device.clone()).unwrap();
-    let dbg_fs = dbg_frag_shader::load(device.clone()).unwrap();
-    // TODO only activate when debugging
-     */
+
+    let vs_gui = gui_vert_shader::load(device.clone()).unwrap();
+    let fs_gui = gui_frag_shader::load(device.clone()).unwrap();
 
     // --- pipeline ---
-    let pipeline = gpu::pipeline(
-        device.clone(),
-        vs,
-        fs,
-        render_pass.clone(),
-        PrimitiveTopology::TriangleList,
-        RasterizationState::new(),
-        true,
-    );
-    let mut debug_rasterization_state = RasterizationState::new();
-    debug_rasterization_state.line_width = StateMode::Fixed(5.0);
+    let game_pipeline = {
+        let pipeline = GraphicsPipeline::start()
+            .vertex_shader(vs.entry_point("main").unwrap(), ())
+            .vertex_input_state(BuffersDefinition::new().vertex::<Vertex>().instance::<InstanceData>())
+            .input_assembly_state(InputAssemblyState::new().topology(PrimitiveTopology::TriangleList))
+            .fragment_shader(fs.entry_point("main").unwrap(), ())
+            .viewport_state(ViewportState::viewport_dynamic_scissor_irrelevant())
+            .rasterization_state(RasterizationState::new())
+            .depth_stencil_state(DepthStencilState::simple_depth_test())
+            .render_pass(subpass.clone());
 
-    /*
-    let debug_pipeline = gpu::pipeline(
-        device.clone(),
-        dbg_vs,
-        dbg_fs,
-        render_pass.clone(),
-        PrimitiveTopology::LineList,
-        debug_rasterization_state,
-        false,
-    );
-     */
+        pipeline.build(device.clone()).unwrap()
+    };
+
+    let gui_pipeline = {
+        let pipeline = GraphicsPipeline::start()
+            .vertex_shader(vs_gui.entry_point("main").unwrap(), ())
+            .vertex_input_state(BuffersDefinition::new().vertex::<Vertex>())
+            .input_assembly_state(InputAssemblyState::new().topology(PrimitiveTopology::TriangleList))
+            .fragment_shader(fs_gui.entry_point("main").unwrap(), ())
+            .viewport_state(ViewportState::viewport_dynamic_scissor_dynamic(1))
+            .rasterization_state(RasterizationState::new())
+            .depth_stencil_state(DepthStencilState::simple_depth_test())
+            .render_pass(gui_subpass.clone());
+
+        pipeline.build(device.clone()).unwrap()
+    };
 
     // --- framebuffers ---
-    let framebuffers = gpu::framebuffers(&images, render_pass.clone(), depth_buffer.clone());
+    let framebuffers = gpu::framebuffers(&images, render_pass.clone(), depth_buffer.clone(), depth_buffer_gui.clone());
 
     // --- gpu ---
-    let gpu = Gpu {
+    let gpu = Arc::new(Gpu {
         device,
         queue,
         surface,
         render_pass,
 
         window,
-        swapchain,
-        framebuffers,
 
         vertex_buffer,
         index_buffer,
-        depth_buffer,
-        uniform_buffers,
-
-        pipeline,
-    };
+        uniform_buffer, // TODO move uniform and depth buffer
+    });
 
     // --- load map ---
     //let map = Map::load("test".to_owned());
@@ -396,13 +428,29 @@ fn main() {
 
     let mut input_handler = InputHandler::new();
     let mut camera = Camera::new(gpu::window_size(&gpu.window));
-    let mut renderer = Renderer::new(game.clone(), init_data.clone(), gpu);
+    let mut renderer = Renderer::new(
+        game.clone(),
+        init_data.clone(),
+        gpu.clone(),
+        game_pipeline,
+        depth_buffer,
+        depth_buffer_gui,
+        swapchain,
+        framebuffers
+    );
 
     // --- game ---
     let tick = GameMsg::Tick {};
 
     sys.schedule(TICK_INTERVAL, TICK_INTERVAL, game.clone(), None, tick);
 
+    let mut gui = Gui::new_with_subpass(
+        &event_loop,
+        gpu.surface.clone(),
+        None,
+        gpu.queue.clone(),
+        gui_subpass,
+    );
 
     // --- event-loop ---
     {
@@ -415,6 +463,8 @@ fn main() {
 
             let mut window_event = None;
             let mut device_event = None;
+
+            let init_data = init_data.clone();
 
             match &event {
                 Event::WindowEvent {
@@ -430,29 +480,27 @@ fn main() {
                     return;
                 },
 
-                Event::WindowEvent {
-                    event: WindowEvent::Resized(_),
-                    ..
-                } => {
-                    renderer.recreate_swapchain = true;
-                    camera.window_size = gpu::window_size(&renderer.gpu.window);
-                },
-
-                Event::WindowEvent {
-                    event: WindowEvent::ScaleFactorChanged { .. },
-                    ..
-                } => {
-                    renderer.recreate_swapchain = true;
-                    camera.window_size = gpu::window_size(&renderer.gpu.window);
-                }
-
                 Event::WindowEvent { event, .. } => {
-                    window_event = Some(event);
+                    if !gui.update(&event) {
+                        window_event = Some(event);
+                    }
+
+                    match event {
+                        WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => {
+                            renderer.recreate_swapchain = true;
+                            camera.window_size = gpu::window_size(&gpu.window);
+                        }
+                        _ => {}
+                    }
                 },
 
                 Event::DeviceEvent { event, .. } => {
                     device_event = Some(event);
                 },
+
+                Event::MainEventsCleared => {
+                    gpu.window.request_redraw();
+                }
 
                 _ => {},
             };
@@ -463,11 +511,44 @@ fn main() {
                 camera.input_state(input_state);
             }
 
-            if event == Event::RedrawEventsCleared {
+            if event == Event::RedrawRequested(gpu.window.id()) {
+                let gpu = gpu.clone();
+
                 camera.update_pos();
                 camera.update_pointing_at();
 
-                block_on(renderer.render(&sys, camera.get_camera_state()));
+                gui.begin_frame();
+
+                TopBottomPanel::bottom("tiles")
+                    .show_separator_line(false)
+                    .resizable(false)
+                    .frame(
+                        Frame::none()
+                            .fill(Color::WHITE.with_alpha(0.5).into())
+                            .shadow(Shadow {
+                                extrusion: 12.0,
+                                color: Color::GRAY.with_alpha(0.5).into(),
+                            })
+                            .outer_margin(Margin::same(10.0))
+                            .rounding(Rounding::same(5.0))
+                    )
+                    .show(&gui.context(), |ui| {
+                        let style = ui.style_mut();
+
+                        style.spacing.interact_size.y = 70.0;
+                        style.spacing.scroll_bar_width = 0.0;
+                        style.spacing.scroll_bar_outer_margin = 0.0;
+
+                        ScrollArea::horizontal()
+                            .always_show_scroll(true)
+                            .show_viewport(ui, |ui, _viewport| {
+                                ui.horizontal(|ui| {
+                                    gui::render_tile_selection(ui, init_data.clone(), gpu.clone(), gui_pipeline.clone());
+                                });
+                            });
+                    });
+
+                block_on(renderer.render(&sys, camera.get_camera_state(), subpass.clone(), &mut gui));
             }
         });
     }

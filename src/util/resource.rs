@@ -24,7 +24,11 @@ impl ResourceManager {
     fn parse_model(&self, json: Object, working_dir: &Path) -> Option<Model> {
         json.get("model")?
             .as_str()
-            .map(|v| working_dir.join(v))
+            .map(|v| {
+                let p = working_dir.join(v);
+                log::debug!("trying to load model: {:?}", p);
+                p
+            })
             .map(File::open)
             .and_then(Result::ok)
             .and_then(|file| {
@@ -75,12 +79,15 @@ impl ResourceManager {
 
         let id = id(namespace, name);
 
-        println!("{}", id);
-
         self.resources
             .insert(id.clone(), Resource { faces_index: None });
 
         let model = self.parse_model(json, working_dir);
+
+        model.as_ref().inspect(|v| {
+            log::debug!("loaded model vertices: {}", v.vertices.len());
+            log::debug!("loaded model faces: {}", v.faces.len());
+        });
 
         Some((id, model))
     }

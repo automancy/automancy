@@ -2,28 +2,21 @@ use std::sync::Arc;
 
 use vulkano::{buffer::{BufferContents, BufferUsage, CpuAccessibleBuffer}, command_buffer::DrawIndexedIndirectCommand, device::{
     Device, Queue,
-}, image::{view::ImageView, AttachmentImage, SwapchainImage}, pipeline::{
-    graphics::{
-        depth_stencil::DepthStencilState,
-        input_assembly::{InputAssemblyState, PrimitiveTopology},
-        rasterization::RasterizationState,
-        vertex_input::BuffersDefinition,
-        viewport::{Viewport, ViewportState},
-    },
-    GraphicsPipeline,
-}, render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass, Subpass}, shader::ShaderModule, swapchain::Surface, sync, sync::GpuFuture};
+}, image::{view::ImageView, AttachmentImage, SwapchainImage}, render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass}, swapchain::Surface, sync, sync::GpuFuture};
 use vulkano::buffer::DeviceLocalBuffer;
 use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryAutoCommandBuffer};
 use vulkano::command_buffer::allocator::{StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo};
 use vulkano::format::Format;
 use vulkano::image::{ImageAccess, ImageUsage};
 use vulkano::memory::allocator::{MemoryAllocator};
+use vulkano::pipeline::graphics::viewport::Viewport;
 use vulkano::swapchain::{Swapchain, SwapchainAcquireFuture, SwapchainCreateInfo, SwapchainCreationError, SwapchainPresentInfo};
 use vulkano::sync::{FlushError};
 use winit::{dpi::LogicalSize, window::Window};
 
 use crate::{render::data::Vertex, math::cg::Num, registry::init::InitData};
 use crate::math::cg::{Double};
+use crate::render::gpu;
 
 use super::data::{InstanceData, UniformBufferObject};
 
@@ -34,13 +27,6 @@ pub mod vert_shader {
     }
 }
 
-pub mod dbg_vert_shader {
-    vulkano_shaders::shader! {
-        ty: "vertex",
-        path: "game/shaders/dbg_vert.glsl"
-    }
-}
-
 pub mod frag_shader {
     vulkano_shaders::shader! {
         ty: "fragment",
@@ -48,84 +34,75 @@ pub mod frag_shader {
     }
 }
 
-pub mod dbg_frag_shader {
+pub mod gui_vert_shader {
     vulkano_shaders::shader! {
-        ty: "fragment",
-        path: "game/shaders/dbg_frag.glsl"
+        ty: "vertex",
+        path: "game/shaders/vert_gui.glsl"
     }
 }
 
-pub fn pipeline(
-    device: Arc<Device>,
-    vs: Arc<ShaderModule>,
-    fs: Arc<ShaderModule>,
-    render_pass: Arc<RenderPass>,
-    topology: PrimitiveTopology,
-    rasterization: RasterizationState,
-    instanced: bool,
-) -> Arc<GraphicsPipeline> {
-    let mut vertex_input_state = BuffersDefinition::new().vertex::<Vertex>();
-
-    if instanced {
-        vertex_input_state = vertex_input_state.instance::<InstanceData>();
+pub mod gui_frag_shader {
+    vulkano_shaders::shader! {
+        ty: "fragment",
+        path: "game/shaders/frag_gui.glsl"
     }
-
-    let pipeline = GraphicsPipeline::start()
-        .vertex_input_state(vertex_input_state)
-        .vertex_shader(vs.entry_point("main").unwrap(), ())
-        .input_assembly_state(InputAssemblyState::new().topology(topology))
-        .viewport_state(ViewportState::viewport_dynamic_scissor_irrelevant())
-        .fragment_shader(fs.entry_point("main").unwrap(), ())
-        .render_pass(Subpass::from(render_pass.clone(), 0).unwrap())
-        .rasterization_state(rasterization)
-        .depth_stencil_state(DepthStencilState::simple_depth_test());
-
-    pipeline.build(device.clone()).unwrap()
 }
 
 pub fn immutable_buffer<T, D, W>(
     allocator: &(impl MemoryAllocator + ?Sized),
     data: D,
     buffer_usage: BufferUsage,
-    command_buffer_builder: &mut AutoCommandBufferBuilder<W>
+    builder: &mut AutoCommandBufferBuilder<W>
 ) -> Arc<DeviceLocalBuffer<[T]>>
-where
-    D: IntoIterator<Item = T>,
-    D::IntoIter: ExactSizeIterator,
-    [T]: BufferContents
+    where
+        D: IntoIterator<Item = T>,
+        D::IntoIter: ExactSizeIterator,
+        [T]: BufferContents
 {
-    let buffer = DeviceLocalBuffer::from_iter(allocator, data, buffer_usage, command_buffer_builder)
+    let buffer = DeviceLocalBuffer::from_iter(allocator, data, buffer_usage, builder)
         .expect("failed to create vertex buffer");
 
     buffer
 }
 
-pub fn uniform_buffers(
+pub fn cpu_accessible_buffer<T, D>(
     allocator: &(impl MemoryAllocator + ?Sized),
-    image_count: u32,
-) -> Vec<Arc<CpuAccessibleBuffer<UniformBufferObject>>> {
-    (0..image_count)
-        .map(|_| {
-            CpuAccessibleBuffer::from_data(
-                allocator,
-                BufferUsage {
-                    uniform_buffer: true,
-                    ..Default::default()
-                },
-                false,
-                UniformBufferObject::default(),
-            )
-            .unwrap()
-        })
-        .collect()
+    data: D,
+    buffer_usage: BufferUsage,
+) -> Arc<CpuAccessibleBuffer<[T]>>
+where
+    D: IntoIterator<Item = T>,
+    D::IntoIter: ExactSizeIterator,
+    [T]: BufferContents
+{
+    let buffer = CpuAccessibleBuffer::from_iter(allocator, buffer_usage, false, data)
+        .expect("failed to create vertex buffer");
+
+    buffer
+}
+
+pub fn uniform_buffer(
+    allocator: &(impl MemoryAllocator + ?Sized)
+) -> Arc<CpuAccessibleBuffer<UniformBufferObject>> {
+    CpuAccessibleBuffer::from_data(
+        allocator,
+        BufferUsage {
+            uniform_buffer: true,
+            ..Default::default()
+        },
+        false,
+        UniformBufferObject::default(),
+    ).unwrap()
 }
 
 pub fn framebuffers(
     images: &[Arc<SwapchainImage>],
     render_pass: Arc<RenderPass>,
     depth_buffer: Arc<AttachmentImage>,
+    depth_buffer_gui: Arc<AttachmentImage>,
 ) -> Vec<Arc<Framebuffer>> {
     let depth_buffer = ImageView::new_default(depth_buffer).unwrap();
+    let depth_buffer_gui = ImageView::new_default(depth_buffer_gui).unwrap();
 
     images
         .iter()
@@ -135,7 +112,7 @@ pub fn framebuffers(
             Framebuffer::new(
                 render_pass.clone(),
                 FramebufferCreateInfo {
-                    attachments: vec![view, depth_buffer.clone()],
+                    attachments: vec![view, depth_buffer.clone(), depth_buffer_gui.clone()],
                     ..Default::default()
                 },
             )
@@ -145,7 +122,7 @@ pub fn framebuffers(
 }
 
 fn get_window_size(window: &Window) -> LogicalSize<u32> {
-    window.inner_size().to_logical(window.scale_factor())
+    window.inner_size().to_logical(1.0) // ?
 }
 
 pub fn window_size(window: &Window) -> (Double, Double) {
@@ -161,9 +138,13 @@ pub fn window_size_u32(window: &Window) -> [u32; 2] {
 pub fn viewport(window: &Window) -> Viewport {
     let (width, height) = window_size(window);
 
+    viewport_with_dims([width as Num, height as Num])
+}
+
+pub fn viewport_with_dims(dimensions: [Num; 2]) -> Viewport {
     Viewport {
         origin: [0.0, 0.0],
-        dimensions: [width as Num, height as Num],
+        dimensions,
         depth_range: 0.0..1.0,
     }
 }
@@ -183,68 +164,65 @@ pub fn command_buffer_builder(device: Arc<Device>, queue: Arc<Queue>) -> AutoCom
     ).unwrap()
 }
 
-pub fn indirect_buffer<W>(
+pub fn indirect_buffer(
     allocator: &(impl MemoryAllocator + ?Sized),
     init_data: &InitData,
     instances: &[InstanceData],
-    command_buffer_builder: &mut AutoCommandBufferBuilder<W>
 ) -> (
-    Arc<DeviceLocalBuffer<[InstanceData]>>,
+    Arc<CpuAccessibleBuffer<[InstanceData]>>,
     Vec<DrawIndexedIndirectCommand>,
 ) {
     let indirect_commands = instances
         .group_by(|a, b| a.faces_index == b.faces_index)
         .scan(0, |init, instances| {
-            let len = instances.len() as u32;
+            let instance_count = instances.len() as u32;
 
             let first_instance = *init;
-            *init += len;
 
-            if let Some(faces) = &init_data.all_faces[instances[0].faces_index] {
+            let r = if let Some(faces) = &init_data.all_faces[instances[0].faces_index] {
                 let commands = faces
                     .iter()
-                    .scan(0, |init, face| {
-                        let face_len = face.vertex_indices.len() as u32;
-
-                        *init += face_len;
-
-                        Some(DrawIndexedIndirectCommand {
-                            first_index: *init,
-                            index_count: face_len,
-                            first_instance,
-                            instance_count: len,
+                    .map(|face| {
+                        DrawIndexedIndirectCommand {
+                            index_count: face.indices.len() as u32,
+                            instance_count,
+                            first_index: face.offset.unwrap(),
                             vertex_offset: 0,
-                        })
+                            first_instance,
+                        }
                     })
                     .collect::<Vec<_>>();
 
                 Some(commands)
             } else {
                 None
-            }
+            };
+
+            *init += instance_count;
+
+            r
         })
         .flatten()
         .collect::<Vec<_>>();
 
-    let instance_buffer = immutable_buffer(
+    let instance_buffer = cpu_accessible_buffer(
         allocator,
         instances.to_vec(),
         BufferUsage {
             vertex_buffer: true,
             ..Default::default()
-        },
-        command_buffer_builder
+        }
     );
 
     (instance_buffer, indirect_commands)
 }
 
 impl Gpu {
-    pub fn depth_buffer_size(&mut self, allocator: &(impl MemoryAllocator + ?Sized), size: [u32; 2], recreate_swapchain: &mut bool) {
-        if size != ImageAccess::dimensions(&self.depth_buffer).width_height() {
+    pub fn depth_buffer_size(&self, depth_buffer: &mut Arc<AttachmentImage>, allocator: &(impl MemoryAllocator + ?Sized), size: [u32; 2], recreate_swapchain: &mut bool) {
+        if size != depth_buffer.dimensions().width_height() {
             *recreate_swapchain = true;
 
-            self.depth_buffer = AttachmentImage::with_usage(
+            *depth_buffer = AttachmentImage::with_usage(
                 allocator,
                 size,
                 Format::D24_UNORM_S8_UINT,
@@ -256,11 +234,19 @@ impl Gpu {
         }
     }
 
-    pub fn recreate_swapchain(&mut self, size: [u32; 2], recreate_swapchain: &mut bool) {
+    pub fn recreate_swapchain(
+        &self,
+        size: [u32; 2],
+        depth_buffer: Arc<AttachmentImage>,
+        depth_buffer_gui: Arc<AttachmentImage>,
+        swapchain: &mut Arc<Swapchain>,
+        framebuffers: &mut Vec<Arc<Framebuffer>>,
+        recreate_swapchain: &mut bool
+    ) {
         let (new_swapchain, new_images) = {
-            match self.swapchain.recreate(SwapchainCreateInfo {
+            match swapchain.recreate(SwapchainCreateInfo {
                 image_extent: size,
-                ..self.swapchain.create_info()
+                ..swapchain.create_info()
             }) {
                 Ok(r) => r,
                 Err(SwapchainCreationError::ImageExtentNotSupported { .. }) => return,
@@ -268,15 +254,15 @@ impl Gpu {
             }
         };
 
-        self.swapchain = new_swapchain;
-
-        self.framebuffers = framebuffers(&new_images, self.render_pass.clone(), self.depth_buffer.clone());
+        *swapchain = new_swapchain;
+        *framebuffers = gpu::framebuffers(&new_images, self.render_pass.clone(), depth_buffer.clone(), depth_buffer_gui.clone());
         *recreate_swapchain = false;
     }
 
     pub fn commit_commands(
-        &mut self,
+        &self,
         image_num: usize,
+        swapchain: Arc<Swapchain>,
         acquire_future: SwapchainAcquireFuture,
         command_buffer: PrimaryAutoCommandBuffer,
         previous_frame_end: &mut Option<Box<dyn GpuFuture + Send + Sync>>,
@@ -288,7 +274,7 @@ impl Gpu {
             .join(acquire_future)
             .then_execute(self.queue.clone(), command_buffer)
             .unwrap()
-            .then_swapchain_present(self.queue.clone(), SwapchainPresentInfo::swapchain_image_index(self.swapchain.clone(), image_num as u32))
+            .then_swapchain_present(self.queue.clone(), SwapchainPresentInfo::swapchain_image_index(swapchain.clone(), image_num as u32))
             .then_signal_fence_and_flush();
 
         match future {
@@ -308,6 +294,34 @@ impl Gpu {
     }
 }
 
+pub fn indirect_instance(
+    allocator: &(impl MemoryAllocator + ?Sized),
+    init_data: &InitData,
+    instances: &[InstanceData]
+) -> Option<(Arc<CpuAccessibleBuffer<[DrawIndexedIndirectCommand]>>, Arc<CpuAccessibleBuffer<[InstanceData]>>)> {
+    if instances.is_empty() {
+        None
+    } else {
+        let (instance_buffer, commands) = indirect_buffer(
+            allocator, init_data, instances
+        );
+
+        if commands.is_empty() {
+            None
+        } else {
+            let indirect_buffer = cpu_accessible_buffer(
+                allocator,
+                commands.into_iter(),
+                BufferUsage {
+                    indirect_buffer: true,
+                    ..Default::default()
+                }
+            );
+            Some((indirect_buffer, instance_buffer))
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Gpu {
     pub device: Arc<Device>,
@@ -316,13 +330,7 @@ pub struct Gpu {
     pub render_pass: Arc<RenderPass>,
     pub window: Arc<Window>,
 
-    pub swapchain: Arc<Swapchain>,
-    pub framebuffers: Vec<Arc<Framebuffer>>,
-
     pub vertex_buffer: Arc<DeviceLocalBuffer<[Vertex]>>,
     pub index_buffer: Arc<DeviceLocalBuffer<[u32]>>,
-    pub depth_buffer: Arc<AttachmentImage>,
-    pub uniform_buffers: Vec<Arc<CpuAccessibleBuffer<UniformBufferObject>>>,
-
-    pub pipeline: Arc<GraphicsPipeline>,
+    pub uniform_buffer: Arc<CpuAccessibleBuffer<UniformBufferObject>>,
 }

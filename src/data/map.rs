@@ -39,7 +39,7 @@ impl Map {
         RenderContext {
             init_data,
         }: &RenderContext,
-    ) -> MapRenderInfo {
+    ) -> MapRenderInfo { // TODO cache this
         let instances = self.tiles
             .iter()
             .map(|(a, b)| (a.clone(), b))

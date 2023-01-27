@@ -26,23 +26,21 @@ impl InitData {
             .map(|v| v.unzip())
             .unzip();
 
-        let offsets = {
-            let len = vertices.len();
-
-            let mut vec = Vec::with_capacity(len);
-
-            vertices
-                .iter()
-                .map(|v| v.as_ref().map_or(0, Vec::len))
-                .for_each(|v| vec.push(v + vec.last().map_or(0, Clone::clone)));
-
-            vec.truncate(len - 1);
-            vec.insert(0, 0);
-
-            vec
-        };
+        let mut index_offsets = vertices
+            .iter()
+            .scan(0, |offset, v| {
+                v.as_ref().map(|v| {
+                    *offset += v.len();
+                    Some(*offset)
+                })
+            })
+            .collect::<Vec<_>>();
+        drop(index_offsets.split_off(index_offsets.len() - 1));
+        index_offsets.insert(0, Some(0));
 
         let combined_vertices = vertices.into_iter().flatten().flatten().collect::<Vec<_>>();
+
+        let mut offset = 0;
 
         let all_faces: Vec<_> = faces
             .into_iter()
@@ -50,12 +48,24 @@ impl InitData {
             .map(|(i, v)| {
                 v.map(|(id, faces)| {
                     if let Some(resource) = resource_man.resources.get_mut(&id) {
+                        log::debug!("{}->faces_index: {}", id, i);
                         resource.faces_index = Some(i);
                     }
 
                     faces
                         .into_iter()
-                        .map(|face| face.with_offset(offsets[i] as u32))
+                        .map(|face| {
+                            let len = face.indices.len();
+
+                            let mut result = face.with_offset(offset);
+
+                            if let Some(index_offset) = index_offsets[i] {
+                                result.index_offset(index_offset as u32);
+                            }
+                            offset += len as u32;
+
+                            result
+                        })
                         .collect::<Vec<_>>()
                 })
             })
@@ -63,11 +73,16 @@ impl InitData {
 
         log::debug!(
             "all registered resources: {:?}",
-            resource_man.resources.keys()
+            resource_man.resources
         );
 
-        log::debug!("combined_vertices: {:?}", combined_vertices);
-        log::debug!("all_faces: {:?}", all_faces);
+        log::debug!("combined_vertices ({}): {:?}", combined_vertices.len(), combined_vertices);
+        log::debug!("all_faces:");
+        resource_man.resources.iter().for_each(|(id, resource)| {
+            resource.faces_index.map(|faces_index| {
+                log::debug!("{} ({}):\n{:?}\n", id, faces_index, all_faces[faces_index]);
+            });
+        });
 
         InitData {
             resource_man,

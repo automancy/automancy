@@ -1,5 +1,6 @@
-use std::f64::consts::PI;
+use std::f32::consts::PI;
 use std::sync::Arc;
+use egui_winit_vulkano::Gui;
 use hexagon_tiles::hex::Hex;
 use hexagon_tiles::layout::{hex_to_pixel, pixel_to_hex};
 
@@ -10,14 +11,16 @@ use riker::actors::{ActorRef, ActorSystem};
 use riker_patterns::ask::ask;
 
 use vulkano::buffer::{BufferUsage};
-use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, RenderPassBeginInfo, SubpassContents};
+use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferInheritanceInfo, CommandBufferUsage, RenderPassBeginInfo, SubpassContents};
 use vulkano::command_buffer::allocator::{StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo};
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::format::{ClearValue};
+use vulkano::image::AttachmentImage;
 use vulkano::memory::allocator::{FastMemoryAllocator};
-use vulkano::pipeline::{Pipeline, PipelineBindPoint};
-use vulkano::swapchain::{acquire_next_image, AcquireError};
+use vulkano::pipeline::{GraphicsPipeline, Pipeline, PipelineBindPoint};
+use vulkano::render_pass::{Framebuffer, Subpass};
+use vulkano::swapchain::{acquire_next_image, AcquireError, Swapchain};
 use vulkano::sync;
 use vulkano::sync::GpuFuture;
 
@@ -28,20 +31,25 @@ use crate::game::game::GameMsg;
 use crate::render::camera::{CameraState, FAR};
 use crate::render::data::{InstanceData, RENDER_LAYOUT, UniformBufferObject};
 use crate::render::gpu;
-use crate::render::gpu::{Gpu, window_size_u32};
 use crate::math::cg::{matrix, Matrix4, Num};
 use crate::registry::init::InitData;
+use crate::render::gpu::Gpu;
+use crate::util::colors::Color;
 
 pub struct Renderer {
     game: ActorRef<GameMsg>,
 
     init_data: Arc<InitData>,
 
-    pub gpu: Gpu,
     pub recreate_swapchain: bool,
-    previous_frame_end: Option<Box<dyn GpuFuture + Send + Sync>>,
 
-    instances: Vec<InstanceData>,
+    gpu: Arc<Gpu>,
+    pipeline: Arc<GraphicsPipeline>,
+    depth_buffer: Arc<AttachmentImage>,
+    depth_buffer_gui: Arc<AttachmentImage>,
+    swapchain: Arc<Swapchain>,
+    framebuffers: Vec<Arc<Framebuffer>>,
+    previous_frame_end: Option<Box<dyn GpuFuture + Send + Sync>>,
 }
 
 impl Renderer {
@@ -50,7 +58,12 @@ impl Renderer {
 
         init_data: Arc<InitData>,
 
-        gpu: Gpu,
+        gpu: Arc<Gpu>,
+        pipeline: Arc<GraphicsPipeline>,
+        depth_buffer: Arc<AttachmentImage>,
+        depth_buffer_gui: Arc<AttachmentImage>,
+        swapchain: Arc<Swapchain>,
+        framebuffers: Vec<Arc<Framebuffer>>,
     ) -> Self {
         let device = gpu.device.clone();
 
@@ -59,24 +72,34 @@ impl Renderer {
 
             init_data,
 
-            gpu,
             recreate_swapchain: false,
-            previous_frame_end: Some(sync::now(device).boxed_send_sync()),
 
-            instances: vec![],
+            gpu,
+            pipeline,
+            depth_buffer,
+            depth_buffer_gui,
+            swapchain,
+            framebuffers,
+            previous_frame_end: Some(sync::now(device).boxed_send_sync()),
         }
     }
 }
 
 
 impl Renderer {
-    pub async fn render(&mut self, sys: &ActorSystem, camera_state: CameraState) {
+    pub async fn render(
+        &mut self,
+        sys: &ActorSystem,
+        camera_state: CameraState,
+        subpass: Subpass,
+        gui: &mut Gui
+    ) {
         let (width, height) = gpu::window_size(&self.gpu.window);
         let aspect = width / height;
 
         let camera_pos = camera_state.pos;
 
-        self.instances = {
+        let instances = {
             let pos = point(camera_pos.x, camera_pos.y);
             let pos = pixel_to_hex(RENDER_LAYOUT, pos).round();
 
@@ -117,7 +140,7 @@ impl Renderer {
                     .map(|instance| {
                         *instance = instance
                             .add_position_offset([0.0, 0.0, 0.0001])
-                            .color_offset([1.0, 0.745, 0.447, 0.5])
+                            .color_offset(Color::ORANGE.with_alpha(0.5).into())
                     });
             }
 
@@ -128,28 +151,29 @@ impl Renderer {
             instances
         };
 
-        self.inner_render(matrix(camera_pos, aspect, PI).cast::<Num>().unwrap())
+        self.inner_render(matrix(camera_pos.cast::<Num>().unwrap(), aspect as Num, PI), subpass, &instances, gui)
     }
 
-    fn inner_render(&mut self, matrix: Matrix4) {
-        let size = window_size_u32(&self.gpu.window);
+    fn inner_render(&mut self, matrix: Matrix4, subpass: Subpass, instances: &[InstanceData], gui: &mut Gui) {
+        let dimensions = gpu::window_size_u32(&self.gpu.window);
 
-        if size[0] == 0 || size[1] == 0 {
+        if dimensions[0] == 0 || dimensions[1] == 0 {
             return;
         }
 
         let allocator = FastMemoryAllocator::new_default(self.gpu.device.clone());
 
-        self.gpu.depth_buffer_size(&allocator, size, &mut self.recreate_swapchain);
+        self.gpu.depth_buffer_size(&mut self.depth_buffer, &allocator, dimensions, &mut self.recreate_swapchain);
+        self.gpu.depth_buffer_size(&mut self.depth_buffer_gui, &allocator, dimensions, &mut self.recreate_swapchain);
 
         self.previous_frame_end.as_mut().unwrap().cleanup_finished();
 
         if self.recreate_swapchain {
-            self.gpu.recreate_swapchain(size, &mut self.recreate_swapchain)
+            self.gpu.recreate_swapchain(dimensions, self.depth_buffer.clone(), self.depth_buffer_gui.clone(), &mut self.swapchain, &mut self.framebuffers, &mut self.recreate_swapchain);
         }
 
         let (image_num, suboptimal, acquire_future) = {
-            match acquire_next_image(self.gpu.swapchain.clone(), None) {
+            match acquire_next_image(self.swapchain.clone(), None) {
                 Ok(r) => r,
                 Err(AcquireError::OutOfDate) => {
                     self.recreate_swapchain = true;
@@ -158,12 +182,8 @@ impl Renderer {
                 Err(e) => panic!("failed to acquire next image: {:?}", e),
             }
         };
-
+        if suboptimal { self.recreate_swapchain = true; }
         let image_num = image_num as usize;
-
-        if suboptimal {
-            self.recreate_swapchain = true;
-        }
 
         let command_allocator = StandardCommandBufferAllocator::new(
             self.gpu.device.clone(),
@@ -172,46 +192,48 @@ impl Renderer {
             }
         );
 
-        let mut command_buffer_builder = AutoCommandBufferBuilder::primary(
+        let mut builder = AutoCommandBufferBuilder::primary(
             &command_allocator,
             self.gpu.queue.queue_family_index(),
             CommandBufferUsage::OneTimeSubmit,
         ).unwrap();
 
-        // TODO improve this garbage
-        let instances = self.instances.as_slice();
+        builder
+            .begin_render_pass(
+                RenderPassBeginInfo {
+                    clear_values: vec![
+                        Some(ClearValue::Float([0.0, 0.0, 0.0, 1.0])),
+                        Some(ClearValue::DepthStencil((1.0, 0))),
+                        Some(ClearValue::DepthStencil((1.0, 0))),
+                    ],
+                    ..RenderPassBeginInfo::framebuffer(self.framebuffers[image_num].clone())
+                },
+                SubpassContents::SecondaryCommandBuffers
+            ).unwrap();
 
-        let indirect_instance = if !instances.is_empty() {
-            let (instance_buffer, commands) = gpu::indirect_buffer(
-                &allocator, &self.init_data, instances, &mut command_buffer_builder
-            );
 
-            if !commands.is_empty() {
-                let indirect_buffer = gpu::immutable_buffer(
-                    &allocator,
-                    commands.into_iter(),
-                    BufferUsage {
-                        indirect_buffer: true,
-                        ..Default::default()
-                    },
-                    &mut command_buffer_builder,
-                );
-                Some((indirect_buffer, instance_buffer))
-            } else {
-                None
-            }
-        } else {
-            None
-        };
+        let mut secondary_builder = AutoCommandBufferBuilder::secondary(
+            &command_allocator,
+            self.gpu.queue.queue_family_index(),
+            CommandBufferUsage::OneTimeSubmit,
+            CommandBufferInheritanceInfo {
+                render_pass: Some(subpass.clone().into()),
+                ..Default::default()
+            },
+        ).unwrap();
+
+        secondary_builder
+            .set_viewport(0, [gpu::viewport(&self.gpu.window)]);
+
+        let indirect_instance = gpu::indirect_instance(&allocator, &self.init_data, instances);
 
         let ubo = UniformBufferObject {
             matrix: matrix.into(),
         };
 
-        *self.gpu.uniform_buffers[image_num].write().unwrap() = ubo;
+        *self.gpu.uniform_buffer.write().unwrap() = ubo;
 
-        let pipeline_layout = self.gpu.pipeline.layout();
-        let ubo_layout = pipeline_layout.set_layouts()[0].clone();
+        let ubo_layout = self.pipeline.layout().set_layouts()[0].clone();
 
         let descriptor_allocator = StandardDescriptorSetAllocator::new(self.gpu.device.clone());
 
@@ -220,74 +242,41 @@ impl Renderer {
             ubo_layout,
             [WriteDescriptorSet::buffer(
                 0,
-                self.gpu.uniform_buffers[image_num].clone(),
+                self.gpu.uniform_buffer.clone(),
             )],
         ).unwrap();
 
-        /*
-        let debug_pipeline_layout = debug_pipeline.layout();
-        let debug_ubo_layout = debug_pipeline_layout.set_layouts()[0].clone();
-        let debug_ubo_set = PersistentDescriptorSet::new(
-            debug_ubo_layout.clone(),
-            [WriteDescriptorSet::buffer(
-                0,
-                uniform_buffers[image_num].clone(),
-            )],
-        )
-        .unwrap();
-         */
-
-        let mut render_pass_info = RenderPassBeginInfo::framebuffer(self.gpu.framebuffers[image_num].clone());
-        render_pass_info.render_pass = self.gpu.render_pass.clone();
-        render_pass_info.clear_values = vec![
-            Some(ClearValue::Float([0.0, 0.0, 0.0, 1.0])),
-            Some(ClearValue::DepthStencil((1.0, 0))),
-        ];
-
-        command_buffer_builder
-            .begin_render_pass(
-                render_pass_info,
-                SubpassContents::Inline
-            )
-            .unwrap()
-            .set_viewport(0, [gpu::viewport(&self.gpu.window)]);
-
         if let Some((indirect_buffer, instance_buffer)) = indirect_instance {
-            command_buffer_builder
+            secondary_builder
+                .bind_pipeline_graphics(self.pipeline.clone())
                 .bind_vertex_buffers(0, (self.gpu.vertex_buffer.clone(), instance_buffer))
                 .bind_index_buffer(self.gpu.index_buffer.clone())
                 .bind_descriptor_sets(
                     PipelineBindPoint::Graphics,
-                    pipeline_layout.clone(),
+                    self.pipeline.layout().clone(),
                     0,
                     ubo_set,
                 )
-                .bind_pipeline_graphics(self.gpu.pipeline.clone())
                 .draw_indexed_indirect(indirect_buffer)
                 .unwrap();
         }
 
-        /*
-        let debug_vertex_buffer_size = debug_vertex_buffer.len() as u32;
-        if debug_vertex_buffer_size != 0 {
-            builder
-                .bind_vertex_buffers(0, debug_vertex_buffer)
-                .bind_pipeline_graphics(debug_pipeline)
-                .bind_descriptor_sets(
-                    PipelineBindPoint::Graphics,
-                    debug_pipeline_layout.clone(),
-                    0,
-                    debug_ubo_set,
-                )
-                .draw(debug_vertex_buffer_size, 1, 0, 0)
-                .unwrap();
-        }
-         */
+        // game
+        let secondary_buffer = secondary_builder.build().unwrap();
+        builder.execute_commands(secondary_buffer).unwrap();
 
-        command_buffer_builder.end_render_pass().unwrap();
 
-        let command_buffer = command_buffer_builder.build().unwrap();
+        // gui
+        builder.next_subpass(SubpassContents::SecondaryCommandBuffers).unwrap();
+        let gui_command_buffer = gui.draw_on_subpass_image(dimensions);
+        builder.execute_commands(gui_command_buffer).unwrap();
 
-        self.gpu.commit_commands(image_num, acquire_future, command_buffer, &mut self.previous_frame_end, &mut self.recreate_swapchain);
+
+        // end
+        builder.end_render_pass().unwrap();
+
+
+        let command_buffer = builder.build().unwrap();
+        self.gpu.commit_commands(image_num, self.swapchain.clone(), acquire_future, command_buffer, &mut self.previous_frame_end, &mut self.recreate_swapchain);
     }
 }

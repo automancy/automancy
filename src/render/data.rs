@@ -165,12 +165,17 @@ pub struct UniformBufferObject {
 
 #[derive(Clone, Debug)]
 pub struct Face {
-    pub vertex_indices: Vec<u32>,
+    pub indices: Vec<u32>,
+    pub offset: Option<u32>,
 }
 
 impl Face {
+    pub fn index_offset(&mut self, offset: u32) {
+        self.indices.iter_mut().for_each(|v| *v += offset);
+    }
+
     pub fn with_offset(mut self, offset: u32) -> Self {
-        self.vertex_indices.iter_mut().for_each(|v| *v += offset);
+        self.offset = Some(offset);
 
         self
     }
@@ -179,12 +184,15 @@ impl Face {
 impl PropertyAccess for Face {
     fn new() -> Self {
         Face {
-            vertex_indices: Vec::new(),
+            indices: Vec::new(),
+            offset: None,
         }
     }
     fn set_property(&mut self, key: String, property: Property) {
         match (key.as_ref(), property) {
-            ("vertex_indices", Property::ListUInt(vec)) => self.vertex_indices = vec,
+            ("vertex_indices", Property::ListUInt(vec)) => {
+                self.indices = vec;
+            },
             (_, _) => {}
         }
     }

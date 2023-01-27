@@ -6,3 +6,5 @@
 Cargo.lock
 
 *.blend1
+
+renderdoc.cap
