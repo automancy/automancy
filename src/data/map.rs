@@ -3,14 +3,16 @@ use std::{
     path::PathBuf,
     sync::Arc,
 };
-use std::fmt::{Debug};
+use std::fmt::Debug;
+use riker::actor::ActorRef;
 
 
+use crate::render::data::InstanceData;
+use crate::data::id::Id;
+use crate::data::tile::TileMsg;
+use crate::util::init::InitData;
 
-
-use crate::{render::data::InstanceData, registry::init::InitData};
-
-use super::tile::{Tile, TileCoord};
+use super::tile::TileCoord;
 
 pub const MAP_PATH: &str = "map";
 
@@ -30,7 +32,7 @@ pub struct MapRenderInfo {
 pub struct Map {
     pub map_name: String,
 
-    pub tiles: HashMap<TileCoord, Tile>,
+    pub tiles: HashMap<TileCoord, (Id, ActorRef<TileMsg>)>,
 }
 
 impl Map {
@@ -38,13 +40,13 @@ impl Map {
         &self,
         RenderContext {
             init_data,
-        }: &RenderContext,
+        }: &RenderContext
     ) -> MapRenderInfo { // TODO cache this
         let instances = self.tiles
             .iter()
             .map(|(a, b)| (a.clone(), b))
-            .flat_map(|(pos, tile)| {
-                InstanceData::from_tile(tile, pos, init_data.clone())
+            .flat_map(|(pos, (id, _))| {
+                InstanceData::from_id(&id, pos, init_data.clone())
             })
             .collect();
 
@@ -57,13 +59,6 @@ impl Map {
         Self {
             map_name,
             tiles: HashMap::new(),
-        }
-    }
-
-    pub fn new(map_name: String, tiles: impl IntoIterator<Item = (TileCoord, Tile)>) -> Self {
-        Self {
-            map_name,
-            tiles: HashMap::from_iter(tiles),
         }
     }
 

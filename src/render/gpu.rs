@@ -2,21 +2,23 @@ use std::sync::Arc;
 
 use vulkano::{buffer::{BufferContents, BufferUsage, CpuAccessibleBuffer}, command_buffer::DrawIndexedIndirectCommand, device::{
     Device, Queue,
-}, image::{view::ImageView, AttachmentImage, SwapchainImage}, render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass}, swapchain::Surface, sync, sync::GpuFuture};
+}, image::{AttachmentImage, SwapchainImage, view::ImageView}, render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass}, swapchain::Surface, sync, sync::GpuFuture};
 use vulkano::buffer::DeviceLocalBuffer;
 use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryAutoCommandBuffer};
 use vulkano::command_buffer::allocator::{StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo};
 use vulkano::format::Format;
-use vulkano::image::{ImageAccess, ImageUsage};
-use vulkano::memory::allocator::{MemoryAllocator};
+use vulkano::image::{ImageAccess, ImageUsage, SampleCount};
+use vulkano::memory::allocator::MemoryAllocator;
 use vulkano::pipeline::graphics::viewport::Viewport;
 use vulkano::swapchain::{Swapchain, SwapchainAcquireFuture, SwapchainCreateInfo, SwapchainCreationError, SwapchainPresentInfo};
-use vulkano::sync::{FlushError};
+use vulkano::sync::FlushError;
 use winit::{dpi::LogicalSize, window::Window};
 
-use crate::{render::data::Vertex, math::cg::Num, registry::init::InitData};
-use crate::math::cg::{Double};
+use crate::render::data::Vertex;
+use crate::util::cg::Double;
 use crate::render::gpu;
+use crate::util::cg::Num;
+use crate::util::init::InitData;
 
 use super::data::{InstanceData, UniformBufferObject};
 
@@ -98,11 +100,13 @@ pub fn uniform_buffer(
 pub fn framebuffers(
     images: &[Arc<SwapchainImage>],
     render_pass: Arc<RenderPass>,
+    color_image: Arc<AttachmentImage>,
     depth_buffer: Arc<AttachmentImage>,
-    depth_buffer_gui: Arc<AttachmentImage>,
+    depth_buffer_egui: Arc<AttachmentImage>,
 ) -> Vec<Arc<Framebuffer>> {
+    let color_image_view = ImageView::new_default(color_image).unwrap();
     let depth_buffer = ImageView::new_default(depth_buffer).unwrap();
-    let depth_buffer_gui = ImageView::new_default(depth_buffer_gui).unwrap();
+    let depth_buffer_egui = ImageView::new_default(depth_buffer_egui).unwrap();
 
     images
         .iter()
@@ -112,7 +116,7 @@ pub fn framebuffers(
             Framebuffer::new(
                 render_pass.clone(),
                 FramebufferCreateInfo {
-                    attachments: vec![view, depth_buffer.clone(), depth_buffer_gui.clone()],
+                    attachments: vec![view, color_image_view.clone(), depth_buffer.clone(), depth_buffer_egui.clone()],
                     ..Default::default()
                 },
             )
@@ -218,18 +222,29 @@ pub fn indirect_buffer(
 }
 
 impl Gpu {
-    pub fn depth_buffer_size(&self, depth_buffer: &mut Arc<AttachmentImage>, allocator: &(impl MemoryAllocator + ?Sized), size: [u32; 2], recreate_swapchain: &mut bool) {
-        if size != depth_buffer.dimensions().width_height() {
+    pub fn resize_image_with_samples(&self, sample_count: SampleCount, image: &mut Arc<AttachmentImage>, allocator: &(impl MemoryAllocator + ?Sized), size: [u32; 2], recreate_swapchain: &mut bool) {
+        if size != image.dimensions().width_height() {
             *recreate_swapchain = true;
 
-            *depth_buffer = AttachmentImage::with_usage(
+            *image = AttachmentImage::multisampled_with_usage(
                 allocator,
                 size,
-                Format::D24_UNORM_S8_UINT,
-                ImageUsage {
-                    depth_stencil_attachment: true,
-                    ..Default::default()
-                },
+                sample_count,
+                image.format(),
+                *image.usage(),
+            ).unwrap();
+        }
+    }
+
+    pub fn resize_image(&self, image: &mut Arc<AttachmentImage>, allocator: &(impl MemoryAllocator + ?Sized), size: [u32; 2], recreate_swapchain: &mut bool) {
+        if size != image.dimensions().width_height() {
+            *recreate_swapchain = true;
+
+            *image = AttachmentImage::with_usage(
+                allocator,
+                size,
+                image.format(),
+                *image.usage(),
             ).unwrap();
         }
     }
@@ -237,8 +252,9 @@ impl Gpu {
     pub fn recreate_swapchain(
         &self,
         size: [u32; 2],
+        color_image: Arc<AttachmentImage>,
         depth_buffer: Arc<AttachmentImage>,
-        depth_buffer_gui: Arc<AttachmentImage>,
+        depth_buffer_egui: Arc<AttachmentImage>,
         swapchain: &mut Arc<Swapchain>,
         framebuffers: &mut Vec<Arc<Framebuffer>>,
         recreate_swapchain: &mut bool
@@ -255,7 +271,7 @@ impl Gpu {
         };
 
         *swapchain = new_swapchain;
-        *framebuffers = gpu::framebuffers(&new_images, self.render_pass.clone(), depth_buffer.clone(), depth_buffer_gui.clone());
+        *framebuffers = gpu::framebuffers(&new_images, self.render_pass.clone(), color_image.clone(), depth_buffer.clone(), depth_buffer_egui.clone());
         *recreate_swapchain = false;
     }
 

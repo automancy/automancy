@@ -1,0 +1,14 @@
+{
+    "id": "iron_ingot",
+    "script_t": "refinery",
+    "instructions": {
+        "input": {
+            "id": "iron_ore",
+            "amount": 10
+        },
+        "output": {
+            "id": "iron_ingot",
+            "amount": 1
+        }
+    }
+}

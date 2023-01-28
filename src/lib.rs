@@ -8,9 +8,5 @@
 
 pub mod data;
 pub mod game;
-pub mod input;
-pub mod math;
-pub mod player;
-pub mod registry;
 pub mod render;
 pub mod util;

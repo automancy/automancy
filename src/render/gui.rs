@@ -5,18 +5,17 @@ use std::sync::Arc;
 use cgmath::{point3, vec3};
 use egui::{Align, CursorIcon, Frame, Layout, PaintCallback, RichText, Sense, Stroke, TextStyle, Ui, vec2, WidgetText};
 use egui_winit_vulkano::CallbackFn;
-use futures::channel::{mpsc};
+use futures::channel::{mpsc, oneshot};
 use vulkano::buffer::BufferUsage;
-use vulkano::command_buffer::DrawIndexedIndirectCommand;
+use vulkano::command_buffer::{DrawIndexedIndirectCommand, SecondaryAutoCommandBuffer};
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::pipeline::{GraphicsPipeline, Pipeline, PipelineBindPoint};
-use crate::math::cg::{Matrix4, perspective, Vector3};
-use crate::registry::init::InitData;
+use crate::util::cg::{Matrix4, perspective, Vector3};
+use crate::util::init::InitData;
+use crate::render::gpu::{Gpu};
+use crate::data::id::Id;
 use crate::render::data::UniformBufferObject;
 use crate::render::gpu;
-use crate::render::gpu::{Gpu};
-use crate::util::colors::Color;
-use crate::util::id::Id;
 
 fn tile_ui(size: f32, id: Id, faces_index: usize, mut channel: mpsc::Sender<Id>, ui: &mut Ui, init_data: Arc<InitData>, gpu: Arc<Gpu>, gui_pipeline: Arc<GraphicsPipeline>) -> PaintCallback {
     let (rect, response) = ui.allocate_exact_size(

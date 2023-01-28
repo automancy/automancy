@@ -1,10 +1,8 @@
 use crate::{
     render::data::{Face, Model, Vertex},
-    util::{
-        id::{Id},
-        resource::ResourceManager,
-    },
 };
+use crate::data::id::Id;
+use crate::util::resource::ResourceManager;
 
 #[derive(Debug)]
 pub struct InitData {
@@ -17,26 +15,30 @@ pub struct InitData {
 impl InitData {
     pub fn new(
         mut resource_man: ResourceManager,
-        resources: Vec<Option<(Id, Option<Model>)>>,
+        resources: Vec<(Id, Option<Model>)>,
     ) -> Self {
         // indices vertices
         let (vertices, faces): (Vec<_>, Vec<_>) = resources
             .into_iter()
-            .map(|r| r.and_then(|(id, model)| model.map(|m| (m.vertices, (id, m.faces)))))
+            .map(|(id, model)| model.map(|m| (m.vertices, (id, m.faces))))
             .map(|v| v.unzip())
             .unzip();
 
         let mut index_offsets = vertices
             .iter()
             .scan(0, |offset, v| {
-                v.as_ref().map(|v| {
+                if let Some(ref v) = v {
                     *offset += v.len();
                     Some(*offset)
-                })
+                } else {
+                    Some(0)
+                }
             })
             .collect::<Vec<_>>();
-        drop(index_offsets.split_off(index_offsets.len() - 1));
-        index_offsets.insert(0, Some(0));
+        if !index_offsets.is_empty() {
+            drop(index_offsets.split_off(index_offsets.len() - 1));
+            index_offsets.insert(0, 0);
+        }
 
         let combined_vertices = vertices.into_iter().flatten().flatten().collect::<Vec<_>>();
 
@@ -48,7 +50,6 @@ impl InitData {
             .map(|(i, v)| {
                 v.map(|(id, faces)| {
                     if let Some(resource) = resource_man.resources.get_mut(&id) {
-                        log::debug!("{}->faces_index: {}", id, i);
                         resource.faces_index = Some(i);
                     }
 
@@ -59,9 +60,7 @@ impl InitData {
 
                             let mut result = face.with_offset(offset);
 
-                            if let Some(index_offset) = index_offsets[i] {
-                                result.index_offset(index_offset as u32);
-                            }
+                                result.index_offset(index_offsets[i] as u32);
                             offset += len as u32;
 
                             result

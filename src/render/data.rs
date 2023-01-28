@@ -7,15 +7,11 @@ use hexagon_tiles::point::Point;
 use ply_rs::ply::{Property, PropertyAccess};
 use vulkano::impl_vertex;
 
-use crate::{
-    data::tile::{Tile, TileCoord},
-    math::{
-        cg::{Num, Vector2},
-    },
-    registry::init::InitData,
-};
+use crate::data::tile::{Tile, TileCoord};
+use crate::data::id::Id;
 use crate::render::camera::FAR;
-
+use crate::util::cg::{Num, Vector2};
+use crate::util::init::InitData;
 
 
 fn color_to_num(color: u8) -> Num {
@@ -92,11 +88,11 @@ pub const RENDER_LAYOUT: Layout = Layout {
 };
 
 impl InstanceData {
-    pub fn from_tile(tile: &Tile, pos: TileCoord, init_data: Arc<InitData>) -> Option<(TileCoord, Self)> {
+    pub fn from_id(id: &Id, pos: TileCoord, init_data: Arc<InitData>) -> Option<(TileCoord, Self)> {
         init_data
             .resource_man
             .resources
-            .get(&tile.id)
+            .get(id)
             .and_then(|r| r.faces_index)
             .map(|face| {
                 let p = hex_to_pixel(RENDER_LAYOUT, pos.0);

@@ -1,6 +1,7 @@
+use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
-
-pub type SingleData = u32;
+use crate::data::id::Id;
+use crate::game::item::ItemAmount;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct Data(pub Vec<SingleData>);
+pub struct Data(pub HashMap<Id, ItemAmount>);

@@ -1,0 +1,14 @@
+{
+    "id": "tin_ingot",
+    "script_t": "refinery",
+    "instructions": {
+        "input": {
+            "id": "tin_ore",
+            "amount": 10
+        },
+        "output": {
+            "id": "tin_ingot",
+            "amount": 1
+        }
+    }
+}

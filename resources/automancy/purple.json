@@ -1,4 +1,11 @@
 {
     "id": "purple",
-    "model": "purple.ply"
+    "model": "purple.ply",
+    "scripts": [
+        "iron_ingot.json",
+        "gold_ingot.json",
+        "tin_ingot.json",
+        "copper_ingot.json",
+        "stone.json"
+    ]
 }

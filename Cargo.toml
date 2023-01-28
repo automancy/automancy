@@ -26,14 +26,13 @@ winit = "0.27.5"
 egui = "0.20.1"
 egui_winit_vulkano = "0.22.0"
 
-lazy_static = "1.4.0"
 walkdir = "2.3.2"
-paste = "1.0.7"
 
 hexagon_tiles = { git = "https://github.com/Mg138/hexagon-tiles" }
 bytemuck = "1.8.0"
 flexstr = { version = "0.9.2", features = ["serde", "fast_format"] }
 cgmath = "0.18.0"
+uuid = { version = "1.2.2", features = ["v4"] }
 rand = "0.8.5"
 num = "0.4.0"
 
@@ -46,6 +45,7 @@ json = "0.12.4"
 png = "0.17.5"
 
 futures-executor = "0.3.25"
+futures-timer = "3.0.2"
 futures-task = "0.3.25"
 futures-util = "0.3.25"
 futures = "0.3.25"

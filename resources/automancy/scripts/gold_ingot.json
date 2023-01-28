@@ -1,0 +1,14 @@
+{
+    "id": "gold_ingot",
+    "script_t": "refinery",
+    "instructions": {
+        "input": {
+            "id": "gold_ore",
+            "amount": 10
+        },
+        "output": {
+            "id": "gold_ingot",
+            "amount": 1
+        }
+    }
+}

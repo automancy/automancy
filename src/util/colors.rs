@@ -1,5 +1,5 @@
 use std::ops::Mul;
-use crate::math::cg::Num;
+use crate::util::cg::Num;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Color {
@@ -64,6 +64,8 @@ impl Color {
         = Color { r: 1.0, g: 1.0, b: 1.0, a: 1.0 };
     pub const GRAY: Color
         = Color { r: 0.7, g: 0.7, b: 0.7, a: 1.0 };
+    pub const BLACK: Color
+        = Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 };
     pub const TRANSPARENT: Color
         = Color { r: 0.0, g: 0.0, b: 0.0, a: 0.0 };
 }

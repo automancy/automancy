@@ -1,0 +1,14 @@
+{
+    "id": "stone",
+    "script_t": "refinery",
+    "instructions": {
+        "input": {
+            "id": "rough_stone",
+            "amount": 10
+        },
+        "output": {
+            "id": "stone",
+            "amount": 1
+        }
+    }
+}
