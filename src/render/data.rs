@@ -7,7 +7,7 @@ use hexagon_tiles::point::Point;
 use ply_rs::ply::{Property, PropertyAccess};
 use vulkano::impl_vertex;
 
-use crate::data::tile::{Tile, TileCoord};
+use crate::data::tile::{TileCoord};
 use crate::data::id::Id;
 use crate::render::camera::FAR;
 use crate::util::cg::{Num, Vector2};

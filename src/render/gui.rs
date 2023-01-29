@@ -1,13 +1,13 @@
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::f32::consts::{FRAC_PI_4, FRAC_PI_8};
+
+
+use std::f32::consts::{FRAC_PI_4};
 use std::sync::Arc;
 use cgmath::{point3, vec3};
-use egui::{Align, CursorIcon, Frame, Layout, PaintCallback, RichText, Sense, Stroke, TextStyle, Ui, vec2, WidgetText};
+use egui::{CursorIcon, PaintCallback, Sense, Ui, vec2};
 use egui_winit_vulkano::CallbackFn;
-use futures::channel::{mpsc, oneshot};
+use futures::channel::{mpsc};
 use vulkano::buffer::BufferUsage;
-use vulkano::command_buffer::{DrawIndexedIndirectCommand, SecondaryAutoCommandBuffer};
+use vulkano::command_buffer::{DrawIndexedIndirectCommand};
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::pipeline::{GraphicsPipeline, Pipeline, PipelineBindPoint};
 use crate::util::cg::{Matrix4, perspective, Vector3};
@@ -23,7 +23,7 @@ fn tile_ui(size: f32, id: Id, faces_index: usize, mut channel: mpsc::Sender<Id>,
         Sense::click(),
     );
 
-    response.clone().on_hover_text(id.to_string());
+    response.clone().on_hover_text(init_data.resource_man.tile_name(&id));
     response.clone().on_hover_cursor(CursorIcon::Grab);
 
     let hover = if response.clone().hovered() {
@@ -105,10 +105,11 @@ fn tile_ui(size: f32, id: Id, faces_index: usize, mut channel: mpsc::Sender<Id>,
 
 pub fn render_tile_selection(ui: &mut Ui, init_data: Arc<InitData>, channel: mpsc::Sender<Id>, gpu: Arc<Gpu>, gui_pipeline: Arc<GraphicsPipeline>) {
     let size = ui.available_height();
+    let resource_man = &init_data.clone().resource_man;
 
-    init_data.clone().resource_man.resources
+    resource_man.ordered_ids
         .iter()
-        .map(|(id, resource)| resource.faces_index.map(|v| (id.clone(), v)))
+        .map(|id| resource_man.resources.get(&id).and_then(|v| v.faces_index.map(|v| (id.clone(), v))))
         .flatten()
         .for_each(|(id, faces_index)| {
             let callback = tile_ui(size, id, faces_index, channel.clone(), ui, init_data.clone(), gpu.clone(), gui_pipeline.clone());

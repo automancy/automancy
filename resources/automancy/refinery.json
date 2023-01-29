@@ -1,0 +1,11 @@
+{
+    "id": "refinery",
+    "model": "purple.ply",
+    "scripts": [
+        "iron_ingot",
+        "gold_ingot",
+        "tin_ingot",
+        "copper_ingot",
+        "stone"
+    ]
+}

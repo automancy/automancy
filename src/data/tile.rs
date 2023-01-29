@@ -14,14 +14,13 @@ use crate::game::item::Item;
 use crate::game::script::Script;
 use crate::util::init::InitData;
 
-pub const NONE: Id = id_static("automancy", "none");
-
 #[derive(Debug, Clone)]
 pub struct Tile {
     pub id: Id,
     pub data: Data,
     pub script: Option<Id>,
-    pub target: TileCoord,
+    pub target_coord: Option<TileCoord>,
+    pub target_ref: Option<BasicActorRef>,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -34,15 +33,19 @@ pub enum TransactionError {
 #[derive(Debug, Clone)]
 pub enum TileMsg {
     GetId,
+    Tick {
+        init_data: Arc<InitData>,
+    },
     Transaction {
         item: Item,
         init_data: Arc<InitData>,
     },
-    TransactionResult(Result<Item, TransactionError>),
-    SetTarget(TileCoord),
+    TransactionResult(Result<(), TransactionError>),
+    SetTarget((TileCoord, BasicActorRef)),
     GetTarget,
     SetScript(Id),
     GetScript,
+    GetData,
 }
 
 impl Actor for Tile {
@@ -55,52 +58,83 @@ impl Actor for Tile {
             TileMsg::GetId => {
                 sender.inspect(|v| v.try_tell(self.id.clone(), myself).unwrap());
             }
+            TileMsg::Tick { init_data } => {
+                if let Some(target) = self.target_ref.clone() {
+                    if let Some(script) = self.script.as_ref().and_then(|v| init_data.resource_man.scripts.get(v)) {
+                        let instructions = &script.instructions;
+                        let output = instructions.output.clone();
+
+                        if let Some(input) = instructions.input.clone() {
+                            let id = &input.id;
+
+                            // TODO send transaction result back to Game
+                            let stored = *self.data.0.get(&id).unwrap_or(&0);
+                            if stored >= input.amount {
+                                self.data.0.insert(id.clone(), stored - input.amount);
+
+                                if let Some(output) = output {
+                                    target.try_tell(TileMsg::Transaction { item: output, init_data }, myself).unwrap();
+                                }
+                            }
+                        } else {
+                            if let Some(output) = output {
+                                target.try_tell(TileMsg::Transaction { item: output, init_data }, myself).unwrap();
+                            }
+                        }
+                    }
+                }
+            }
             TileMsg::Transaction { item, init_data } => {
                 if let Some(sender) = sender {
                     if let Some(script) = self.get_script(init_data) {
-                        let input = script.instructions.input;
-                        let id = item.id;
-                        let has = item.amount;
-                        let required = input.amount;
+                        if let Some(input) = script.instructions.input {
+                            let id = item.id;
+                            let has = item.amount;
+                            let required = input.amount;
 
-                        if input.id != id {
+                            if input.id != id {
+                                sender.try_tell(TileMsg::TransactionResult(Err(TransactionError::NotSuitable)), myself).unwrap();
+                                return;
+                            }
+
+                            let amount = self.data.0.entry(id.clone()).or_insert(0);
+                            *amount += has;
+
+                            if has >= required {
+                                sender.try_tell(TileMsg::TransactionResult(Ok(())), myself).unwrap();
+                                return;
+                            } else {
+                                sender.try_tell(TileMsg::TransactionResult(Err(TransactionError::NotEnough)), myself).unwrap();
+                                return;
+                            }
+                        } else {
                             sender.try_tell(TileMsg::TransactionResult(Err(TransactionError::NotSuitable)), myself).unwrap();
                             return;
                         }
-
-                        if required > has {
-                            sender.try_tell(TileMsg::TransactionResult(Err(TransactionError::NotEnough)), myself).unwrap();
-                            return;
-                        }
-
-                        let amount = self.data.0.entry(id.clone()).or_insert(0);
-                        *amount += required;
-
-                        sender.try_tell(TileMsg::TransactionResult(Ok(Item { id, amount: has - required })), myself).unwrap();
                     } else {
                         sender.try_tell(TileMsg::TransactionResult(Err(TransactionError::NoScript)), myself).unwrap();
                         return;
                     }
                 }
             }
-            TileMsg::TransactionResult(result) => {
+            TileMsg::TransactionResult(_result) => {
                 // TODO slow down if error
-                if let Ok(new) = result {
-                    let amount = self.data.0.entry(new.id).or_insert(0);
-                    *amount = new.amount;
-                }
             }
-            TileMsg::SetTarget(target) => {
-                self.target = target;
+            TileMsg::SetTarget((target_coord, target_ref)) => {
+                self.target_coord = Some(target_coord);
+                self.target_ref = Some(target_ref);
             }
             TileMsg::GetTarget => {
-                sender.inspect(|v| v.try_tell(self.target, myself).unwrap());
+                sender.inspect(|v| v.try_tell((self.target_coord, self.target_ref.clone()), myself).unwrap());
             }
             TileMsg::SetScript(id) => {
                 self.script = Some(id)
             }
             TileMsg::GetScript => {
                 sender.inspect(|v| v.try_tell(self.script.clone(), myself).unwrap());
+            }
+            TileMsg::GetData => {
+                sender.inspect(|v| v.try_tell(self.data.clone(), myself).unwrap());
             }
         }
     }
@@ -118,7 +152,8 @@ impl Tile {
             id,
             data,
             script: None,
-            target: TileCoord::ZERO,
+            target_coord: None,
+            target_ref: None,
         }
     }
 

@@ -19,21 +19,21 @@ use json::JsonValue;
 
 use automancy::util::init::InitData;
 use automancy::util::resource::{Resource, ResourceManager};
-use walkdir::WalkDir;
 
 use std::{ffi::OsStr, fs::{File, read_to_string}, fs, path::Path, sync::Arc};
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::f32::consts::{FRAC_PI_4, FRAC_PI_8, PI};
 use std::fs::DirEntry;
+use std::io::BufReader;
 use std::sync::Mutex;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
-use cgmath::{EuclideanSpace, point3, SquareMatrix, vec3};
+use cgmath::{EuclideanSpace, point2, point3, SquareMatrix, vec3};
 use egui::panel::{Side, TopBottomSide};
-use egui::{Align, Align2, Area, Color32, Frame, Layout, PaintCallback, Rect, Rounding, ScrollArea, Sense, Shape, SidePanel, Stroke, Style, TopBottomPanel, Vec2, vec2, Visuals, Window};
+use egui::{Align, Align2, Area, Color32, FontData, FontDefinitions, FontFamily, Frame, Label, Layout, PaintCallback, Rect, RichText, Rounding, ScrollArea, Sense, Shape, SidePanel, Stroke, Style, TopBottomPanel, Vec2, vec2, Visuals, Window};
 use egui::epaint::Shadow;
 use egui::style::{default_text_styles, Margin};
-use egui_winit_vulkano::{CallbackFn, Gui};
+use egui_winit_vulkano::Gui;
 use futures::channel::{mpsc, oneshot};
 use futures::executor::block_on;
 use futures_util::FutureExt;
@@ -75,10 +75,11 @@ use winit::{
     event_loop::{ControlFlow, EventLoop},
     window::{Icon, WindowBuilder},
 };
+use automancy::data::data::Data;
 use automancy::data::id::Id;
 use automancy::data::map::{MapRenderInfo, RenderContext};
 use automancy::data::tile::{Tile, TileCoord, TileMsg};
-use automancy::data::tile::TileMsg::SetScript;
+use automancy::data::tile::TileMsg::{SetScript, SetTarget};
 use automancy::game::game::GameMsg;
 use automancy::game::input::{GameDeviceEvent, InputState};
 use automancy::util::cg::{Double, eye, matrix, Matrix4, Num, perspective, projection, Vector3, view};
@@ -98,7 +99,7 @@ fn load_resources() -> (ResourceManager, Vec<(Id, Option<Model>)>) {
 
     // TODO: just use serde?
 
-    let resources = fs::read_dir(RESOURCE)
+    let mut resources = fs::read_dir(RESOURCE)
         .unwrap()
         .flatten()
         .map(|v| v.path())
@@ -123,6 +124,9 @@ fn load_resources() -> (ResourceManager, Vec<(Id, Option<Model>)>) {
         })
         .flatten()
         .map(|(resource, dir)| {
+            resource_man.load_scripts(&dir);
+            resource_man.load_translates(&dir);
+
             resource_man.load_resource(resource, &dir)
         })
         .flatten()
@@ -300,20 +304,20 @@ fn main() {
                 format: Format::D24_UNORM_S8_UINT,
                 samples: 4,
             },
-            depth_egui: {
+            depth_gui: {
                 load: Clear,
                 store: DontCare,
                 format: Format::D24_UNORM_S8_UINT,
-                samples: 1,
+                samples: 4,
             }
         },
         passes: [
             { color: [color], depth_stencil: { depth     }, input: [], resolve: [color_resolve] },
-            { color: [color_resolve], depth_stencil: { depth_egui }, input: [] }
+            { color: [color], depth_stencil: { depth_gui }, input: [], resolve: [color_resolve] }
         ]
     ).unwrap();
     let subpass = Subpass::from(render_pass.clone(), 0).unwrap();
-    let egui_subpass = Subpass::from(render_pass.clone(), 1).unwrap();
+    let gui_subpass = Subpass::from(render_pass.clone(), 1).unwrap();
 
     // --- buffers ---
     let allocator = StandardMemoryAllocator::new_default(device.clone());
@@ -368,9 +372,10 @@ fn main() {
         },
     ).unwrap();
 
-    let depth_buffer_egui = AttachmentImage::with_usage(
+    let depth_buffer_gui = AttachmentImage::multisampled_with_usage(
         &allocator,
         gpu::window_size_u32(&window),
+        Sample4,
         Format::D24_UNORM_S8_UINT,
         ImageUsage {
             depth_stencil_attachment: true,
@@ -424,13 +429,17 @@ fn main() {
             .viewport_state(ViewportState::viewport_dynamic_scissor_dynamic(1))
             .rasterization_state(RasterizationState::new())
             .depth_stencil_state(DepthStencilState::simple_depth_test())
-            .render_pass(egui_subpass.clone());
+            .multisample_state(MultisampleState {
+                rasterization_samples: Sample4,
+                ..Default::default()
+            })
+            .render_pass(gui_subpass.clone());
 
         pipeline.build(device.clone()).unwrap()
     };
 
     // --- framebuffers ---
-    let framebuffers = gpu::framebuffers(&images, render_pass.clone(), color_image.clone(), depth_buffer.clone(), depth_buffer_egui.clone());
+    let framebuffers = gpu::framebuffers(&images, render_pass.clone(), color_image.clone(), depth_buffer.clone(), depth_buffer_gui.clone());
 
     // --- gpu ---
     let gpu = Arc::new(Gpu {
@@ -453,7 +462,7 @@ fn main() {
     // --- init actors ---
     let sys = SystemBuilder::new().name("automancy").create().unwrap();
 
-    let game = sys.actor_of_args::<Game, Map>("game", map).unwrap();
+    let game = sys.actor_of_args::<Game, Arc<Map>>("bin", Arc::new(map)).unwrap();
 
     let mut camera = Camera::new(gpu::window_size(&gpu.window));
     let mut renderer = Renderer::new(
@@ -462,34 +471,53 @@ fn main() {
         game_pipeline,
         color_image,
         depth_buffer,
-        depth_buffer_egui,
+        depth_buffer_gui,
         swapchain,
         framebuffers
     );
 
-    // --- game ---
-    let tick = GameMsg::Tick {};
+    // --- bin ---
+    let tick = GameMsg::Tick {
+        init_data: init_data.clone(),
+    };
 
-    sys.schedule(TICK_INTERVAL, TICK_INTERVAL, game.clone(), None, tick);
+    let id = sys.schedule(TICK_INTERVAL, TICK_INTERVAL, game.clone(), None, tick);
 
     let mut gui = Gui::new_with_subpass(
         &event_loop,
         gpu.surface.clone(),
         None,
         gpu.queue.clone(),
-        egui_subpass,
+        gui_subpass,
     );
 
-    gui.context().set_style(
-        Style {
-            override_text_style: None,
-            override_font_id: None,
-            text_styles: default_text_styles(),
-            wrap: None,
-            visuals: Visuals::light(),
-            ..Default::default()
-        }
-    );
+    log::info!("loading font...");
+    {
+        let mut fonts = FontDefinitions::default();
+        let iosevka = "iosevka".to_owned();
+
+        fonts.font_data.insert(iosevka.clone(), FontData::from_static(include_bytes!("./fonts/iosevka-extended.ttf")));
+
+        fonts.families.get_mut(&FontFamily::Proportional).unwrap()
+            .insert(0, iosevka.clone());
+        fonts.families.get_mut(&FontFamily::Monospace).unwrap()
+            .insert(0, iosevka.clone());
+
+        gui.context().set_fonts(fonts);
+    }
+
+    {
+        gui.context().set_style(
+            Style {
+                override_text_style: None,
+                override_font_id: None,
+                text_styles: default_text_styles(),
+                wrap: None,
+                visuals: Visuals::light(),
+                ..Default::default()
+            }
+        );
+    }
 
     let frame = Frame::none()
         .fill(Color::WHITE.with_alpha(0.6).into())
@@ -588,18 +616,18 @@ fn main() {
                 }
             }
 
-
             if event == Event::RedrawRequested(gpu.window.id()) {
                 let gpu = gpu.clone();
 
                 let (selection_send, mut selection_recv) = mpsc::channel(1);
 
-                gui.immediate_ui(|ui| {
+                gui.immediate_ui(|gui| {
+                    // tile_selection
                     TopBottomPanel::bottom("tile_selection")
                         .show_separator_line(false)
                         .resizable(false)
                         .frame(frame.outer_margin(Margin::same(10.0)))
-                        .show(&ui.context(), |ui| {
+                        .show(&gui.context(), |ui| {
                             let spacing = ui.spacing_mut();
 
                             spacing.interact_size.y = 70.0;
@@ -615,18 +643,23 @@ fn main() {
                                 });
                         });
 
+                    // tile_info
                     Window::new("Tile Info")
                         .anchor(Align2([Align::RIGHT, Align::TOP]), vec2(-10.0, 10.0))
                         .resizable(false)
                         .default_width(300.0)
                         .frame(frame.inner_margin(Margin::same(10.0)))
-                        .show(&ui.context(), |ui| {
+                        .show(&gui.context(), |ui| {
                             let coord = pointing_at;
 
                             let result: Option<(Id, ActorRef<TileMsg>)> = block_on(ask(&sys, &game, GameMsg::GetTile(coord)));
 
                             if let Some((id, tile)) = result {
-                                ui.label(id.to_string());
+                                ui.label(init_data.resource_man.tile_name(&id));
+                                let data: Data = block_on(ask(&sys, &tile, TileMsg::GetData));
+                                for (id, amount) in data.0.iter() {
+                                    ui.label(format!("{} - {}", init_data.resource_man.item_name(id), amount));
+                                }
                             }
                         });
 
@@ -648,27 +681,32 @@ fn main() {
                                 Window::new("Config")
                                     .resizable(false)
                                     .auto_sized()
+                                    .constrain(true)
                                     .frame(frame.inner_margin(Margin::same(10.0)))
-                                    .show(&ui.context(), |ui| {
-                                        ui.colored_label(Color::GRAY, format!("{}: {}\n", id, config_open));
+                                    .show(&gui.context(), |ui| {
+                                        ui.set_max_width(300.0);
+
+                                        ui.label(RichText::new(format!("{}: {}\n", id, config_open)).color(Color32::GRAY).size(15.0));
 
                                         let current_script_text = if let Some(ref current_script) = current_script {
-                                            current_script.to_string()
+                                            init_data.resource_man.item_name(current_script)
                                         } else {
                                             "<none>".to_owned()
                                         };
 
                                         ui.label(format!("Script: {}", current_script_text));
                                         ScrollArea::vertical().max_height(80.0).show(ui, |ui| {
+                                            ui.set_width(ui.available_width());
+
                                             scripts.iter().for_each(|script| {
                                                 ui.radio_value(
                                                     &mut current_script,
                                                     Some(script.clone()),
-                                                    script.to_string()
+                                                    init_data.resource_man.item_name(&script)
                                                 );
                                             })
                                         });
-                                        ui.colored_label(Color::ORANGE, "○ Output");
+
                                     });
                             });
 

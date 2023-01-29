@@ -17,6 +17,22 @@ impl InitData {
         mut resource_man: ResourceManager,
         resources: Vec<(Id, Option<Model>)>,
     ) -> Self {
+        let mut ids = resources.iter().map(|(id, _)| id.clone()).collect::<Vec<_>>();
+
+        ids.sort_unstable_by_key(|id| id.clone());
+
+        if let Some(none_idx) = ids.iter().enumerate().find_map(|(idx, id)| {
+            if id == &Id::NONE {
+                Some(idx)
+            } else {
+                None
+            }
+        }) {
+            ids.swap(none_idx, 0);
+        }
+
+        resource_man.ordered_ids = ids;
+
         // indices vertices
         let (vertices, faces): (Vec<_>, Vec<_>) = resources
             .into_iter()

@@ -11,6 +11,6 @@ pub struct Script {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Instructions {
-    pub input: Item,
-    pub output: Item,
+    pub input: Option<Item>,
+    pub output: Option<Item>,
 }

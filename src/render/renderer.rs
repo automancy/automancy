@@ -1,25 +1,24 @@
-use std::borrow::Borrow;
+
 use std::f32::consts::PI;
 use std::sync::Arc;
 use egui_winit_vulkano::Gui;
-use futures::channel::mpsc;
-use futures_util::{StreamExt, TryStreamExt};
+
 use hexagon_tiles::hex::Hex;
 use hexagon_tiles::layout::{hex_to_pixel, pixel_to_hex};
 
 use hexagon_tiles::point::{point};
 use hexagon_tiles::traits::HexRound;
 
-use riker::actors::{ActorRef, ActorSystem};
-use riker_patterns::ask::ask;
 
-use vulkano::buffer::{BufferUsage};
-use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferInheritanceInfo, CommandBufferUsage, DrawIndexedIndirectCommand, RenderPassBeginInfo, SubpassContents};
+
+
+
+use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferInheritanceInfo, CommandBufferUsage, RenderPassBeginInfo, SubpassContents};
 use vulkano::command_buffer::allocator::{StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo};
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::format::{ClearValue};
-use vulkano::image::{AttachmentImage, ImageUsage};
+use vulkano::image::{AttachmentImage};
 use vulkano::image::SampleCount::Sample4;
 use vulkano::memory::allocator::{FastMemoryAllocator};
 use vulkano::pipeline::{GraphicsPipeline, Pipeline, PipelineBindPoint};
@@ -27,8 +26,9 @@ use vulkano::render_pass::{Framebuffer, Subpass};
 use vulkano::swapchain::{acquire_next_image, AcquireError, Swapchain};
 use vulkano::sync;
 use vulkano::sync::GpuFuture;
+use crate::data::id::Id;
 
-use crate::data::map::{MapRenderInfo, RenderContext};
+use crate::data::map::{MapRenderInfo};
 use crate::data::tile;
 use crate::data::tile::{TileCoord, TileUnit};
 use crate::render::camera::{CameraState, FAR};
@@ -48,7 +48,7 @@ pub struct Renderer {
     pipeline: Arc<GraphicsPipeline>,
     color_image: Arc<AttachmentImage>,
     depth_buffer: Arc<AttachmentImage>,
-    depth_buffer_egui: Arc<AttachmentImage>,
+    depth_buffer_gui: Arc<AttachmentImage>,
     swapchain: Arc<Swapchain>,
     framebuffers: Vec<Arc<Framebuffer>>,
     previous_frame_end: Option<Box<dyn GpuFuture + Send + Sync>>,
@@ -62,7 +62,7 @@ impl Renderer {
         pipeline: Arc<GraphicsPipeline>,
         color_image: Arc<AttachmentImage>,
         depth_buffer: Arc<AttachmentImage>,
-        depth_buffer_egui: Arc<AttachmentImage>,
+        depth_buffer_gui: Arc<AttachmentImage>,
         swapchain: Arc<Swapchain>,
         framebuffers: Vec<Arc<Framebuffer>>,
     ) -> Self {
@@ -77,7 +77,7 @@ impl Renderer {
             pipeline,
             color_image,
             depth_buffer,
-            depth_buffer_egui,
+            depth_buffer_gui,
             swapchain,
             framebuffers,
             previous_frame_end: Some(sync::now(device).boxed_send_sync()),
@@ -113,7 +113,7 @@ impl Renderer {
             let max = pos + o;
 
             let none = InstanceData::new().faces_index(
-                self.init_data.resource_man.resources[&tile::NONE]
+                self.init_data.resource_man.resources[&Id::NONE]
                     .faces_index
                     .unwrap(),
             );
@@ -180,8 +180,9 @@ impl Renderer {
             dimensions,
             &mut self.recreate_swapchain
         );
-        self.gpu.resize_image(
-            &mut self.depth_buffer_egui,
+        self.gpu.resize_image_with_samples(
+            Sample4,
+            &mut self.depth_buffer_gui,
             &allocator,
             dimensions,
             &mut self.recreate_swapchain
@@ -190,7 +191,7 @@ impl Renderer {
         self.previous_frame_end.as_mut().unwrap().cleanup_finished();
 
         if self.recreate_swapchain {
-            self.gpu.recreate_swapchain(dimensions, self.color_image.clone(), self.depth_buffer.clone(), self.depth_buffer_egui.clone(), &mut self.swapchain, &mut self.framebuffers, &mut self.recreate_swapchain);
+            self.gpu.recreate_swapchain(dimensions, self.color_image.clone(), self.depth_buffer.clone(), self.depth_buffer_gui.clone(), &mut self.swapchain, &mut self.framebuffers, &mut self.recreate_swapchain);
         }
 
         let (image_num, suboptimal, acquire_future) = {
@@ -283,7 +284,7 @@ impl Renderer {
                 .unwrap();
         }
 
-        // game
+        // bin
         let game_buffer = game_builder.build().unwrap();
         builder.execute_commands(game_buffer).unwrap();
 

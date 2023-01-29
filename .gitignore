@@ -1,10 +1,10 @@
 /target
 /.fleet
-*.spv
 /.vscode
 /.cargo
-Cargo.lock
 
+*.spv
 *.blend1
 
-renderdoc.cap
+/Cargo.lock
+/renderdoc.cap

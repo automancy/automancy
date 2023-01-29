@@ -2,7 +2,7 @@ use cgmath::{point2, vec2};
 use winit::event::{DeviceEvent, ModifiersState, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent};
 use winit::event::ElementState::Pressed;
 
-use crate::util::cg::{Double, DPoint2, DPoint3, DVector2};
+use crate::util::cg::{Double, DPoint2, DVector2};
 
 #[derive(Debug, Copy, Clone)]
 pub enum GameWindowEvent {

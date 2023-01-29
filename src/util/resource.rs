@@ -1,16 +1,13 @@
 use std::{collections::HashMap, ffi::OsStr, fs::File, io::BufReader, path::Path};
-use std::fs::read_to_string;
-use std::sync::Arc;
-use json::JsonValue;
+use std::fs::{read_dir, read_to_string};
 
-use json::object::Object;
 use ply_rs::parser::Parser;
 use serde::Deserialize;
 use serde_json::Error;
 
 use crate::{
     render::data::{Face, Model, Vertex},
-    data::id::{Id, id},
+    data::id::{Id},
 };
 use crate::game::script::Script;
 
@@ -24,44 +21,24 @@ pub struct ResourceRef {
 pub struct Resource {
     pub id: Id,
     pub model: Option<String>,
-    pub scripts: Option<Vec<String>>,
+    pub scripts: Option<Vec<Id>>,//TODO model meta file
 }
 
 #[derive(Debug, Default)]
 pub struct ResourceManager {
-    pub resources: HashMap<Id, ResourceRef>, //TODO model meta file
+    pub ordered_ids: Vec<Id>,
+    pub resources: HashMap<Id, ResourceRef>,
     pub scripts: HashMap<Id, Script>,
+    pub translates: Translate,
+}
 
-    loaded_scripts: HashMap<String, Id>,
+#[derive(Debug, Default, Clone, Deserialize)]
+pub struct Translate {
+    pub items: HashMap<Id, String>,
+    pub tiles: HashMap<Id, String>,
 }
 
 impl ResourceManager {
-    fn parse_script(&mut self, name: &str, dir: &Path) -> Option<Id> {
-        if let Some(script) = self.loaded_scripts.get(name) {
-            return Some(script.clone())
-        }
-
-        let path = dir.join(name);
-        log::debug!("trying to load script: {:?}", path);
-
-        let script: Result<Script, Error> = serde_json::from_str(read_to_string(path).ok()?.as_str());
-        match script {
-            Ok(script) => {
-                let id = script.id.clone();
-
-                self.loaded_scripts.insert(name.to_string(), script.id.clone());
-                self.scripts.insert(id.clone(), script);
-
-                Some(id)
-            }
-            Err(err) => {
-                log::warn!("failed to parse script: {}", err);
-
-                None
-            }
-        }
-    }
-
     fn parse_model(&self, model: Option<String>, working_dir: &Path) -> Option<Model> {
         model
             .map(|v| {
@@ -104,7 +81,82 @@ impl ResourceManager {
             })
     }
 
-    // TODO naming!!!!!
+    fn load_translate(&mut self, file: &Path) -> Option<()> {
+        log::debug!("trying to load translate: {:?}", file);
+
+        let translate: Result<Translate, Error> = serde_json::from_str(read_to_string(file).ok()?.as_str());
+
+        match translate {
+            Ok(translate) => {
+                self.translates = translate;
+
+                Some(())
+            }
+            Err(err) => {
+                log::error!("failed to parse translate: {}", err);
+
+                None
+            }
+        }
+    }
+
+    fn load_script(&mut self, file: &Path) -> Option<()> {
+        log::debug!("trying to load script: {:?}", file);
+
+        let script: Result<Script, Error> = serde_json::from_str(read_to_string(file).ok()?.as_str());
+
+        match script {
+            Ok(ref script) => {
+                self.scripts.insert(script.id.clone(), script.clone());
+
+                Some(())
+            }
+            Err(err) => {
+                log::error!("failed to parse script: {}", err);
+
+                None
+            }
+        }
+    }
+
+    pub fn load_translates(
+        &mut self,
+        dir: &Path,
+    ) -> Option<()> {
+        let translates = dir.join("translates");
+        let translates = read_dir(translates).ok()?;
+
+        translates
+            .into_iter()
+            .flatten()
+            .map(|v| v.path())
+            .for_each(|translate| {
+                // TODO language selection
+                if translate.file_stem() == Some(OsStr::new("en_US")) {
+                    self.load_translate(&translate);
+                }
+            });
+
+        Some(())
+    }
+
+    pub fn load_scripts(
+        &mut self,
+        dir: &Path,
+    ) -> Option<()> {
+        let scripts = dir.join("scripts");
+        let scripts = read_dir(scripts).ok()?;
+
+        scripts
+            .into_iter()
+            .flatten()
+            .map(|v| v.path())
+            .for_each(|script| {
+                self.load_script(&script);
+            });
+
+        Some(())
+    }
 
     pub fn load_resource(
         &mut self,
@@ -119,21 +171,25 @@ impl ResourceManager {
                 log::debug!("loaded model faces: {}", v.faces.len());
             });
 
-        let scripts = resource.scripts.map(|scripts| {
-            scripts
-                .into_iter()
-                .map(|script| {
-                    self.parse_script(&script, &dir.join("scripts"))
-                })
-                .flatten()
-                .collect::<Vec<_>>()
-        });
-
-        println!("{}, {:?}", id, scripts);
-
         self.resources
-            .insert(id.clone(), ResourceRef { scripts, faces_index: None });
+            .insert(id.clone(), ResourceRef { scripts: resource.scripts, faces_index: None });
 
         Some((id, model))
+    }
+}
+
+impl ResourceManager {
+    pub fn item_name(&self, id: &Id) -> String {
+        match self.translates.items.get(id) {
+            Some(name) => { name.to_owned() }
+            None => { id.to_string() }
+        }
+    }
+
+    pub fn tile_name(&self, id: &Id) -> String {
+        match self.translates.tiles.get(id) {
+            Some(name) => { name.to_owned() }
+            None => { id.to_string() }
+        }
     }
 }

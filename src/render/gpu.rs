@@ -6,8 +6,7 @@ use vulkano::{buffer::{BufferContents, BufferUsage, CpuAccessibleBuffer}, comman
 use vulkano::buffer::DeviceLocalBuffer;
 use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryAutoCommandBuffer};
 use vulkano::command_buffer::allocator::{StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo};
-use vulkano::format::Format;
-use vulkano::image::{ImageAccess, ImageUsage, SampleCount};
+use vulkano::image::{ImageAccess, SampleCount};
 use vulkano::memory::allocator::MemoryAllocator;
 use vulkano::pipeline::graphics::viewport::Viewport;
 use vulkano::swapchain::{Swapchain, SwapchainAcquireFuture, SwapchainCreateInfo, SwapchainCreationError, SwapchainPresentInfo};
@@ -25,28 +24,28 @@ use super::data::{InstanceData, UniformBufferObject};
 pub mod vert_shader {
     vulkano_shaders::shader! {
         ty: "vertex",
-        path: "game/shaders/vert.glsl"
+        path: "bin/shaders/vert.glsl"
     }
 }
 
 pub mod frag_shader {
     vulkano_shaders::shader! {
         ty: "fragment",
-        path: "game/shaders/frag.glsl"
+        path: "bin/shaders/frag.glsl"
     }
 }
 
 pub mod gui_vert_shader {
     vulkano_shaders::shader! {
         ty: "vertex",
-        path: "game/shaders/vert_gui.glsl"
+        path: "bin/shaders/vert_gui.glsl"
     }
 }
 
 pub mod gui_frag_shader {
     vulkano_shaders::shader! {
         ty: "fragment",
-        path: "game/shaders/frag_gui.glsl"
+        path: "bin/shaders/frag_gui.glsl"
     }
 }
 
@@ -102,11 +101,11 @@ pub fn framebuffers(
     render_pass: Arc<RenderPass>,
     color_image: Arc<AttachmentImage>,
     depth_buffer: Arc<AttachmentImage>,
-    depth_buffer_egui: Arc<AttachmentImage>,
+    depth_buffer_gui: Arc<AttachmentImage>,
 ) -> Vec<Arc<Framebuffer>> {
     let color_image_view = ImageView::new_default(color_image).unwrap();
     let depth_buffer = ImageView::new_default(depth_buffer).unwrap();
-    let depth_buffer_egui = ImageView::new_default(depth_buffer_egui).unwrap();
+    let depth_buffer_gui = ImageView::new_default(depth_buffer_gui).unwrap();
 
     images
         .iter()
@@ -116,7 +115,7 @@ pub fn framebuffers(
             Framebuffer::new(
                 render_pass.clone(),
                 FramebufferCreateInfo {
-                    attachments: vec![view, color_image_view.clone(), depth_buffer.clone(), depth_buffer_egui.clone()],
+                    attachments: vec![view, color_image_view.clone(), depth_buffer.clone(), depth_buffer_gui.clone()],
                     ..Default::default()
                 },
             )
@@ -254,7 +253,7 @@ impl Gpu {
         size: [u32; 2],
         color_image: Arc<AttachmentImage>,
         depth_buffer: Arc<AttachmentImage>,
-        depth_buffer_egui: Arc<AttachmentImage>,
+        depth_buffer_gui: Arc<AttachmentImage>,
         swapchain: &mut Arc<Swapchain>,
         framebuffers: &mut Vec<Arc<Framebuffer>>,
         recreate_swapchain: &mut bool
@@ -271,7 +270,7 @@ impl Gpu {
         };
 
         *swapchain = new_swapchain;
-        *framebuffers = gpu::framebuffers(&new_images, self.render_pass.clone(), color_image.clone(), depth_buffer.clone(), depth_buffer_egui.clone());
+        *framebuffers = gpu::framebuffers(&new_images, self.render_pass.clone(), color_image.clone(), depth_buffer.clone(), depth_buffer_gui.clone());
         *recreate_swapchain = false;
     }
 

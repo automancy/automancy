@@ -1,0 +1,7 @@
+{
+    "id": "extractor",
+    "model": "purple.ply",
+    "scripts": [
+        "copper_ore"
+    ]
+}

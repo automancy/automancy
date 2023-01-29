@@ -1,0 +1,16 @@
+{
+    "items": {
+        "copper_ore": "Copper Ore",
+        "iron_ingot": "Iron Ingot",
+        "gold_ingot": "Gold Ingot",
+        "copper_ingot": "Copper Ingot",
+        "tin_ingot": "Tin Ingot",
+        "stone": "Stone"
+    },
+    "tiles": {
+        "none": "None",
+        "void": "Resource® Void™",
+        "extractor": "Extractor",
+        "refinery": "Refinery"
+    }
+}

@@ -7,6 +7,10 @@ use serde::de::{Error, Visitor};
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Id(SharedStr, SharedStr);
 
+impl Id {
+    pub const NONE: Id = id_static("automancy", "none");
+}
+
 impl Display for Id {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}:{}", self.0, self.1)
