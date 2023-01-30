@@ -1,6 +1,7 @@
 {
     "id": "refinery",
-    "model": "purple.ply",
+    "model": "refinery",
+    "resource_t": "Machine",
     "scripts": [
         "iron_ingot",
         "gold_ingot",

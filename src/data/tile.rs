@@ -1,5 +1,7 @@
 use std::fmt::{Display, Formatter};
+use std::ops::Add;
 use std::sync::Arc;
+use egui::NumExt;
 use hexagon_tiles::hex::{Hex, hex};
 use riker::actor::{Context, Sender};
 use riker::actors::{Actor, ActorFactoryArgs, BasicActorRef};
@@ -9,7 +11,7 @@ use super::data::Data;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::{SeqAccess, Visitor};
 use serde::ser::SerializeTuple;
-use crate::data::id::{Id, id_static};
+use crate::data::id::Id;
 use crate::game::item::Item;
 use crate::game::script::Script;
 use crate::util::init::InitData;
@@ -99,6 +101,7 @@ impl Actor for Tile {
 
                             let amount = self.data.0.entry(id.clone()).or_insert(0);
                             *amount += has;
+                            *amount = amount.at_most(required * 2);
 
                             if has >= required {
                                 sender.try_tell(TileMsg::TransactionResult(Ok(())), myself).unwrap();
@@ -128,7 +131,8 @@ impl Actor for Tile {
                 sender.inspect(|v| v.try_tell((self.target_coord, self.target_ref.clone()), myself).unwrap());
             }
             TileMsg::SetScript(id) => {
-                self.script = Some(id)
+                self.script = Some(id);
+                self.data.0.clear();
             }
             TileMsg::GetScript => {
                 sender.inspect(|v| v.try_tell(self.script.clone(), myself).unwrap());
@@ -172,6 +176,14 @@ impl TileCoord {
 
     pub fn new(q: TileUnit, r: TileUnit) -> Self {
         Self(Hex::new(q, r))
+    }
+}
+
+impl Add for TileCoord {
+    type Output = TileCoord;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self(self.0 + rhs.0)
     }
 }
 

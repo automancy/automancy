@@ -1,5 +1,6 @@
 #![feature(result_option_inspect)]
 #![feature(is_some_with)]
+#![feature(slice_flatten)]
 
 use automancy::{
     data::map::Map,
@@ -9,7 +10,7 @@ use automancy::{
     },
     render::{
         camera::Camera,
-        data::Model,
+        data::RawModel,
         gpu::{self, frag_shader, vert_shader},
         renderer::Renderer,
     }
@@ -18,29 +19,32 @@ use automancy::{
 use json::JsonValue;
 
 use automancy::util::init::InitData;
-use automancy::util::resource::{Resource, ResourceManager};
+use automancy::util::resource::{Resource, ResourceManager, ResourceType};
 
 use std::{ffi::OsStr, fs::{File, read_to_string}, fs, path::Path, sync::Arc};
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::f32::consts::{FRAC_PI_4, FRAC_PI_8, PI};
+use std::f64::consts;
 use std::fs::DirEntry;
 use std::io::BufReader;
 use std::sync::Mutex;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use cgmath::{EuclideanSpace, point2, point3, SquareMatrix, vec3};
 use egui::panel::{Side, TopBottomSide};
-use egui::{Align, Align2, Area, Color32, FontData, FontDefinitions, FontFamily, Frame, Label, Layout, PaintCallback, Rect, RichText, Rounding, ScrollArea, Sense, Shape, SidePanel, Stroke, Style, TopBottomPanel, Vec2, vec2, Visuals, Window};
+use egui::{Align, Align2, Area, Color32, FontData, FontDefinitions, FontFamily, Frame, Label, Layout, PaintCallback, Pos2, RadioButton, Rect, RichText, Rounding, ScrollArea, SelectableLabel, Sense, Shape, SidePanel, Stroke, Style, TopBottomPanel, Vec2, vec2, Visuals, Window};
 use egui::epaint::Shadow;
 use egui::style::{default_text_styles, Margin};
 use egui_winit_vulkano::Gui;
 use futures::channel::{mpsc, oneshot};
 use futures::executor::block_on;
 use futures_util::FutureExt;
+use hexagon_tiles::hex::Hex;
 use hexagon_tiles::layout::hex_to_pixel;
+use hexagon_tiles::traits::HexDirection;
 use riker::actor::ActorRef;
 
-use riker::actors::{ActorRefFactory, SystemBuilder, Tell, Timer};
+use riker::actors::{ActorRefFactory, BasicActorRef, SystemBuilder, Tell, Timer};
 use riker_patterns::ask::ask;
 
 use vulkano::buffer::BufferUsage;
@@ -78,14 +82,13 @@ use winit::{
 use automancy::data::data::Data;
 use automancy::data::id::Id;
 use automancy::data::map::{MapRenderInfo, RenderContext};
-use automancy::data::tile::{Tile, TileCoord, TileMsg};
-use automancy::data::tile::TileMsg::{SetScript, SetTarget};
+use automancy::data::tile::{Tile, TileCoord, TileMsg, TileUnit};
 use automancy::game::game::GameMsg;
 use automancy::game::input::{GameDeviceEvent, InputState};
-use automancy::util::cg::{Double, eye, matrix, Matrix4, Num, perspective, projection, Vector3, view};
+use automancy::util::cg::{deg, DMatrix4, Double, eye, matrix, Matrix4, Num, perspective, projection, rad, Vector3, view};
 use automancy::game::input::convert_input;
 use automancy::game::script::Script;
-use automancy::render::data::{InstanceData, UniformBufferObject, Vertex};
+use automancy::render::data::{InstanceData, RENDER_LAYOUT, UniformBufferObject, Vertex};
 use automancy::render::gpu::{Gpu, gui_frag_shader, gui_vert_shader};
 use automancy::render::gui;
 use automancy::util::colors::Color;
@@ -94,51 +97,44 @@ pub const ASSET_LOGO: &str = "assets/logo.png";
 
 pub const RESOURCE: &str = "resources";
 
-fn load_resources() -> (ResourceManager, Vec<(Id, Option<Model>)>) {
+fn load_resources() -> ResourceManager {
     let mut resource_man = ResourceManager::default();
 
     // TODO: just use serde?
 
-    let mut resources = fs::read_dir(RESOURCE)
+    fs::read_dir(RESOURCE)
         .unwrap()
         .flatten()
         .map(|v| v.path())
-        .map(|dir| {
+        .for_each(|dir| {
+            resource_man.load_models(&dir);
+            resource_man.load_scripts(&dir);
+            resource_man.load_translates(&dir);
+
             fs::read_dir(&dir)
                 .unwrap()
                 .flatten()
                 .map(|v |v.path())
-                .filter_map(move |path| {
+                .for_each(|path| {
                     let extension = path.extension().and_then(OsStr::to_str);
 
                     if let Some("json") = extension {
-                        log::info!("loading resource at {:?}", dir);
+                        log::info!("loading resource at {:?}", path);
 
                         let resource: Resource = serde_json::from_str(&read_to_string(&path).unwrap()).unwrap();
 
-                        return Some((resource, dir.clone()));
+                        resource_man.register_resource(resource);
                     }
-
-                    None
                 })
-        })
-        .flatten()
-        .map(|(resource, dir)| {
-            resource_man.load_scripts(&dir);
-            resource_man.load_translates(&dir);
+        });
 
-            resource_man.load_resource(resource, &dir)
-        })
-        .flatten()
-        .collect::<Vec<_>>();
-
-    (resource_man, resources)
+    resource_man
 }
 
 fn init() -> Arc<InitData> {
-    let (resource_man, resources) = load_resources();
+    let resource_man = load_resources();
 
-    let init_data = InitData::new(resource_man, resources);
+    let init_data = InitData::new(resource_man);
 
     Arc::new(init_data)
 }
@@ -336,9 +332,8 @@ fn main() {
     let index_buffer = gpu::immutable_buffer(
         &allocator,
         init_data
-            .all_faces
+            .all_raw_faces
             .iter()
-            .flatten()
             .flatten()
             .flat_map(|v| v.indices.clone())
             .collect::<Vec<_>>(),
@@ -349,6 +344,7 @@ fn main() {
         &mut command_buffer_builder,
     );
     let uniform_buffer = gpu::uniform_buffer(&allocator);
+    let gui_uniform_buffer = gpu::uniform_buffer(&allocator);
 
     let color_image = AttachmentImage::multisampled_with_usage(
         &allocator,
@@ -452,7 +448,6 @@ fn main() {
 
         vertex_buffer,
         index_buffer,
-        uniform_buffer, // TODO move uniform and depth buffer
     });
 
     // --- load map ---
@@ -469,11 +464,13 @@ fn main() {
         init_data.clone(),
         gpu.clone(),
         game_pipeline,
+        swapchain,
+        framebuffers,
         color_image,
         depth_buffer,
         depth_buffer_gui,
-        swapchain,
-        framebuffers
+        uniform_buffer,
+        gui_uniform_buffer,
     );
 
     // --- bin ---
@@ -488,7 +485,7 @@ fn main() {
         gpu.surface.clone(),
         None,
         gpu.queue.clone(),
-        gui_subpass,
+        gui_subpass.clone(),
     );
 
     log::info!("loading font...");
@@ -547,6 +544,7 @@ fn main() {
             let mut device_event = None;
 
             let mut extra_instances = vec![];
+            let mut extra_vertices = vec![];
             let init_data = init_data.clone();
 
             match &event {
@@ -675,43 +673,82 @@ fn main() {
                         let result: Option<(Id, ActorRef<TileMsg>)> = block_on(ask(&sys, &game, GameMsg::GetTile(config_open)));
 
                         if let Some((id, tile)) = result {
-                            let mut current_script: Option<Id> = block_on(ask(&sys, &tile, TileMsg::GetScript));
+                            let current_script: Option<Id> = block_on(ask(&sys, &tile, TileMsg::GetScript));
+                            let mut new_script = current_script.clone();
 
-                            init_data.resource_man.resources[&id].scripts.as_ref().map(|scripts| {
-                                Window::new("Config")
-                                    .resizable(false)
-                                    .auto_sized()
-                                    .constrain(true)
-                                    .frame(frame.inner_margin(Margin::same(10.0)))
-                                    .show(&gui.context(), |ui| {
-                                        ui.set_max_width(300.0);
+                            let (current_target_coord, _): (Option<TileCoord>, Option<BasicActorRef>) = block_on(ask(&sys, &tile, TileMsg::GetTarget));
+                            let mut new_target_coord = current_target_coord;
 
-                                        ui.label(RichText::new(format!("{}: {}\n", id, config_open)).color(Color32::GRAY).size(15.0));
+                            // tile_config
+                            if init_data.resource_man.resources[&id].resource_t == ResourceType::Machine {
+                                if let Some(ref scripts) = init_data.resource_man.resources[&id].scripts {
+                                    Window::new("Config")
+                                        .resizable(false)
+                                        .auto_sized()
+                                        .constrain(true)
+                                        .frame(frame.inner_margin(Margin::same(10.0)))
+                                        .show(&gui.context(), |ui| {
+                                            ui.set_max_width(300.0);
 
-                                        let current_script_text = if let Some(ref current_script) = current_script {
-                                            init_data.resource_man.item_name(current_script)
-                                        } else {
-                                            "<none>".to_owned()
-                                        };
+                                            let script_text = if let Some(ref script) = new_script {
+                                                init_data.resource_man.item_name(script)
+                                            } else {
+                                                "<none>".to_owned()
+                                            };
 
-                                        ui.label(format!("Script: {}", current_script_text));
-                                        ScrollArea::vertical().max_height(80.0).show(ui, |ui| {
-                                            ui.set_width(ui.available_width());
+                                            ui.label(format!("Script: {}", script_text));
+                                            ScrollArea::vertical().max_height(80.0).show(ui, |ui| {
+                                                ui.set_width(ui.available_width());
 
-                                            scripts.iter().for_each(|script| {
-                                                ui.radio_value(
-                                                    &mut current_script,
-                                                    Some(script.clone()),
-                                                    init_data.resource_man.item_name(&script)
-                                                );
-                                            })
+                                                scripts.iter().for_each(|script| {
+                                                    ui.radio_value(
+                                                        &mut new_script,
+                                                        Some(script.clone()),
+                                                        init_data.resource_man.item_name(&script)
+                                                    );
+                                                })
+                                            });
+
+                                            ui.separator();
+
+                                            ui.label("Target:");
+                                            ui.vertical(|ui| {
+                                                ui.horizontal(|ui| {
+                                                    ui.add_space(10.0);
+                                                    gui::add_direction(ui, &mut new_target_coord, 5);
+                                                    gui::add_direction(ui, &mut new_target_coord, 0);
+                                                });
+
+                                                ui.horizontal(|ui| {
+                                                    gui::add_direction(ui, &mut new_target_coord, 4);
+                                                    ui.add_space(20.0);
+                                                    gui::add_direction(ui, &mut new_target_coord, 1);
+                                                });
+
+                                                ui.horizontal(|ui| {
+                                                    ui.add_space(10.0);
+                                                    gui::add_direction(ui, &mut new_target_coord, 3);
+                                                    gui::add_direction(ui, &mut new_target_coord, 2);
+                                                });
+                                            });
                                         });
+                                }
+                            }
 
-                                    });
-                            });
+                            if new_script != current_script {
+                                if let Some(script) = new_script {
+                                    tile.tell(TileMsg::SetScript(script), None);
+                                }
+                            }
 
-                            if let Some(script) = current_script {
-                                tile.tell(SetScript(script), None);
+                            if new_target_coord != current_target_coord {
+                                if let Some(new_target_coord) = new_target_coord {
+                                    let result: Option<(Id, ActorRef<TileMsg>)> = block_on(ask(&sys, &game, GameMsg::GetTile(config_open + new_target_coord)));
+
+                                    if let Some((_, target)) = result {
+                                        tile.tell(TileMsg::SetTarget((new_target_coord, target.into())), None);
+                                    }
+                                }
                             }
                         }
                     }
@@ -725,13 +762,13 @@ fn main() {
                     }
                 }
 
+                let mouse_pos = camera.cursor_to_pos(input_state.main_pos, point3(0.0, 0.0, 1.0));
+                let mouse_pos = mouse_pos + camera.camera_state().pos.to_vec().truncate();
+
                 let camera_state = camera.camera_state();
                 if camera_state.is_at_max_height() {
                     if let Some(ref id) = selected_id {
                         if let Some(faces_index) = init_data.resource_man.resources.get(id).and_then(|v| v.faces_index) {
-                            let p = camera.cursor_to_pos(input_state.main_pos, point3(0.0, 0.0, 1.0));
-                            let p = p + camera_state.pos.to_vec().truncate();
-
                             let time = SystemTime::now()
                                 .duration_since(UNIX_EPOCH)
                                 .unwrap();
@@ -740,7 +777,7 @@ fn main() {
 
                             let instance = InstanceData::new()
                                 .faces_index(faces_index)
-                                .position_offset([p.x as Num, p.y as Num, 0.1])
+                                .position_offset([mouse_pos.x as Num, mouse_pos.y as Num, 0.1])
                                 .color_offset(Color::TRANSPARENT.with_alpha(glow as Num).into());
                             extra_instances.push(instance);
                         }
@@ -755,7 +792,7 @@ fn main() {
                     })
                 );
 
-                renderer.render(render_info, camera.camera_state(), subpass.clone(), extra_instances, &mut gui);
+                renderer.render(render_info, camera.camera_state(), subpass.clone(), gui_subpass.clone(), extra_instances, extra_vertices, &mut gui, gui_pipeline.clone());
 
                 input_state.reset();
             }

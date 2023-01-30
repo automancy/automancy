@@ -114,7 +114,7 @@ impl Camera {
     }
 
     fn on_moving_main(&mut self, delta: DVector2) {
-        self.camera_state.move_vel += delta / 1250.0;
+        self.camera_state.move_vel += delta / 1200.0;
     }
 
     pub fn cursor_to_pos(&self, main_pos: DPoint2, pos: DPoint3) -> DPoint2 {

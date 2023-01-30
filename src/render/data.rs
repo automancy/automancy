@@ -1,6 +1,8 @@
 use std::{ops::Div, sync::Arc};
+use std::ops::{Add, Mul};
 
 use bytemuck::{Pod, Zeroable};
+use cgmath::vec3;
 
 use hexagon_tiles::layout::{hex_to_pixel, Layout, LAYOUT_ORIENTATION_POINTY};
 use hexagon_tiles::point::Point;
@@ -10,7 +12,7 @@ use vulkano::impl_vertex;
 use crate::data::tile::{TileCoord};
 use crate::data::id::Id;
 use crate::render::camera::FAR;
-use crate::util::cg::{Num, Vector2};
+use crate::util::cg::{Matrix4, Num, Vector2};
 use crate::util::init::InitData;
 
 
@@ -62,6 +64,33 @@ impl Div<Vector2> for Vertex {
         let color = self.color;
 
         Self { pos, color }
+    }
+}
+
+impl Mul<Matrix4> for Vertex {
+    type Output = Vertex;
+
+    fn mul(self, rhs: Matrix4) -> Self::Output {
+        let vec3 = vec3(self.pos[0], self.pos[1], self.pos[2]);
+        let vec3 = rhs * vec3.extend(1.0);
+        let w = vec3.w;
+        let pos = [vec3.x / w, vec3.y / w, vec3.z / w];
+
+        Self {
+            pos,
+            color: self.color,
+        }
+    }
+}
+
+impl Add<Vector2> for Vertex {
+    type Output = Vertex;
+
+    fn add(mut self, rhs: Vector2) -> Self::Output {
+        self.pos[0] += rhs.x;
+        self.pos[1] += rhs.y;
+
+        self
     }
 }
 
@@ -160,28 +189,22 @@ pub struct UniformBufferObject {
 // face
 
 #[derive(Clone, Debug)]
-pub struct Face {
+pub struct RawFace {
     pub indices: Vec<u32>,
-    pub offset: Option<u32>,
 }
 
-impl Face {
-    pub fn index_offset(&mut self, offset: u32) {
+impl RawFace {
+    pub fn index_offset(mut self, offset: u32) -> Self {
         self.indices.iter_mut().for_each(|v| *v += offset);
-    }
-
-    pub fn with_offset(mut self, offset: u32) -> Self {
-        self.offset = Some(offset);
 
         self
     }
 }
 
-impl PropertyAccess for Face {
+impl PropertyAccess for RawFace {
     fn new() -> Self {
-        Face {
+        RawFace {
             indices: Vec::new(),
-            offset: None,
         }
     }
     fn set_property(&mut self, key: String, property: Property) {
@@ -199,13 +222,13 @@ impl PropertyAccess for Face {
 // model
 
 #[derive(Debug, Clone)]
-pub struct Model {
+pub struct RawModel {
     pub vertices: Vec<Vertex>,
-    pub faces: Vec<Face>,
+    pub faces: Vec<RawFace>,
 }
 
-impl Model {
-    pub fn new(vertices: Vec<Vertex>, faces: Vec<Face>) -> Self {
+impl RawModel {
+    pub fn new(vertices: Vec<Vertex>, faces: Vec<RawFace>) -> Self {
         Self { vertices, faces }
     }
 }

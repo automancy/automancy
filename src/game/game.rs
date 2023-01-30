@@ -14,7 +14,6 @@ use crate::game::ticking::{MAX_ALLOWED_TICK_INTERVAL};
 use crate::data::map::Map;
 use crate::data::tile::{Tile, TileCoord, TileMsg};
 use crate::data::id::Id;
-use crate::data::tile;
 use crate::util::init::InitData;
 
 

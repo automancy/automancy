@@ -182,28 +182,23 @@ pub fn indirect_buffer(
 
             let first_instance = *init;
 
-            let r = if let Some(faces) = &init_data.all_faces[instances[0].faces_index] {
-                let commands = faces
-                    .iter()
-                    .map(|face| {
-                        DrawIndexedIndirectCommand {
-                            index_count: face.indices.len() as u32,
-                            instance_count,
-                            first_index: face.offset.unwrap(),
-                            vertex_offset: 0,
-                            first_instance,
-                        }
-                    })
-                    .collect::<Vec<_>>();
-
-                Some(commands)
-            } else {
-                None
-            };
+            let faces = &init_data.resource_man.all_faces[instances[0].faces_index];
+            let commands = faces
+                .iter()
+                .map(|face| {
+                    DrawIndexedIndirectCommand {
+                        index_count: face.size,
+                        instance_count,
+                        first_index: face.offset,
+                        vertex_offset: 0,
+                        first_instance,
+                    }
+                })
+                .collect::<Vec<_>>();
 
             *init += instance_count;
 
-            r
+            Some(commands)
         })
         .flatten()
         .collect::<Vec<_>>();
@@ -347,5 +342,4 @@ pub struct Gpu {
 
     pub vertex_buffer: Arc<DeviceLocalBuffer<[Vertex]>>,
     pub index_buffer: Arc<DeviceLocalBuffer<[u32]>>,
-    pub uniform_buffer: Arc<CpuAccessibleBuffer<UniformBufferObject>>,
 }

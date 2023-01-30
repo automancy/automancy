@@ -1,4 +1,5 @@
 use std::{collections::HashMap, ffi::OsStr, fs::File, io::BufReader, path::Path};
+use std::convert::AsRef;
 use std::fs::{read_dir, read_to_string};
 
 use ply_rs::parser::Parser;
@@ -6,30 +7,31 @@ use serde::Deserialize;
 use serde_json::Error;
 
 use crate::{
-    render::data::{Face, Model, Vertex},
+    render::data::{RawFace, RawModel, Vertex},
     data::id::{Id},
 };
 use crate::game::script::Script;
 
-#[derive(Debug, Default, Clone)]
+pub static JSON_EXT: &str = "json";
+
+#[derive(Debug, Clone)]
 pub struct ResourceRef {
     pub scripts: Option<Vec<Id>>,
     pub faces_index: Option<usize>,
+    pub resource_t: ResourceType,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct Resource {
-    pub id: Id,
-    pub model: Option<String>,
-    pub scripts: Option<Vec<Id>>,//TODO model meta file
+#[derive(Debug, Default, Clone)]
+pub struct Face {
+    pub offset: u32,
+    pub size: u32,
 }
 
-#[derive(Debug, Default)]
-pub struct ResourceManager {
-    pub ordered_ids: Vec<Id>,
-    pub resources: HashMap<Id, ResourceRef>,
-    pub scripts: HashMap<Id, Script>,
-    pub translates: Translate,
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+pub enum ResourceType {
+    None,
+    Model,
+    Machine,
 }
 
 #[derive(Debug, Default, Clone, Deserialize)]
@@ -38,49 +40,34 @@ pub struct Translate {
     pub tiles: HashMap<Id, String>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct Model {
+    pub id: Id,
+    pub file: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Resource {
+    pub resource_t: ResourceType,
+    pub id: Id,
+    pub model: Option<Id>,
+    pub scripts: Option<Vec<Id>>,
+}
+
+#[derive(Debug, Default)]
+pub struct ResourceManager {
+    pub ordered_ids: Vec<Id>,
+
+    pub resources: HashMap<Id, ResourceRef>,
+    pub scripts: HashMap<Id, Script>,
+    pub translates: Translate,
+
+    pub raw_models: HashMap<Id, RawModel>,
+    pub models_referenced: HashMap<Id, Vec<Id>>,
+    pub all_faces: Vec<Vec<Face>>,
+}
+
 impl ResourceManager {
-    fn parse_model(&self, model: Option<String>, working_dir: &Path) -> Option<Model> {
-        model
-            .map(|v| {
-                let path = working_dir.join(v);
-                log::debug!("trying to load model: {:?}", path);
-                path
-            })
-            .map(File::open)
-            .and_then(Result::ok)
-            .and_then(|file| {
-                let mut model_reader = BufReader::new(file);
-
-                let vertex_parser = Parser::<Vertex>::new();
-                let face_parser = Parser::<Face>::new();
-
-                let header = vertex_parser.read_header(&mut model_reader).unwrap();
-
-                let mut vertices = None;
-                let mut faces = None;
-
-                for (_, element) in &header.elements {
-                    match element.name.as_ref() {
-                        "vertex" => {
-                            vertices = vertex_parser
-                                .read_payload_for_element(&mut model_reader, &element, &header)
-                                .ok();
-                        }
-                        "face" => {
-                            faces = face_parser
-                                .read_payload_for_element(&mut model_reader, &element, &header)
-                                .ok();
-                        }
-                        _ => (),
-                    }
-                }
-
-                vertices
-                    .zip(faces)
-                    .map(|(vertices, faces)| Model::new(vertices, faces))
-            })
-    }
-
     fn load_translate(&mut self, file: &Path) -> Option<()> {
         log::debug!("trying to load translate: {:?}", file);
 
@@ -119,10 +106,60 @@ impl ResourceManager {
         }
     }
 
-    pub fn load_translates(
-        &mut self,
-        dir: &Path,
-    ) -> Option<()> {
+    fn load_model(&mut self, file: &Path) -> Option<()> {
+        log::debug!("trying to load model: {:?}", file);
+
+        let model: Result<Model, Error> = serde_json::from_str(read_to_string(file).ok()?.as_str());
+
+        match model {
+            Ok(ref model) => {
+                let file = file.parent().unwrap().join("files").join(model.file.as_str());
+                log::debug!("trying to load model file: {:?}", file);
+
+                let file = File::open(file).ok().unwrap();
+                let mut read = BufReader::new(file);
+
+                let vertex_parser = Parser::<Vertex>::new();
+                let face_parser = Parser::<RawFace>::new();
+
+                let header = vertex_parser.read_header(&mut read).unwrap();
+
+                let mut vertices = None;
+                let mut faces = None;
+
+                for (_, element) in &header.elements {
+                    match element.name.as_ref() {
+                        "vertex" => {
+                            vertices = vertex_parser
+                                .read_payload_for_element(&mut read, &element, &header)
+                                .ok();
+                        }
+                        "face" => {
+                            faces = face_parser
+                                .read_payload_for_element(&mut read, &element, &header)
+                                .ok();
+                        }
+                        _ => (),
+                    }
+                }
+
+                let raw_model = vertices
+                    .zip(faces)
+                    .map(|(vertices, faces)| RawModel::new(vertices, faces))?;
+
+                self.raw_models.insert(model.id.clone(), raw_model);
+
+                Some(())
+            }
+            Err(err) => {
+                log::error!("failed to parse model: {}", err);
+
+                None
+            }
+        }
+    }
+
+    pub fn load_translates(&mut self, dir: &Path) -> Option<()> {
         let translates = dir.join("translates");
         let translates = read_dir(translates).ok()?;
 
@@ -130,6 +167,7 @@ impl ResourceManager {
             .into_iter()
             .flatten()
             .map(|v| v.path())
+            .filter(|v| v.extension() == Some(OsStr::new(JSON_EXT)))
             .for_each(|translate| {
                 // TODO language selection
                 if translate.file_stem() == Some(OsStr::new("en_US")) {
@@ -140,10 +178,7 @@ impl ResourceManager {
         Some(())
     }
 
-    pub fn load_scripts(
-        &mut self,
-        dir: &Path,
-    ) -> Option<()> {
+    pub fn load_scripts(&mut self, dir: &Path) -> Option<()> {
         let scripts = dir.join("scripts");
         let scripts = read_dir(scripts).ok()?;
 
@@ -151,6 +186,7 @@ impl ResourceManager {
             .into_iter()
             .flatten()
             .map(|v| v.path())
+            .filter(|v| v.extension() == Some(OsStr::new(JSON_EXT)))
             .for_each(|script| {
                 self.load_script(&script);
             });
@@ -158,23 +194,39 @@ impl ResourceManager {
         Some(())
     }
 
-    pub fn load_resource(
-        &mut self,
-        resource: Resource,
-        dir: &Path,
-    ) -> Option<(Id, Option<Model>)> {
-        let id = resource.id;
+    pub fn load_models(&mut self, dir: &Path) -> Option<()> {
+        let models = dir.join("models");
+        let models = read_dir(models).ok()?;
 
-        let model = self.parse_model(resource.model, dir)
-            .inspect(|v| {
-                log::debug!("loaded model vertices: {}", v.vertices.len());
-                log::debug!("loaded model faces: {}", v.faces.len());
+        models
+            .into_iter()
+            .flatten()
+            .map(|v| v.path())
+            .filter(|v| v.extension() == Some(OsStr::new(JSON_EXT)))
+            .for_each(|model| {
+                self.load_model(&model);
             });
 
-        self.resources
-            .insert(id.clone(), ResourceRef { scripts: resource.scripts, faces_index: None });
+        Some(())
+    }
 
-        Some((id, model))
+    pub fn register_resource(&mut self, resource: Resource) {
+        let id = resource.id;
+
+        if let Some(model) = resource.model {
+            let references = self.models_referenced.entry(model).or_insert_with(Vec::default);
+
+            references.push(id.clone());
+        }
+
+        self.resources.insert(
+            id,
+            ResourceRef {
+                scripts: resource.scripts,
+                faces_index: None,
+                resource_t: resource.resource_t
+            }
+        );
     }
 }
 

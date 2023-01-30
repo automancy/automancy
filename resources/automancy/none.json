@@ -1,4 +1,5 @@
 {
     "id": "none",
-    "model": "none.ply"
+    "model": "none",
+    "resource_t": "None"
 }

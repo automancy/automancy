@@ -1,5 +1,5 @@
 {
     "id": "void",
-    "model": "purple.ply",
-    "scripts": []
+    "model": "void",
+    "resource_t": "None"
 }

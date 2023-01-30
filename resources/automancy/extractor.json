@@ -1,6 +1,7 @@
 {
     "id": "extractor",
-    "model": "purple.ply",
+    "model": "extractor",
+    "resource_t": "Machine",
     "scripts": [
         "copper_ore"
     ]
