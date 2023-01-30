@@ -66,7 +66,7 @@ impl Color {
     pub const WHITE: Color
         = Color { r: 1.0, g: 1.0, b: 1.0, a: 1.0 };
     pub const GRAY: Color
-        = Color { r: 0.7, g: 0.7, b: 0.7, a: 1.0 };
+        = Color { r: 0.5, g: 0.5, b: 0.5, a: 1.0 };
     pub const BLACK: Color
         = Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 };
     pub const TRANSPARENT: Color
