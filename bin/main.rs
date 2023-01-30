@@ -2,6 +2,47 @@
 #![feature(is_some_with)]
 #![feature(slice_flatten)]
 
+use std::{ffi::OsStr, fs::{File, read_to_string}, fs, sync::Arc};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use cgmath::{EuclideanSpace, point3};
+use egui::{Align, Align2, Area, Color32, FontData, FontDefinitions, FontFamily, Frame, Label, Layout, PaintCallback, Pos2, RadioButton, Rect, RichText, Rounding, ScrollArea, SelectableLabel, Sense, Shape, SidePanel, Stroke, Style, TopBottomPanel, Vec2, vec2, Visuals, Window};
+use egui::epaint::Shadow;
+use egui::style::{default_text_styles, Margin};
+use egui_winit_vulkano::Gui;
+use futures::channel::mpsc;
+use futures::executor::block_on;
+use riker::actor::ActorRef;
+use riker::actors::{ActorRefFactory, BasicActorRef, SystemBuilder, Tell, Timer};
+use riker_patterns::ask::ask;
+use vulkano::buffer::BufferUsage;
+use vulkano::command_buffer::PrimaryCommandBufferAbstract;
+use vulkano::device::{Device, DeviceCreateInfo, DeviceExtensions, Features, QueueCreateInfo};
+use vulkano::device::physical::PhysicalDeviceType;
+use vulkano::format::Format;
+use vulkano::image::{AttachmentImage, ImageUsage};
+use vulkano::image::SampleCount::Sample4;
+use vulkano::instance::{Instance, InstanceCreateInfo};
+use vulkano::memory::allocator::StandardMemoryAllocator;
+use vulkano::pipeline::graphics::depth_stencil::DepthStencilState;
+use vulkano::pipeline::graphics::input_assembly::{InputAssemblyState, PrimitiveTopology};
+use vulkano::pipeline::graphics::multisample::MultisampleState;
+use vulkano::pipeline::graphics::rasterization::RasterizationState;
+use vulkano::pipeline::graphics::vertex_input::BuffersDefinition;
+use vulkano::pipeline::graphics::viewport::ViewportState;
+use vulkano::pipeline::GraphicsPipeline;
+use vulkano::render_pass::Subpass;
+use vulkano::swapchain::{Swapchain, SwapchainCreateInfo};
+use vulkano::sync::GpuFuture;
+use vulkano::VulkanLibrary;
+use vulkano_win::create_surface_from_winit;
+use winit::{
+    dpi::PhysicalSize,
+    event::{Event, WindowEvent},
+    event_loop::{ControlFlow, EventLoop},
+    window::{Icon, WindowBuilder},
+};
+
 use automancy::{
     data::map::Map,
     game::{
@@ -10,95 +51,31 @@ use automancy::{
     },
     render::{
         camera::Camera,
-        data::RawModel,
         gpu::{self, frag_shader, vert_shader},
         renderer::Renderer,
     }
-};
-
-use json::JsonValue;
-
-use automancy::util::init::InitData;
-use automancy::util::resource::{Resource, ResourceManager, ResourceType};
-
-use std::{ffi::OsStr, fs::{File, read_to_string}, fs, path::Path, sync::Arc};
-use std::borrow::Borrow;
-use std::collections::HashMap;
-use std::f32::consts::{FRAC_PI_4, FRAC_PI_8, PI};
-use std::f64::consts;
-use std::fs::DirEntry;
-use std::io::BufReader;
-use std::sync::Mutex;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
-use cgmath::{EuclideanSpace, point2, point3, SquareMatrix, vec3};
-use egui::panel::{Side, TopBottomSide};
-use egui::{Align, Align2, Area, Color32, FontData, FontDefinitions, FontFamily, Frame, Label, Layout, PaintCallback, Pos2, RadioButton, Rect, RichText, Rounding, ScrollArea, SelectableLabel, Sense, Shape, SidePanel, Stroke, Style, TopBottomPanel, Vec2, vec2, Visuals, Window};
-use egui::epaint::Shadow;
-use egui::style::{default_text_styles, Margin};
-use egui_winit_vulkano::Gui;
-use futures::channel::{mpsc, oneshot};
-use futures::executor::block_on;
-use futures_util::FutureExt;
-use hexagon_tiles::hex::Hex;
-use hexagon_tiles::layout::hex_to_pixel;
-use hexagon_tiles::traits::HexDirection;
-use riker::actor::ActorRef;
-
-use riker::actors::{ActorRefFactory, BasicActorRef, SystemBuilder, Tell, Timer};
-use riker_patterns::ask::ask;
-
-use vulkano::buffer::BufferUsage;
-
-use vulkano::command_buffer::{DrawIndexedIndirectCommand, PrimaryCommandBufferAbstract};
-use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
-use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
-use vulkano::device::{Device, DeviceCreateInfo, DeviceExtensions, Features, QueueCreateInfo};
-use vulkano::device::physical::PhysicalDeviceType;
-use vulkano::format::Format;
-use vulkano::image::{AttachmentImage, ImageUsage};
-use vulkano::image::SampleCount::Sample4;
-use vulkano::instance::{Instance, InstanceCreateInfo};
-use vulkano::instance::debug::ValidationFeatureEnable;
-use vulkano::memory::allocator::{FastMemoryAllocator, StandardMemoryAllocator};
-use vulkano::pipeline::graphics::input_assembly::{InputAssemblyState, PrimitiveTopology};
-use vulkano::pipeline::graphics::rasterization::RasterizationState;
-use vulkano::pipeline::{GraphicsPipeline, Pipeline, PipelineBindPoint};
-use vulkano::pipeline::graphics::depth_stencil::DepthStencilState;
-use vulkano::pipeline::graphics::multisample::MultisampleState;
-use vulkano::pipeline::graphics::vertex_input::BuffersDefinition;
-use vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
-use vulkano::render_pass::Subpass;
-use vulkano::swapchain::{Swapchain, SwapchainCreateInfo};
-use vulkano::sync::GpuFuture;
-use vulkano::VulkanLibrary;
-use vulkano_win::create_surface_from_winit;
-
-use winit::{
-    dpi::PhysicalSize,
-    event::{Event, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
-    window::{Icon, WindowBuilder},
 };
 use automancy::data::data::Data;
 use automancy::data::id::Id;
 use automancy::data::map::{MapRenderInfo, RenderContext};
 use automancy::data::tile::{Tile, TileCoord, TileMsg, TileUnit};
 use automancy::game::game::GameMsg;
-use automancy::game::input::{GameDeviceEvent, InputState};
-use automancy::util::cg::{deg, DMatrix4, Double, eye, matrix, Matrix4, Num, perspective, projection, rad, Vector3, view};
 use automancy::game::input::convert_input;
-use automancy::game::script::Script;
-use automancy::render::data::{InstanceData, RENDER_LAYOUT, UniformBufferObject, Vertex};
+use automancy::game::input::InputState;
+use automancy::render::data::{InstanceData, Vertex};
 use automancy::render::gpu::{Gpu, gui_frag_shader, gui_vert_shader};
 use automancy::render::gui;
+use automancy::util::cg::{deg, DMatrix4, Double, eye, matrix, Matrix4, Num, perspective, projection, rad, Vector3, view};
 use automancy::util::colors::Color;
+use automancy::util::init::InitData;
+use automancy::util::resource::{ResourceManager, ResourceRaw, ResourceType};
 
 pub const ASSET_LOGO: &str = "assets/logo.png";
 
 pub const RESOURCE: &str = "resources";
 
 fn load_resources() -> ResourceManager {
-    let mut resource_man = ResourceManager::default();
+    let mut resource_man = ResourceManager::new();
 
     // TODO: just use serde?
 
@@ -121,7 +98,7 @@ fn load_resources() -> ResourceManager {
                     if let Some("json") = extension {
                         log::info!("loading resource at {:?}", path);
 
-                        let resource: Resource = serde_json::from_str(&read_to_string(&path).unwrap()).unwrap();
+                        let resource: ResourceRaw = serde_json::from_str(&read_to_string(&path).unwrap()).unwrap();
 
                         resource_man.register_resource(resource);
                     }
@@ -473,12 +450,14 @@ fn main() {
         gui_uniform_buffer,
     );
 
+    let none = init_data.resource_man.none;
+
     // --- bin ---
     let tick = GameMsg::Tick {
         init_data: init_data.clone(),
     };
 
-    let id = sys.schedule(TICK_INTERVAL, TICK_INTERVAL, game.clone(), None, tick);
+    let _id = sys.schedule(TICK_INTERVAL, TICK_INTERVAL, game.clone(), None, tick);
 
     let mut gui = Gui::new_with_subpass(
         &event_loop,
@@ -544,7 +523,7 @@ fn main() {
             let mut device_event = None;
 
             let mut extra_instances = vec![];
-            let mut extra_vertices = vec![];
+            let extra_vertices = vec![];
             let init_data = init_data.clone();
 
             match &event {
@@ -601,12 +580,13 @@ fn main() {
                     selected_id = None;
                 }
 
-                if let Some(ref id) = selected_id {
+                if let Some(id) = selected_id {
                     if input_state.main_held {
                         game.tell(
                             GameMsg::PlaceTile {
                                 coord: pointing_at,
-                                id: id.clone(),
+                                id,
+                                none,
                             },
                             None
                         );
@@ -655,6 +635,7 @@ fn main() {
                             if let Some((id, tile)) = result {
                                 ui.label(init_data.resource_man.tile_name(&id));
                                 let data: Data = block_on(ask(&sys, &tile, TileMsg::GetData));
+
                                 for (id, amount) in data.0.iter() {
                                     ui.label(format!("{} - {}", init_data.resource_man.item_name(id), amount));
                                 }
@@ -767,8 +748,8 @@ fn main() {
 
                 let camera_state = camera.camera_state();
                 if camera_state.is_at_max_height() {
-                    if let Some(ref id) = selected_id {
-                        if let Some(faces_index) = init_data.resource_man.resources.get(id).and_then(|v| v.faces_index) {
+                    if let Some(id) = selected_id {
+                        if let Some(faces_index) = init_data.resource_man.resources.get(&id).and_then(|v| v.faces_index) {
                             let time = SystemTime::now()
                                 .duration_since(UNIX_EPOCH)
                                 .unwrap();
@@ -792,7 +773,7 @@ fn main() {
                     })
                 );
 
-                renderer.render(render_info, camera.camera_state(), subpass.clone(), gui_subpass.clone(), extra_instances, extra_vertices, &mut gui, gui_pipeline.clone());
+                renderer.render(render_info, camera.camera_state(), none, subpass.clone(), gui_subpass.clone(), extra_instances, extra_vertices, &mut gui, gui_pipeline.clone());
 
                 input_state.reset();
             }

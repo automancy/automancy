@@ -1,42 +1,38 @@
-
 use std::f32::consts::PI;
 use std::sync::Arc;
+
 use cgmath::SquareMatrix;
 use egui_winit_vulkano::Gui;
-
 use hexagon_tiles::hex::Hex;
 use hexagon_tiles::layout::{hex_to_pixel, pixel_to_hex};
-
-use hexagon_tiles::point::{point};
+use hexagon_tiles::point::point;
 use hexagon_tiles::traits::HexRound;
 use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer};
-
-
 use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferInheritanceInfo, CommandBufferUsage, RenderPassBeginInfo, SubpassContents};
 use vulkano::command_buffer::allocator::{StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo};
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
-use vulkano::format::{ClearValue};
-use vulkano::image::{AttachmentImage};
+use vulkano::format::ClearValue;
+use vulkano::image::AttachmentImage;
 use vulkano::image::SampleCount::Sample4;
-use vulkano::memory::allocator::{FastMemoryAllocator};
+use vulkano::memory::allocator::FastMemoryAllocator;
 use vulkano::pipeline::{GraphicsPipeline, Pipeline, PipelineBindPoint};
 use vulkano::pipeline::graphics::viewport::Scissor;
 use vulkano::render_pass::{Framebuffer, Subpass};
 use vulkano::swapchain::{acquire_next_image, AcquireError, Swapchain};
 use vulkano::sync;
 use vulkano::sync::GpuFuture;
-use crate::data::id::Id;
 
-use crate::data::map::{MapRenderInfo};
+use crate::data::id::Id;
+use crate::data::map::MapRenderInfo;
 use crate::data::tile::{TileCoord, TileUnit};
 use crate::render::camera::{CameraState, FAR};
 use crate::render::data::{InstanceData, RENDER_LAYOUT, UniformBufferObject, Vertex};
 use crate::render::gpu;
-use crate::util::cg::{matrix, Matrix4, Num};
-use crate::util::init::InitData;
 use crate::render::gpu::Gpu;
+use crate::util::cg::{matrix, Matrix4, Num};
 use crate::util::colors::Color;
+use crate::util::init::InitData;
 
 pub struct Renderer {
     init_data: Arc<InitData>,
@@ -103,6 +99,7 @@ impl Renderer {
         &mut self,
         map_render_info: MapRenderInfo,
         camera_state: CameraState,
+        none: Id,
         subpass: Subpass,
         gui_subpass: Subpass,
         mut extra_instances: Vec<InstanceData>,
@@ -128,7 +125,7 @@ impl Renderer {
             let max = pos + o;
 
             let none = InstanceData::new().faces_index(
-                self.init_data.resource_man.resources[&Id::NONE]
+                self.init_data.resource_man.resources[&none]
                     .faces_index
                     .unwrap(),
             );

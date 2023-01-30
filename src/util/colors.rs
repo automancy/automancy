@@ -1,4 +1,5 @@
 use std::ops::Mul;
+
 use crate::util::cg::Num;
 
 #[derive(Debug, Copy, Clone)]

@@ -1,24 +1,24 @@
 use std::fmt::{Display, Formatter};
 use std::ops::Add;
 use std::sync::Arc;
+
 use egui::NumExt;
 use hexagon_tiles::hex::{Hex, hex};
 use riker::actor::{Context, Sender};
 use riker::actors::{Actor, ActorFactoryArgs, BasicActorRef};
-
-use super::data::Data;
-
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::{SeqAccess, Visitor};
 use serde::ser::SerializeTuple;
+
 use crate::data::id::Id;
 use crate::game::item::Item;
 use crate::game::script::Script;
 use crate::util::init::InitData;
 
+use super::data::Data;
+
 #[derive(Debug, Clone)]
 pub struct Tile {
-    pub id: Id,
     pub data: Data,
     pub script: Option<Id>,
     pub target_coord: Option<TileCoord>,
@@ -34,7 +34,6 @@ pub enum TransactionError {
 
 #[derive(Debug, Clone)]
 pub enum TileMsg {
-    GetId,
     Tick {
         init_data: Arc<InitData>,
     },
@@ -57,9 +56,6 @@ impl Actor for Tile {
         let myself = Some(ctx.myself().into());
 
         match msg {
-            TileMsg::GetId => {
-                sender.inspect(|v| v.try_tell(self.id.clone(), myself).unwrap());
-            }
             TileMsg::Tick { init_data } => {
                 if let Some(target) = self.target_ref.clone() {
                     if let Some(script) = self.script.as_ref().and_then(|v| init_data.resource_man.scripts.get(v)) {
@@ -67,12 +63,12 @@ impl Actor for Tile {
                         let output = instructions.output.clone();
 
                         if let Some(input) = instructions.input.clone() {
-                            let id = &input.id;
+                            let id = input.id;
 
                             // TODO send transaction result back to Game
                             let stored = *self.data.0.get(&id).unwrap_or(&0);
                             if stored >= input.amount {
-                                self.data.0.insert(id.clone(), stored - input.amount);
+                                self.data.0.insert(id, stored - input.amount);
 
                                 if let Some(output) = output {
                                     target.try_tell(TileMsg::Transaction { item: output, init_data }, myself).unwrap();
@@ -144,16 +140,15 @@ impl Actor for Tile {
     }
 }
 
-impl ActorFactoryArgs<(Id, Data)> for Tile {
-    fn create_args(args: (Id, Data)) -> Self {
-        Self::new(args.0, args.1)
+impl ActorFactoryArgs<Data> for Tile {
+    fn create_args(args: Data) -> Self {
+        Self::new(args)
     }
 }
 
 impl Tile {
-    fn new(id: Id, data: Data) -> Self {
+    fn new(data: Data) -> Self {
         Self {
-            id,
             data,
             script: None,
             target_coord: None,

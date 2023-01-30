@@ -1,24 +1,24 @@
-
-
-use std::f32::consts::{FRAC_PI_4};
+use std::f32::consts::FRAC_PI_4;
 use std::sync::Arc;
+
 use cgmath::{point3, vec3};
 use egui::{CursorIcon, PaintCallback, Sense, Ui, vec2};
 use egui_winit_vulkano::CallbackFn;
-use futures::channel::{mpsc};
+use futures::channel::mpsc;
 use hexagon_tiles::hex::Hex;
 use hexagon_tiles::traits::HexDirection;
 use vulkano::buffer::BufferUsage;
-use vulkano::command_buffer::{DrawIndexedIndirectCommand};
+use vulkano::command_buffer::DrawIndexedIndirectCommand;
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::pipeline::{GraphicsPipeline, Pipeline, PipelineBindPoint};
-use crate::util::cg::{deg, Matrix4, perspective, Vector2, Vector3};
-use crate::util::init::InitData;
-use crate::render::gpu::{Gpu};
+
 use crate::data::id::Id;
 use crate::data::tile::{TileCoord, TileUnit};
-use crate::render::data::{UniformBufferObject, Vertex, VertexColor};
-use crate::render::{gpu, gui};
+use crate::render::gpu;
+use crate::render::data::UniformBufferObject;
+use crate::render::gpu::Gpu;
+use crate::util::cg::{Matrix4, perspective, Vector3};
+use crate::util::init::InitData;
 use crate::util::resource::ResourceType;
 
 fn tile_ui(size: f32, id: Id, faces_index: usize, mut channel: mpsc::Sender<Id>, ui: &mut Ui, init_data: Arc<InitData>, gpu: Arc<Gpu>, gui_pipeline: Arc<GraphicsPipeline>) -> PaintCallback {

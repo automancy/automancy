@@ -1,21 +1,17 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use riker::actor::{Actor};
-
-use riker::actors::{Context, Sender, ActorFactoryArgs, Tell, ActorRefFactory};
-
+use riker::actor::Actor;
+use riker::actors::{ActorFactoryArgs, ActorRefFactory, Context, Sender, Tell};
 use uuid::Uuid;
+
 use crate::data::data::Data;
-use crate::data::map::{RenderContext};
-
-use crate::game::ticking::{MAX_ALLOWED_TICK_INTERVAL};
-
+use crate::data::id::Id;
+use crate::data::map::RenderContext;
 use crate::data::map::Map;
 use crate::data::tile::{Tile, TileCoord, TileMsg};
-use crate::data::id::Id;
+use crate::game::ticking::MAX_ALLOWED_TICK_INTERVAL;
 use crate::util::init::InitData;
-
 
 #[derive(Debug, Clone)]
 pub struct Ticked;
@@ -51,6 +47,7 @@ pub enum GameMsg {
     PlaceTile {
         coord: TileCoord,
         id: Id,
+        none: Id
     },
     GetTile(TileCoord),
 }
@@ -70,13 +67,13 @@ impl Actor for Game {
 
                 sender.inspect(|v| v.try_tell(render_info, myself).unwrap());
             }
-            GameMsg::PlaceTile { coord, id } => {
+            GameMsg::PlaceTile { coord, id, none } => {
                 let map = Arc::make_mut(&mut self.map);
 
-                if id == Id::NONE {
+                if id == none {
                     map.tiles.remove_entry(&coord);
                 } else {
-                    let tile = ctx.system.actor_of_args::<Tile, (Id, Data)>(Uuid::new_v4().to_string().as_str(), (id.clone(), Data::default()));
+                    let tile = ctx.system.actor_of_args::<Tile, Data>(Uuid::new_v4().to_string().as_str(), Data::default());
 
                     map.tiles.insert(coord, (id, tile.unwrap()));
                 }

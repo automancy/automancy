@@ -1,13 +1,14 @@
 use std::f64::consts::PI;
 use std::ops::{Div, Sub};
+
 use cgmath::{EuclideanSpace, point2, point3, vec2, Zero};
 use cgmath::num_traits::clamp;
 use hexagon_tiles::layout::pixel_to_hex;
-use hexagon_tiles::point::{point};
+use hexagon_tiles::point::point;
 use hexagon_tiles::traits::HexRound;
+
 use crate::data::tile::TileCoord;
 use crate::game::input::InputState;
-
 use crate::render::data::RENDER_LAYOUT;
 use crate::util::cg::{Double, DPoint2, DPoint3, DVector2, matrix};
 

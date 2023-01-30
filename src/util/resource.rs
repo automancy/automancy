@@ -7,18 +7,19 @@ use serde::Deserialize;
 use serde_json::Error;
 
 use crate::{
-    render::data::{RawFace, RawModel, Vertex},
-    data::id::{Id},
+    data::id::IdRaw,
+    render::data::{ModelRaw, RawFace, Vertex},
 };
-use crate::game::script::Script;
+use crate::data::id::{Id, Interner};
+use crate::game::script::{Instructions, Script, ScriptRaw};
 
 pub static JSON_EXT: &str = "json";
 
 #[derive(Debug, Clone)]
-pub struct ResourceRef {
+pub struct Resource {
+    pub resource_t: ResourceType,
     pub scripts: Option<Vec<Id>>,
     pub faces_index: Option<usize>,
-    pub resource_t: ResourceType,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -34,48 +35,85 @@ pub enum ResourceType {
     Machine,
 }
 
-#[derive(Debug, Default, Clone, Deserialize)]
+#[derive(Debug, Default, Clone)]
 pub struct Translate {
     pub items: HashMap<Id, String>,
     pub tiles: HashMap<Id, String>,
 }
 
+#[derive(Debug, Default, Clone, Deserialize)]
+pub struct TranslateRaw {
+    pub items: HashMap<IdRaw, String>,
+    pub tiles: HashMap<IdRaw, String>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct Model {
-    pub id: Id,
+    pub id: IdRaw,
     pub file: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct Resource {
+pub struct ResourceRaw {
     pub resource_t: ResourceType,
-    pub id: Id,
-    pub model: Option<Id>,
-    pub scripts: Option<Vec<Id>>,
+    pub id: IdRaw,
+    pub model: Option<IdRaw>,
+    pub scripts: Option<Vec<IdRaw>>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct ResourceManager {
+    pub interner: Interner,
+    pub none: Id,
+
     pub ordered_ids: Vec<Id>,
 
-    pub resources: HashMap<Id, ResourceRef>,
+    pub resources: HashMap<Id, Resource>,
     pub scripts: HashMap<Id, Script>,
     pub translates: Translate,
 
-    pub raw_models: HashMap<Id, RawModel>,
+    pub raw_models: HashMap<Id, ModelRaw>,
     pub models_referenced: HashMap<Id, Vec<Id>>,
     pub all_faces: Vec<Vec<Face>>,
+}
+
+impl ResourceManager {
+    pub fn new() -> Self {
+        let mut interner = Interner::new();
+        let none = IdRaw::NONE.to_id(&mut interner);
+
+        Self {
+            interner,
+            none,
+
+            ordered_ids: vec![],
+
+            resources: Default::default(),
+            scripts: Default::default(),
+            translates: Default::default(),
+
+            raw_models: Default::default(),
+            models_referenced: Default::default(),
+            all_faces: vec![],
+        }
+    }
 }
 
 impl ResourceManager {
     fn load_translate(&mut self, file: &Path) -> Option<()> {
         log::debug!("trying to load translate: {:?}", file);
 
-        let translate: Result<Translate, Error> = serde_json::from_str(read_to_string(file).ok()?.as_str());
+        let translate: Result<TranslateRaw, Error> = serde_json::from_str(read_to_string(file).ok()?.as_str());
 
         match translate {
             Ok(translate) => {
-                self.translates = translate;
+                let items = translate.items.into_iter().map(|(id, str)| (id.to_id(&mut self.interner), str)).collect();
+                let tiles = translate.tiles.into_iter().map(|(id, str)| (id.to_id(&mut self.interner), str)).collect();
+
+                self.translates = Translate {
+                    items,
+                    tiles,
+                };
 
                 Some(())
             }
@@ -90,11 +128,25 @@ impl ResourceManager {
     fn load_script(&mut self, file: &Path) -> Option<()> {
         log::debug!("trying to load script: {:?}", file);
 
-        let script: Result<Script, Error> = serde_json::from_str(read_to_string(file).ok()?.as_str());
+        let script: Result<ScriptRaw, Error> = serde_json::from_str(read_to_string(file).ok()?.as_str());
 
         match script {
             Ok(ref script) => {
-                self.scripts.insert(script.id.clone(), script.clone());
+                let id = script.id.to_id(&mut self.interner);
+                let script_t = script.script_t.to_id(&mut self.interner);
+
+                let instructions = Instructions {
+                    input: script.instructions.input.as_ref().map(|v| v.to_item(&mut self.interner)),
+                    output: script.instructions.output.as_ref().map(|v| v.to_item(&mut self.interner)),
+                };
+
+                let script = Script {
+                    id,
+                    script_t,
+                    instructions,
+                };
+
+                self.scripts.insert(id, script);
 
                 Some(())
             }
@@ -145,9 +197,9 @@ impl ResourceManager {
 
                 let raw_model = vertices
                     .zip(faces)
-                    .map(|(vertices, faces)| RawModel::new(vertices, faces))?;
+                    .map(|(vertices, faces)| ModelRaw::new(vertices, faces))?;
 
-                self.raw_models.insert(model.id.clone(), raw_model);
+                self.raw_models.insert(model.id.to_id(&mut self.interner), raw_model);
 
                 Some(())
             }
@@ -210,19 +262,21 @@ impl ResourceManager {
         Some(())
     }
 
-    pub fn register_resource(&mut self, resource: Resource) {
-        let id = resource.id;
+    pub fn register_resource(&mut self, resource: ResourceRaw) {
+        let id = resource.id.to_id(&mut self.interner);
 
         if let Some(model) = resource.model {
-            let references = self.models_referenced.entry(model).or_insert_with(Vec::default);
+            let references = self.models_referenced.entry(model.to_id(&mut self.interner)).or_insert_with(Vec::default);
 
-            references.push(id.clone());
+            references.push(id);
         }
+
+        let scripts = resource.scripts.map(|v| v.into_iter().map(|id| id.to_id(&mut self.interner)).collect());
 
         self.resources.insert(
             id,
-            ResourceRef {
-                scripts: resource.scripts,
+            Resource {
+                scripts,
                 faces_index: None,
                 resource_t: resource.resource_t
             }

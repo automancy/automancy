@@ -3,18 +3,16 @@ use std::ops::{Add, Mul};
 
 use bytemuck::{Pod, Zeroable};
 use cgmath::vec3;
-
 use hexagon_tiles::layout::{hex_to_pixel, Layout, LAYOUT_ORIENTATION_POINTY};
 use hexagon_tiles::point::Point;
 use ply_rs::ply::{Property, PropertyAccess};
 use vulkano::impl_vertex;
 
-use crate::data::tile::{TileCoord};
 use crate::data::id::Id;
+use crate::data::tile::TileCoord;
 use crate::render::camera::FAR;
 use crate::util::cg::{Matrix4, Num, Vector2};
 use crate::util::init::InitData;
-
 
 fn color_to_num(color: u8) -> Num {
     color as Num / 255.0
@@ -222,12 +220,12 @@ impl PropertyAccess for RawFace {
 // model
 
 #[derive(Debug, Clone)]
-pub struct RawModel {
+pub struct ModelRaw {
     pub vertices: Vec<Vertex>,
     pub faces: Vec<RawFace>,
 }
 
-impl RawModel {
+impl ModelRaw {
     pub fn new(vertices: Vec<Vertex>, faces: Vec<RawFace>) -> Self {
         Self { vertices, faces }
     }

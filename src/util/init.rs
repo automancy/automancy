@@ -1,7 +1,5 @@
-use crate::{
-    render::data::{RawFace, Vertex},
-};
-use crate::data::id::Id;
+use crate::render::data::{RawFace, Vertex};
+use crate::data::id::IdRaw;
 use crate::util::resource::{Face, ResourceManager};
 
 #[derive(Debug)]
@@ -14,12 +12,16 @@ pub struct InitData {
 
 impl InitData {
     pub fn new(mut resource_man: ResourceManager) -> Self {
-        let mut ids = resource_man.resources.iter().map(|(id, _)| id.clone()).collect::<Vec<_>>();
+        let mut ids = resource_man.resources
+            .iter()
+            .flat_map(|(id, _)| resource_man.interner.resolve(*id))
+            .map(|id| IdRaw::parse(id))
+            .collect::<Vec<_>>();
 
         ids.sort_unstable_by_key(|id| id.clone());
 
         if let Some(none_idx) = ids.iter().enumerate().find_map(|(idx, id)| {
-            if id == &Id::NONE {
+            if id == &IdRaw::NONE {
                 Some(idx)
             } else {
                 None
@@ -27,6 +29,11 @@ impl InitData {
         }) {
             ids.swap(none_idx, 0);
         }
+
+        let ids = ids
+            .into_iter()
+            .flat_map(|id| resource_man.interner.get(id.to_string()))
+            .collect();
 
         resource_man.ordered_ids = ids;
 

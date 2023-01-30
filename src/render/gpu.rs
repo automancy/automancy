@@ -14,8 +14,8 @@ use vulkano::sync::FlushError;
 use winit::{dpi::LogicalSize, window::Window};
 
 use crate::render::data::Vertex;
-use crate::util::cg::Double;
 use crate::render::gpu;
+use crate::util::cg::Double;
 use crate::util::cg::Num;
 use crate::util::init::InitData;
 
