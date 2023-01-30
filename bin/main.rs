@@ -506,10 +506,10 @@ fn main() {
     }
 
     let frame = Frame::none()
-        .fill(Color::WHITE.with_alpha(0.8).into())
+        .fill(Color::WHITE.into())
         .shadow(Shadow {
-            extrusion: 12.0,
-            color: Color::GRAY.with_alpha(0.7).into(),
+            extrusion: 8.0,
+            color: Color::DARK_GRAY.with_alpha(0.5).into(),
         })
         .rounding(Rounding::same(5.0));
 
