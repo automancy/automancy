@@ -6,5 +6,4 @@
 *.spv
 *.blend1
 
-/Cargo.lock
 /renderdoc.cap
