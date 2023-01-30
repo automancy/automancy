@@ -1,15 +1,14 @@
 #![feature(result_option_inspect)]
-#![feature(is_some_with)]
-#![feature(slice_flatten)]
+#![feature(is_some_and)]
 
 use std::{ffi::OsStr, fs::{File, read_to_string}, fs, sync::Arc};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use cgmath::{EuclideanSpace, point3};
-use egui::{Align, Align2, FontData, FontDefinitions, FontFamily, FontId, Frame, RichText, Rounding, ScrollArea, Style, TextStyle, TopBottomPanel, vec2, Visuals, Window};
+use egui::{Align, Align2, Color32, FontData, FontDefinitions, FontFamily, FontId, Frame, RichText, Rounding, ScrollArea, Stroke, Style, TextStyle, TopBottomPanel, vec2, Visuals, Window};
 use egui::epaint::Shadow;
 use egui::FontFamily::{Monospace, Proportional};
-use egui::style::{default_text_styles, Margin};
+use egui::style::{Margin, Widgets, WidgetVisuals};
 use egui_winit_vulkano::Gui;
 use futures::channel::mpsc;
 use futures::executor::block_on;
@@ -25,7 +24,6 @@ use vulkano::image::{AttachmentImage, ImageUsage};
 use vulkano::image::SampleCount::Sample4;
 use vulkano::instance::{Instance, InstanceCreateInfo};
 use vulkano::memory::allocator::StandardMemoryAllocator;
-use vulkano::pipeline::graphics::color_blend::{AttachmentBlend, BlendFactor, ColorBlendState};
 use vulkano::pipeline::graphics::depth_stencil::DepthStencilState;
 use vulkano::pipeline::graphics::input_assembly::{InputAssemblyState, PrimitiveTopology};
 use vulkano::pipeline::graphics::multisample::MultisampleState;
@@ -499,14 +497,53 @@ fn main() {
                     (TextStyle::Monospace, FontId::new(13.0, Monospace)),
                 ].into(),
                 wrap: None,
-                visuals: Visuals::light(),
+                visuals: Visuals {
+                    widgets: Widgets {
+                        noninteractive: WidgetVisuals {
+                            bg_fill: Color32::from_gray(190),
+                            bg_stroke: Stroke::new(1.0, Color32::from_gray(190)), // separators, indentation lines
+                            fg_stroke: Stroke::new(1.0, Color32::from_gray(80)),  // normal text color
+                            rounding: Rounding::same(2.0),
+                            expansion: 0.0,
+                        },
+                        inactive: WidgetVisuals {
+                            bg_fill: Color32::from_gray(180), // button background
+                            bg_stroke: Default::default(),
+                            fg_stroke: Stroke::new(1.0, Color32::from_gray(60)), // button text
+                            rounding: Rounding::same(2.0),
+                            expansion: 0.0,
+                        },
+                        hovered: WidgetVisuals {
+                            bg_fill: Color32::from_gray(170),
+                            bg_stroke: Stroke::new(1.0, Color32::from_gray(105)), // e.g. hover over window edge or button
+                            fg_stroke: Stroke::new(1.5, Color32::BLACK),
+                            rounding: Rounding::same(3.0),
+                            expansion: 1.0,
+                        },
+                        active: WidgetVisuals {
+                            bg_fill: Color32::from_gray(160),
+                            bg_stroke: Stroke::new(1.0, Color32::BLACK),
+                            fg_stroke: Stroke::new(2.0, Color32::BLACK),
+                            rounding: Rounding::same(2.0),
+                            expansion: 1.0,
+                        },
+                        open: WidgetVisuals {
+                            bg_fill: Color32::from_gray(170),
+                            bg_stroke: Stroke::new(1.0, Color32::from_gray(160)),
+                            fg_stroke: Stroke::new(1.0, Color32::BLACK),
+                            rounding: Rounding::same(2.0),
+                            expansion: 0.0,
+                        },
+                    },
+                    ..Visuals::light()
+                },
                 ..Default::default()
             }
         );
     }
 
     let frame = Frame::none()
-        .fill(Color::WHITE.into())
+        .fill(Color::WHITE.with_alpha(0.7).into())
         .shadow(Shadow {
             extrusion: 8.0,
             color: Color::DARK_GRAY.with_alpha(0.5).into(),
@@ -748,7 +785,7 @@ fn main() {
                 });
 
                 if let Ok(Some(id)) = selection_recv.try_next() {
-                    if selected_id.is_some_and(|v| v == &id) {
+                    if selected_id.is_some_and(|v| v == id) {
                         selected_id = None;
                     } else {
                         selected_id = Some(id);

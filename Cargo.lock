@@ -1227,7 +1227,7 @@ dependencies = [
 [[package]]
 name = "hexagon_tiles"
 version = "0.1.0"
-source = "git+https://github.com/Mg138/hexagon-tiles#a8b6075a2c0bf2e9294027241ad594ef26f1ddda"
+source = "git+https://github.com/Mg138/hexagon-tiles#a050627e95f13aa9e2a4913ba6bb5c88cc5f66d6"
 dependencies = [
  "float_eq",
  "num",
