@@ -241,8 +241,8 @@ impl Renderer {
                     clear_values: vec![
                         None,
                         Some(ClearValue::Float([0.0, 0.0, 0.0, 1.0])),
-                        Some(ClearValue::DepthStencil((1.0, 0))),
-                        Some(ClearValue::DepthStencil((1.0, 0))),
+                        Some(ClearValue::Depth(1.0)),
+                        Some(ClearValue::Depth(1.0)),
                     ],
                     ..RenderPassBeginInfo::framebuffer(self.framebuffers[image_num].clone())
                 },

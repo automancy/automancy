@@ -5,7 +5,7 @@ use std::{ffi::OsStr, fs::{File, read_to_string}, fs, sync::Arc};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use cgmath::{EuclideanSpace, point3};
-use egui::{Align, Align2, Color32, FontData, FontDefinitions, FontFamily, FontId, Frame, RichText, Rounding, ScrollArea, Stroke, Style, TextStyle, TopBottomPanel, vec2, Visuals, Window};
+use egui::{Align, Align2, Color32, FontData, FontDefinitions, FontId, Frame, Rounding, ScrollArea, Stroke, Style, TextStyle, TopBottomPanel, vec2, Visuals, Window};
 use egui::epaint::Shadow;
 use egui::FontFamily::{Monospace, Proportional};
 use egui::style::{Margin, Widgets, WidgetVisuals};
@@ -276,13 +276,13 @@ fn main() {
             depth: {
                 load: Clear,
                 store: DontCare,
-                format: Format::D24_UNORM_S8_UINT,
+                format: Format::D32_SFLOAT,
                 samples: 4,
             },
             depth_gui: {
                 load: Clear,
                 store: DontCare,
-                format: Format::D24_UNORM_S8_UINT,
+                format: Format::D32_SFLOAT,
                 samples: 4,
             }
         },
@@ -340,7 +340,7 @@ fn main() {
         &allocator,
         gpu::window_size_u32(&window),
         Sample4,
-        Format::D24_UNORM_S8_UINT,
+        Format::D32_SFLOAT,
         ImageUsage {
             depth_stencil_attachment: true,
             ..Default::default()
@@ -351,7 +351,7 @@ fn main() {
         &allocator,
         gpu::window_size_u32(&window),
         Sample4,
-        Format::D24_UNORM_S8_UINT,
+        Format::D32_SFLOAT,
         ImageUsage {
             depth_stencil_attachment: true,
             ..Default::default()
