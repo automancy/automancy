@@ -1,5 +1,5 @@
-use crate::render::data::{RawFace, Vertex};
 use crate::data::id::IdRaw;
+use crate::render::data::{RawFace, Vertex};
 use crate::util::resource::{Face, ResourceManager};
 
 #[derive(Debug)]
@@ -95,9 +95,11 @@ impl InitData {
             })
             .unzip();
 
+        /*
         log::debug!("combined_vertices: {:?}", combined_vertices);
         log::debug!("all_raw_faces: {:?}", all_raw_faces);
         log::debug!("all_faces: {:?}", all_faces);
+         */
 
         resource_man.all_faces = all_faces;
 

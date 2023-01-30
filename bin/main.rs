@@ -6,8 +6,9 @@ use std::{ffi::OsStr, fs::{File, read_to_string}, fs, sync::Arc};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use cgmath::{EuclideanSpace, point3};
-use egui::{Align, Align2, Area, Color32, FontData, FontDefinitions, FontFamily, Frame, Label, Layout, PaintCallback, Pos2, RadioButton, Rect, RichText, Rounding, ScrollArea, SelectableLabel, Sense, Shape, SidePanel, Stroke, Style, TopBottomPanel, Vec2, vec2, Visuals, Window};
+use egui::{Align, Align2, FontData, FontDefinitions, FontFamily, FontId, Frame, RichText, Rounding, ScrollArea, Style, TextStyle, TopBottomPanel, vec2, Visuals, Window};
 use egui::epaint::Shadow;
+use egui::FontFamily::{Monospace, Proportional};
 use egui::style::{default_text_styles, Margin};
 use egui_winit_vulkano::Gui;
 use futures::channel::mpsc;
@@ -24,6 +25,7 @@ use vulkano::image::{AttachmentImage, ImageUsage};
 use vulkano::image::SampleCount::Sample4;
 use vulkano::instance::{Instance, InstanceCreateInfo};
 use vulkano::memory::allocator::StandardMemoryAllocator;
+use vulkano::pipeline::graphics::color_blend::{AttachmentBlend, BlendFactor, ColorBlendState};
 use vulkano::pipeline::graphics::depth_stencil::DepthStencilState;
 use vulkano::pipeline::graphics::input_assembly::{InputAssemblyState, PrimitiveTopology};
 use vulkano::pipeline::graphics::multisample::MultisampleState;
@@ -58,14 +60,14 @@ use automancy::{
 use automancy::data::data::Data;
 use automancy::data::id::Id;
 use automancy::data::map::{MapRenderInfo, RenderContext};
-use automancy::data::tile::{Tile, TileCoord, TileMsg, TileUnit};
+use automancy::data::tile::{TileCoord, TileMsg};
 use automancy::game::game::GameMsg;
 use automancy::game::input::convert_input;
 use automancy::game::input::InputState;
 use automancy::render::data::{InstanceData, Vertex};
 use automancy::render::gpu::{Gpu, gui_frag_shader, gui_vert_shader};
 use automancy::render::gui;
-use automancy::util::cg::{deg, DMatrix4, Double, eye, matrix, Matrix4, Num, perspective, projection, rad, Vector3, view};
+use automancy::util::cg::Num;
 use automancy::util::colors::Color;
 use automancy::util::init::InitData;
 use automancy::util::resource::{ResourceManager, ResourceRaw, ResourceType};
@@ -229,6 +231,8 @@ fn main() {
                 .unwrap()[0]
                 .0,
         );
+
+        log::debug!("image_format: {:?}", image_format);
 
         Swapchain::new(
             device.clone(),
@@ -462,7 +466,7 @@ fn main() {
     let mut gui = Gui::new_with_subpass(
         &event_loop,
         gpu.surface.clone(),
-        None,
+        Some(renderer.swapchain.image_format()),
         gpu.queue.clone(),
         gui_subpass.clone(),
     );
@@ -474,9 +478,9 @@ fn main() {
 
         fonts.font_data.insert(iosevka.clone(), FontData::from_static(include_bytes!("./fonts/iosevka-extended.ttf")));
 
-        fonts.families.get_mut(&FontFamily::Proportional).unwrap()
+        fonts.families.get_mut(&Proportional).unwrap()
             .insert(0, iosevka.clone());
-        fonts.families.get_mut(&FontFamily::Monospace).unwrap()
+        fonts.families.get_mut(&Monospace).unwrap()
             .insert(0, iosevka.clone());
 
         gui.context().set_fonts(fonts);
@@ -487,7 +491,13 @@ fn main() {
             Style {
                 override_text_style: None,
                 override_font_id: None,
-                text_styles: default_text_styles(),
+                text_styles: [
+                    (TextStyle::Small, FontId::new(9.0, Proportional)),
+                    (TextStyle::Body, FontId::new(13.0, Proportional)),
+                    (TextStyle::Button, FontId::new(13.0, Proportional)),
+                    (TextStyle::Heading, FontId::new(19.0, Proportional)),
+                    (TextStyle::Monospace, FontId::new(13.0, Monospace)),
+                ].into(),
                 wrap: None,
                 visuals: Visuals::light(),
                 ..Default::default()
@@ -496,10 +506,10 @@ fn main() {
     }
 
     let frame = Frame::none()
-        .fill(Color::WHITE.with_alpha(0.6).into())
+        .fill(Color::WHITE.with_alpha(0.7).into())
         .shadow(Shadow {
-            extrusion: 12.0,
-            color: Color::GRAY.with_alpha(0.5).into(),
+            extrusion: 8.0,
+            color: Color::GRAY.with_alpha(0.3).into(),
         })
         .rounding(Rounding::same(5.0));
 
@@ -568,6 +578,8 @@ fn main() {
             };
 
             if window_event.is_some() || device_event.is_some() {
+                input_state.reset();
+
                 input_state.update(convert_input(window_event, device_event));
 
                 let ignore_move = selected_id.is_some();
@@ -590,6 +602,14 @@ fn main() {
                             },
                             None
                         );
+                    }
+                }
+
+                if input_state.alternate_pressed {
+                    if config_open == Some(pointing_at)  {
+                        config_open = None;
+                    } else {
+                        config_open = Some(pointing_at);
                     }
                 }
             }
@@ -641,14 +661,6 @@ fn main() {
                                 }
                             }
                         });
-
-                    if input_state.alternate_pressed {
-                        if config_open == Some(pointing_at)  {
-                            config_open = None;
-                        } else {
-                            config_open = Some(pointing_at);
-                        }
-                    }
 
                     if let Some(config_open) = config_open {
                         let result: Option<(Id, ActorRef<TileMsg>)> = block_on(ask(&sys, &game, GameMsg::GetTile(config_open)));
@@ -774,8 +786,6 @@ fn main() {
                 );
 
                 renderer.render(render_info, camera.camera_state(), none, subpass.clone(), gui_subpass.clone(), extra_instances, extra_vertices, &mut gui, gui_pipeline.clone());
-
-                input_state.reset();
             }
         });
     }

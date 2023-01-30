@@ -41,7 +41,7 @@ pub struct Renderer {
 
     gpu: Arc<Gpu>,
     pipeline: Arc<GraphicsPipeline>,
-    swapchain: Arc<Swapchain>,
+    pub swapchain: Arc<Swapchain>,
     framebuffers: Vec<Arc<Framebuffer>>,
     previous_frame_end: Option<Box<dyn GpuFuture + Send + Sync>>,
 
@@ -147,7 +147,7 @@ impl Renderer {
                     .map(|instance| {
                         *instance = instance
                             .add_position_offset([0.0, 0.0, 0.0001])
-                            .color_offset(Color::WHITE.with_alpha(0.5).into())
+                            .color_offset(Color::ORANGE.with_alpha(0.5).into())
                     });
             }
 

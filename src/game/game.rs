@@ -7,8 +7,8 @@ use uuid::Uuid;
 
 use crate::data::data::Data;
 use crate::data::id::Id;
-use crate::data::map::RenderContext;
 use crate::data::map::Map;
+use crate::data::map::RenderContext;
 use crate::data::tile::{Tile, TileCoord, TileMsg};
 use crate::game::ticking::MAX_ALLOWED_TICK_INTERVAL;
 use crate::util::init::InitData;

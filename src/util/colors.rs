@@ -1,5 +1,7 @@
 use std::ops::Mul;
 
+use egui::{Color32, Rgba};
+
 use crate::util::cg::Num;
 
 #[derive(Debug, Copy, Clone)]
@@ -31,15 +33,15 @@ impl Into<[Num; 4]> for Color {
     }
 }
 
-impl Into<egui::Rgba> for Color {
-    fn into(self) -> egui::Rgba {
-        egui::Rgba::from_rgba_unmultiplied(self.r, self.g, self.b, self.a)
+impl Into<Rgba> for Color {
+    fn into(self) -> Rgba {
+        Rgba::from_rgba_premultiplied(self.r, self.g, self.b, self.a)
     }
 }
 
-impl Into<egui::Color32> for Color {
-    fn into(self) -> egui::Color32 {
-        let rgba: egui::Rgba = self.into();
+impl Into<Color32> for Color {
+    fn into(self) -> Color32 {
+        let rgba: Rgba = self.into();
 
         rgba.into()
     }

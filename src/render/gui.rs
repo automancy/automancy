@@ -14,8 +14,8 @@ use vulkano::pipeline::{GraphicsPipeline, Pipeline, PipelineBindPoint};
 
 use crate::data::id::Id;
 use crate::data::tile::{TileCoord, TileUnit};
-use crate::render::gpu;
 use crate::render::data::UniformBufferObject;
+use crate::render::gpu;
 use crate::render::gpu::Gpu;
 use crate::util::cg::{Matrix4, perspective, Vector3};
 use crate::util::init::InitData;
