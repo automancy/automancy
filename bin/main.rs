@@ -130,6 +130,7 @@ fn main() {
         library,
         InstanceCreateInfo {
             enabled_extensions: required_extensions,
+            enumerate_portability: true,
             ..Default::default()
         }
     ).expect("failed to create instance");
@@ -154,7 +155,6 @@ fn main() {
         WindowBuilder::new()
             .with_title("automancy")
             .with_window_icon(Some(icon))
-            .with_inner_size(PhysicalSize::new(800, 800))
             .build(&event_loop)
             .expect("could not build window")
     );
@@ -671,7 +671,7 @@ fn main() {
 
                             ScrollArea::horizontal()
                                 .always_show_scroll(true)
-                                .show_viewport(ui, |ui, _viewport| {
+                                .show(ui, |ui| {
                                     ui.horizontal(|ui| {
                                         gui::render_tile_selection(ui, init_data.clone(), selection_send, gpu.clone(), gui_pipeline.clone());
                                     });
