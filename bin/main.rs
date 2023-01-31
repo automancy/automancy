@@ -10,10 +10,12 @@ use egui::epaint::Shadow;
 use egui::FontFamily::{Monospace, Proportional};
 use egui::style::{Margin, Widgets, WidgetVisuals};
 use egui_winit_vulkano::Gui;
+use fuse_rust::Fuse;
 use futures::channel::mpsc;
 use futures::executor::block_on;
+use hexagon_tiles::hex::Hex;
 use riker::actor::ActorRef;
-use riker::actors::{ActorRefFactory, BasicActorRef, SystemBuilder, Tell, Timer};
+use riker::actors::{ActorRefFactory, SystemBuilder, Tell, Timer};
 use riker_patterns::ask::ask;
 use vulkano::buffer::BufferUsage;
 use vulkano::command_buffer::PrimaryCommandBufferAbstract;
@@ -37,18 +39,17 @@ use vulkano::sync::GpuFuture;
 use vulkano::VulkanLibrary;
 use vulkano_win::create_surface_from_winit;
 use winit::{
-    dpi::PhysicalSize,
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::{Icon, WindowBuilder},
 };
 
 use automancy::{
-    data::map::Map,
     game::{
         game::Game,
         ticking::TICK_INTERVAL,
     },
+    game::map::Map,
     render::{
         camera::Camera,
         gpu::{self, frag_shader, vert_shader},
@@ -57,11 +58,11 @@ use automancy::{
 };
 use automancy::data::data::Data;
 use automancy::data::id::Id;
-use automancy::data::map::{MapRenderInfo, RenderContext};
-use automancy::data::tile::{TileCoord, TileMsg};
 use automancy::game::game::GameMsg;
 use automancy::game::input::convert_input;
 use automancy::game::input::InputState;
+use automancy::game::map::{MapRenderInfo, RenderContext};
+use automancy::game::tile::{TileCoord, TileMsg, TileUnit};
 use automancy::render::data::{InstanceData, Vertex};
 use automancy::render::gpu::{Gpu, gui_frag_shader, gui_vert_shader};
 use automancy::render::gui;
@@ -561,6 +562,10 @@ fn main() {
 
         let mut config_open = None;
 
+        let mut script_filter = String::new();
+
+        let fuse = Fuse::default();
+
         event_loop.run(move |event, _, control_flow| {
             if closed {
                 return;
@@ -630,7 +635,7 @@ fn main() {
                 }
 
                 if let Some(id) = selected_id {
-                    if input_state.main_held {
+                    if input_state.main_pressed {
                         game.tell(
                             GameMsg::PlaceTile {
                                 coord: pointing_at,
@@ -645,6 +650,7 @@ fn main() {
                 if input_state.alternate_pressed {
                     if config_open == Some(pointing_at)  {
                         config_open = None;
+                        script_filter.clear();
                     } else {
                         config_open = Some(pointing_at);
                     }
@@ -687,6 +693,8 @@ fn main() {
                         .show(&gui.context(), |ui| {
                             let coord = pointing_at;
 
+                            ui.colored_label(Color::DARK_GRAY, coord.to_string());
+
                             let result: Option<(Id, ActorRef<TileMsg>)> = block_on(ask(&sys, &game, GameMsg::GetTile(coord)));
 
                             if let Some((id, tile)) = result {
@@ -706,12 +714,12 @@ fn main() {
                             let current_script: Option<Id> = block_on(ask(&sys, &tile, TileMsg::GetScript));
                             let mut new_script = current_script.clone();
 
-                            let (current_target_coord, _): (Option<TileCoord>, Option<BasicActorRef>) = block_on(ask(&sys, &tile, TileMsg::GetTarget));
+                            let current_target_coord: Option<Hex<TileUnit>> = block_on(ask(&sys, &tile, TileMsg::GetTarget));
                             let mut new_target_coord = current_target_coord;
 
                             // tile_config
-                            if init_data.resource_man.resources[&id].resource_t == ResourceType::Machine {
-                                if let Some(ref scripts) = init_data.resource_man.resources[&id].scripts {
+                            if let ResourceType::Machine(_) = init_data.resource_man.resources[&id].resource_type {
+                                if let Some(scripts) = init_data.resource_man.resources[&id].scripts.clone() {
                                     Window::new("Config")
                                         .resizable(false)
                                         .auto_sized()
@@ -721,19 +729,39 @@ fn main() {
                                             ui.set_max_width(300.0);
 
                                             let script_text = if let Some(ref script) = new_script {
-                                                init_data.resource_man.item_name(script)
+                                                init_data.resource_man.item_name(script) //TODO move this to resource_man
                                             } else {
                                                 "<none>".to_owned()
                                             };
 
                                             ui.label(format!("Script: {}", script_text));
+
+                                            ui.text_edit_singleline(&mut script_filter);
+
                                             ScrollArea::vertical().max_height(80.0).show(ui, |ui| {
                                                 ui.set_width(ui.available_width());
+
+                                                let scripts = if !script_filter.is_empty() {
+                                                    let mut filtered = scripts
+                                                        .into_iter()
+                                                        .flat_map(|id| {
+                                                            let result = fuse.search_text_in_string(&script_filter, init_data.resource_man.item_name(&id).as_str());
+
+                                                            Some(id).zip(result.map(|v| v.score))
+                                                        })
+                                                        .collect::<Vec<_>>();
+
+                                                    filtered.sort_unstable_by(|a, b| a.1.total_cmp(&b.1));
+
+                                                    filtered.into_iter().map(|v| v.0).collect::<Vec<_>>()
+                                                } else {
+                                                    scripts
+                                                };
 
                                                 scripts.iter().for_each(|script| {
                                                     ui.radio_value(
                                                         &mut new_script,
-                                                        Some(script.clone()),
+                                                        Some(*script),
                                                         init_data.resource_man.item_name(&script)
                                                     );
                                                 })
@@ -744,19 +772,19 @@ fn main() {
                                             ui.label("Target:");
                                             ui.vertical(|ui| {
                                                 ui.horizontal(|ui| {
-                                                    ui.add_space(10.0);
+                                                    ui.add_space(15.0);
                                                     gui::add_direction(ui, &mut new_target_coord, 5);
                                                     gui::add_direction(ui, &mut new_target_coord, 0);
                                                 });
 
                                                 ui.horizontal(|ui| {
                                                     gui::add_direction(ui, &mut new_target_coord, 4);
-                                                    ui.add_space(20.0);
+                                                    ui.selectable_value(&mut new_target_coord, None, "❌");
                                                     gui::add_direction(ui, &mut new_target_coord, 1);
                                                 });
 
                                                 ui.horizontal(|ui| {
-                                                    ui.add_space(10.0);
+                                                    ui.add_space(15.0);
                                                     gui::add_direction(ui, &mut new_target_coord, 3);
                                                     gui::add_direction(ui, &mut new_target_coord, 2);
                                                 });
@@ -772,13 +800,13 @@ fn main() {
                             }
 
                             if new_target_coord != current_target_coord {
-                                if let Some(new_target_coord) = new_target_coord {
-                                    let result: Option<(Id, ActorRef<TileMsg>)> = block_on(ask(&sys, &game, GameMsg::GetTile(config_open + new_target_coord)));
-
-                                    if let Some((_, target)) = result {
-                                        tile.tell(TileMsg::SetTarget((new_target_coord, target.into())), None);
-                                    }
-                                }
+                                game.send_msg(
+                                    GameMsg::SendMsgToTile(
+                                        config_open,
+                                        TileMsg::SetTarget(new_target_coord)
+                                    ),
+                                    None
+                                );
                             }
                         }
                     }

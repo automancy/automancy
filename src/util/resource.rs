@@ -17,7 +17,7 @@ pub static JSON_EXT: &str = "json";
 
 #[derive(Debug, Clone)]
 pub struct Resource {
-    pub resource_t: ResourceType,
+    pub resource_type: ResourceType,
     pub scripts: Option<Vec<Id>>,
     pub faces_index: Option<usize>,
 }
@@ -28,11 +28,14 @@ pub struct Face {
     pub size: u32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(tag = "type", content = "param")]
 pub enum ResourceType {
     None,
+    Void,
     Model,
-    Machine,
+    Machine(IdRaw),
+    Transfer(IdRaw),
 }
 
 #[derive(Debug, Default, Clone)]
@@ -55,7 +58,7 @@ pub struct Model {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ResourceRaw {
-    pub resource_t: ResourceType,
+    pub resource_type: ResourceType,
     pub id: IdRaw,
     pub model: Option<IdRaw>,
     pub scripts: Option<Vec<IdRaw>>,
@@ -133,7 +136,6 @@ impl ResourceManager {
         match script {
             Ok(ref script) => {
                 let id = script.id.to_id(&mut self.interner);
-                let script_t = script.script_t.to_id(&mut self.interner);
 
                 let instructions = Instructions {
                     input: script.instructions.input.as_ref().map(|v| v.to_item(&mut self.interner)),
@@ -142,7 +144,6 @@ impl ResourceManager {
 
                 let script = Script {
                     id,
-                    script_t,
                     instructions,
                 };
 
@@ -273,12 +274,14 @@ impl ResourceManager {
 
         let scripts = resource.scripts.map(|v| v.into_iter().map(|id| id.to_id(&mut self.interner)).collect());
 
+        let resource_type = resource.resource_type;
+
         self.resources.insert(
             id,
             Resource {
+                resource_type,
                 scripts,
                 faces_index: None,
-                resource_t: resource.resource_t
             }
         );
     }
@@ -288,14 +291,14 @@ impl ResourceManager {
     pub fn item_name(&self, id: &Id) -> String {
         match self.translates.items.get(id) {
             Some(name) => { name.to_owned() }
-            None => { id.to_string() }
+            None => { "<unnamed>".to_string() }
         }
     }
 
     pub fn tile_name(&self, id: &Id) -> String {
         match self.translates.tiles.get(id) {
             Some(name) => { name.to_owned() }
-            None => { id.to_string() }
+            None => { "<unnamed>".to_string() }
         }
     }
 }

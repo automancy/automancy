@@ -26,6 +26,7 @@ egui_winit_vulkano = { git = "https://github.com/Mg138/egui_winit_vulkano" }
 egui = "0.20.1"
 
 string-interner = "0.14.0"
+fuse-rust = "0.3.1"
 hexagon_tiles = { git = "https://github.com/Mg138/hexagon-tiles" }
 bytemuck = "1.8.0"
 flexstr = { version = "0.9.2", features = ["serde", "fast_format"] }

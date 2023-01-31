@@ -9,6 +9,7 @@
     },
     "tiles": {
         "none": "None",
+        "splitter": "Splitter",
         "void": "Resource® Void™",
         "extractor": "Extractor",
         "refinery": "Refinery"

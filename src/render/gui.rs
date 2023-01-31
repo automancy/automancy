@@ -13,7 +13,7 @@ use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::pipeline::{GraphicsPipeline, Pipeline, PipelineBindPoint};
 
 use crate::data::id::Id;
-use crate::data::tile::{TileCoord, TileUnit};
+use crate::game::tile::TileUnit;
 use crate::render::data::UniformBufferObject;
 use crate::render::gpu;
 use crate::render::gpu::Gpu;
@@ -116,7 +116,7 @@ pub fn render_tile_selection(ui: &mut Ui, init_data: Arc<InitData>, channel: mps
         .flat_map(|id| {
             let resource = &resource_man.resources[id];
 
-            if resource.resource_t == ResourceType::Model {
+            if resource.resource_type == ResourceType::Model {
                 return None;
             }
 
@@ -129,9 +129,9 @@ pub fn render_tile_selection(ui: &mut Ui, init_data: Arc<InitData>, channel: mps
         });
 }
 
-pub fn add_direction(ui: &mut Ui, target_coord: &mut Option<TileCoord>, n: usize) {
+pub fn add_direction(ui: &mut Ui, target_coord: &mut Option<Hex<TileUnit>>, n: usize) {
     let coord = Hex::<TileUnit>::NEIGHBORS[(n + 2) % 6];
-    let coord = Some(TileCoord(coord));
+    let coord = Some(coord);
 
     ui.selectable_value(target_coord, coord, match n {
         0 => "↗",
@@ -143,57 +143,3 @@ pub fn add_direction(ui: &mut Ui, target_coord: &mut Option<TileCoord>, n: usize
         _ => "",
     });
 }
-
-/*
-const OUTPUT_SETTING_COLOR: VertexColor = [1.0, 0.87, 0.64, 1.0];
-
-pub const fn output_setting() -> [Vertex; 3] {
-    [
-        Vertex { // a
-            pos: [0.72, -0.36, 0.0],
-            color: OUTPUT_SETTING_COLOR,
-        },
-        Vertex { // b
-            pos: [0.86, 0.0, 0.0],
-            color: OUTPUT_SETTING_COLOR,
-        },
-        Vertex { // c
-            pos: [0.72, 0.36, 0.0],
-            color: OUTPUT_SETTING_COLOR,
-        }
-    ]
-}
-
-pub fn output_setting_vertices(translate: Vector2, matrix: Matrix4) -> Vec<Vertex> {
-    let vertices = output_setting();
-
-    let b = Matrix4::from_angle_z(deg( 60.0));
-    let c = Matrix4::from_angle_z(deg(120.0));
-    let d = Matrix4::from_angle_z(deg(180.0));
-    let e = Matrix4::from_angle_z(deg(240.0));
-    let f = Matrix4::from_angle_z(deg(300.0));
-
-    let a = vertices;
-    let b = vertices.map(|v| v * b);
-    let c = vertices.map(|v| v * c);
-    let d = vertices.map(|v| v * d);
-    let e = vertices.map(|v| v * e);
-    let f = vertices.map(|v| v * f);
-
-    let a = a.map(|v| v + translate);
-    let b = b.map(|v| v + translate);
-    let c = c.map(|v| v + translate);
-    let d = d.map(|v| v + translate);
-    let e = e.map(|v| v + translate);
-    let f = f.map(|v| v + translate);
-
-    let a = a.map(|v| v * matrix);
-    let b = b.map(|v| v * matrix);
-    let c = c.map(|v| v * matrix);
-    let d = d.map(|v| v * matrix);
-    let e = e.map(|v| v * matrix);
-    let f = f.map(|v| v * matrix);
-
-    [a, b, c, d, e, f].into_iter().flatten().collect::<Vec<_>>()
-}
- */

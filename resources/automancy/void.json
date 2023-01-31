@@ -1,5 +1,7 @@
 {
     "id": "void",
     "model": "void",
-    "resource_t": "None"
+    "resource_type": {
+        "type": "Void"
+    }
 }

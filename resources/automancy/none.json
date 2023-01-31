@@ -1,5 +1,7 @@
 {
     "id": "none",
     "model": "none",
-    "resource_t": "None"
+    "resource_type": {
+        "type": "None"
+    }
 }

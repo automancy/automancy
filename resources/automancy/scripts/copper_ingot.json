@@ -1,6 +1,5 @@
 {
     "id": "copper_ingot",
-    "script_t": "refinery",
     "instructions": {
         "input": {
             "id": "copper_ore",

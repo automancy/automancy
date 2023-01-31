@@ -1,7 +1,10 @@
 {
     "id": "extractor",
     "model": "extractor",
-    "resource_t": "Machine",
+    "resource_type": {
+        "type": "Machine",
+        "param": "extractor"
+    },
     "scripts": [
         "copper_ore"
     ]

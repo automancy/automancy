@@ -4,12 +4,35 @@ use flexstr::SharedStr;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::{Error, Visitor};
 use string_interner::backend::BufferBackend;
-use string_interner::StringInterner;
+use string_interner::{StringInterner, Symbol};
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct IdRaw(SharedStr, SharedStr);
 
-pub type Id = usize;
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Id(usize);
+
+impl Into<usize> for Id {
+    fn into(self) -> usize {
+        self.0
+    }
+}
+
+impl From<usize> for Id {
+    fn from(value: usize) -> Self {
+        Self(value)
+    }
+}
+
+impl Symbol for Id {
+    fn try_from_usize(index: usize) -> Option<Self> {
+        Some(Self(index))
+    }
+
+    fn to_usize(self) -> usize {
+        self.0
+    }
+}
 
 // TODO if saving is too bad with this, switch back to StringBackend
 pub type Interner = StringInterner<BufferBackend<Id>>;

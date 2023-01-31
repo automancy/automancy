@@ -6,7 +6,6 @@ use crate::game::item::{Item, ItemRaw};
 #[derive(Debug, Clone, Copy)]
 pub struct Script {
     pub id: Id,
-    pub script_t: Id,
     pub instructions: Instructions,
 }
 
@@ -19,7 +18,6 @@ pub struct Instructions {
 #[derive(Debug, Clone, Deserialize)]
 pub struct ScriptRaw {
     pub id: IdRaw,
-    pub script_t: IdRaw,
     pub instructions: InstructionsRaw,
 }
 

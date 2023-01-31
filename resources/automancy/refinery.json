@@ -1,7 +1,10 @@
 {
     "id": "refinery",
     "model": "refinery",
-    "resource_t": "Machine",
+    "resource_type": {
+        "type": "Machine",
+        "param": "refinery"
+    },
     "scripts": [
         "iron_ingot",
         "gold_ingot",

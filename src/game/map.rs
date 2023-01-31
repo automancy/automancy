@@ -8,7 +8,7 @@ use std::fmt::Debug;
 use riker::actor::ActorRef;
 
 use crate::data::id::Id;
-use crate::data::tile::TileMsg;
+use crate::game::tile::TileMsg;
 use crate::render::data::InstanceData;
 use crate::util::init::InitData;
 

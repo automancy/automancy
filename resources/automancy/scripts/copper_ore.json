@@ -1,6 +1,5 @@
 {
     "id": "copper_ore",
-    "script_t": "extracting",
     "instructions": {
         "output": {
             "id": "copper_ore",

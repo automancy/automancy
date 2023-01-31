@@ -1,6 +1,5 @@
 {
     "id": "iron_ingot",
-    "script_t": "refinery",
     "instructions": {
         "input": {
             "id": "iron_ore",

@@ -1,0 +1,8 @@
+{
+    "id": "splitter",
+    "model": "extractor",
+    "resource_type": {
+        "type": "Transfer",
+        "param": "splitter"
+    }
+}

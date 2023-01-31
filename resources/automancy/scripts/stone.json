@@ -1,6 +1,5 @@
 {
     "id": "stone",
-    "script_t": "refinery",
     "instructions": {
         "input": {
             "id": "rough_stone",

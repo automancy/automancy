@@ -1,6 +1,5 @@
 {
     "id": "tin_ingot",
-    "script_t": "refinery",
     "instructions": {
         "input": {
             "id": "tin_ore",

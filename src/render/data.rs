@@ -9,7 +9,7 @@ use ply_rs::ply::{Property, PropertyAccess};
 use vulkano::impl_vertex;
 
 use crate::data::id::Id;
-use crate::data::tile::TileCoord;
+use crate::game::tile::TileCoord;
 use crate::render::camera::FAR;
 use crate::util::cg::{Matrix4, Num, Vector2};
 use crate::util::init::InitData;

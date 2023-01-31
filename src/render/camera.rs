@@ -7,7 +7,7 @@ use hexagon_tiles::layout::pixel_to_hex;
 use hexagon_tiles::point::point;
 use hexagon_tiles::traits::HexRound;
 
-use crate::data::tile::TileCoord;
+use crate::game::tile::TileCoord;
 use crate::game::input::InputState;
 use crate::render::data::RENDER_LAYOUT;
 use crate::util::cg::{Double, DPoint2, DPoint3, DVector2, matrix};
@@ -115,7 +115,7 @@ impl Camera {
     }
 
     fn on_moving_main(&mut self, delta: DVector2) {
-        self.camera_state.move_vel += delta / 400.0;
+        self.camera_state.move_vel += delta / 300.0;
     }
 
     pub fn cursor_to_pos(&self, main_pos: DPoint2, pos: DPoint3) -> DPoint2 {
