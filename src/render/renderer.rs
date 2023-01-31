@@ -9,7 +9,7 @@ use hexagon_tiles::point::point;
 use hexagon_tiles::traits::HexRound;
 use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferInheritanceInfo, CommandBufferUsage, RenderPassBeginInfo, SubpassContents};
-use vulkano::command_buffer::allocator::{StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo};
+use vulkano::command_buffer::allocator::{StandardCommandBufferAllocator};
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::format::ClearValue;
@@ -45,6 +45,9 @@ pub struct Renderer {
     framebuffers: Vec<Arc<Framebuffer>>,
     previous_frame_end: Option<Box<dyn GpuFuture + Send + Sync>>,
 
+    command_allocator: StandardCommandBufferAllocator,
+    descriptor_allocator: StandardDescriptorSetAllocator,
+
     color_image: Arc<AttachmentImage>,
     depth_buffer: Arc<AttachmentImage>,
     depth_buffer_gui: Arc<AttachmentImage>,
@@ -61,6 +64,9 @@ impl Renderer {
         pipeline: Arc<GraphicsPipeline>,
         swapchain: Arc<Swapchain>,
         framebuffers: Vec<Arc<Framebuffer>>,
+
+        command_allocator: StandardCommandBufferAllocator,
+        descriptor_allocator: StandardDescriptorSetAllocator,
 
         color_image: Arc<AttachmentImage>,
         depth_buffer: Arc<AttachmentImage>,
@@ -82,6 +88,8 @@ impl Renderer {
             swapchain,
             framebuffers,
 
+            command_allocator,
+            descriptor_allocator,
 
             color_image,
             depth_buffer,
@@ -179,6 +187,8 @@ impl Renderer {
             return;
         }
 
+        self.previous_frame_end.as_mut().unwrap().cleanup_finished();
+
         let allocator = FastMemoryAllocator::new_default(self.gpu.device.clone());
 
         self.gpu.resize_image_with_samples(
@@ -203,7 +213,6 @@ impl Renderer {
             &mut self.recreate_swapchain
         );
 
-        self.previous_frame_end.as_mut().unwrap().cleanup_finished();
 
         if self.recreate_swapchain {
             self.gpu.recreate_swapchain(dimensions, self.color_image.clone(), self.depth_buffer.clone(), self.depth_buffer_gui.clone(), &mut self.swapchain, &mut self.framebuffers, &mut self.recreate_swapchain);
@@ -222,15 +231,8 @@ impl Renderer {
         if suboptimal { self.recreate_swapchain = true; }
         let image_num = image_num as usize;
 
-        let command_allocator = StandardCommandBufferAllocator::new(
-            self.gpu.device.clone(),
-            StandardCommandBufferAllocatorCreateInfo {
-                ..Default::default()
-            }
-        );
-
         let mut builder = AutoCommandBufferBuilder::primary(
-            &command_allocator,
+            &self.command_allocator,
             self.gpu.queue.queue_family_index(),
             CommandBufferUsage::OneTimeSubmit,
         ).unwrap();
@@ -251,7 +253,7 @@ impl Renderer {
 
 
         let mut game_builder = AutoCommandBufferBuilder::secondary(
-            &command_allocator,
+            &self.command_allocator,
             self.gpu.queue.queue_family_index(),
             CommandBufferUsage::OneTimeSubmit,
             CommandBufferInheritanceInfo {
@@ -273,10 +275,8 @@ impl Renderer {
 
         let ubo_layout = self.pipeline.layout().set_layouts()[0].clone();
 
-        let descriptor_allocator = StandardDescriptorSetAllocator::new(self.gpu.device.clone());
-
         let ubo_set = PersistentDescriptorSet::new(
-            &descriptor_allocator,
+            &self.descriptor_allocator,
             ubo_layout.clone(),
             [WriteDescriptorSet::buffer(
                 0,
@@ -313,7 +313,7 @@ impl Renderer {
             *self.gui_uniform_buffer.write().unwrap() = ubo;
 
             let gui_ubo_set = PersistentDescriptorSet::new(
-                &descriptor_allocator,
+                &self.descriptor_allocator,
                 ubo_layout.clone(),
                 [WriteDescriptorSet::buffer(
                     0,
@@ -322,7 +322,7 @@ impl Renderer {
             ).unwrap();
 
             let mut gui_builder = AutoCommandBufferBuilder::secondary(
-                &command_allocator,
+                &self.command_allocator,
                 self.gpu.queue.queue_family_index(),
                 CommandBufferUsage::OneTimeSubmit,
                 CommandBufferInheritanceInfo {

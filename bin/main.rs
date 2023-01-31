@@ -18,7 +18,9 @@ use riker::actor::ActorRef;
 use riker::actors::{ActorRefFactory, SystemBuilder, Tell, Timer};
 use riker_patterns::ask::ask;
 use vulkano::buffer::BufferUsage;
-use vulkano::command_buffer::PrimaryCommandBufferAbstract;
+use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryCommandBufferAbstract};
+use vulkano::command_buffer::allocator::{StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo};
+use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::device::{Device, DeviceCreateInfo, DeviceExtensions, Features, QueueCreateInfo};
 use vulkano::device::physical::PhysicalDeviceType;
 use vulkano::format::Format;
@@ -165,8 +167,9 @@ fn main() {
     // --- physical device ---
     let device_extensions = DeviceExtensions {
         khr_swapchain: true,
-        khr_depth_stencil_resolve: true,
-        ..DeviceExtensions::empty()
+        khr_dedicated_allocation: true,
+        khr_get_memory_requirements2: true,
+        ..DeviceExtensions::default()
     };
 
     let (physical_device, queue_family_index) = instance
@@ -298,7 +301,18 @@ fn main() {
     // --- buffers ---
     let allocator = StandardMemoryAllocator::new_default(device.clone());
 
-    let mut command_buffer_builder = gpu::command_buffer_builder(device.clone(), queue.clone());
+    let command_allocator = StandardCommandBufferAllocator::new(
+        device.clone(),
+        StandardCommandBufferAllocatorCreateInfo {
+            ..Default::default()
+        }
+    );
+
+    let mut command_buffer_builder = AutoCommandBufferBuilder::primary(
+        &command_allocator,
+        queue.queue_family_index(),
+        CommandBufferUsage::OneTimeSubmit,
+    ).unwrap();
 
     let vertex_buffer = gpu::immutable_buffer(
         &allocator,
@@ -442,13 +456,19 @@ fn main() {
     let mut camera = Camera::new(gpu::window_size(&gpu.window));
     let mut renderer = Renderer::new(
         init_data.clone(),
+
         gpu.clone(),
         game_pipeline,
         swapchain,
         framebuffers,
+
+        command_allocator,
+        StandardDescriptorSetAllocator::new(gpu.device.clone()),
+
         color_image,
         depth_buffer,
         depth_buffer_gui,
+
         uniform_buffer,
         gui_uniform_buffer,
     );

@@ -4,8 +4,7 @@ use vulkano::{buffer::{BufferContents, BufferUsage, CpuAccessibleBuffer}, comman
     Device, Queue,
 }, image::{AttachmentImage, SwapchainImage, view::ImageView}, render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass}, swapchain::Surface, sync, sync::GpuFuture};
 use vulkano::buffer::DeviceLocalBuffer;
-use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryAutoCommandBuffer};
-use vulkano::command_buffer::allocator::{StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo};
+use vulkano::command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer};
 use vulkano::image::{ImageAccess, SampleCount};
 use vulkano::memory::allocator::MemoryAllocator;
 use vulkano::pipeline::graphics::viewport::Viewport;
@@ -150,21 +149,6 @@ pub fn viewport_with_dims(dimensions: [Num; 2]) -> Viewport {
         dimensions,
         depth_range: 0.0..1.0,
     }
-}
-
-pub fn command_buffer_builder(device: Arc<Device>, queue: Arc<Queue>) -> AutoCommandBufferBuilder<PrimaryAutoCommandBuffer> {
-    let command_allocator = StandardCommandBufferAllocator::new(
-        device.clone(),
-        StandardCommandBufferAllocatorCreateInfo {
-            ..Default::default()
-        }
-    );
-
-    AutoCommandBufferBuilder::primary(
-        &command_allocator,
-        queue.queue_family_index(),
-        CommandBufferUsage::OneTimeSubmit,
-    ).unwrap()
 }
 
 pub fn indirect_buffer(
