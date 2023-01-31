@@ -1,0 +1,8 @@
+{
+    "id": "l_splitter",
+    "model": "l_splitter",
+    "resource_type": {
+        "type": "Transfer",
+        "param": "l_splitter"
+    }
+}

@@ -49,6 +49,7 @@ pub enum TileMsg {
     Transaction {
         item: Item,
         tick_count: usize,
+        source_type: ResourceType,
         direction: Hex<TileUnit>,
         init_data: Arc<InitData>,
     },
@@ -60,11 +61,15 @@ pub enum TileMsg {
     GetData,
 }
 
-const SPLITTER: IdRaw = id_static("automancy", "splitter");
+const L_SPLITTER: IdRaw = id_static("automancy", "l_splitter");
+const L_SPLITTER_A: Hex<TileUnit> = Hex::<TileUnit>::NEIGHBORS[1];
+const L_SPLITTER_B: Hex<TileUnit> = Hex::<TileUnit>::NEIGHBORS[3];
+const L_SPLITTER_C: Hex<TileUnit> = Hex::<TileUnit>::NEIGHBORS[5];
 
-const SPLITTER_A: Hex<TileUnit> = Hex::<TileUnit>::NEIGHBORS[0];
-const SPLITTER_B: Hex<TileUnit> = Hex::<TileUnit>::NEIGHBORS[2];
-const SPLITTER_C: Hex<TileUnit> = Hex::<TileUnit>::NEIGHBORS[4];
+const R_SPLITTER: IdRaw = id_static("automancy", "r_splitter");
+const R_SPLITTER_A: Hex<TileUnit> = Hex::<TileUnit>::NEIGHBORS[0];
+const R_SPLITTER_B: Hex<TileUnit> = Hex::<TileUnit>::NEIGHBORS[2];
+const R_SPLITTER_C: Hex<TileUnit> = Hex::<TileUnit>::NEIGHBORS[4];
 
 impl Actor for Tile {
     type Msg = TileMsg;
@@ -89,31 +94,35 @@ impl Actor for Tile {
 
                 match resource_type {
                     ResourceType::Machine(_) => {
-                        self.machine_tell(myself, init_data, tick_count);
+                        self.machine_tell(myself, init_data, resource_type, tick_count);
                     }
                     _ => {
                     }
                 }
             }
-            TileMsg::Transaction { item, tick_count, direction, init_data } => {
+            TileMsg::Transaction { item, tick_count, source_type, direction, init_data } => {
                 if let Some(sender) = sender {
                     let resource_type = init_data.resource_man.resources[&self.id].resource_type.clone();
 
-                    match resource_type {
+                    match &resource_type {
                         ResourceType::Machine(_) => {
                             self.machine_result(myself, sender, init_data, item);
                         }
                         ResourceType::Transfer(id) => {
-                            if id == SPLITTER {
+                            if let ResourceType::Transfer(_) = source_type {
+                                return;
+                            }
+
+                            if id == &L_SPLITTER {
                                 let (a, b) = match -direction {
-                                    SPLITTER_A => {
-                                        (SPLITTER_B, SPLITTER_C)
+                                    L_SPLITTER_A => {
+                                        (L_SPLITTER_B, L_SPLITTER_C)
                                     }
-                                    SPLITTER_B => {
-                                        (SPLITTER_A, SPLITTER_C)
+                                    L_SPLITTER_B => {
+                                        (L_SPLITTER_A, L_SPLITTER_C)
                                     }
-                                    SPLITTER_C => {
-                                        (SPLITTER_A, SPLITTER_B)
+                                    L_SPLITTER_C => {
+                                        (L_SPLITTER_A, L_SPLITTER_B)
                                     }
                                     _ => {
                                         return;
@@ -128,7 +137,32 @@ impl Actor for Tile {
 
                                 let coord = TileCoord(self.coord.0 + target);
 
-                                self.game.try_tell(GameMsg::SendMsgToTile(coord, TileMsg::Transaction { item, tick_count, direction: target, init_data }), Some(sender)).unwrap();
+                                self.game.try_tell(GameMsg::SendMsgToTile(coord, TileMsg::Transaction { item, tick_count, source_type: resource_type.clone(), direction: target, init_data }), Some(sender)).unwrap();
+                            } else if id == &R_SPLITTER {
+                                let (a, b) = match -direction {
+                                    R_SPLITTER_A => {
+                                        (R_SPLITTER_B, R_SPLITTER_C)
+                                    }
+                                    R_SPLITTER_B => {
+                                        (R_SPLITTER_A, R_SPLITTER_C)
+                                    }
+                                    R_SPLITTER_C => {
+                                        (R_SPLITTER_A, R_SPLITTER_B)
+                                    }
+                                    _ => {
+                                        return;
+                                    }
+                                };
+
+                                let target = if tick_count % 2 == 0 {
+                                    a
+                                } else {
+                                    b
+                                };
+
+                                let coord = TileCoord(self.coord.0 + target);
+
+                                self.game.try_tell(GameMsg::SendMsgToTile(coord, TileMsg::Transaction { item, tick_count, source_type: resource_type.clone(), direction: target, init_data }), Some(sender)).unwrap();
                             }
                         }
                         ResourceType::Void => {
@@ -185,7 +219,7 @@ impl ActorFactoryArgs<(BasicActorRef, Id, TileCoord, Data)> for Tile {
 }
 
 impl Tile {
-    fn machine_tell(&mut self, myself: Option<BasicActorRef>, init_data: Arc<InitData>, tick_count: usize) {
+    fn machine_tell(&mut self, myself: Option<BasicActorRef>, init_data: Arc<InitData>, resource_type: ResourceType, tick_count: usize) {
         if let Some(direction) = self.target_direction {
             let coord = TileCoord(self.coord.0 + direction);
 
@@ -202,12 +236,12 @@ impl Tile {
                         self.data.0.insert(id, stored - input.amount);
 
                         if let Some(output) = output {
-                            self.send_tile_msg(myself, coord, TileMsg::Transaction { item: output, tick_count, direction, init_data });
+                            self.send_tile_msg(myself, coord, TileMsg::Transaction { item: output, tick_count, source_type: resource_type.clone(), direction, init_data });
                         }
                     }
                 } else {
                     if let Some(output) = output {
-                        self.send_tile_msg(myself, coord, TileMsg::Transaction { item: output, tick_count, direction, init_data });
+                        self.send_tile_msg(myself, coord, TileMsg::Transaction { item: output, tick_count, source_type: resource_type.clone(), direction, init_data });
                     }
                 }
             }

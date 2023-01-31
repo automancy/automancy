@@ -9,7 +9,8 @@
     },
     "tiles": {
         "none": "None",
-        "splitter": "Splitter",
+        "r_splitter": "Right Splitter",
+        "l_splitter": "Left Splitter",
         "void": "Resource® Void™",
         "extractor": "Extractor",
         "refinery": "Refinery"
