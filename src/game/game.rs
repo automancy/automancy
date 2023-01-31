@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use riker::actor::{Actor, ActorRef, BasicActorRef};
+use riker::actor::{Actor, BasicActorRef};
 use riker::actors::{ActorFactoryArgs, ActorRefFactory, Context, Sender, Strategy, Tell};
 use uuid::Uuid;
 
@@ -14,8 +14,6 @@ use crate::util::init::InitData;
 
 #[derive(Debug, Clone)]
 pub struct Ticked;
-
-
 
 #[derive(Debug, Clone, Copy)]
 pub struct GameState {

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use egui::NumExt;
 use hexagon_tiles::hex::{Hex, hex};
 use hexagon_tiles::traits::HexDirection;
-use riker::actor::{ActorRef, Context, Sender};
+use riker::actor::{Context, Sender};
 use riker::actors::{Actor, ActorFactoryArgs, BasicActorRef};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::{SeqAccess, Visitor};
