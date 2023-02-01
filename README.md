@@ -10,4 +10,4 @@ Game's WIP.
 
 Tech used: Rust, Vulkan (via Vulkano), Riker-rs, egui
 
-Lead dev(s): Madeline Sparkles 
+Lead dev(s): Madeline Sparkles, Mae Rosaline
