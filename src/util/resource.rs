@@ -212,6 +212,18 @@ impl ResourceManager {
         }
     }
 
+    fn load_tile(&mut self, file: &Path) -> Option<()> {
+        let extension = file.extension().and_then(OsStr::to_str);
+
+        if let Some("json") = extension {
+            log::info!("loading resource at {:?}", file);
+
+            let resource: ResourceRaw = serde_json::from_str(&read_to_string(&file).unwrap()).unwrap();
+
+            self.register_resource(resource);
+        }
+        Some(())
+    }
     pub fn load_translates(&mut self, dir: &Path) -> Option<()> {
         let translates = dir.join("translates");
         let translates = read_dir(translates).ok()?;
@@ -263,6 +275,21 @@ impl ResourceManager {
         Some(())
     }
 
+    pub fn load_tiles(&mut self, dir: &Path) -> Option<()> {
+        let tiles = dir.join("tiles");
+        let tiles = read_dir(tiles).ok()?;
+
+        tiles
+            .into_iter()
+            .flatten()
+            .map(|v |v.path())
+            .filter(|v| v.extension() == Some(OsStr::new(JSON_EXT)))
+            .for_each(|tile| {
+                self.load_tile(&tile);
+            });
+
+        Some(())
+    }
     pub fn register_resource(&mut self, resource: ResourceRaw) {
         let id = resource.id.to_id(&mut self.interner);
 

@@ -91,22 +91,7 @@ fn load_resources() -> ResourceManager {
             resource_man.load_models(&dir);
             resource_man.load_scripts(&dir);
             resource_man.load_translates(&dir);
-
-            fs::read_dir(&dir.join(Path::new("tiles")))
-                .unwrap()
-                .flatten()
-                .map(|v |v.path())
-                .for_each(|path| {
-                    let extension = path.extension().and_then(OsStr::to_str);
-
-                    if let Some("json") = extension {
-                        log::info!("loading resource at {:?}", path);
-
-                        let resource: ResourceRaw = serde_json::from_str(&read_to_string(&path).unwrap()).unwrap();
-
-                        resource_man.register_resource(resource);
-                    }
-                })
+            resource_man.load_tiles(&dir);
         });
 
     resource_man
