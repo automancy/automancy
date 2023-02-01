@@ -1,5 +1,5 @@
 [package]
-authors = ["Madeline Sparkles <sparkles.system@gmail.com>"]
+authors = ["Madeline Sparkles <sparkles.system@gmail.com>", "Mae Rosaline <mae@maestoso.online>"]
 name = "automancy"
 version = "0.1.0"
 edition = "2021"
@@ -28,6 +28,7 @@ egui = "0.20.1"
 string-interner = "0.14.0"
 fuse-rust = "0.3.1"
 hexagon_tiles = { git = "https://github.com/Mg138/hexagon-tiles" }
+discord-rich-presence = "0.2.3"
 bytemuck = "1.8.0"
 flexstr = { version = "0.9.2", features = ["serde", "fast_format"] }
 cgmath = "0.18.0"
@@ -51,4 +52,3 @@ futures = "0.3.25"
 
 riker-patterns = "0.4.2"
 riker = "0.4.2"
-discord-rich-presence = "0.2.3"
