@@ -82,6 +82,161 @@ pub mod gui_frag_shader {
     }
 }
 
+pub fn create_game_pipeline(device: Arc<Device>, subpass: &Subpass) -> Arc<GraphicsPipeline> {
+    let vs = vert_shader::load(device.clone()).unwrap();
+    let fs = frag_shader::load(device.clone()).unwrap();
+
+    let pipeline = GraphicsPipeline::start()
+        .vertex_shader(vs.entry_point("main").unwrap(), ())
+        .vertex_input_state(
+            BuffersDefinition::new()
+                .vertex::<Vertex>()
+                .instance::<InstanceData>(),
+        )
+        .input_assembly_state(InputAssemblyState::new().topology(PrimitiveTopology::TriangleList))
+        .fragment_shader(fs.entry_point("main").unwrap(), ())
+        .viewport_state(ViewportState::viewport_dynamic_scissor_irrelevant())
+        .rasterization_state(RasterizationState::new())
+        .depth_stencil_state(DepthStencilState::simple_depth_test())
+        .multisample_state(MultisampleState {
+            rasterization_samples: Sample4,
+            ..Default::default()
+        })
+        .render_pass(subpass.clone());
+
+    pipeline.build(device.clone()).unwrap()
+}
+
+pub fn create_gui_pipeline(device: Arc<Device>, subpass: &Subpass) -> Arc<GraphicsPipeline> {
+    let vs_gui = gui_vert_shader::load(device.clone()).unwrap();
+    let fs_gui = gui_frag_shader::load(device.clone()).unwrap();
+
+    let pipeline = GraphicsPipeline::start()
+        .vertex_shader(vs_gui.entry_point("main").unwrap(), ())
+        .vertex_input_state(BuffersDefinition::new().vertex::<Vertex>())
+        .input_assembly_state(InputAssemblyState::new().topology(PrimitiveTopology::TriangleList))
+        .fragment_shader(fs_gui.entry_point("main").unwrap(), ())
+        .viewport_state(ViewportState::viewport_dynamic_scissor_dynamic(1))
+        .rasterization_state(RasterizationState::new())
+        .depth_stencil_state(DepthStencilState::simple_depth_test())
+        .multisample_state(MultisampleState {
+            rasterization_samples: Sample4,
+            ..Default::default()
+        })
+        .render_pass(subpass.clone());
+
+    pipeline.build(device.clone()).unwrap()
+}
+
+pub fn create_instance() -> Arc<Instance> {
+    let library = VulkanLibrary::new().expect("no local Vulkan library");
+    let required_extensions = vulkano_win::required_extensions(&library);
+
+    Instance::new(
+        library,
+        InstanceCreateInfo {
+            enabled_extensions: required_extensions,
+            enumerate_portability: true,
+            ..Default::default()
+        },
+    )
+    .expect("failed to create instance")
+}
+
+pub fn create_window(icon: Icon, event_loop: &EventLoop<()>) -> Arc<Window> {
+    Arc::new(
+        WindowBuilder::new()
+            .with_title("automancy")
+            .with_window_icon(Some(icon))
+            .build(event_loop)
+            .expect("could not build window"),
+    )
+}
+
+pub fn create_surface(window: Arc<Window>, instance: Arc<Instance>) -> Arc<Surface> {
+    create_surface_from_winit(window, instance.clone()).expect("could not create surface")
+}
+
+pub fn get_physical_device(
+    instance: Arc<Instance>,
+    surface: Arc<Surface>,
+    device_extensions: &DeviceExtensions,
+) -> (Arc<PhysicalDevice>, u32) {
+    instance
+        .enumerate_physical_devices()
+        .expect("could not enumerate devices")
+        .filter(|p| p.supported_extensions().contains(device_extensions))
+        .filter_map(|p| {
+            p.queue_family_properties()
+                .iter()
+                .enumerate()
+                .position(|(i, q)| {
+                    q.queue_flags.graphics && p.surface_support(i as u32, &surface).unwrap_or(false)
+                })
+                .map(|q| (p, q as u32))
+        })
+        .min_by_key(|(p, _)| match p.properties().device_type {
+            PhysicalDeviceType::DiscreteGpu => 0,
+            PhysicalDeviceType::IntegratedGpu => 1,
+            PhysicalDeviceType::VirtualGpu => 2,
+            PhysicalDeviceType::Cpu => 3,
+            _ => 4,
+        })
+        .expect("no devices available")
+}
+
+pub fn get_logical_device(
+    physical_device: Arc<PhysicalDevice>,
+    queue_family_index: u32,
+    device_extensions: DeviceExtensions,
+) -> (Arc<Device>, impl ExactSizeIterator<Item = Arc<Queue>>) {
+    Device::new(
+        physical_device.clone(),
+        DeviceCreateInfo {
+            queue_create_infos: vec![QueueCreateInfo {
+                queue_family_index,
+                ..Default::default()
+            }],
+            enabled_extensions: device_extensions,
+            enabled_features: Features {
+                multi_draw_indirect: true,
+                fill_mode_non_solid: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    )
+    .expect("failed to create device")
+}
+
+fn get_window_size(window: &Window) -> LogicalSize<u32> {
+    window.inner_size().to_logical(1.0)
+}
+
+pub fn window_size(window: &Window) -> (Double, Double) {
+    get_window_size(window).cast::<Double>().into()
+}
+
+pub fn window_size_u32(window: &Window) -> [u32; 2] {
+    let size = get_window_size(window);
+
+    [size.width, size.height]
+}
+
+pub fn viewport(window: &Window) -> Viewport {
+    let (width, height) = window_size(window);
+
+    viewport_with_dims([width as Num, height as Num])
+}
+
+pub fn viewport_with_dims(dimensions: [Num; 2]) -> Viewport {
+    Viewport {
+        origin: [0.0, 0.0],
+        dimensions,
+        depth_range: 0.0..1.0,
+    }
+}
+
 pub fn immutable_buffer<T, D, W>(
     allocator: &(impl MemoryAllocator + ?Sized),
     data: D,
@@ -163,34 +318,6 @@ pub fn framebuffers(
         .collect()
 }
 
-fn get_window_size(window: &Window) -> LogicalSize<u32> {
-    window.inner_size().to_logical(1.0) // ?
-}
-
-pub fn window_size(window: &Window) -> (Double, Double) {
-    get_window_size(window).cast::<Double>().into()
-}
-
-pub fn window_size_u32(window: &Window) -> [u32; 2] {
-    let size = get_window_size(window);
-
-    [size.width, size.height]
-}
-
-pub fn viewport(window: &Window) -> Viewport {
-    let (width, height) = window_size(window);
-
-    viewport_with_dims([width as Num, height as Num])
-}
-
-pub fn viewport_with_dims(dimensions: [Num; 2]) -> Viewport {
-    Viewport {
-        origin: [0.0, 0.0],
-        dimensions,
-        depth_range: 0.0..1.0,
-    }
-}
-
 pub fn indirect_buffer(
     allocator: &(impl MemoryAllocator + ?Sized),
     init_data: &InitData,
@@ -235,134 +362,6 @@ pub fn indirect_buffer(
     );
 
     (instance_buffer, indirect_commands)
-}
-
-impl Gpu {
-    pub fn resize_images(
-        &mut self,
-        allocator: &impl MemoryAllocator,
-        dimensions: [u32; 2],
-        recreate_swapchain: &mut bool,
-    ) {
-        Self::resize_image_with_samples(
-            dimensions,
-            allocator,
-            Sample4,
-            &mut self.alloc.color_image,
-            recreate_swapchain,
-        );
-        Self::resize_image_with_samples(
-            dimensions,
-            allocator,
-            Sample4,
-            &mut self.alloc.game_depth_buffer,
-            recreate_swapchain,
-        );
-        Self::resize_image_with_samples(
-            dimensions,
-            allocator,
-            Sample4,
-            &mut self.alloc.gui_depth_buffer,
-            recreate_swapchain,
-        );
-    }
-
-    fn resize_image_with_samples(
-        size: [u32; 2],
-        allocator: &impl MemoryAllocator,
-        sample_count: SampleCount,
-        image: &mut Arc<AttachmentImage>,
-        recreate_swapchain: &mut bool,
-    ) {
-        if size != image.dimensions().width_height() {
-            *recreate_swapchain = true;
-
-            *image = AttachmentImage::multisampled_with_usage(
-                allocator,
-                size,
-                sample_count,
-                image.format(),
-                *image.usage(),
-            )
-            .unwrap();
-        }
-    }
-
-    fn resize_image(
-        size: [u32; 2],
-        allocator: &impl MemoryAllocator,
-        image: &mut Arc<AttachmentImage>,
-        recreate_swapchain: &mut bool,
-    ) {
-        if size != image.dimensions().width_height() {
-            *recreate_swapchain = true;
-
-            *image = AttachmentImage::with_usage(allocator, size, image.format(), *image.usage())
-                .unwrap();
-        }
-    }
-
-    pub fn recreate_swapchain(&mut self, size: [u32; 2], recreate_swapchain: &mut bool) {
-        let (new_swapchain, new_images) = {
-            match self.alloc.swapchain.recreate(SwapchainCreateInfo {
-                image_extent: size,
-                ..self.alloc.swapchain.create_info()
-            }) {
-                Ok(r) => r,
-                Err(SwapchainCreationError::ImageExtentNotSupported { .. }) => return,
-                Err(e) => panic!("failed to recreate swapchain: {:?}", e),
-            }
-        };
-
-        self.alloc.swapchain = new_swapchain;
-        self.framebuffers = framebuffers(
-            &new_images,
-            self.render_pass.clone(),
-            self.alloc.color_image.clone(),
-            self.alloc.game_depth_buffer.clone(),
-            self.alloc.gui_depth_buffer.clone(),
-        );
-        *recreate_swapchain = false;
-    }
-
-    pub fn commit_commands(
-        &self,
-        image_num: usize,
-        acquire_future: SwapchainAcquireFuture,
-        command_buffer: PrimaryAutoCommandBuffer,
-        previous_frame_end: &mut Option<Box<dyn GpuFuture + Send + Sync>>,
-        recreate_swapchain: &mut bool,
-    ) {
-        let future = previous_frame_end
-            .take()
-            .unwrap()
-            .join(acquire_future)
-            .then_execute(self.queue.clone(), command_buffer)
-            .unwrap()
-            .then_swapchain_present(
-                self.queue.clone(),
-                SwapchainPresentInfo::swapchain_image_index(
-                    self.alloc.swapchain.clone(),
-                    image_num as u32,
-                ),
-            )
-            .then_signal_fence_and_flush();
-
-        match future {
-            Ok(future) => {
-                future.wait(None).unwrap();
-                *previous_frame_end = Some(future.boxed_send_sync());
-            }
-            Err(FlushError::OutOfDate) => {
-                *recreate_swapchain = true;
-                *previous_frame_end = Some(sync::now(self.device.clone()).boxed_send_sync());
-            }
-            Err(e) => {
-                log::error!("failed to flush future: {:?}", e);
-                *previous_frame_end = Some(sync::now(self.device.clone()).boxed_send_sync());
-            }
-        }
-    }
 }
 
 pub fn indirect_instance(
@@ -586,133 +585,6 @@ impl RenderAlloc {
     }
 }
 
-pub fn create_game_pipeline(device: Arc<Device>, subpass: &Subpass) -> Arc<GraphicsPipeline> {
-    let vs = vert_shader::load(device.clone()).unwrap();
-    let fs = frag_shader::load(device.clone()).unwrap();
-
-    let pipeline = GraphicsPipeline::start()
-        .vertex_shader(vs.entry_point("main").unwrap(), ())
-        .vertex_input_state(
-            BuffersDefinition::new()
-                .vertex::<Vertex>()
-                .instance::<InstanceData>(),
-        )
-        .input_assembly_state(InputAssemblyState::new().topology(PrimitiveTopology::TriangleList))
-        .fragment_shader(fs.entry_point("main").unwrap(), ())
-        .viewport_state(ViewportState::viewport_dynamic_scissor_irrelevant())
-        .rasterization_state(RasterizationState::new())
-        .depth_stencil_state(DepthStencilState::simple_depth_test())
-        .multisample_state(MultisampleState {
-            rasterization_samples: Sample4,
-            ..Default::default()
-        })
-        .render_pass(subpass.clone());
-
-    pipeline.build(device.clone()).unwrap()
-}
-
-pub fn create_gui_pipeline(device: Arc<Device>, subpass: &Subpass) -> Arc<GraphicsPipeline> {
-    let vs_gui = gui_vert_shader::load(device.clone()).unwrap();
-    let fs_gui = gui_frag_shader::load(device.clone()).unwrap();
-
-    let pipeline = GraphicsPipeline::start()
-        .vertex_shader(vs_gui.entry_point("main").unwrap(), ())
-        .vertex_input_state(BuffersDefinition::new().vertex::<Vertex>())
-        .input_assembly_state(InputAssemblyState::new().topology(PrimitiveTopology::TriangleList))
-        .fragment_shader(fs_gui.entry_point("main").unwrap(), ())
-        .viewport_state(ViewportState::viewport_dynamic_scissor_dynamic(1))
-        .rasterization_state(RasterizationState::new())
-        .depth_stencil_state(DepthStencilState::simple_depth_test())
-        .multisample_state(MultisampleState {
-            rasterization_samples: Sample4,
-            ..Default::default()
-        })
-        .render_pass(subpass.clone());
-
-    pipeline.build(device.clone()).unwrap()
-}
-
-pub fn create_instance() -> Arc<Instance> {
-    let library = VulkanLibrary::new().expect("no local Vulkan library");
-    let required_extensions = vulkano_win::required_extensions(&library);
-
-    Instance::new(
-        library,
-        InstanceCreateInfo {
-            enabled_extensions: required_extensions,
-            enumerate_portability: true,
-            ..Default::default()
-        },
-    )
-    .expect("failed to create instance")
-}
-
-pub fn create_window(icon: Icon, event_loop: &EventLoop<()>) -> Arc<Window> {
-    Arc::new(
-        WindowBuilder::new()
-            .with_title("automancy")
-            .with_window_icon(Some(icon))
-            .build(event_loop)
-            .expect("could not build window"),
-    )
-}
-
-pub fn create_surface(window: Arc<Window>, instance: Arc<Instance>) -> Arc<Surface> {
-    create_surface_from_winit(window, instance.clone()).expect("could not create surface")
-}
-
-pub fn get_physical_device(
-    instance: Arc<Instance>,
-    surface: Arc<Surface>,
-    device_extensions: &DeviceExtensions,
-) -> (Arc<PhysicalDevice>, u32) {
-    instance
-        .enumerate_physical_devices()
-        .expect("could not enumerate devices")
-        .filter(|p| p.supported_extensions().contains(device_extensions))
-        .filter_map(|p| {
-            p.queue_family_properties()
-                .iter()
-                .enumerate()
-                .position(|(i, q)| {
-                    q.queue_flags.graphics && p.surface_support(i as u32, &surface).unwrap_or(false)
-                })
-                .map(|q| (p, q as u32))
-        })
-        .min_by_key(|(p, _)| match p.properties().device_type {
-            PhysicalDeviceType::DiscreteGpu => 0,
-            PhysicalDeviceType::IntegratedGpu => 1,
-            PhysicalDeviceType::VirtualGpu => 2,
-            PhysicalDeviceType::Cpu => 3,
-            _ => 4,
-        })
-        .expect("no devices available")
-}
-
-pub fn get_logical_device(
-    physical_device: Arc<PhysicalDevice>,
-    queue_family_index: u32,
-    device_extensions: DeviceExtensions,
-) -> (Arc<Device>, impl ExactSizeIterator<Item = Arc<Queue>>) {
-    Device::new(
-        physical_device.clone(),
-        DeviceCreateInfo {
-            queue_create_infos: vec![QueueCreateInfo {
-                queue_family_index,
-                ..Default::default()
-            }],
-            enabled_extensions: device_extensions,
-            enabled_features: Features {
-                multi_draw_indirect: true,
-                fill_mode_non_solid: true,
-                ..Default::default()
-            },
-            ..Default::default()
-        },
-    )
-    .expect("failed to create device")
-}
-
 pub struct Gpu {
     pub device: Arc<Device>,
     pub queue: Arc<Queue>,
@@ -731,6 +603,132 @@ pub struct Gpu {
 }
 
 impl Gpu {
+    pub fn resize_images(
+        &mut self,
+        allocator: &impl MemoryAllocator,
+        dimensions: [u32; 2],
+        recreate_swapchain: &mut bool,
+    ) {
+        Self::resize_image_with_samples(
+            dimensions,
+            allocator,
+            Sample4,
+            &mut self.alloc.color_image,
+            recreate_swapchain,
+        );
+        Self::resize_image_with_samples(
+            dimensions,
+            allocator,
+            Sample4,
+            &mut self.alloc.game_depth_buffer,
+            recreate_swapchain,
+        );
+        Self::resize_image_with_samples(
+            dimensions,
+            allocator,
+            Sample4,
+            &mut self.alloc.gui_depth_buffer,
+            recreate_swapchain,
+        );
+    }
+
+    fn resize_image_with_samples(
+        size: [u32; 2],
+        allocator: &impl MemoryAllocator,
+        sample_count: SampleCount,
+        image: &mut Arc<AttachmentImage>,
+        recreate_swapchain: &mut bool,
+    ) {
+        if size != image.dimensions().width_height() {
+            *recreate_swapchain = true;
+
+            *image = AttachmentImage::multisampled_with_usage(
+                allocator,
+                size,
+                sample_count,
+                image.format(),
+                *image.usage(),
+            )
+            .unwrap();
+        }
+    }
+
+    fn resize_image(
+        size: [u32; 2],
+        allocator: &impl MemoryAllocator,
+        image: &mut Arc<AttachmentImage>,
+        recreate_swapchain: &mut bool,
+    ) {
+        if size != image.dimensions().width_height() {
+            *recreate_swapchain = true;
+
+            *image = AttachmentImage::with_usage(allocator, size, image.format(), *image.usage())
+                .unwrap();
+        }
+    }
+
+    pub fn recreate_swapchain(&mut self, size: [u32; 2], recreate_swapchain: &mut bool) {
+        let (new_swapchain, new_images) = {
+            match self.alloc.swapchain.recreate(SwapchainCreateInfo {
+                image_extent: size,
+                ..self.alloc.swapchain.create_info()
+            }) {
+                Ok(r) => r,
+                Err(SwapchainCreationError::ImageExtentNotSupported { .. }) => return,
+                Err(e) => panic!("failed to recreate swapchain: {:?}", e),
+            }
+        };
+
+        self.alloc.swapchain = new_swapchain;
+        self.framebuffers = framebuffers(
+            &new_images,
+            self.render_pass.clone(),
+            self.alloc.color_image.clone(),
+            self.alloc.game_depth_buffer.clone(),
+            self.alloc.gui_depth_buffer.clone(),
+        );
+        *recreate_swapchain = false;
+    }
+
+    pub fn commit_commands(
+        &self,
+        image_num: usize,
+        acquire_future: SwapchainAcquireFuture,
+        command_buffer: PrimaryAutoCommandBuffer,
+        previous_frame_end: &mut Option<Box<dyn GpuFuture + Send + Sync>>,
+        recreate_swapchain: &mut bool,
+    ) {
+        let future = previous_frame_end
+            .take()
+            .unwrap()
+            .join(acquire_future)
+            .then_execute(self.queue.clone(), command_buffer)
+            .unwrap()
+            .then_swapchain_present(
+                self.queue.clone(),
+                SwapchainPresentInfo::swapchain_image_index(
+                    self.alloc.swapchain.clone(),
+                    image_num as u32,
+                ),
+            )
+            .then_signal_fence_and_flush();
+
+        match future {
+            Ok(future) => {
+                future.wait(None).unwrap();
+                *previous_frame_end = Some(future.boxed_send_sync());
+            }
+            Err(FlushError::OutOfDate) => {
+                *recreate_swapchain = true;
+                *previous_frame_end = Some(sync::now(self.device.clone()).boxed_send_sync());
+            }
+            Err(e) => {
+                log::error!("failed to flush future: {:?}", e);
+                *previous_frame_end = Some(sync::now(self.device.clone()).boxed_send_sync());
+            }
+        }
+    }
+
     fn create_render_pass(swapchain: Arc<Swapchain>, device: Arc<Device>) -> Arc<RenderPass> {
         vulkano::ordered_passes_renderpass!(
             device.clone(),
