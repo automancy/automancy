@@ -2,6 +2,7 @@
 #![feature(is_some_and)]
 
 use std::{fs, fs::File, sync::Arc};
+use std::ops::Deref;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use cgmath::{EuclideanSpace, point3};
@@ -22,10 +23,10 @@ use vulkano::buffer::BufferUsage;
 use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryCommandBufferAbstract};
 use vulkano::command_buffer::allocator::{StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo};
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
-use vulkano::device::{Device, DeviceCreateInfo, DeviceExtensions, Features, QueueCreateInfo};
-use vulkano::device::physical::PhysicalDeviceType;
+use vulkano::device::{Device, DeviceCreateInfo, DeviceExtensions, Features, Queue, QueueCreateInfo};
+use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType};
 use vulkano::format::Format;
-use vulkano::image::{AttachmentImage, ImageUsage};
+use vulkano::image::{AttachmentImage, ImageUsage, SwapchainImage};
 use vulkano::image::SampleCount::Sample4;
 use vulkano::instance::{Instance, InstanceCreateInfo};
 use vulkano::memory::allocator::StandardMemoryAllocator;
@@ -36,8 +37,8 @@ use vulkano::pipeline::graphics::rasterization::RasterizationState;
 use vulkano::pipeline::graphics::vertex_input::BuffersDefinition;
 use vulkano::pipeline::graphics::viewport::ViewportState;
 use vulkano::pipeline::GraphicsPipeline;
-use vulkano::render_pass::Subpass;
-use vulkano::swapchain::{Swapchain, SwapchainCreateInfo};
+use vulkano::render_pass::{Framebuffer, RenderPass, Subpass};
+use vulkano::swapchain::{Surface, Swapchain, SwapchainCreateInfo};
 use vulkano::sync::GpuFuture;
 use vulkano::VulkanLibrary;
 use vulkano_win::create_surface_from_winit;
@@ -70,6 +71,7 @@ use automancy::game::tile::{TileCoord, TileMsg, TileUnit};
 use automancy::render::data::{InstanceData, Vertex};
 use automancy::render::gpu::{Gpu, gui_frag_shader, gui_vert_shader};
 use automancy::render::gui;
+use automancy::render::renderer::RenderBuffers;
 use automancy::util::cg::Num;
 use automancy::util::colors::Color;
 use automancy::util::init::InitData;
@@ -79,490 +81,90 @@ pub const ASSET_LOGO: &str = "resources/automancy/branding/logo.png";
 
 pub const RESOURCE: &str = "resources";
 
-fn load_resources() -> ResourceManager {
-    let mut resource_man = ResourceManager::new();
-
-    // TODO: just use serde?
-
-    fs::read_dir(RESOURCE)
-        .unwrap()
-        .flatten()
-        .map(|v| v.path())
-        .for_each(|dir| {
-            resource_man.load_models(&dir);
-            resource_man.load_scripts(&dir);
-            resource_man.load_translates(&dir);
-            resource_man.load_tiles(&dir);
-        });
-
-    resource_man
-}
-
-fn init() -> Arc<InitData> {
-    let resource_man = load_resources();
-
-    let init_data = InitData::new(resource_man);
-
-    Arc::new(init_data)
-}
 
 fn main() {
     env_logger::init();
-
     let start_time = discord::start_time();
-
-    let mut client = discord::setup_rich_presence(start_time.clone()).ok();
-
+    let mut discord_client = discord::setup_rich_presence(start_time.clone()).ok();
     // --- resources & data ---
-    let init_data = init();
-
+    let init_data = init_resources();
     // --- instance ---
-    let library = VulkanLibrary::new().expect("no local Vulkan library");
-    let required_extensions = vulkano_win::required_extensions(&library);
-
-    let instance = Instance::new(
-        library,
-        InstanceCreateInfo {
-            enabled_extensions: required_extensions,
-            enumerate_portability: true,
-            ..Default::default()
-        }
-    ).expect("failed to create instance");
-
+    let instance = create_instance();
     // --- surface ---
-    let (bytes, width, height) = {
-        let decoder = png::Decoder::new(File::open(ASSET_LOGO).unwrap());
-
-        let mut reader = decoder.read_info().unwrap();
-
-        let mut buf = vec![0; reader.output_buffer_size()];
-        let info = reader.next_frame(&mut buf).unwrap();
-
-        (buf[..info.buffer_size()].to_vec(), info.width, info.height)
-    };
-
-    let icon = Icon::from_rgba(bytes, width, height).unwrap();
-
     let event_loop = EventLoop::new();
-
-    let window = Arc::new(
-        WindowBuilder::new()
-            .with_title("automancy")
-            .with_window_icon(Some(icon))
-            .build(&event_loop)
-            .expect("could not build window")
-    );
-
-    let surface = create_surface_from_winit(window.clone(), instance.clone()).expect("could not create surface");
-
+    let icon = get_icon();
+    let window = create_window(&icon, &event_loop);
+    let surface = create_surface(window.clone(), instance.clone());
+    let device_extensions = get_device_extensions();
     // --- physical device ---
-    let device_extensions = DeviceExtensions {
-        khr_swapchain: true,
-        khr_dedicated_allocation: true,
-        khr_get_memory_requirements2: true,
-        ..DeviceExtensions::default()
-    };
-
-    let (physical_device, queue_family_index) = instance
-        .enumerate_physical_devices()
-        .expect("could not enumerate devices")
-        .filter(|p| p.supported_extensions().contains(&device_extensions))
-        .filter_map(|p| {
-            p.queue_family_properties()
-                .iter()
-                .enumerate()
-                .position(|(i, q)| {
-                    q.queue_flags.graphics && p.surface_support(i as u32, &surface).unwrap_or(false)
-                })
-                .map(|q| (p, q as u32))
-        })
-        .min_by_key(|(p, _)| match p.properties().device_type {
-            PhysicalDeviceType::DiscreteGpu => 0,
-            PhysicalDeviceType::IntegratedGpu => 1,
-            PhysicalDeviceType::VirtualGpu => 2,
-            PhysicalDeviceType::Cpu => 3,
-            _ => 4,
-        })
-        .expect("no devices available");
-
+    let (physical_device, queue_family_index) = get_physical_device(instance.clone(), surface.clone(), device_extensions.clone());
     log::info!(
         "Using device: {} (type: {:?})",
-        physical_device.properties().device_name,
-        physical_device.properties().device_type
+        physical_device.clone().properties().device_name,
+        physical_device.clone().properties().device_type
     );
-
-    // --- logical device ---
-    let (device, mut queues) = Device::new(
-        physical_device.clone(),
-        DeviceCreateInfo {
-            queue_create_infos: vec![QueueCreateInfo {
-                queue_family_index,
-                ..Default::default()
-            }],
-            enabled_extensions: device_extensions,
-            enabled_features: Features {
-                multi_draw_indirect: true,
-                fill_mode_non_solid: true,
-                ..Default::default()
-            },
-            ..Default::default()
-        },
-    ).expect("failed to create device");
-
+    let (device, mut queues) = get_logical_device(instance.clone(), device_extensions.clone(), physical_device.clone(), queue_family_index);
     // --- queue ---
     let queue = queues.next().unwrap();
-
     // --- swapchain ---
-    let (swapchain, images) = {
-        let surface_capabilities = physical_device
-            .surface_capabilities(&surface, Default::default())
-            .expect("failed to get surface capabilities");
-
-        let image_format = Some(
-            physical_device
-                .surface_formats(&surface, Default::default())
-                .unwrap()[0]
-                .0,
-        );
-
-        log::debug!("image_format: {:?}", image_format);
-
-        Swapchain::new(
-            device.clone(),
-            surface.clone(),
-            SwapchainCreateInfo {
-                min_image_count: surface_capabilities.min_image_count,
-
-                image_format,
-                image_extent: gpu::window_size_u32(&window),
-
-                image_usage: ImageUsage {
-                    color_attachment: true,
-                    transfer_dst: true,
-                    ..Default::default()
-                },
-                composite_alpha: surface_capabilities
-                    .supported_composite_alpha
-                    .iter()
-                    .next()
-                    .unwrap(),
-
-                ..Default::default()
-            },
-        ).unwrap()
-    };
+    let (swapchain, images) = init_swapchain(window.clone(), surface.clone(), physical_device.clone(), device.clone());
 
     // --- render pass ---
-    let render_pass = vulkano::ordered_passes_renderpass!(
-        device.clone(),
-        attachments: {
-            color_resolve: {
-                load: DontCare,
-                store: Store,
-                format: swapchain.image_format(),
-                samples: 1,
-            },
-            color: {
-                load: Clear,
-                store: Store,
-                format: swapchain.image_format(),
-                samples: 4,
-            },
-            depth: {
-                load: Clear,
-                store: DontCare,
-                format: Format::D32_SFLOAT,
-                samples: 4,
-            },
-            depth_gui: {
-                load: Clear,
-                store: DontCare,
-                format: Format::D32_SFLOAT,
-                samples: 4,
-            }
-        },
-        passes: [
-            { color: [color], depth_stencil: { depth     }, input: [], resolve: [color_resolve] },
-            { color: [color], depth_stencil: { depth_gui }, input: [], resolve: [color_resolve] }
-        ]
-    ).unwrap();
+    let render_pass = create_render_pass(swapchain.clone(), device.clone());
     let subpass = Subpass::from(render_pass.clone(), 0).unwrap();
     let gui_subpass = Subpass::from(render_pass.clone(), 1).unwrap();
-
     // --- buffers ---
-    let allocator = StandardMemoryAllocator::new_default(device.clone());
-
-    let command_allocator = StandardCommandBufferAllocator::new(
-        device.clone(),
-        StandardCommandBufferAllocatorCreateInfo {
-            ..Default::default()
-        }
-    );
-
-    let mut command_buffer_builder = AutoCommandBufferBuilder::primary(
-        &command_allocator,
-        queue.queue_family_index(),
-        CommandBufferUsage::OneTimeSubmit,
-    ).unwrap();
-
-    let vertex_buffer = gpu::immutable_buffer(
-        &allocator,
-        init_data.combined_vertices.clone(),
-        BufferUsage {
-            vertex_buffer: true,
-            ..Default::default()
-        },
-        &mut command_buffer_builder,
-    );
-    let index_buffer = gpu::immutable_buffer(
-        &allocator,
-        init_data
-            .all_raw_faces
-            .iter()
-            .flatten()
-            .flat_map(|v| v.indices.clone())
-            .collect::<Vec<_>>(),
-        BufferUsage {
-            index_buffer: true,
-            ..Default::default()
-        },
-        &mut command_buffer_builder,
-    );
-    let uniform_buffer = gpu::uniform_buffer(&allocator);
-    let gui_uniform_buffer = gpu::uniform_buffer(&allocator);
-
-    let color_image = AttachmentImage::multisampled_with_usage(
-        &allocator,
-        gpu::window_size_u32(&window),
-        Sample4,
-        swapchain.image_format(),
-        ImageUsage {
-            color_attachment: true,
-            ..Default::default()
-        },
-    ).unwrap();
-
-    let depth_buffer = AttachmentImage::multisampled_with_usage(
-        &allocator,
-        gpu::window_size_u32(&window),
-        Sample4,
-        Format::D32_SFLOAT,
-        ImageUsage {
-            depth_stencil_attachment: true,
-            ..Default::default()
-        },
-    ).unwrap();
-
-    let depth_buffer_gui = AttachmentImage::multisampled_with_usage(
-        &allocator,
-        gpu::window_size_u32(&window),
-        Sample4,
-        Format::D32_SFLOAT,
-        ImageUsage {
-            depth_stencil_attachment: true,
-            ..Default::default()
-        },
-    ).unwrap();
-
-    let command_buffer = command_buffer_builder.build().unwrap();
-    block_on(
-        command_buffer
-            .execute(queue.clone())
-            .unwrap()
-            .then_signal_fence_and_flush()
-            .unwrap()
-    ).unwrap();
-
-    drop(allocator);
-
-    // --- shaders ---
-    let vs = vert_shader::load(device.clone()).unwrap();
-    let fs = frag_shader::load(device.clone()).unwrap();
-
-    let vs_gui = gui_vert_shader::load(device.clone()).unwrap();
-    let fs_gui = gui_frag_shader::load(device.clone()).unwrap();
-
-    // --- pipeline ---
-    let game_pipeline = {
-        let pipeline = GraphicsPipeline::start()
-            .vertex_shader(vs.entry_point("main").unwrap(), ())
-            .vertex_input_state(BuffersDefinition::new().vertex::<Vertex>().instance::<InstanceData>())
-            .input_assembly_state(InputAssemblyState::new().topology(PrimitiveTopology::TriangleList))
-            .fragment_shader(fs.entry_point("main").unwrap(), ())
-            .viewport_state(ViewportState::viewport_dynamic_scissor_irrelevant())
-            .rasterization_state(RasterizationState::new())
-            .depth_stencil_state(DepthStencilState::simple_depth_test())
-            .multisample_state(MultisampleState {
-                rasterization_samples: Sample4,
-                ..Default::default()
-            })
-            .render_pass(subpass.clone());
-
-        pipeline.build(device.clone()).unwrap()
-    };
-
-    let gui_pipeline = {
-        let pipeline = GraphicsPipeline::start()
-            .vertex_shader(vs_gui.entry_point("main").unwrap(), ())
-            .vertex_input_state(BuffersDefinition::new().vertex::<Vertex>())
-            .input_assembly_state(InputAssemblyState::new().topology(PrimitiveTopology::TriangleList))
-            .fragment_shader(fs_gui.entry_point("main").unwrap(), ())
-            .viewport_state(ViewportState::viewport_dynamic_scissor_dynamic(1))
-            .rasterization_state(RasterizationState::new())
-            .depth_stencil_state(DepthStencilState::simple_depth_test())
-            .multisample_state(MultisampleState {
-                rasterization_samples: Sample4,
-                ..Default::default()
-            })
-            .render_pass(gui_subpass.clone());
-
-        pipeline.build(device.clone()).unwrap()
-    };
-
-    // --- framebuffers ---
-    let framebuffers = gpu::framebuffers(&images, render_pass.clone(), color_image.clone(), depth_buffer.clone(), depth_buffer_gui.clone());
-
+    let buffers = create_render_buffers(init_data.clone(), window.clone(), swapchain.clone(), device.clone(), queue.clone());
     // --- gpu ---
     let gpu = Arc::new(Gpu {
-        device,
+        device: device.clone(),
         queue,
-        surface,
-        render_pass,
-
-        window,
-
-        vertex_buffer,
-        index_buffer,
+        surface: surface.clone(),
+        render_pass: render_pass.clone(),
+        window: window.clone(),
+        vertex_buffer: buffers.vertex_buffer,
+        index_buffer: buffers.index_buffer,
     });
-
+    // --- pipeline ---
+    let game_pipeline = create_game_pipeline(device.clone(), &subpass);
+    let gui_pipeline = create_gui_pipeline(device.clone(), &gui_subpass);
+    // --- framebuffers ---
+    let framebuffers = gpu::framebuffers(&images, render_pass.clone(), buffers.color_image.clone(), buffers.depth_buffer.clone(), buffers.depth_buffer_gui.clone());
     // --- load map ---
     //let map = Map::load("test".to_owned());
     let map = Map::new_empty("test".to_owned());
-
     // --- init actors ---
     let sys = SystemBuilder::new().name("automancy").create().unwrap();
-
     let game = sys.actor_of_args::<Game, Arc<Map>>("bin", Arc::new(map)).unwrap();
-
     let mut camera = Camera::new(gpu::window_size(&gpu.window));
-    let mut renderer = Renderer::new(
+    let mut renderer = {Renderer::new(
         init_data.clone(),
 
         gpu.clone(),
         game_pipeline,
-        swapchain,
+        swapchain.clone(),
         framebuffers,
 
-        command_allocator,
+        buffers.command_allocator,
         StandardDescriptorSetAllocator::new(gpu.device.clone()),
 
-        color_image,
-        depth_buffer,
-        depth_buffer_gui,
+        buffers.color_image,
+        buffers.depth_buffer,
+        buffers.depth_buffer_gui,
 
-        uniform_buffer,
-        gui_uniform_buffer,
-    );
-
+        buffers.uniform_buffer,
+        buffers.uniform_buffer_gui,
+    )};
     let none = init_data.resource_man.none;
-
     // --- bin ---
     let tick = GameMsg::Tick {
         init_data: init_data.clone(),
     };
-
     let _id = sys.schedule(TICK_INTERVAL, TICK_INTERVAL, game.clone(), None, tick);
-
-    let mut gui = Gui::new_with_subpass(
-        &event_loop,
-        gpu.surface.clone(),
-        Some(renderer.swapchain.image_format()),
-        gpu.queue.clone(),
-        gui_subpass.clone(),
-    );
-
-    log::info!("loading font...");
-    {
-        let mut fonts = FontDefinitions::default();
-        let iosevka = "iosevka".to_owned();
-
-        fonts.font_data.insert(iosevka.clone(), FontData::from_static(include_bytes!("../bin/fonts/iosevka-extended.ttf")));
-
-        fonts.families.get_mut(&Proportional).unwrap()
-            .insert(0, iosevka.clone());
-        fonts.families.get_mut(&Monospace).unwrap()
-            .insert(0, iosevka.clone());
-
-        gui.context().set_fonts(fonts);
-    }
-
-    {
-        gui.context().set_style(
-            Style {
-                override_text_style: None,
-                override_font_id: None,
-                text_styles: [
-                    (TextStyle::Small, FontId::new(9.0, Proportional)),
-                    (TextStyle::Body, FontId::new(13.0, Proportional)),
-                    (TextStyle::Button, FontId::new(13.0, Proportional)),
-                    (TextStyle::Heading, FontId::new(19.0, Proportional)),
-                    (TextStyle::Monospace, FontId::new(13.0, Monospace)),
-                ].into(),
-                wrap: None,
-                visuals: Visuals {
-                    widgets: Widgets {
-                        noninteractive: WidgetVisuals {
-                            bg_fill: Color32::from_gray(190),
-                            bg_stroke: Stroke::new(1.0, Color32::from_gray(190)), // separators, indentation lines
-                            fg_stroke: Stroke::new(1.0, Color32::from_gray(80)),  // normal text color
-                            rounding: Rounding::same(2.0),
-                            expansion: 0.0,
-                        },
-                        inactive: WidgetVisuals {
-                            bg_fill: Color32::from_gray(180), // button background
-                            bg_stroke: Default::default(),
-                            fg_stroke: Stroke::new(1.0, Color32::from_gray(60)), // button text
-                            rounding: Rounding::same(2.0),
-                            expansion: 0.0,
-                        },
-                        hovered: WidgetVisuals {
-                            bg_fill: Color32::from_gray(170),
-                            bg_stroke: Stroke::new(1.0, Color32::from_gray(105)), // e.g. hover over window edge or button
-                            fg_stroke: Stroke::new(1.5, Color32::BLACK),
-                            rounding: Rounding::same(3.0),
-                            expansion: 1.0,
-                        },
-                        active: WidgetVisuals {
-                            bg_fill: Color32::from_gray(160),
-                            bg_stroke: Stroke::new(1.0, Color32::BLACK),
-                            fg_stroke: Stroke::new(2.0, Color32::BLACK),
-                            rounding: Rounding::same(2.0),
-                            expansion: 1.0,
-                        },
-                        open: WidgetVisuals {
-                            bg_fill: Color32::from_gray(170),
-                            bg_stroke: Stroke::new(1.0, Color32::from_gray(160)),
-                            fg_stroke: Stroke::new(1.0, Color32::BLACK),
-                            rounding: Rounding::same(2.0),
-                            expansion: 0.0,
-                        },
-                    },
-                    ..Visuals::light()
-                },
-                ..Default::default()
-            }
-        );
-    }
-
-    let frame = Frame::none()
-        .fill(Color::WHITE.with_alpha(0.7).into())
-        .shadow(Shadow {
-            extrusion: 8.0,
-            color: Color::DARK_GRAY.with_alpha(0.5).into(),
-        })
-        .rounding(Rounding::same(5.0));
-
-    client.as_mut().map(|client| discord::set_status(client, start_time.clone(), discord::DiscordStatuses::InGame).unwrap());
+    let mut gui = init_gui(&event_loop, gpu.clone(), &subpass, &renderer);
+    let frame = init_frame();
+    println!("Completed loading!");
+    discord_client.as_mut().map(|client| discord::set_status(client, start_time.clone(), discord::DiscordStatuses::InGame).unwrap());
 
     // --- event-loop ---
     {
@@ -597,7 +199,7 @@ fn main() {
                     ..
                 } => {
                     block_on(sys.shutdown()).unwrap();
-                    client.as_mut().map(|client| client.close());
+                    discord_client.as_mut().map(|client| client.close());
 
                     *control_flow = ControlFlow::Exit;
 
@@ -868,4 +470,423 @@ fn main() {
             }
         });
     }
+}
+
+fn load_resources() -> ResourceManager {
+    let mut resource_man = ResourceManager::new();
+
+    // TODO: just use serde?
+
+    fs::read_dir(RESOURCE)
+        .unwrap()
+        .flatten()
+        .map(|v| v.path())
+        .for_each(|dir| {
+            resource_man.load_models(&dir);
+            resource_man.load_scripts(&dir);
+            resource_man.load_translates(&dir);
+            resource_man.load_tiles(&dir);
+        });
+
+    resource_man
+}
+fn init_resources() -> Arc<InitData> {
+    let resource_man = load_resources();
+
+    let init_data = InitData::new(resource_man);
+
+    Arc::new(init_data)
+}
+fn create_instance() -> Arc<Instance> {
+    let library = VulkanLibrary::new().expect("no local Vulkan library");
+    let required_extensions = vulkano_win::required_extensions(&library);
+
+    Instance::new(
+        library,
+        InstanceCreateInfo {
+            enabled_extensions: required_extensions,
+            enumerate_portability: true,
+            ..Default::default()
+        }
+    ).expect("failed to create instance")
+}
+fn get_icon() -> Icon {
+    let (bytes, width, height) = {
+        let decoder = png::Decoder::new(File::open(ASSET_LOGO).unwrap());
+
+        let mut reader = decoder.read_info().unwrap();
+
+        let mut buf = vec![0; reader.output_buffer_size()];
+        let info = reader.next_frame(&mut buf).unwrap();
+
+        (buf[..info.buffer_size()].to_vec(), info.width, info.height)
+    };
+
+    Icon::from_rgba(bytes, width, height).unwrap()
+}
+fn create_window(icon: &Icon, event_loop: &EventLoop<()>) -> Arc<winit::window::Window> {
+    Arc::new(
+        WindowBuilder::new()
+            .with_title("automancy")
+            .with_window_icon(Some(get_icon()))
+            .build(event_loop)
+            .expect("could not build window")
+    )
+}
+fn create_surface(window: Arc<winit::window::Window>, instance: Arc<Instance>) -> Arc<Surface> {
+    create_surface_from_winit(window, instance.clone()).expect("could not create surface")
+}
+fn get_device_extensions() -> Arc<DeviceExtensions> {
+    Arc::new(DeviceExtensions {
+        khr_swapchain: true,
+        khr_dedicated_allocation: true,
+        khr_get_memory_requirements2: true,
+        ..DeviceExtensions::default()
+    })
+}
+fn get_physical_device(instance: Arc<Instance>, surface: Arc<Surface>, device_extensions: Arc<DeviceExtensions>) -> (Arc<PhysicalDevice>, u32) {
+    instance
+        .enumerate_physical_devices()
+        .expect("could not enumerate devices")
+        .filter(|p| p.supported_extensions().contains(device_extensions.as_ref()))
+        .filter_map(|p| {
+            p.queue_family_properties()
+                .iter()
+                .enumerate()
+                .position(|(i, q)| {
+                    q.queue_flags.graphics && p.surface_support(i as u32, &surface).unwrap_or(false)
+                })
+                .map(|q| (p, q as u32))
+        })
+        .min_by_key(|(p, _)| match p.properties().device_type {
+            PhysicalDeviceType::DiscreteGpu => 0,
+            PhysicalDeviceType::IntegratedGpu => 1,
+            PhysicalDeviceType::VirtualGpu => 2,
+            PhysicalDeviceType::Cpu => 3,
+            _ => 4,
+        })
+        .expect("no devices available")
+
+
+}
+fn get_logical_device(instance: Arc<Instance>, device_extensions: Arc<DeviceExtensions>, physical_device: Arc<PhysicalDevice>, queue_family_index: u32) -> (Arc<Device>, impl ExactSizeIterator<Item = Arc<Queue>>) {
+    // --- logical device ---
+    Device::new(
+        physical_device.clone(),
+        DeviceCreateInfo {
+            queue_create_infos: vec![QueueCreateInfo {
+                queue_family_index,
+                ..Default::default()
+            }],
+            enabled_extensions: *device_extensions.clone(),
+            enabled_features: Features {
+                multi_draw_indirect: true,
+                fill_mode_non_solid: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    ).expect("failed to create device")
+}
+fn init_swapchain(window: Arc<winit::window::Window>, surface: Arc<Surface>, physical_device: Arc<PhysicalDevice>, device: Arc<Device> ) -> (Arc<Swapchain>, Vec<Arc<SwapchainImage>>) {
+    let surface_capabilities = physical_device
+        .clone()
+        .surface_capabilities(&surface, Default::default())
+        .expect("failed to get surface capabilities");
+
+    let image_format = Some(
+        physical_device
+            .surface_formats(&surface, Default::default())
+            .unwrap()[0]
+            .0,
+    );
+
+    log::debug!("image_format: {:?}", image_format);
+
+    Swapchain::new(
+        device.clone(),
+        surface.clone(),
+        SwapchainCreateInfo {
+            min_image_count: surface_capabilities.min_image_count,
+
+            image_format,
+            image_extent: gpu::window_size_u32(window.clone().as_ref()),
+
+            image_usage: ImageUsage {
+                color_attachment: true,
+                transfer_dst: true,
+                ..Default::default()
+            },
+            composite_alpha: surface_capabilities
+                .supported_composite_alpha
+                .iter()
+                .next()
+                .unwrap(),
+
+            ..Default::default()
+        },
+    ).unwrap()
+}
+fn create_render_pass(swapchain: Arc<Swapchain>, device: Arc<Device>) -> Arc<RenderPass> {
+    vulkano::ordered_passes_renderpass!(
+        device.clone(),
+        attachments: {
+            color_resolve: {
+                load: DontCare,
+                store: Store,
+                format: swapchain.image_format(),
+                samples: 1,
+            },
+            color: {
+                load: Clear,
+                store: Store,
+                format: swapchain.image_format(),
+                samples: 4,
+            },
+            depth: {
+                load: Clear,
+                store: DontCare,
+                format: Format::D32_SFLOAT,
+                samples: 4,
+            },
+            depth_gui: {
+                load: Clear,
+                store: DontCare,
+                format: Format::D32_SFLOAT,
+                samples: 4,
+            }
+        },
+        passes: [
+            { color: [color], depth_stencil: { depth     }, input: [], resolve: [color_resolve] },
+            { color: [color], depth_stencil: { depth_gui }, input: [], resolve: [color_resolve] }
+        ]
+    ).unwrap()
+}
+fn create_render_buffers(init_data: Arc<InitData>, window: Arc<winit::window::Window>, swapchain: Arc<Swapchain>, device: Arc<Device>, queue: Arc<Queue>) -> RenderBuffers {
+    let allocator = StandardMemoryAllocator::new_default(device.clone());
+
+    let command_allocator = StandardCommandBufferAllocator::new(
+        device.clone(),
+        StandardCommandBufferAllocatorCreateInfo {
+            ..Default::default()
+        }
+    );
+
+    let mut command_buffer_builder = AutoCommandBufferBuilder::primary(
+        &command_allocator,
+        queue.queue_family_index(),
+        CommandBufferUsage::OneTimeSubmit,
+    ).unwrap();
+    let vertex_buffer = gpu::immutable_buffer(
+        &allocator,
+        init_data.combined_vertices.clone(),
+        BufferUsage {
+            vertex_buffer: true,
+            ..Default::default()
+        },
+        &mut command_buffer_builder,
+    );
+    let index_buffer = gpu::immutable_buffer(
+        &allocator,
+        init_data
+            .all_raw_faces
+            .iter()
+            .flatten()
+            .flat_map(|v| v.indices.clone())
+            .collect::<Vec<_>>(),
+        BufferUsage {
+            index_buffer: true,
+            ..Default::default()
+        },
+        &mut command_buffer_builder,
+    );
+    let uniform_buffer = gpu::uniform_buffer(&allocator);
+    let uniform_buffer_gui = gpu::uniform_buffer(&allocator);
+
+    let color_image = AttachmentImage::multisampled_with_usage(
+        &allocator,
+        gpu::window_size_u32(window.clone().as_ref()),
+        Sample4,
+        swapchain.clone().image_format(),
+        ImageUsage {
+            color_attachment: true,
+            ..Default::default()
+        },
+    ).unwrap();
+
+    let depth_buffer = AttachmentImage::multisampled_with_usage(
+        &allocator,
+        gpu::window_size_u32(window.clone().as_ref()),
+        Sample4,
+        Format::D32_SFLOAT,
+        ImageUsage {
+            depth_stencil_attachment: true,
+            ..Default::default()
+        },
+    ).unwrap();
+
+    let depth_buffer_gui = AttachmentImage::multisampled_with_usage(
+        &allocator,
+        gpu::window_size_u32(&window),
+        Sample4,
+        Format::D32_SFLOAT,
+        ImageUsage {
+            depth_stencil_attachment: true,
+            ..Default::default()
+        },
+    ).unwrap();
+
+    let command_buffer = command_buffer_builder.build().unwrap();
+    block_on(
+        command_buffer
+            .execute(queue.clone())
+            .unwrap()
+            .then_signal_fence_and_flush()
+            .unwrap()
+    ).unwrap();
+
+    drop(allocator);
+    RenderBuffers {
+        vertex_buffer,
+        index_buffer,
+        uniform_buffer,
+        uniform_buffer_gui,
+        color_image,
+        depth_buffer,
+        depth_buffer_gui,
+        command_allocator
+    }
+}
+fn create_game_pipeline(device: Arc<Device>, subpass: &Subpass) -> Arc<GraphicsPipeline> {
+    let vs = vert_shader::load(device.clone()).unwrap();
+    let fs = frag_shader::load(device.clone()).unwrap();
+
+    let pipeline = GraphicsPipeline::start()
+        .vertex_shader(vs.entry_point("main").unwrap(), ())
+        .vertex_input_state(BuffersDefinition::new().vertex::<Vertex>().instance::<InstanceData>())
+        .input_assembly_state(InputAssemblyState::new().topology(PrimitiveTopology::TriangleList))
+        .fragment_shader(fs.entry_point("main").unwrap(), ())
+        .viewport_state(ViewportState::viewport_dynamic_scissor_irrelevant())
+        .rasterization_state(RasterizationState::new())
+        .depth_stencil_state(DepthStencilState::simple_depth_test())
+        .multisample_state(MultisampleState {
+            rasterization_samples: Sample4,
+            ..Default::default()
+        })
+        .render_pass(subpass.clone());
+
+    pipeline.build(device.clone()).unwrap()
+}
+fn create_gui_pipeline(device: Arc<Device>, subpass: &Subpass) -> Arc<GraphicsPipeline> {
+    let vs_gui = gui_vert_shader::load(device.clone()).unwrap();
+    let fs_gui = gui_frag_shader::load(device.clone()).unwrap();
+
+    let pipeline = GraphicsPipeline::start()
+        .vertex_shader(vs_gui.entry_point("main").unwrap(), ())
+        .vertex_input_state(BuffersDefinition::new().vertex::<Vertex>())
+        .input_assembly_state(InputAssemblyState::new().topology(PrimitiveTopology::TriangleList))
+        .fragment_shader(fs_gui.entry_point("main").unwrap(), ())
+        .viewport_state(ViewportState::viewport_dynamic_scissor_dynamic(1))
+        .rasterization_state(RasterizationState::new())
+        .depth_stencil_state(DepthStencilState::simple_depth_test())
+        .multisample_state(MultisampleState {
+            rasterization_samples: Sample4,
+            ..Default::default()
+        })
+        .render_pass(subpass.clone());
+
+    pipeline.build(device.clone()).unwrap()
+}
+fn init_fonts(gui: &Gui) {
+    let mut fonts = FontDefinitions::default();
+    let iosevka = "iosevka".to_owned();
+
+    fonts.font_data.insert(iosevka.clone(), FontData::from_static(include_bytes!("../bin/fonts/iosevka-extended.ttf")));
+
+    fonts.families.get_mut(&Proportional).unwrap()
+        .insert(0, iosevka.clone());
+    fonts.families.get_mut(&Monospace).unwrap()
+        .insert(0, iosevka.clone());
+
+    gui.context().set_fonts(fonts);
+}
+fn init_styles(gui: &Gui) {
+    gui.clone().context().set_style(
+        Style {
+            override_text_style: None,
+            override_font_id: None,
+            text_styles: [
+                (TextStyle::Small, FontId::new(9.0, Proportional)),
+                (TextStyle::Body, FontId::new(13.0, Proportional)),
+                (TextStyle::Button, FontId::new(13.0, Proportional)),
+                (TextStyle::Heading, FontId::new(19.0, Proportional)),
+                (TextStyle::Monospace, FontId::new(13.0, Monospace)),
+            ].into(),
+            wrap: None,
+            visuals: Visuals {
+                widgets: Widgets {
+                    noninteractive: WidgetVisuals {
+                        bg_fill: Color32::from_gray(190),
+                        bg_stroke: Stroke::new(1.0, Color32::from_gray(190)), // separators, indentation lines
+                        fg_stroke: Stroke::new(1.0, Color32::from_gray(80)),  // normal text color
+                        rounding: Rounding::same(2.0),
+                        expansion: 0.0,
+                    },
+                    inactive: WidgetVisuals {
+                        bg_fill: Color32::from_gray(180), // button background
+                        bg_stroke: Default::default(),
+                        fg_stroke: Stroke::new(1.0, Color32::from_gray(60)), // button text
+                        rounding: Rounding::same(2.0),
+                        expansion: 0.0,
+                    },
+                    hovered: WidgetVisuals {
+                        bg_fill: Color32::from_gray(170),
+                        bg_stroke: Stroke::new(1.0, Color32::from_gray(105)), // e.g. hover over window edge or button
+                        fg_stroke: Stroke::new(1.5, Color32::BLACK),
+                        rounding: Rounding::same(3.0),
+                        expansion: 1.0,
+                    },
+                    active: WidgetVisuals {
+                        bg_fill: Color32::from_gray(160),
+                        bg_stroke: Stroke::new(1.0, Color32::BLACK),
+                        fg_stroke: Stroke::new(2.0, Color32::BLACK),
+                        rounding: Rounding::same(2.0),
+                        expansion: 1.0,
+                    },
+                    open: WidgetVisuals {
+                        bg_fill: Color32::from_gray(170),
+                        bg_stroke: Stroke::new(1.0, Color32::from_gray(160)),
+                        fg_stroke: Stroke::new(1.0, Color32::BLACK),
+                        rounding: Rounding::same(2.0),
+                        expansion: 0.0,
+                    },
+                },
+                ..Visuals::light()
+            },
+            ..Default::default()
+        }
+    );
+}
+fn init_gui(event_loop: &EventLoop<()>, gpu: Arc<Gpu>, subpass: &Subpass, renderer: &Renderer) -> Gui {
+    let mut gui = Gui::new_with_subpass(
+        event_loop,
+        gpu.surface.clone(),
+        Some(renderer.swapchain.image_format()),
+        gpu.queue.clone(),
+        subpass.clone(),
+    );
+
+    init_fonts(&gui);
+    init_styles(&gui);
+
+    gui
+}
+fn init_frame() -> Frame {
+    Frame::none()
+        .fill(Color::WHITE.with_alpha(0.7).into())
+        .shadow(Shadow {
+            extrusion: 8.0,
+            color: Color::DARK_GRAY.with_alpha(0.5).into(),
+        })
+        .rounding(Rounding::same(5.0))
 }

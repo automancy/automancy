@@ -7,8 +7,8 @@ use hexagon_tiles::hex::Hex;
 use hexagon_tiles::layout::{hex_to_pixel, pixel_to_hex};
 use hexagon_tiles::point::point;
 use hexagon_tiles::traits::HexRound;
-use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer};
-use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferInheritanceInfo, CommandBufferUsage, RenderPassBeginInfo, SubpassContents};
+use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer, DeviceLocalBuffer};
+use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferInheritanceInfo, CommandBufferUsage, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassContents};
 use vulkano::command_buffer::allocator::{StandardCommandBufferAllocator};
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
@@ -367,4 +367,14 @@ impl Renderer {
         let command_buffer = builder.build().unwrap();
         self.gpu.commit_commands(image_num, self.swapchain.clone(), acquire_future, command_buffer, &mut self.previous_frame_end, &mut self.recreate_swapchain);
     }
+}
+pub struct RenderBuffers {
+    pub vertex_buffer: Arc<DeviceLocalBuffer<[Vertex]>>,
+    pub index_buffer: Arc<DeviceLocalBuffer<[u32]>>,
+    pub uniform_buffer: Arc<CpuAccessibleBuffer<UniformBufferObject>>,
+    pub uniform_buffer_gui: Arc<CpuAccessibleBuffer<UniformBufferObject>>,
+    pub color_image: Arc<AttachmentImage>,
+    pub depth_buffer: Arc<AttachmentImage>,
+    pub depth_buffer_gui: Arc<AttachmentImage>,
+    pub command_allocator: StandardCommandBufferAllocator
 }
