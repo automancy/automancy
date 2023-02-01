@@ -106,7 +106,7 @@ impl ResourceManager {
 
 impl ResourceManager {
     fn load_translate(&mut self, file: &Path) -> Option<()> {
-        log::debug!("trying to load translate: {:?}", file);
+        log::info!("loading translate at: {:?}", file);
 
         let translate: TranslateRaw = serde_json::from_str(
             &read_to_string(&file).expect(&format!("error loading {:?}", file)),
@@ -130,7 +130,7 @@ impl ResourceManager {
     }
 
     fn load_script(&mut self, file: &Path) -> Option<()> {
-        log::debug!("trying to load script: {:?}", file);
+        log::info!("loading script at: {:?}", file);
 
         let script: ScriptRaw = serde_json::from_str(
             &read_to_string(&file).expect(&format!("error loading {:?}", file)),
@@ -160,7 +160,7 @@ impl ResourceManager {
     }
 
     fn load_model(&mut self, file: &Path) -> Option<()> {
-        log::debug!("trying to load model: {:?}", file);
+        log::info!("loading model at: {:?}", file);
 
         let model: ModelRaw = serde_json::from_str(
             &read_to_string(&file).expect(&format!("error loading {:?}", file)),
@@ -173,7 +173,7 @@ impl ResourceManager {
             .join("files")
             .join(model.file.as_str());
 
-        log::debug!("trying to load model file: {:?}", file);
+        log::info!("loading model file at: {:?}", file);
 
         let file = File::open(file).ok().unwrap();
         let mut read = BufReader::new(file);
