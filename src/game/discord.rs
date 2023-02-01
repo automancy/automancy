@@ -1,30 +1,55 @@
-use discord_rich_presence::{activity, DiscordIpc, DiscordIpcClient};
-use discord_rich_presence::activity::Assets;
-use vulkano::command_buffer::PrimaryCommandBufferAbstract;
+use std::error::Error;
+use std::time::{Instant, SystemTime};
+use discord_rich_presence::{DiscordIpc, DiscordIpcClient};
+use discord_rich_presence::activity::{Activity, Assets, Button, Timestamps};
 
 /// The discord application's client ID.
-const CLIENT_ID: &'static str = "1070156213892947978";
+static CLIENT_ID: &str = "1070156213892947978";
+
+pub fn default_activity<'a>() -> Activity<'a> {
+    Activity::new()
+        .assets(Assets::new().large_image("logo"))
+        .buttons(vec![Button::new("Find us on Fediverse", "https://gamedev.lgbt/@automancy")])
+        .details("(WIP) An automation game based on Hexagons.")
+}
+
+/// Called at the start of the game and stays.
+pub fn start_time() -> Timestamps {
+    Timestamps::new().start(
+        SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64
+    )
+}
+
 /// Sets up the discord rich presence.
-pub fn setup_rich_presence() -> Result<DiscordIpcClient, Box<dyn std::error::Error>>{
+pub fn setup_rich_presence(start_time: Timestamps) -> Result<DiscordIpcClient, Box<dyn Error>> {
     let mut client = DiscordIpcClient::new(CLIENT_ID)?;
 
     client.connect()?;
-    client.set_activity(activity::Activity::new()
-        .state("Loading")
-        .details("Automancy is not released yet, go to https://gamedev.lgbt/@automancy to see the development progress")
+
+    client.set_activity(
+        default_activity()
+            .state("Loading")
+            .timestamps(start_time)
     )?;
+
     Ok(client)
 }
+
 /// Sets the current status of the player here.
-pub fn set_status(client: &mut DiscordIpcClient, status: DiscordStatuses) -> Result<(), Box<dyn std::error::Error>> {
-    client.set_activity(activity::Activity::new()
-        .state(match status {
-            DiscordStatuses::MainMenu => {"In the main menu"}
-            DiscordStatuses::InGame => {"In game"}
-        })
-        .assets(Assets::new().large_image("logo"))
-        .details("https://gamedev.lgbt/@automancy"))
+pub fn set_status(client: &mut DiscordIpcClient, start_time: Timestamps, status: DiscordStatuses) -> Result<(), Box<dyn Error>> {
+    client.set_activity(
+        default_activity()
+            .state(match status {
+                DiscordStatuses::MainMenu => {"In the main menu"}
+                DiscordStatuses::InGame => {"In game"}
+            })
+            .timestamps(start_time)
+    )
 }
+
 pub enum DiscordStatuses {
     MainMenu,
     InGame

@@ -1,9 +1,7 @@
 #![feature(result_option_inspect)]
 #![feature(is_some_and)]
 
-use std::{ffi::OsStr, fs::{File, read_to_string}, fs, sync::Arc};
-use std::borrow::BorrowMut;
-use std::path::Path;
+use std::{fs, fs::File, sync::Arc};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use cgmath::{EuclideanSpace, point3};
@@ -51,9 +49,9 @@ use winit::{
 
 use automancy::{
     game::{
+        discord,
         game::Game,
-        ticking::TICK_INTERVAL,
-        discord
+        ticking::TICK_INTERVAL
     },
     game::map::Map,
     render::{
@@ -75,7 +73,7 @@ use automancy::render::gui;
 use automancy::util::cg::Num;
 use automancy::util::colors::Color;
 use automancy::util::init::InitData;
-use automancy::util::resource::{ResourceManager, ResourceRaw, ResourceType};
+use automancy::util::resource::{ResourceManager, ResourceType};
 
 pub const ASSET_LOGO: &str = "resources/automancy/branding/logo.png";
 
@@ -110,7 +108,11 @@ fn init() -> Arc<InitData> {
 
 fn main() {
     env_logger::init();
-    let mut client = discord::setup_rich_presence().unwrap();
+
+    let start_time = discord::start_time();
+
+    let mut client = discord::setup_rich_presence(start_time.clone()).ok();
+
     // --- resources & data ---
     let init_data = init();
 
@@ -560,7 +562,7 @@ fn main() {
         })
         .rounding(Rounding::same(5.0));
 
-    unsafe { discord::set_status(client.borrow_mut(), discord::DiscordStatuses::InGame).unwrap_unchecked(); }
+    client.as_mut().map(|client| discord::set_status(client, start_time.clone(), discord::DiscordStatuses::InGame).unwrap());
 
     // --- event-loop ---
     {
@@ -595,12 +597,11 @@ fn main() {
                     ..
                 } => {
                     block_on(sys.shutdown()).unwrap();
+                    client.as_mut().map(|client| client.close());
 
                     *control_flow = ControlFlow::Exit;
 
                     closed = true;
-
-                    client.close();
 
                     return;
                 },
