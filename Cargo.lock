@@ -146,6 +146,7 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "cgmath",
+ "discord-rich-presence",
  "egui",
  "egui_winit_vulkano",
  "env_logger",
@@ -707,6 +708,18 @@ dependencies = [
  "libc",
  "redox_users",
  "winapi",
+]
+
+[[package]]
+name = "discord-rich-presence"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "47fc4beffb85ee1461588499073a4d9c20dcc7728c4b13d6b282ab6c508947e5"
+dependencies = [
+ "serde 1.0.152",
+ "serde_derive",
+ "serde_json",
+ "uuid 0.8.2",
 ]
 
 [[package]]

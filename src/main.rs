@@ -2,10 +2,12 @@
 #![feature(is_some_and)]
 
 use std::{ffi::OsStr, fs::{File, read_to_string}, fs, sync::Arc};
+use std::borrow::BorrowMut;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use cgmath::{EuclideanSpace, point3};
+use discord_rich_presence::DiscordIpc;
 use egui::{Align, Align2, Color32, FontData, FontDefinitions, FontId, Frame, Rounding, ScrollArea, Stroke, Style, TextStyle, TopBottomPanel, vec2, Visuals, Window};
 use egui::epaint::Shadow;
 use egui::FontFamily::{Monospace, Proportional};
@@ -51,6 +53,7 @@ use automancy::{
     game::{
         game::Game,
         ticking::TICK_INTERVAL,
+        discord
     },
     game::map::Map,
     render::{
@@ -107,7 +110,7 @@ fn init() -> Arc<InitData> {
 
 fn main() {
     env_logger::init();
-
+    let mut client = discord::setup_rich_presence().unwrap();
     // --- resources & data ---
     let init_data = init();
 
@@ -557,6 +560,8 @@ fn main() {
         })
         .rounding(Rounding::same(5.0));
 
+    unsafe { discord::set_status(client.borrow_mut(), discord::DiscordStatuses::InGame).unwrap_unchecked(); }
+
     // --- event-loop ---
     {
         let mut closed = false;
@@ -594,6 +599,8 @@ fn main() {
                     *control_flow = ControlFlow::Exit;
 
                     closed = true;
+
+                    client.close();
 
                     return;
                 },

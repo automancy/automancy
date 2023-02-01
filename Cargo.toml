@@ -51,3 +51,4 @@ futures = "0.3.25"
 
 riker-patterns = "0.4.2"
 riker = "0.4.2"
+discord-rich-presence = "0.2.3"
