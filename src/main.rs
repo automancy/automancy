@@ -481,7 +481,7 @@ fn main() {
         let mut fonts = FontDefinitions::default();
         let iosevka = "iosevka".to_owned();
 
-        fonts.font_data.insert(iosevka.clone(), FontData::from_static(include_bytes!("./fonts/iosevka-extended.ttf")));
+        fonts.font_data.insert(iosevka.clone(), FontData::from_static(include_bytes!("../bin/fonts/iosevka-extended.ttf")));
 
         fonts.families.get_mut(&Proportional).unwrap()
             .insert(0, iosevka.clone());

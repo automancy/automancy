@@ -10,7 +10,7 @@ edition = "2021"
 
 [[bin]]
 name = "automancy"
-path = "bin/main.rs"
+path = "src/main.rs"
 test = false
 
 [dependencies]
