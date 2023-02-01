@@ -84,7 +84,10 @@ pub fn eye<N: BaseFloat>(z: N, pi: N) -> cgmath::Vector3<N> {
     cgmath::vec3(N::zero(), r, o)
 }
 
-pub fn actual_pos<N: BaseFloat>(pos: cgmath::Point3<N>, eye: cgmath::Vector3<N>) -> cgmath::Point3<N> {
+pub fn actual_pos<N: BaseFloat>(
+    pos: cgmath::Point3<N>,
+    eye: cgmath::Vector3<N>,
+) -> cgmath::Point3<N> {
     let one = N::one();
     let two = one + one;
     let six = two + two + two;

@@ -1,5 +1,5 @@
 pub mod camera;
 pub mod data;
 pub mod gpu;
-pub mod renderer;
 pub mod gui;
+pub mod renderer;

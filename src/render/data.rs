@@ -1,5 +1,5 @@
-use std::{ops::Div, sync::Arc};
 use std::ops::{Add, Mul};
+use std::{ops::Div, sync::Arc};
 
 use bytemuck::{Pod, Zeroable};
 use cgmath::vec3;
@@ -8,10 +8,10 @@ use hexagon_tiles::point::Point;
 use ply_rs::ply::{Property, PropertyAccess};
 use vulkano::impl_vertex;
 
-use crate::data::id::Id;
 use crate::game::tile::TileCoord;
 use crate::render::camera::FAR;
 use crate::util::cg::{Matrix4, Num, Vector2};
+use crate::util::id::Id;
 use crate::util::init::InitData;
 
 fn color_to_num(color: u8) -> Num {
@@ -124,7 +124,12 @@ impl InstanceData {
             .map(|face| {
                 let p = hex_to_pixel(RENDER_LAYOUT, pos.0);
 
-                (pos, Self::new().position_offset([p.x as Num, p.y as Num, FAR as Num]).faces_index(face))
+                (
+                    pos,
+                    Self::new()
+                        .position_offset([p.x as Num, p.y as Num, FAR as Num])
+                        .faces_index(face),
+                )
             })
     }
 
@@ -209,7 +214,7 @@ impl PropertyAccess for RawFace {
         match (key.as_ref(), property) {
             ("vertex_indices", Property::ListUInt(vec)) => {
                 self.indices = vec;
-            },
+            }
             (_, _) => {}
         }
     }

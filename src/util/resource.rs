@@ -1,17 +1,14 @@
-use std::{collections::HashMap, ffi::OsStr, fs::File, io::BufReader, path::Path};
 use std::convert::AsRef;
 use std::fs::{read_dir, read_to_string};
+use std::{collections::HashMap, ffi::OsStr, fs::File, io::BufReader, path::Path};
 
 use ply_rs::parser::Parser;
 use serde::Deserialize;
 use serde_json::Error;
 
-use crate::{
-    data::id::IdRaw,
-    render::data::{ModelRaw, RawFace, Vertex},
-};
-use crate::data::id::{Id, Interner};
 use crate::game::script::{Instructions, Script, ScriptRaw};
+use crate::render::data::{ModelRaw, RawFace, Vertex};
+use crate::util::id::{Id, IdRaw, Interner};
 
 pub static JSON_EXT: &str = "json";
 
@@ -106,17 +103,23 @@ impl ResourceManager {
     fn load_translate(&mut self, file: &Path) -> Option<()> {
         log::debug!("trying to load translate: {:?}", file);
 
-        let translate: Result<TranslateRaw, Error> = serde_json::from_str(read_to_string(file).ok()?.as_str());
+        let translate: Result<TranslateRaw, Error> =
+            serde_json::from_str(read_to_string(file).ok()?.as_str());
 
         match translate {
             Ok(translate) => {
-                let items = translate.items.into_iter().map(|(id, str)| (id.to_id(&mut self.interner), str)).collect();
-                let tiles = translate.tiles.into_iter().map(|(id, str)| (id.to_id(&mut self.interner), str)).collect();
+                let items = translate
+                    .items
+                    .into_iter()
+                    .map(|(id, str)| (id.to_id(&mut self.interner), str))
+                    .collect();
+                let tiles = translate
+                    .tiles
+                    .into_iter()
+                    .map(|(id, str)| (id.to_id(&mut self.interner), str))
+                    .collect();
 
-                self.translates = Translate {
-                    items,
-                    tiles,
-                };
+                self.translates = Translate { items, tiles };
 
                 Some(())
             }
@@ -131,21 +134,27 @@ impl ResourceManager {
     fn load_script(&mut self, file: &Path) -> Option<()> {
         log::debug!("trying to load script: {:?}", file);
 
-        let script: Result<ScriptRaw, Error> = serde_json::from_str(read_to_string(file).ok()?.as_str());
+        let script: Result<ScriptRaw, Error> =
+            serde_json::from_str(read_to_string(file).ok()?.as_str());
 
         match script {
             Ok(ref script) => {
                 let id = script.id.to_id(&mut self.interner);
 
                 let instructions = Instructions {
-                    input: script.instructions.input.as_ref().map(|v| v.to_item(&mut self.interner)),
-                    output: script.instructions.output.as_ref().map(|v| v.to_item(&mut self.interner)),
+                    input: script
+                        .instructions
+                        .input
+                        .as_ref()
+                        .map(|v| v.to_item(&mut self.interner)),
+                    output: script
+                        .instructions
+                        .output
+                        .as_ref()
+                        .map(|v| v.to_item(&mut self.interner)),
                 };
 
-                let script = Script {
-                    id,
-                    instructions,
-                };
+                let script = Script { id, instructions };
 
                 self.scripts.insert(id, script);
 
@@ -166,7 +175,11 @@ impl ResourceManager {
 
         match model {
             Ok(ref model) => {
-                let file = file.parent().unwrap().join("files").join(model.file.as_str());
+                let file = file
+                    .parent()
+                    .unwrap()
+                    .join("files")
+                    .join(model.file.as_str());
                 log::debug!("trying to load model file: {:?}", file);
 
                 let file = File::open(file).ok().unwrap();
@@ -200,7 +213,8 @@ impl ResourceManager {
                     .zip(faces)
                     .map(|(vertices, faces)| ModelRaw::new(vertices, faces))?;
 
-                self.raw_models.insert(model.id.to_id(&mut self.interner), raw_model);
+                self.raw_models
+                    .insert(model.id.to_id(&mut self.interner), raw_model);
 
                 Some(())
             }
@@ -218,7 +232,8 @@ impl ResourceManager {
         if let Some("json") = extension {
             log::info!("loading resource at {:?}", file);
 
-            let resource: ResourceRaw = serde_json::from_str(&read_to_string(&file).unwrap()).unwrap();
+            let resource: ResourceRaw =
+                serde_json::from_str(&read_to_string(&file).unwrap()).unwrap();
 
             self.register_resource(resource);
         }
@@ -282,7 +297,7 @@ impl ResourceManager {
         tiles
             .into_iter()
             .flatten()
-            .map(|v |v.path())
+            .map(|v| v.path())
             .filter(|v| v.extension() == Some(OsStr::new(JSON_EXT)))
             .for_each(|tile| {
                 self.load_tile(&tile);
@@ -294,12 +309,19 @@ impl ResourceManager {
         let id = resource.id.to_id(&mut self.interner);
 
         if let Some(model) = resource.model {
-            let references = self.models_referenced.entry(model.to_id(&mut self.interner)).or_insert_with(Vec::default);
+            let references = self
+                .models_referenced
+                .entry(model.to_id(&mut self.interner))
+                .or_insert_with(Vec::default);
 
             references.push(id);
         }
 
-        let scripts = resource.scripts.map(|v| v.into_iter().map(|id| id.to_id(&mut self.interner)).collect());
+        let scripts = resource.scripts.map(|v| {
+            v.into_iter()
+                .map(|id| id.to_id(&mut self.interner))
+                .collect()
+        });
 
         let resource_type = resource.resource_type;
 
@@ -309,7 +331,7 @@ impl ResourceManager {
                 resource_type,
                 scripts,
                 faces_index: None,
-            }
+            },
         );
     }
 }
@@ -317,15 +339,15 @@ impl ResourceManager {
 impl ResourceManager {
     pub fn item_name(&self, id: &Id) -> String {
         match self.translates.items.get(id) {
-            Some(name) => { name.to_owned() }
-            None => { "<unnamed>".to_string() }
+            Some(name) => name.to_owned(),
+            None => "<unnamed>".to_string(),
         }
     }
 
     pub fn tile_name(&self, id: &Id) -> String {
         match self.translates.tiles.get(id) {
-            Some(name) => { name.to_owned() }
-            None => { "<unnamed>".to_string() }
+            Some(name) => name.to_owned(),
+            None => "<unnamed>".to_string(),
         }
     }
 }

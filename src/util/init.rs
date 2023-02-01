@@ -1,5 +1,5 @@
-use crate::data::id::IdRaw;
 use crate::render::data::{RawFace, Vertex};
+use crate::util::id::IdRaw;
 use crate::util::resource::{Face, ResourceManager};
 
 #[derive(Debug)]
@@ -12,7 +12,8 @@ pub struct InitData {
 
 impl InitData {
     pub fn new(mut resource_man: ResourceManager) -> Self {
-        let mut ids = resource_man.resources
+        let mut ids = resource_man
+            .resources
             .iter()
             .flat_map(|(id, _)| resource_man.interner.resolve(*id))
             .map(|id| IdRaw::parse(id))
@@ -20,13 +21,17 @@ impl InitData {
 
         ids.sort_unstable_by_key(|id| id.clone());
 
-        if let Some(none_idx) = ids.iter().enumerate().find_map(|(idx, id)| {
-            if id == &IdRaw::NONE {
-                Some(idx)
-            } else {
-                None
-            }
-        }) {
+        if let Some(none_idx) =
+            ids.iter().enumerate().find_map(
+                |(idx, id)| {
+                    if id == &IdRaw::NONE {
+                        Some(idx)
+                    } else {
+                        None
+                    }
+                },
+            )
+        {
             ids.swap(none_idx, 0);
         }
 
@@ -38,7 +43,8 @@ impl InitData {
         resource_man.ordered_ids = ids;
 
         // indices vertices
-        let (vertices, raw_faces): (Vec<_>, Vec<_>) = resource_man.raw_models
+        let (vertices, raw_faces): (Vec<_>, Vec<_>) = resource_man
+            .raw_models
             .iter()
             .map(|(id, model)| (model.vertices.clone(), (id, model.faces.clone())))
             .unzip();
@@ -62,17 +68,13 @@ impl InitData {
             .into_iter()
             .enumerate()
             .map(|(i, (id, raw_faces))| {
-                resource_man.models_referenced
-                    .get(&id)
-                    .map(|references| {
-                        references
-                            .iter()
-                            .for_each(|id| {
-                                if let Some(resource) = resource_man.resources.get_mut(id) {
-                                    resource.faces_index = Some(i);
-                                }
-                            });
+                resource_man.models_referenced.get(&id).map(|references| {
+                    references.iter().for_each(|id| {
+                        if let Some(resource) = resource_man.resources.get_mut(id) {
+                            resource.faces_index = Some(i);
+                        }
                     });
+                });
 
                 let faces = raw_faces
                     .iter()

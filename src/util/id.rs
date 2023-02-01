@@ -1,8 +1,8 @@
 use std::fmt::{self, Display, Formatter};
 
 use flexstr::SharedStr;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::{Error, Visitor};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use string_interner::backend::BufferBackend;
 use string_interner::{StringInterner, Symbol};
 
@@ -62,7 +62,10 @@ pub const fn id_static(a: &'static str, b: &'static str) -> IdRaw {
 }
 
 impl Serialize for IdRaw {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
         serializer.serialize_str(&self.to_string())
     }
 }
@@ -76,18 +79,25 @@ impl<'de> Visitor<'de> for IdVisitor {
         formatter.write_str("an Id structured as namespace:name")
     }
 
-    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E> where E: Error {
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
         Ok(IdRaw::parse(v))
     }
 
-    fn visit_string<E>(self, v: String) -> Result<Self::Value, E> where E: Error {
+    fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
         Ok(IdRaw::parse(&v))
     }
 }
 
 impl<'de> Deserialize<'de> for IdRaw {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: Deserializer<'de>
+    where
+        D: Deserializer<'de>,
     {
         deserializer.deserialize_str(IdVisitor)
     }

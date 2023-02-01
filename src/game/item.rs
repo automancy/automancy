@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::data::id::{Id, IdRaw, Interner};
+use crate::util::id::{Id, IdRaw, Interner};
 
 pub type ItemAmount = u64;
 

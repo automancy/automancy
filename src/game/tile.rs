@@ -3,19 +3,19 @@ use std::ops::Add;
 use std::sync::Arc;
 
 use egui::NumExt;
-use hexagon_tiles::hex::{Hex, hex};
+use hexagon_tiles::hex::{hex, Hex};
 use hexagon_tiles::traits::HexDirection;
 use riker::actor::{Context, Sender};
 use riker::actors::{Actor, ActorFactoryArgs, BasicActorRef};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::{SeqAccess, Visitor};
 use serde::ser::SerializeTuple;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::data::data::Data;
-use crate::data::id::{Id, id_static, IdRaw};
+use crate::game::data::Data;
 use crate::game::game::GameMsg;
 use crate::game::item::Item;
 use crate::game::script::Script;
+use crate::util::id::{id_static, Id, IdRaw};
 use crate::util::init::InitData;
 use crate::util::resource::ResourceType;
 
@@ -83,26 +83,38 @@ impl Actor for Tile {
         let myself = Some(ctx.myself().into());
 
         match msg {
-            TileMsg::Tick { init_data, tick_count } => {
+            TileMsg::Tick {
+                init_data,
+                tick_count,
+            } => {
                 let interval = 1 + self.interval_offset;
 
                 if (tick_count % interval) != 0 {
                     return;
                 }
 
-                let resource_type = init_data.resource_man.resources[&self.id].resource_type.clone();
+                let resource_type = init_data.resource_man.resources[&self.id]
+                    .resource_type
+                    .clone();
 
                 match resource_type {
                     ResourceType::Machine(_) => {
                         self.machine_tell(myself, init_data, resource_type, tick_count);
                     }
-                    _ => {
-                    }
+                    _ => {}
                 }
             }
-            TileMsg::Transaction { item, tick_count, source_type, direction, init_data } => {
+            TileMsg::Transaction {
+                item,
+                tick_count,
+                source_type,
+                direction,
+                init_data,
+            } => {
                 if let Some(sender) = sender {
-                    let resource_type = init_data.resource_man.resources[&self.id].resource_type.clone();
+                    let resource_type = init_data.resource_man.resources[&self.id]
+                        .resource_type
+                        .clone();
 
                     match &resource_type {
                         ResourceType::Machine(_) => {
@@ -115,83 +127,96 @@ impl Actor for Tile {
 
                             if id == &L_SPLITTER {
                                 let (a, b) = match -direction {
-                                    L_SPLITTER_A => {
-                                        (L_SPLITTER_B, L_SPLITTER_C)
-                                    }
-                                    L_SPLITTER_B => {
-                                        (L_SPLITTER_A, L_SPLITTER_C)
-                                    }
-                                    L_SPLITTER_C => {
-                                        (L_SPLITTER_A, L_SPLITTER_B)
-                                    }
+                                    L_SPLITTER_A => (L_SPLITTER_B, L_SPLITTER_C),
+                                    L_SPLITTER_B => (L_SPLITTER_A, L_SPLITTER_C),
+                                    L_SPLITTER_C => (L_SPLITTER_A, L_SPLITTER_B),
                                     _ => {
                                         return;
                                     }
                                 };
 
-                                let target = if tick_count % 2 == 0 {
-                                    a
-                                } else {
-                                    b
-                                };
+                                let target = if tick_count % 2 == 0 { a } else { b };
 
                                 let coord = TileCoord(self.coord.0 + target);
 
-                                self.game.try_tell(GameMsg::SendMsgToTile(coord, TileMsg::Transaction { item, tick_count, source_type: resource_type.clone(), direction: target, init_data }), Some(sender)).unwrap();
+                                self.game
+                                    .try_tell(
+                                        GameMsg::SendMsgToTile(
+                                            coord,
+                                            TileMsg::Transaction {
+                                                item,
+                                                tick_count,
+                                                source_type: resource_type.clone(),
+                                                direction: target,
+                                                init_data,
+                                            },
+                                        ),
+                                        Some(sender),
+                                    )
+                                    .unwrap();
                             } else if id == &R_SPLITTER {
                                 let (a, b) = match -direction {
-                                    R_SPLITTER_A => {
-                                        (R_SPLITTER_B, R_SPLITTER_C)
-                                    }
-                                    R_SPLITTER_B => {
-                                        (R_SPLITTER_A, R_SPLITTER_C)
-                                    }
-                                    R_SPLITTER_C => {
-                                        (R_SPLITTER_A, R_SPLITTER_B)
-                                    }
+                                    R_SPLITTER_A => (R_SPLITTER_B, R_SPLITTER_C),
+                                    R_SPLITTER_B => (R_SPLITTER_A, R_SPLITTER_C),
+                                    R_SPLITTER_C => (R_SPLITTER_A, R_SPLITTER_B),
                                     _ => {
                                         return;
                                     }
                                 };
 
-                                let target = if tick_count % 2 == 0 {
-                                    a
-                                } else {
-                                    b
-                                };
+                                let target = if tick_count % 2 == 0 { a } else { b };
 
                                 let coord = TileCoord(self.coord.0 + target);
 
-                                self.game.try_tell(GameMsg::SendMsgToTile(coord, TileMsg::Transaction { item, tick_count, source_type: resource_type.clone(), direction: target, init_data }), Some(sender)).unwrap();
+                                self.game
+                                    .try_tell(
+                                        GameMsg::SendMsgToTile(
+                                            coord,
+                                            TileMsg::Transaction {
+                                                item,
+                                                tick_count,
+                                                source_type: resource_type.clone(),
+                                                direction: target,
+                                                init_data,
+                                            },
+                                        ),
+                                        Some(sender),
+                                    )
+                                    .unwrap();
                             }
                         }
                         ResourceType::Void => {
-                            sender.try_tell(TileMsg::TransactionResult(Ok(())), myself).unwrap();
+                            sender
+                                .try_tell(TileMsg::TransactionResult(Ok(())), myself)
+                                .unwrap();
                         }
                         _ => {
-                            sender.try_tell(TileMsg::TransactionResult(Err(TransactionError::NotSuitable)), myself).unwrap();
+                            sender
+                                .try_tell(
+                                    TileMsg::TransactionResult(Err(TransactionError::NotSuitable)),
+                                    myself,
+                                )
+                                .unwrap();
                         }
                     }
                 }
             }
-            TileMsg::TransactionResult(result) => {
-                match result {
-                    Ok(_) => {
+            TileMsg::TransactionResult(result) => match result {
+                Ok(_) => {
+                    self.interval_offset = 0;
+                }
+                Err(error) => match error {
+                    TransactionError::NoScript
+                    | TransactionError::NotSuitable
+                    | TransactionError::Full => {
+                        self.slow_down();
+                        return;
+                    }
+                    TransactionError::NotEnough => {
                         self.interval_offset = 0;
                     }
-                    Err(error) => {
-                        match error {
-                            TransactionError::NoScript | TransactionError::NotSuitable | TransactionError::Full => {
-                                self.slow_down();
-                                return;
-                            }
-                            TransactionError::NotEnough => {
-                                self.interval_offset = 0;
-                            }
-                        }
-                    }
-                }
-            }
+                },
+            },
             TileMsg::SetTarget(target_direction) => {
                 self.target_direction = target_direction;
             }
@@ -219,11 +244,21 @@ impl ActorFactoryArgs<(BasicActorRef, Id, TileCoord, Data)> for Tile {
 }
 
 impl Tile {
-    fn machine_tell(&mut self, myself: Option<BasicActorRef>, init_data: Arc<InitData>, resource_type: ResourceType, tick_count: usize) {
+    fn machine_tell(
+        &mut self,
+        myself: Option<BasicActorRef>,
+        init_data: Arc<InitData>,
+        resource_type: ResourceType,
+        tick_count: usize,
+    ) {
         if let Some(direction) = self.target_direction {
             let coord = TileCoord(self.coord.0 + direction);
 
-            if let Some(script) = self.script.as_ref().and_then(|v| init_data.resource_man.scripts.get(v)) {
+            if let Some(script) = self
+                .script
+                .as_ref()
+                .and_then(|v| init_data.resource_man.scripts.get(v))
+            {
                 let instructions = &script.instructions;
                 let output = instructions.output.clone();
 
@@ -236,12 +271,32 @@ impl Tile {
                         self.data.0.insert(id, stored - input.amount);
 
                         if let Some(output) = output {
-                            self.send_tile_msg(myself, coord, TileMsg::Transaction { item: output, tick_count, source_type: resource_type.clone(), direction, init_data });
+                            self.send_tile_msg(
+                                myself,
+                                coord,
+                                TileMsg::Transaction {
+                                    item: output,
+                                    tick_count,
+                                    source_type: resource_type.clone(),
+                                    direction,
+                                    init_data,
+                                },
+                            );
                         }
                     }
                 } else {
                     if let Some(output) = output {
-                        self.send_tile_msg(myself, coord, TileMsg::Transaction { item: output, tick_count, source_type: resource_type.clone(), direction, init_data });
+                        self.send_tile_msg(
+                            myself,
+                            coord,
+                            TileMsg::Transaction {
+                                item: output,
+                                tick_count,
+                                source_type: resource_type.clone(),
+                                direction,
+                                init_data,
+                            },
+                        );
                     }
                 }
             }
@@ -250,7 +305,13 @@ impl Tile {
         }
     }
 
-    fn machine_result(&mut self, myself: Option<BasicActorRef>, sender: BasicActorRef, init_data: Arc<InitData>, item: Item) {
+    fn machine_result(
+        &mut self,
+        myself: Option<BasicActorRef>,
+        sender: BasicActorRef,
+        init_data: Arc<InitData>,
+        item: Item,
+    ) {
         if let Some(script) = self.get_script(init_data) {
             if let Some(input) = script.instructions.input {
                 let id = item.id;
@@ -258,7 +319,12 @@ impl Tile {
                 let required = input.amount;
 
                 if input.id != id {
-                    sender.try_tell(TileMsg::TransactionResult(Err(TransactionError::NotSuitable)), myself).unwrap();
+                    sender
+                        .try_tell(
+                            TileMsg::TransactionResult(Err(TransactionError::NotSuitable)),
+                            myself,
+                        )
+                        .unwrap();
                     return;
                 }
 
@@ -270,23 +336,45 @@ impl Tile {
                 if *amount > limit {
                     *amount = amount.at_most(limit);
 
-                    sender.try_tell(TileMsg::TransactionResult(Err(TransactionError::Full)), myself).unwrap();
+                    sender
+                        .try_tell(
+                            TileMsg::TransactionResult(Err(TransactionError::Full)),
+                            myself,
+                        )
+                        .unwrap();
                     return;
                 }
 
                 if has >= required {
-                    sender.try_tell(TileMsg::TransactionResult(Ok(())), myself).unwrap();
+                    sender
+                        .try_tell(TileMsg::TransactionResult(Ok(())), myself)
+                        .unwrap();
                     return;
                 } else {
-                    sender.try_tell(TileMsg::TransactionResult(Err(TransactionError::NotEnough)), myself).unwrap();
+                    sender
+                        .try_tell(
+                            TileMsg::TransactionResult(Err(TransactionError::NotEnough)),
+                            myself,
+                        )
+                        .unwrap();
                     return;
                 }
             } else {
-                sender.try_tell(TileMsg::TransactionResult(Err(TransactionError::NotSuitable)), myself).unwrap();
+                sender
+                    .try_tell(
+                        TileMsg::TransactionResult(Err(TransactionError::NotSuitable)),
+                        myself,
+                    )
+                    .unwrap();
                 return;
             }
         } else {
-            sender.try_tell(TileMsg::TransactionResult(Err(TransactionError::NoScript)), myself).unwrap();
+            sender
+                .try_tell(
+                    TileMsg::TransactionResult(Err(TransactionError::NoScript)),
+                    myself,
+                )
+                .unwrap();
             return;
         }
     }
@@ -297,7 +385,10 @@ impl Tile {
     }
 
     fn send_tile_msg(&mut self, myself: Option<BasicActorRef>, coord: TileCoord, msg: TileMsg) {
-        match self.game.try_tell(GameMsg::SendMsgToTile(coord, msg), myself) {
+        match self
+            .game
+            .try_tell(GameMsg::SendMsgToTile(coord, msg), myself)
+        {
             Ok(_) => {}
             Err(_) => {
                 self.target_direction = None;
@@ -320,7 +411,10 @@ impl Tile {
     }
 
     fn get_script(&self, init_data: Arc<InitData>) -> Option<Script> {
-        self.script.as_ref().and_then(|v| init_data.resource_man.scripts.get(v)).cloned()
+        self.script
+            .as_ref()
+            .and_then(|v| init_data.resource_man.scripts.get(v))
+            .cloned()
     }
 }
 
@@ -353,8 +447,8 @@ impl Display for TileCoord {
 
 impl Serialize for TileCoord {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: Serializer,
+    where
+        S: Serializer,
     {
         let mut tuple = serializer.serialize_tuple(2)?;
         tuple.serialize_element(&self.0.q())?;
@@ -373,7 +467,8 @@ impl<'de> Visitor<'de> for TileCoordVisitor {
     }
 
     fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-        where A: SeqAccess<'de>
+    where
+        A: SeqAccess<'de>,
     {
         let q: TileUnit = seq.next_element()?.unwrap();
         let r: TileUnit = seq.next_element()?.unwrap();
@@ -383,12 +478,12 @@ impl<'de> Visitor<'de> for TileCoordVisitor {
 }
 
 impl<'de> Deserialize<'de> for TileCoord
-    where
-        Self: Sized
+where
+    Self: Sized,
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: Deserializer<'de>
+    where
+        D: Deserializer<'de>,
     {
         deserializer.deserialize_tuple(2, TileCoordVisitor)
     }

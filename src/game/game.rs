@@ -5,11 +5,11 @@ use riker::actor::{Actor, BasicActorRef};
 use riker::actors::{ActorFactoryArgs, ActorRefFactory, Context, Sender, Strategy, Tell};
 use uuid::Uuid;
 
-use crate::data::data::Data;
-use crate::data::id::Id;
+use crate::game::data::Data;
 use crate::game::map::{Map, RenderContext};
 use crate::game::ticking::MAX_ALLOWED_TICK_INTERVAL;
 use crate::game::tile::{Tile, TileCoord, TileMsg};
+use crate::util::id::Id;
 use crate::util::init::InitData;
 
 #[derive(Debug, Clone)]
@@ -27,7 +27,8 @@ pub struct Game {
     map: Arc<Map>,
 }
 
-impl ActorFactoryArgs<Arc<Map>> for Game { // TODO dont clone Map
+impl ActorFactoryArgs<Arc<Map>> for Game {
+    // TODO dont clone Map
     fn create_args(args: Arc<Map>) -> Self {
         Self::new(args)
     }
@@ -35,17 +36,9 @@ impl ActorFactoryArgs<Arc<Map>> for Game { // TODO dont clone Map
 
 #[derive(Debug, Clone)]
 pub enum GameMsg {
-    Tick {
-        init_data: Arc<InitData>,
-    },
-    RenderInfoRequest {
-        context: RenderContext,
-    },
-    PlaceTile {
-        coord: TileCoord,
-        id: Id,
-        none: Id
-    },
+    Tick { init_data: Arc<InitData> },
+    RenderInfoRequest { context: RenderContext },
+    PlaceTile { coord: TileCoord, id: Id, none: Id },
     GetTile(TileCoord),
     SendMsgToTile(TileCoord, TileMsg),
 }
@@ -79,14 +72,21 @@ impl Actor for Game {
                 if id == none {
                     map.tiles.remove_entry(&coord);
                 } else {
-                    let tile = ctx.system.actor_of_args::<Tile, (BasicActorRef, Id, TileCoord, Data)>(&Uuid::new_v4().to_string(), (ctx.myself().into(), id, coord, Data::default())).unwrap();
+                    let tile = ctx
+                        .system
+                        .actor_of_args::<Tile, (BasicActorRef, Id, TileCoord, Data)>(
+                            &Uuid::new_v4().to_string(),
+                            (ctx.myself().into(), id, coord, Data::default()),
+                        )
+                        .unwrap();
 
                     map.tiles.insert(coord, (id, tile));
                 }
             }
             GameMsg::GetTile(coord) => {
                 sender.inspect(|v| {
-                    v.try_tell(self.map.tiles.get(&coord).cloned(), myself).unwrap();
+                    v.try_tell(self.map.tiles.get(&coord).cloned(), myself)
+                        .unwrap();
                 });
             }
             GameMsg::SendMsgToTile(coord, msg) => {
@@ -99,19 +99,19 @@ impl Actor for Game {
 }
 
 impl Game {
-    pub fn new(
-        map: Arc<Map>,
-    ) -> Self {
-        Self {
-            tick_count: 0,
-
-            map,
-        }
+    pub fn new(map: Arc<Map>) -> Self {
+        Self { tick_count: 0, map }
     }
 
     fn inner_tick(&mut self, init_data: Arc<InitData>) {
         for (_, (_, tile)) in self.map.tiles.iter() {
-            tile.tell(TileMsg::Tick { init_data: init_data.clone(), tick_count: self.tick_count }, None);
+            tile.tell(
+                TileMsg::Tick {
+                    init_data: init_data.clone(),
+                    tick_count: self.tick_count,
+                },
+                None,
+            );
         }
 
         self.tick_count = self.tick_count.overflowing_add(1).0;

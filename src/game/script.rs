@@ -1,7 +1,7 @@
 use serde::Deserialize;
 
-use crate::data::id::{Id, IdRaw};
 use crate::game::item::{Item, ItemRaw};
+use crate::util::id::{Id, IdRaw};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Script {

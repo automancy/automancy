@@ -1,8 +1,10 @@
 use cgmath::{point2, vec2};
-use winit::event::{DeviceEvent, ModifiersState, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent};
 use winit::event::ElementState::Pressed;
+use winit::event::{
+    DeviceEvent, ModifiersState, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent,
+};
 
-use crate::util::cg::{Double, DPoint2, DVector2};
+use crate::util::cg::{DPoint2, DVector2, Double};
 
 #[derive(Debug, Copy, Clone)]
 pub enum GameWindowEvent {
@@ -63,7 +65,7 @@ pub fn convert_input(
                         } else {
                             MainReleased
                         };
-                    },
+                    }
                     MouseButton::Right => {
                         window = if state == &Pressed {
                             AlternatePressed
@@ -75,7 +77,9 @@ pub fn convert_input(
                 };
             }
             WindowEvent::ModifiersChanged(modifier) => {
-                window = ModifierChanged { modifier: *modifier };
+                window = ModifierChanged {
+                    modifier: *modifier,
+                };
             }
             WindowEvent::CursorMoved { position, .. } => {
                 window = MainPos {
@@ -97,18 +101,16 @@ pub fn convert_input(
 
                 device = MainMove { delta };
             }
-            DeviceEvent::Key(keyboard_input)=> {
-                match keyboard_input.virtual_keycode {
-                    Some(VirtualKeyCode::Escape) => {
-                        device = if keyboard_input.state == Pressed {
-                            ExitPressed
-                        } else {
-                            ExitReleased
-                        }
+            DeviceEvent::Key(keyboard_input) => match keyboard_input.virtual_keycode {
+                Some(VirtualKeyCode::Escape) => {
+                    device = if keyboard_input.state == Pressed {
+                        ExitPressed
+                    } else {
+                        ExitReleased
                     }
-                    _ => {}
                 }
-            }
+                _ => {}
+            },
             _ => {}
         }
     }

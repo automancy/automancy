@@ -1,15 +1,11 @@
-use std::{
-    collections::HashMap,
-    path::PathBuf,
-    sync::Arc,
-};
 use std::fmt::Debug;
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use riker::actor::ActorRef;
 
-use crate::data::id::Id;
 use crate::game::tile::TileMsg;
 use crate::render::data::InstanceData;
+use crate::util::id::Id;
 use crate::util::init::InitData;
 
 use super::tile::TileCoord;
@@ -36,23 +32,16 @@ pub struct Map {
 }
 
 impl Map {
-    pub fn render_info(
-        &self,
-        RenderContext {
-            init_data,
-        }: &RenderContext
-    ) -> MapRenderInfo { // TODO cache this
-        let instances = self.tiles
+    pub fn render_info(&self, RenderContext { init_data }: &RenderContext) -> MapRenderInfo {
+        // TODO cache this
+        let instances = self
+            .tiles
             .iter()
             .map(|(a, b)| (a.clone(), b))
-            .flat_map(|(pos, (id, _))| {
-                InstanceData::from_id(&id, pos, init_data.clone())
-            })
+            .flat_map(|(pos, (id, _))| InstanceData::from_id(&id, pos, init_data.clone()))
             .collect();
 
-        MapRenderInfo {
-            instances,
-        }
+        MapRenderInfo { instances }
     }
 
     pub fn new_empty(map_name: String) -> Self {
