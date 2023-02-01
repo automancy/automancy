@@ -7,7 +7,7 @@ use std::{fs, sync::Arc};
 use cgmath::{point3, EuclideanSpace};
 use discord_rich_presence::DiscordIpc;
 use egui::style::Margin;
-use egui::{vec2, Align, Align2, ScrollArea, TopBottomPanel, Window};
+use egui::Window;
 use env_logger::Env;
 use fuse_rust::Fuse;
 use futures::channel::mpsc;
@@ -23,7 +23,6 @@ use winit::{
     window::Icon,
 };
 
-use automancy::game::data::Data;
 use automancy::game::game::GameMsg;
 use automancy::game::input;
 use automancy::game::input::InputState;
@@ -236,7 +235,6 @@ fn main() {
 
             if window_event.is_some() || device_event.is_some() {
                 input_state.reset();
-
                 input_state.update(input::convert_input(window_event, device_event));
 
                 let ignore_move = selected_id.is_some();
@@ -276,59 +274,11 @@ fn main() {
                 let (selection_send, mut selection_recv) = mpsc::channel(1);
 
                 gui.immediate_ui(|gui| {
-                    // tile_selection
-                    TopBottomPanel::bottom("tile_selection")
-                        .show_separator_line(false)
-                        .resizable(false)
-                        .frame(frame.outer_margin(Margin::same(10.0)))
-                        .show(&gui.context(), |ui| {
-                            let spacing = ui.spacing_mut();
-
-                            spacing.interact_size.y = 70.0;
-                            spacing.scroll_bar_width = 0.0;
-                            spacing.scroll_bar_outer_margin = 0.0;
-
-                            ScrollArea::horizontal()
-                                .always_show_scroll(true)
-                                .show(ui, |ui| {
-                                    ui.horizontal(|ui| {
-                                        gui::render_tile_selection(
-                                            ui,
-                                            init_data.clone(),
-                                            &renderer.gpu,
-                                            selection_send,
-                                        );
-                                    });
-                                });
-                        });
+                    // tile_selections
+                    gui::tile_selections(gui, init_data.clone(), &renderer, selection_send);
 
                     // tile_info
-                    Window::new("Tile Info")
-                        .anchor(Align2([Align::RIGHT, Align::TOP]), vec2(-10.0, 10.0))
-                        .resizable(false)
-                        .default_width(300.0)
-                        .frame(frame.inner_margin(Margin::same(10.0)))
-                        .show(&gui.context(), |ui| {
-                            let coord = pointing_at;
-
-                            ui.colored_label(Color::DARK_GRAY, coord.to_string());
-
-                            let result: Option<(Id, ActorRef<TileMsg>)> =
-                                block_on(ask(&sys, &game, GameMsg::GetTile(coord)));
-
-                            if let Some((id, tile)) = result {
-                                ui.label(init_data.resource_man.tile_name(&id));
-                                let data: Data = block_on(ask(&sys, &tile, TileMsg::GetData));
-
-                                for (id, amount) in data.0.iter() {
-                                    ui.label(format!(
-                                        "{} - {}",
-                                        init_data.resource_man.item_name(id),
-                                        amount
-                                    ));
-                                }
-                            }
-                        });
+                    gui::tile_info(gui, init_data.clone(), &sys, game.clone(), pointing_at);
 
                     if let Some(config_open) = config_open {
                         let result: Option<(Id, ActorRef<TileMsg>)> =
@@ -358,114 +308,23 @@ fn main() {
                                         .show(&gui.context(), |ui| {
                                             ui.set_max_width(300.0);
 
-                                            let script_text = if let Some(ref script) = new_script {
-                                                init_data.resource_man.item_name(script)
-                                            // TODO move this to resource_man
-                                            } else {
-                                                "<none>".to_owned()
-                                            };
+                                            let script_text =
+                                                init_data.resource_man.try_item_name(&new_script);
 
                                             ui.label(format!("Script: {}", script_text));
-
-                                            ui.text_edit_singleline(&mut script_filter);
-
-                                            ScrollArea::vertical().max_height(80.0).show(
+                                            gui::scripts(
                                                 ui,
-                                                |ui| {
-                                                    ui.set_width(ui.available_width());
-
-                                                    let scripts = if !script_filter.is_empty() {
-                                                        let mut filtered = scripts
-                                                            .into_iter()
-                                                            .flat_map(|id| {
-                                                                let result = fuse
-                                                                    .search_text_in_string(
-                                                                        &script_filter,
-                                                                        init_data
-                                                                            .resource_man
-                                                                            .item_name(&id)
-                                                                            .as_str(),
-                                                                    );
-
-                                                                Some(id)
-                                                                    .zip(result.map(|v| v.score))
-                                                            })
-                                                            .collect::<Vec<_>>();
-
-                                                        filtered.sort_unstable_by(|a, b| {
-                                                            a.1.total_cmp(&b.1)
-                                                        });
-
-                                                        filtered
-                                                            .into_iter()
-                                                            .map(|v| v.0)
-                                                            .collect::<Vec<_>>()
-                                                    } else {
-                                                        scripts
-                                                    };
-
-                                                    scripts.iter().for_each(|script| {
-                                                        ui.radio_value(
-                                                            &mut new_script,
-                                                            Some(*script),
-                                                            init_data
-                                                                .resource_man
-                                                                .item_name(&script),
-                                                        );
-                                                    })
-                                                },
+                                                init_data.clone(),
+                                                &fuse,
+                                                scripts,
+                                                &mut new_script,
+                                                &mut script_filter,
                                             );
 
                                             ui.separator();
 
                                             ui.label("Target:");
-                                            ui.vertical(|ui| {
-                                                ui.horizontal(|ui| {
-                                                    ui.add_space(15.0);
-                                                    gui::add_direction(
-                                                        ui,
-                                                        &mut new_target_coord,
-                                                        5,
-                                                    );
-                                                    gui::add_direction(
-                                                        ui,
-                                                        &mut new_target_coord,
-                                                        0,
-                                                    );
-                                                });
-
-                                                ui.horizontal(|ui| {
-                                                    gui::add_direction(
-                                                        ui,
-                                                        &mut new_target_coord,
-                                                        4,
-                                                    );
-                                                    ui.selectable_value(
-                                                        &mut new_target_coord,
-                                                        None,
-                                                        "❌",
-                                                    );
-                                                    gui::add_direction(
-                                                        ui,
-                                                        &mut new_target_coord,
-                                                        1,
-                                                    );
-                                                });
-
-                                                ui.horizontal(|ui| {
-                                                    ui.add_space(15.0);
-                                                    gui::add_direction(
-                                                        ui,
-                                                        &mut new_target_coord,
-                                                        3,
-                                                    );
-                                                    gui::add_direction(
-                                                        ui,
-                                                        &mut new_target_coord,
-                                                        2,
-                                                    );
-                                                });
-                                            });
+                                            gui::targets(ui, &mut new_target_coord);
                                         });
                                 }
                             }

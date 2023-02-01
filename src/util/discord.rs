@@ -1,7 +1,8 @@
-use discord_rich_presence::activity::{Activity, Assets, Button, Timestamps};
-use discord_rich_presence::{DiscordIpc, DiscordIpcClient};
 use std::error::Error;
 use std::time::SystemTime;
+
+use discord_rich_presence::activity::{Activity, Assets, Button, Timestamps};
+use discord_rich_presence::{DiscordIpc, DiscordIpcClient};
 
 /// The discord application's client ID.
 static CLIENT_ID: &str = "1070156213892947978";

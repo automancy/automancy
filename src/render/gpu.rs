@@ -1,6 +1,6 @@
-use futures_executor::block_on;
 use std::sync::Arc;
 
+use futures_executor::block_on;
 use vulkano::buffer::DeviceLocalBuffer;
 use vulkano::command_buffer::allocator::{
     StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo,

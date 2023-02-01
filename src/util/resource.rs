@@ -344,10 +344,26 @@ impl ResourceManager {
         }
     }
 
+    pub fn try_item_name(&self, id: &Option<Id>) -> String {
+        if let Some(id) = id {
+            self.item_name(id)
+        } else {
+            "<none>".to_owned()
+        }
+    }
+
     pub fn tile_name(&self, id: &Id) -> String {
         match self.translates.tiles.get(id) {
             Some(name) => name.to_owned(),
             None => "<unnamed>".to_string(),
+        }
+    }
+
+    pub fn try_tile_name(&self, id: &Option<Id>) -> String {
+        if let Some(id) = id {
+            self.tile_name(id)
+        } else {
+            "<none>".to_owned()
         }
     }
 }
