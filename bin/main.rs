@@ -74,7 +74,7 @@ use automancy::util::colors::Color;
 use automancy::util::init::InitData;
 use automancy::util::resource::{ResourceManager, ResourceRaw, ResourceType};
 
-pub const ASSET_LOGO: &str = "assets/logo.png";
+pub const ASSET_LOGO: &str = "resources/automancy/branding/logo.png";
 
 pub const RESOURCE: &str = "resources";
 
