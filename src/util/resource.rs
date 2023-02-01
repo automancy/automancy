@@ -1,6 +1,9 @@
+use kira::sound::static_sound::{StaticSoundData, StaticSoundSettings};
+use kira::track::TrackHandle;
 use std::convert::AsRef;
+use std::fmt::{Debug, Formatter};
 use std::fs::{read_dir, read_to_string};
-use std::{collections::HashMap, ffi::OsStr, fs::File, io::BufReader, path::Path};
+use std::{collections::HashMap, ffi::OsStr, fmt, fs::File, io::BufReader, path::Path};
 
 use ply_rs::parser::Parser;
 use serde::Deserialize;
@@ -60,16 +63,17 @@ pub struct TileRaw {
     pub scripts: Option<Vec<IdRaw>>,
 }
 
-#[derive(Debug)]
 pub struct ResourceManager {
     pub interner: Interner,
     pub none: Id,
+    pub track: TrackHandle,
 
     pub ordered_ids: Vec<Id>,
 
     pub tiles: HashMap<Id, Tile>,
     pub scripts: HashMap<Id, Script>,
     pub translates: Translate,
+    pub audio: HashMap<String, StaticSoundData>,
 
     pub raw_models: HashMap<Id, Model>,
     pub models_referenced: HashMap<Id, Vec<Id>>,
@@ -79,20 +83,28 @@ pub struct ResourceManager {
     pub all_raw_faces: Vec<Vec<RawFace>>,
 }
 
+impl Debug for ResourceManager {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("<resource manager>")
+    }
+}
+
 impl ResourceManager {
-    pub fn new() -> Self {
+    pub fn new(track: TrackHandle) -> Self {
         let mut interner = Interner::new();
         let none = IdRaw::NONE.to_id(&mut interner);
 
         Self {
             interner,
             none,
+            track,
 
             ordered_ids: vec![],
 
             tiles: Default::default(),
             scripts: Default::default(),
             translates: Default::default(),
+            audio: Default::default(),
 
             raw_models: Default::default(),
             models_referenced: Default::default(),
@@ -247,6 +259,31 @@ impl ResourceManager {
                 faces_index: None,
             },
         );
+
+        Some(())
+    }
+
+    pub fn load_audio(&mut self, dir: &Path) -> Option<()> {
+        let audio = dir.join("audio");
+        let audio = read_dir(audio).ok()?;
+
+        audio
+            .into_iter()
+            .flatten()
+            .map(|v| v.path())
+            .for_each(|file| {
+                log::info!("loading audio at {:?}", file);
+
+                if let Ok(audio) = StaticSoundData::from_file(
+                    file.clone(),
+                    StaticSoundSettings::default().track(&self.track),
+                ) {
+                    self.audio.insert(
+                        file.file_stem().unwrap().to_str().unwrap().to_string(),
+                        audio,
+                    );
+                }
+            });
 
         Some(())
     }

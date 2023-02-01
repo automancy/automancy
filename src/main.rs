@@ -13,6 +13,10 @@ use fuse_rust::Fuse;
 use futures::channel::mpsc;
 use futures::executor::block_on;
 use hexagon_tiles::hex::Hex;
+use kira::manager::backend::cpal::CpalBackend;
+use kira::manager::{AudioManager, AudioManagerSettings};
+use kira::track::effect::filter::FilterBuilder;
+use kira::track::{TrackBuilder, TrackHandle};
 use riker::actor::ActorRef;
 use riker::actors::{ActorRefFactory, SystemBuilder, Tell, Timer};
 use riker_patterns::ask::ask;
@@ -23,7 +27,7 @@ use winit::{
     window::Icon,
 };
 
-use automancy::game::game::GameMsg;
+use automancy::game::game::{GameMsg, PlaceTileResponse};
 use automancy::game::input;
 use automancy::game::input::InputState;
 use automancy::game::map::{MapRenderInfo, RenderContext};
@@ -43,8 +47,8 @@ use automancy::{
     LOGO, RESOURCES,
 };
 
-fn load_resources() -> Arc<ResourceManager> {
-    let mut resource_man = ResourceManager::new();
+fn load_resources(track: TrackHandle) -> Arc<ResourceManager> {
+    let mut resource_man = ResourceManager::new(track);
 
     fs::read_dir(RESOURCES)
         .unwrap()
@@ -54,6 +58,7 @@ fn load_resources() -> Arc<ResourceManager> {
             resource_man.load_models(&dir);
             resource_man.load_scripts(&dir);
             resource_man.load_translates(&dir);
+            resource_man.load_audio(&dir);
             resource_man.load_tiles(&dir);
         });
 
@@ -81,7 +86,16 @@ fn main() {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
     // --- resources & data ---
-    let resource_man = load_resources();
+    let mut audio_man = AudioManager::<CpalBackend>::new(AudioManagerSettings::default()).unwrap();
+    let track = audio_man
+        .add_sub_track({
+            let mut builder = TrackBuilder::new();
+
+            builder
+        })
+        .unwrap();
+
+    let resource_man = load_resources(track);
     log::info!("loaded resources.");
 
     let icon = get_icon();
@@ -134,7 +148,10 @@ fn main() {
     let map = Map::new_empty("test".to_owned());
 
     let game = sys
-        .actor_of_args::<Game, Arc<Map>>("game", Arc::new(map))
+        .actor_of_args::<Game, (Arc<ResourceManager>, Arc<Map>)>(
+            "game",
+            (resource_man.clone(), Arc::new(map)),
+        )
         .unwrap();
 
     sys.schedule(
@@ -142,9 +159,7 @@ fn main() {
         TICK_INTERVAL,
         game.clone(),
         None,
-        GameMsg::Tick {
-            resource_man: resource_man.clone(),
-        },
+        GameMsg::Tick,
     );
 
     log::info!("loading completed!");
@@ -175,6 +190,7 @@ fn main() {
         let mut pointing_at = TileCoord::ZERO;
 
         let mut selected_id = None;
+        let mut already_placed_at = None;
         let mut config_open = None;
 
         event_loop.run(move |event, _, control_flow| {
@@ -246,16 +262,28 @@ fn main() {
                     selected_id = None;
                 }
 
-                if let Some(id) = selected_id {
-                    if input_state.main_pressed {
-                        game.tell(
-                            GameMsg::PlaceTile {
-                                coord: pointing_at,
-                                id,
-                                none,
-                            },
-                            None,
-                        );
+                if input_state.main_pressed || (input_state.shift_held && input_state.main_held) {
+                    if let Some(id) = selected_id {
+                        if already_placed_at != Some(pointing_at) {
+                            let response: PlaceTileResponse = block_on(ask(
+                                &sys,
+                                &game,
+                                GameMsg::PlaceTile {
+                                    coord: pointing_at,
+                                    id,
+                                    none,
+                                },
+                            ));
+
+                            match response {
+                                PlaceTileResponse::Placed => {
+                                    audio_man.play(resource_man.audio["place"].clone()).unwrap();
+                                }
+                                _ => {}
+                            }
+
+                            already_placed_at = Some(pointing_at)
+                        }
                     }
                 }
 

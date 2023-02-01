@@ -125,6 +125,7 @@ pub struct InputState {
     pub main_held: bool,
     pub alternate_held: bool,
     pub exit_held: bool,
+    pub shift_held: bool,
 
     pub main_pressed: bool,
     pub alternate_pressed: bool,
@@ -143,6 +144,7 @@ impl Default for InputState {
             main_held: false,
             alternate_held: false,
             exit_held: false,
+            shift_held: false,
 
             main_pressed: false,
             alternate_pressed: false,
@@ -186,7 +188,14 @@ impl InputState {
             GameWindowEvent::MouseWheel { delta } => {
                 self.scroll = Some(delta);
             }
-            GameWindowEvent::ModifierChanged { .. } => {}
+            GameWindowEvent::ModifierChanged { modifier } => match modifier {
+                ModifiersState::SHIFT => {
+                    self.shift_held = true;
+                }
+                _ => {
+                    self.shift_held = false;
+                }
+            },
             GameWindowEvent::None => {}
         }
 
