@@ -2,6 +2,7 @@
 #![feature(is_some_and)]
 
 use std::{ffi::OsStr, fs::{File, read_to_string}, fs, sync::Arc};
+use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use cgmath::{EuclideanSpace, point3};
@@ -91,7 +92,7 @@ fn load_resources() -> ResourceManager {
             resource_man.load_scripts(&dir);
             resource_man.load_translates(&dir);
 
-            fs::read_dir(&dir)
+            fs::read_dir(&dir.join(Path::new("tiles")))
                 .unwrap()
                 .flatten()
                 .map(|v |v.path())
