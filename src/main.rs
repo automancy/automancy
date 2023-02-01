@@ -4,7 +4,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{fs, sync::Arc};
 
-use cgmath::{point3, EuclideanSpace};
+use cgmath::{point2, EuclideanSpace};
 use discord_rich_presence::DiscordIpc;
 use egui::style::Margin;
 use egui::Window;
@@ -15,7 +15,6 @@ use futures::executor::block_on;
 use hexagon_tiles::hex::Hex;
 use kira::manager::backend::cpal::CpalBackend;
 use kira::manager::{AudioManager, AudioManagerSettings};
-use kira::track::effect::filter::FilterBuilder;
 use kira::track::{TrackBuilder, TrackHandle};
 use riker::actor::ActorRef;
 use riker::actors::{ActorRefFactory, SystemBuilder, Tell, Timer};
@@ -32,6 +31,7 @@ use automancy::game::input;
 use automancy::game::input::InputState;
 use automancy::game::map::{MapRenderInfo, RenderContext};
 use automancy::game::tile::{TileCoord, TileEntityMsg, TileUnit};
+use automancy::render::camera::cursor_to_pos;
 use automancy::render::data::InstanceData;
 use automancy::render::gpu::{Gpu, RenderAlloc};
 use automancy::render::gui;
@@ -89,7 +89,7 @@ fn main() {
     let mut audio_man = AudioManager::<CpalBackend>::new(AudioManagerSettings::default()).unwrap();
     let track = audio_man
         .add_sub_track({
-            let mut builder = TrackBuilder::new();
+            let builder = TrackBuilder::new();
 
             builder
         })
@@ -201,7 +201,7 @@ fn main() {
             let mut window_event = None;
             let mut device_event = None;
 
-            let mut extra_instances = vec![];
+            let mut gui_instances = vec![];
             let extra_vertices = vec![];
 
             let resource_man = resource_man.clone();
@@ -372,6 +372,8 @@ fn main() {
                 });
 
                 if let Ok(Some(id)) = selection_recv.try_next() {
+                    already_placed_at = None;
+
                     if selected_id.is_some_and(|v| v == id) {
                         selected_id = None;
                     } else {
@@ -379,7 +381,12 @@ fn main() {
                     }
                 }
 
-                let mouse_pos = camera.cursor_to_pos(input_state.main_pos, point3(0.0, 0.0, 1.0));
+                let mouse_pos = cursor_to_pos(
+                    camera.window_size.0,
+                    camera.window_size.1,
+                    input_state.main_pos,
+                );
+                let mouse_pos = point2(mouse_pos.x, mouse_pos.y);
                 let mouse_pos = mouse_pos + camera.camera_state().pos.to_vec().truncate();
 
                 let camera_state = camera.camera_state();
@@ -396,7 +403,8 @@ fn main() {
                                 .faces_index(faces_index)
                                 .position_offset([mouse_pos.x as Num, mouse_pos.y as Num, 0.1])
                                 .color_offset(Color::TRANSPARENT.with_alpha(glow as Num).into());
-                            extra_instances.push(instance);
+
+                            gui_instances.push(instance);
                         }
                     }
                 }
@@ -415,7 +423,7 @@ fn main() {
                     render_info,
                     camera.camera_state(),
                     none,
-                    extra_instances,
+                    gui_instances,
                     extra_vertices,
                     &mut gui,
                 );

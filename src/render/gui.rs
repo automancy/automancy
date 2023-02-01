@@ -18,8 +18,6 @@ use hexagon_tiles::hex::Hex;
 use hexagon_tiles::traits::HexDirection;
 use riker::actors::{ActorRef, ActorSystem};
 use riker_patterns::ask::ask;
-use vulkano::buffer::BufferUsage;
-use vulkano::command_buffer::DrawIndexedIndirectCommand;
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::pipeline::{Pipeline, PipelineBindPoint};
 use winit::event_loop::EventLoop;
@@ -27,7 +25,7 @@ use winit::event_loop::EventLoop;
 use crate::game::data::Data;
 use crate::game::game::GameMsg;
 use crate::game::tile::{TileCoord, TileEntityMsg, TileUnit};
-use crate::render::data::UniformBufferObject;
+use crate::render::data::{GuiUBO, InstanceData};
 use crate::render::gpu;
 use crate::render::gpu::Gpu;
 use crate::render::renderer::Renderer;
@@ -182,11 +180,9 @@ fn tile_paint(
     PaintCallback {
         rect,
         callback: Arc::new(CallbackFn::new(move |_info, context| {
-            let faces = &resource_man.all_faces[faces_index];
-
             let uniform_buffer = gpu::uniform_buffer(&context.resources.memory_allocator);
 
-            let ubo = UniformBufferObject {
+            let ubo = GuiUBO {
                 matrix: matrix.into(),
             };
 
@@ -199,39 +195,27 @@ fn tile_paint(
             )
             .unwrap();
 
-            context
-                .builder
-                .bind_pipeline_graphics(pipeline.clone())
-                .bind_vertex_buffers(0, vertex_buffer.clone())
-                .bind_index_buffer(index_buffer.clone())
-                .bind_descriptor_sets(
-                    PipelineBindPoint::Graphics,
-                    pipeline.layout().clone(),
-                    0,
-                    ubo_set.clone(),
-                );
+            let instance = InstanceData::new().faces_index(faces_index);
 
-            let commands = faces.iter().map(|face| DrawIndexedIndirectCommand {
-                index_count: face.size,
-                instance_count: 1,
-                first_index: face.offset,
-                vertex_offset: 0,
-                first_instance: 0,
-            });
-
-            let indirect_buffer = gpu::cpu_accessible_buffer(
+            if let Some((indirect_commands, instance_buffer)) = gpu::indirect_instance(
                 &context.resources.memory_allocator,
-                commands,
-                BufferUsage {
-                    indirect_buffer: true,
-                    ..Default::default()
-                },
-            );
-
-            context
-                .builder
-                .draw_indexed_indirect(indirect_buffer)
-                .unwrap();
+                &resource_man,
+                &[instance],
+            ) {
+                context
+                    .builder
+                    .bind_pipeline_graphics(pipeline.clone())
+                    .bind_vertex_buffers(0, (vertex_buffer.clone(), instance_buffer))
+                    .bind_index_buffer(index_buffer.clone())
+                    .bind_descriptor_sets(
+                        PipelineBindPoint::Graphics,
+                        pipeline.layout().clone(),
+                        0,
+                        ubo_set.clone(),
+                    )
+                    .draw_indexed_indirect(indirect_commands)
+                    .unwrap();
+            }
         })),
     }
 }

@@ -10,7 +10,7 @@ use hexagon_tiles::traits::HexRound;
 use crate::game::input::InputState;
 use crate::game::tile::TileCoord;
 use crate::render::data::RENDER_LAYOUT;
-use crate::util::cg::{matrix, DPoint2, DPoint3, DVector2, Double};
+use crate::util::cg::{matrix, DPoint2, DPoint3, DVector2, Double, Num};
 
 pub const FAR: Double = 0.0;
 
@@ -71,7 +71,7 @@ impl Camera {
     fn scroll(z: Double, vel: Double) -> Double {
         let z = z + vel * 0.4;
 
-        clamp(z, FAR, 1.0)
+        clamp(z, FAR + 0.2, 1.0)
     }
 
     pub fn camera_state(&self) -> CameraState {
@@ -118,37 +118,43 @@ impl Camera {
         self.camera_state.move_vel += delta / 300.0;
     }
 
-    pub fn cursor_to_pos(&self, main_pos: DPoint2, pos: DPoint3) -> DPoint2 {
-        let (width, height) = self.window_size;
-        let size = vec2(width, height) / 2.0;
-        let aspect = width / height;
-
-        let c = vec2(main_pos.x, main_pos.y);
-        let c = c.zip(size, Sub::sub);
-        let c = c.zip(size, Div::div);
-        let c = point3(c.x, c.y, FAR);
-
-        let matrix = matrix(pos, aspect, PI);
-
-        let v = c.to_vec();
-        let v = matrix * v.extend(1.0);
-        let v = v.truncate().truncate() * v.w;
-
-        let aspect_squared = aspect.powi(2);
-
-        point2(v.x * aspect_squared, v.y)
-    }
-
     pub fn update_pointing_at(&mut self, main_pos: DPoint2) {
+        let (width, height) = self.window_size;
+
         let camera_pos = self.camera_state.pos;
         let pos = point(camera_pos.x, camera_pos.y);
         let pos = pixel_to_hex(RENDER_LAYOUT, pos);
 
-        let p = self.cursor_to_pos(main_pos, point3(0.0, 0.0, self.camera_state.pos.z));
+        let p = cursor_to_pos(width, height, main_pos);
         let p = point(p.x, p.y);
         let p = pixel_to_hex(RENDER_LAYOUT, p);
         let p = p + pos;
 
         self.camera_state.pointing_at = TileCoord(p.round());
     }
+}
+
+pub fn cursor_to_pos(width: Double, height: Double, c: DPoint2) -> DPoint3 {
+    let size = vec2(width, height) / 2.0;
+
+    let c = vec2(c.x, c.y);
+    let c = c.zip(size, Sub::sub);
+    let c = c.zip(size, Div::div);
+    let c = point3(c.x, c.y, FAR);
+
+    camera_to_pos(width, height, c)
+}
+
+pub fn camera_to_pos(width: Double, height: Double, p: DPoint3) -> DPoint3 {
+    let aspect = width / height;
+
+    let matrix = matrix(point3(0.0, 0.0, 1.0), aspect, PI);
+
+    let p = p.to_vec();
+    let p = matrix * p.extend(1.0);
+    let p = p.truncate() * p.w;
+
+    let aspect_squared = aspect.powi(2);
+
+    point3(p.x * aspect_squared, p.y, p.z)
 }

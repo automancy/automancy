@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use bytemuck::Pod;
 use futures_executor::block_on;
 use vulkano::buffer::DeviceLocalBuffer;
 use vulkano::command_buffer::allocator::{
@@ -46,13 +47,12 @@ use winit::event_loop::EventLoop;
 use winit::window::{Icon, WindowBuilder};
 use winit::{dpi::LogicalSize, window::Window};
 
-use crate::render::data::Vertex;
-use crate::render::gpu;
+use crate::render::data::{GuiUBO, Vertex};
 use crate::util::cg::Double;
 use crate::util::cg::Num;
 use crate::util::resource::ResourceManager;
 
-use super::data::{InstanceData, UniformBufferObject};
+use super::data::{GameUBO, InstanceData};
 
 pub mod vert_shader {
     vulkano_shaders::shader! {
@@ -113,7 +113,11 @@ pub fn create_gui_pipeline(device: Arc<Device>, subpass: &Subpass) -> Arc<Graphi
 
     let pipeline = GraphicsPipeline::start()
         .vertex_shader(vs_gui.entry_point("main").unwrap(), ())
-        .vertex_input_state(BuffersDefinition::new().vertex::<Vertex>())
+        .vertex_input_state(
+            BuffersDefinition::new()
+                .vertex::<Vertex>()
+                .instance::<InstanceData>(),
+        )
         .input_assembly_state(InputAssemblyState::new().topology(PrimitiveTopology::TriangleList))
         .fragment_shader(fs_gui.entry_point("main").unwrap(), ())
         .viewport_state(ViewportState::viewport_dynamic_scissor_dynamic(1))
@@ -270,9 +274,9 @@ where
     buffer
 }
 
-pub fn uniform_buffer(
+pub fn uniform_buffer<UBO: Default + Pod + Send + Sync>(
     allocator: &(impl MemoryAllocator + ?Sized),
-) -> Arc<CpuAccessibleBuffer<UniformBufferObject>> {
+) -> Arc<CpuAccessibleBuffer<UBO>> {
     CpuAccessibleBuffer::from_data(
         allocator,
         BufferUsage {
@@ -280,7 +284,7 @@ pub fn uniform_buffer(
             ..Default::default()
         },
         false,
-        UniformBufferObject::default(),
+        UBO::default(),
     )
     .unwrap()
 }
@@ -399,8 +403,8 @@ pub struct RenderAlloc {
 
     pub vertex_buffer: Arc<DeviceLocalBuffer<[Vertex]>>,
     pub index_buffer: Arc<DeviceLocalBuffer<[u32]>>,
-    pub game_uniform_buffer: Arc<CpuAccessibleBuffer<UniformBufferObject>>,
-    pub gui_uniform_buffer: Arc<CpuAccessibleBuffer<UniformBufferObject>>,
+    pub game_uniform_buffer: Arc<CpuAccessibleBuffer<GameUBO>>,
+    pub gui_uniform_buffer: Arc<CpuAccessibleBuffer<GuiUBO>>,
 
     pub color_image: Arc<AttachmentImage>,
     pub game_depth_buffer: Arc<AttachmentImage>,
@@ -473,7 +477,7 @@ impl RenderAlloc {
         );
 
         let allocator = StandardMemoryAllocator::new_default(device.clone());
-        let descriptor_set_allocator = StandardDescriptorSetAllocator::new(device.clone());
+        let descriptor_allocator = StandardDescriptorSetAllocator::new(device.clone());
         let command_allocator = StandardCommandBufferAllocator::new(
             device.clone(),
             StandardCommandBufferAllocatorCreateInfo {
@@ -513,9 +517,8 @@ impl RenderAlloc {
             &mut command_buffer_builder,
         );
 
-        let uniform_buffer = uniform_buffer(&allocator);
-
-        let uniform_buffer_gui = gpu::uniform_buffer(&allocator);
+        let game_uniform_buffer = uniform_buffer(&allocator);
+        let gui_uniform_buffer = uniform_buffer(&allocator);
 
         let color_image = AttachmentImage::multisampled_with_usage(
             &allocator,
@@ -529,7 +532,7 @@ impl RenderAlloc {
         )
         .unwrap();
 
-        let depth_buffer = AttachmentImage::multisampled_with_usage(
+        let game_depth_buffer = AttachmentImage::multisampled_with_usage(
             &allocator,
             window_size_u32(window.clone().as_ref()),
             Sample4,
@@ -541,7 +544,7 @@ impl RenderAlloc {
         )
         .unwrap();
 
-        let depth_buffer_gui = AttachmentImage::multisampled_with_usage(
+        let gui_depth_buffer = AttachmentImage::multisampled_with_usage(
             &allocator,
             window_size_u32(&window),
             Sample4,
@@ -572,15 +575,15 @@ impl RenderAlloc {
 
             vertex_buffer,
             index_buffer,
-            game_uniform_buffer: uniform_buffer,
-            gui_uniform_buffer: uniform_buffer_gui,
+            game_uniform_buffer,
+            gui_uniform_buffer,
 
             color_image,
-            game_depth_buffer: depth_buffer,
-            gui_depth_buffer: depth_buffer_gui,
+            game_depth_buffer,
+            gui_depth_buffer,
 
             command_allocator,
-            descriptor_allocator: descriptor_set_allocator,
+            descriptor_allocator,
         }
     }
 }

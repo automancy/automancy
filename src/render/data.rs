@@ -1,8 +1,7 @@
-use std::ops::{Add, Mul};
-use std::{ops::Div, sync::Arc};
+use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
-use cgmath::vec3;
+use cgmath::{Matrix, SquareMatrix};
 use hexagon_tiles::layout::{hex_to_pixel, Layout, LAYOUT_ORIENTATION_POINTY};
 use hexagon_tiles::point::Point;
 use ply_rs::ply::{Property, PropertyAccess};
@@ -10,13 +9,15 @@ use vulkano::impl_vertex;
 
 use crate::game::tile::TileCoord;
 use crate::render::camera::FAR;
-use crate::util::cg::{Matrix4, Num, Vector2};
+use crate::util::cg::{Matrix3, Matrix4, Num, Point3};
 use crate::util::id::Id;
 use crate::util::resource::ResourceManager;
 
-fn color_to_num(color: u8) -> Num {
-    color as Num / 255.0
-}
+pub const RENDER_LAYOUT: Layout = Layout {
+    orientation: LAYOUT_ORIENTATION_POINTY,
+    size: Point { x: 1.0, y: 1.0 },
+    origin: Point { x: 0.0, y: 0.0 },
+};
 
 // vertex
 
@@ -28,14 +29,20 @@ pub type VertexColor = [Num; 4];
 pub struct Vertex {
     pub pos: VertexPos,
     pub color: VertexColor,
+    pub normal: VertexPos,
 }
-impl_vertex!(Vertex, pos, color);
+impl_vertex!(Vertex, pos, color, normal);
+
+fn color_to_num(color: u8) -> Num {
+    color as Num / 255.0
+}
 
 impl PropertyAccess for Vertex {
     fn new() -> Self {
-        Vertex {
+        Self {
             pos: [0.0, 0.0, 0.0],
             color: [0.0, 0.0, 0.0, 0.0],
+            normal: [0.0, 0.0, 0.0],
         }
     }
 
@@ -48,51 +55,13 @@ impl PropertyAccess for Vertex {
             ("green", Property::UChar(v)) => self.color[1] = color_to_num(v),
             ("blue", Property::UChar(v)) => self.color[2] = color_to_num(v),
             ("alpha", Property::UChar(v)) => self.color[3] = color_to_num(v),
+            ("nx", Property::Float(v)) => self.normal[0] = v,
+            ("ny", Property::Float(v)) => self.normal[1] = v,
+            ("nz", Property::Float(v)) => self.normal[2] = v,
             (_, _) => {}
         }
     }
 }
-
-impl Div<Vector2> for Vertex {
-    type Output = Self;
-
-    fn div(self, rhs: Vector2) -> Self::Output {
-        let pos = self.pos;
-        let pos = [pos[0] / rhs[0], pos[1] / rhs[1], pos[2]];
-        let color = self.color;
-
-        Self { pos, color }
-    }
-}
-
-impl Mul<Matrix4> for Vertex {
-    type Output = Vertex;
-
-    fn mul(self, rhs: Matrix4) -> Self::Output {
-        let vec3 = vec3(self.pos[0], self.pos[1], self.pos[2]);
-        let vec3 = rhs * vec3.extend(1.0);
-        let w = vec3.w;
-        let pos = [vec3.x / w, vec3.y / w, vec3.z / w];
-
-        Self {
-            pos,
-            color: self.color,
-        }
-    }
-}
-
-impl Add<Vector2> for Vertex {
-    type Output = Vertex;
-
-    fn add(mut self, rhs: Vector2) -> Self::Output {
-        self.pos[0] += rhs.x;
-        self.pos[1] += rhs.y;
-
-        self
-    }
-}
-
-// vertex
 
 // instance
 
@@ -107,12 +76,6 @@ pub struct InstanceData {
 }
 
 impl_vertex!(InstanceData, position_offset, scale, color_offset);
-
-pub const RENDER_LAYOUT: Layout = Layout {
-    orientation: LAYOUT_ORIENTATION_POINTY,
-    size: Point { x: 1.0, y: 1.0 },
-    origin: Point { x: 0.0, y: 0.0 },
-};
 
 impl InstanceData {
     pub fn from_id(
@@ -178,19 +141,35 @@ impl InstanceData {
     }
 }
 
-// instance
-
 // UBO
 
 type RawMat4 = [[Num; 4]; 4];
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
-pub struct UniformBufferObject {
+pub struct GameUBO {
     pub matrix: RawMat4,
+    pub ambient_light_color: [Num; 4],
+    pub light_pos: VertexPos,
+    pub light_color: [Num; 4],
 }
 
-// UBO
+impl GameUBO {
+    pub fn new(matrix: Matrix4, camera_pos: Point3) -> Self {
+        Self {
+            matrix: matrix.into(),
+            ambient_light_color: [1.0, 1.0, 1.0, 1.0],
+            light_pos: camera_pos.into(),
+            light_color: [1.0, 1.0, 1.0, 0.1],
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
+pub struct GuiUBO {
+    pub matrix: RawMat4,
+}
 
 // face
 
@@ -223,8 +202,6 @@ impl PropertyAccess for RawFace {
     }
 }
 
-// face
-
 // model
 
 #[derive(Debug, Clone)]
@@ -238,5 +215,3 @@ impl Model {
         Self { vertices, faces }
     }
 }
-
-// model
