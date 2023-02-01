@@ -4,41 +4,17 @@ use std::{collections::HashMap, ffi::OsStr, fs::File, io::BufReader, path::Path}
 
 use ply_rs::parser::Parser;
 use serde::Deserialize;
-use serde_json::Error;
 
 use crate::game::script::{Instructions, Script, ScriptRaw};
-use crate::render::data::{ModelRaw, RawFace, Vertex};
+use crate::render::data::{Model, RawFace, Vertex};
 use crate::util::id::{Id, IdRaw, Interner};
 
 pub static JSON_EXT: &str = "json";
-
-#[derive(Debug, Clone)]
-pub struct Resource {
-    pub resource_type: ResourceType,
-    pub scripts: Option<Vec<Id>>,
-    pub faces_index: Option<usize>,
-}
 
 #[derive(Debug, Default, Clone)]
 pub struct Face {
     pub offset: u32,
     pub size: u32,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize)]
-#[serde(tag = "type", content = "param")]
-pub enum ResourceType {
-    None,
-    Void,
-    Model,
-    Machine(IdRaw),
-    Transfer(IdRaw),
-}
-
-#[derive(Debug, Default, Clone)]
-pub struct Translate {
-    pub items: HashMap<Id, String>,
-    pub tiles: HashMap<Id, String>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize)]
@@ -47,15 +23,38 @@ pub struct TranslateRaw {
     pub tiles: HashMap<IdRaw, String>,
 }
 
+#[derive(Debug, Default, Clone)]
+pub struct Translate {
+    pub items: HashMap<Id, String>,
+    pub tiles: HashMap<Id, String>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
-pub struct Model {
+pub struct ModelRaw {
     pub id: IdRaw,
     pub file: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(tag = "type", content = "param")]
+pub enum TileType {
+    Empty,
+    Void,
+    Model,
+    Machine(IdRaw),
+    Transfer(IdRaw),
+}
+
+#[derive(Debug, Clone)]
+pub struct Tile {
+    pub tile_type: TileType,
+    pub scripts: Option<Vec<Id>>,
+    pub faces_index: Option<usize>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
-pub struct ResourceRaw {
-    pub resource_type: ResourceType,
+pub struct TileRaw {
+    pub tile_type: TileType,
     pub id: IdRaw,
     pub model: Option<IdRaw>,
     pub scripts: Option<Vec<IdRaw>>,
@@ -68,13 +67,16 @@ pub struct ResourceManager {
 
     pub ordered_ids: Vec<Id>,
 
-    pub resources: HashMap<Id, Resource>,
+    pub tiles: HashMap<Id, Tile>,
     pub scripts: HashMap<Id, Script>,
     pub translates: Translate,
 
-    pub raw_models: HashMap<Id, ModelRaw>,
+    pub raw_models: HashMap<Id, Model>,
     pub models_referenced: HashMap<Id, Vec<Id>>,
+
     pub all_faces: Vec<Vec<Face>>,
+    pub all_vertices: Vec<Vertex>,
+    pub all_raw_faces: Vec<Vec<RawFace>>,
 }
 
 impl ResourceManager {
@@ -88,13 +90,16 @@ impl ResourceManager {
 
             ordered_ids: vec![],
 
-            resources: Default::default(),
+            tiles: Default::default(),
             scripts: Default::default(),
             translates: Default::default(),
 
             raw_models: Default::default(),
             models_referenced: Default::default(),
+
             all_faces: vec![],
+            all_vertices: vec![],
+            all_raw_faces: vec![],
         }
     }
 }
@@ -103,142 +108,149 @@ impl ResourceManager {
     fn load_translate(&mut self, file: &Path) -> Option<()> {
         log::debug!("trying to load translate: {:?}", file);
 
-        let translate: Result<TranslateRaw, Error> =
-            serde_json::from_str(read_to_string(file).ok()?.as_str());
+        let translate: TranslateRaw = serde_json::from_str(
+            &read_to_string(&file).expect(&format!("error loading {:?}", file)),
+        )
+        .expect(&format!("error loading {:?}", file));
 
-        match translate {
-            Ok(translate) => {
-                let items = translate
-                    .items
-                    .into_iter()
-                    .map(|(id, str)| (id.to_id(&mut self.interner), str))
-                    .collect();
-                let tiles = translate
-                    .tiles
-                    .into_iter()
-                    .map(|(id, str)| (id.to_id(&mut self.interner), str))
-                    .collect();
+        let items = translate
+            .items
+            .into_iter()
+            .map(|(id, str)| (id.to_id(&mut self.interner), str))
+            .collect();
+        let tiles = translate
+            .tiles
+            .into_iter()
+            .map(|(id, str)| (id.to_id(&mut self.interner), str))
+            .collect();
 
-                self.translates = Translate { items, tiles };
+        self.translates = Translate { items, tiles };
 
-                Some(())
-            }
-            Err(err) => {
-                log::error!("failed to parse translate: {}", err);
-
-                None
-            }
-        }
+        Some(())
     }
 
     fn load_script(&mut self, file: &Path) -> Option<()> {
         log::debug!("trying to load script: {:?}", file);
 
-        let script: Result<ScriptRaw, Error> =
-            serde_json::from_str(read_to_string(file).ok()?.as_str());
+        let script: ScriptRaw = serde_json::from_str(
+            &read_to_string(&file).expect(&format!("error loading {:?}", file)),
+        )
+        .expect(&format!("error loading {:?}", file));
 
-        match script {
-            Ok(ref script) => {
-                let id = script.id.to_id(&mut self.interner);
+        let id = script.id.to_id(&mut self.interner);
 
-                let instructions = Instructions {
-                    input: script
-                        .instructions
-                        .input
-                        .as_ref()
-                        .map(|v| v.to_item(&mut self.interner)),
-                    output: script
-                        .instructions
-                        .output
-                        .as_ref()
-                        .map(|v| v.to_item(&mut self.interner)),
-                };
+        let instructions = Instructions {
+            input: script
+                .instructions
+                .input
+                .as_ref()
+                .map(|v| v.to_item(&mut self.interner)),
+            output: script
+                .instructions
+                .output
+                .as_ref()
+                .map(|v| v.to_item(&mut self.interner)),
+        };
 
-                let script = Script { id, instructions };
+        let script = Script { id, instructions };
 
-                self.scripts.insert(id, script);
+        self.scripts.insert(id, script);
 
-                Some(())
-            }
-            Err(err) => {
-                log::error!("failed to parse script: {}", err);
-
-                None
-            }
-        }
+        Some(())
     }
 
     fn load_model(&mut self, file: &Path) -> Option<()> {
         log::debug!("trying to load model: {:?}", file);
 
-        let model: Result<Model, Error> = serde_json::from_str(read_to_string(file).ok()?.as_str());
+        let model: ModelRaw = serde_json::from_str(
+            &read_to_string(&file).expect(&format!("error loading {:?}", file)),
+        )
+        .expect(&format!("error loading {:?}", file));
 
-        match model {
-            Ok(ref model) => {
-                let file = file
-                    .parent()
-                    .unwrap()
-                    .join("files")
-                    .join(model.file.as_str());
-                log::debug!("trying to load model file: {:?}", file);
+        let file = file
+            .parent()
+            .unwrap()
+            .join("files")
+            .join(model.file.as_str());
 
-                let file = File::open(file).ok().unwrap();
-                let mut read = BufReader::new(file);
+        log::debug!("trying to load model file: {:?}", file);
 
-                let vertex_parser = Parser::<Vertex>::new();
-                let face_parser = Parser::<RawFace>::new();
+        let file = File::open(file).ok().unwrap();
+        let mut read = BufReader::new(file);
 
-                let header = vertex_parser.read_header(&mut read).unwrap();
+        let vertex_parser = Parser::<Vertex>::new();
+        let face_parser = Parser::<RawFace>::new();
 
-                let mut vertices = None;
-                let mut faces = None;
+        let header = vertex_parser.read_header(&mut read).unwrap();
 
-                for (_, element) in &header.elements {
-                    match element.name.as_ref() {
-                        "vertex" => {
-                            vertices = vertex_parser
-                                .read_payload_for_element(&mut read, &element, &header)
-                                .ok();
-                        }
-                        "face" => {
-                            faces = face_parser
-                                .read_payload_for_element(&mut read, &element, &header)
-                                .ok();
-                        }
-                        _ => (),
-                    }
+        let mut vertices = None;
+        let mut faces = None;
+
+        for (_, element) in &header.elements {
+            match element.name.as_ref() {
+                "vertex" => {
+                    vertices = vertex_parser
+                        .read_payload_for_element(&mut read, &element, &header)
+                        .ok();
                 }
-
-                let raw_model = vertices
-                    .zip(faces)
-                    .map(|(vertices, faces)| ModelRaw::new(vertices, faces))?;
-
-                self.raw_models
-                    .insert(model.id.to_id(&mut self.interner), raw_model);
-
-                Some(())
-            }
-            Err(err) => {
-                log::error!("failed to parse model: {}", err);
-
-                None
+                "face" => {
+                    faces = face_parser
+                        .read_payload_for_element(&mut read, &element, &header)
+                        .ok();
+                }
+                _ => (),
             }
         }
+
+        let raw_model = vertices
+            .zip(faces)
+            .map(|(vertices, faces)| Model::new(vertices, faces))?;
+
+        self.raw_models
+            .insert(model.id.to_id(&mut self.interner), raw_model);
+
+        Some(())
     }
 
     fn load_tile(&mut self, file: &Path) -> Option<()> {
-        let extension = file.extension().and_then(OsStr::to_str);
+        log::info!("loading tile at {:?}", file);
 
-        if let Some("json") = extension {
-            log::info!("loading resource at {:?}", file);
+        let tile: TileRaw = serde_json::from_str(
+            &read_to_string(&file).expect(&format!("error loading {:?}", file)),
+        )
+        .expect(&format!("error loading {:?}", file));
 
-            let resource: ResourceRaw =
-                serde_json::from_str(&read_to_string(&file).unwrap()).unwrap();
+        let id = tile.id.to_id(&mut self.interner);
 
-            self.register_resource(resource);
+        if let Some(model) = tile.model {
+            let references = self
+                .models_referenced
+                .entry(model.to_id(&mut self.interner))
+                .or_insert_with(Vec::default);
+
+            references.push(id);
         }
+
+        let scripts = tile.scripts.map(|v| {
+            v.into_iter()
+                .map(|id| id.to_id(&mut self.interner))
+                .collect()
+        });
+
+        let tile_type = tile.tile_type;
+
+        self.tiles.insert(
+            id,
+            Tile {
+                tile_type,
+                scripts,
+                faces_index: None,
+            },
+        );
+
         Some(())
     }
+
     pub fn load_translates(&mut self, dir: &Path) -> Option<()> {
         let translates = dir.join("translates");
         let translates = read_dir(translates).ok()?;
@@ -305,34 +317,104 @@ impl ResourceManager {
 
         Some(())
     }
-    pub fn register_resource(&mut self, resource: ResourceRaw) {
-        let id = resource.id.to_id(&mut self.interner);
+}
 
-        if let Some(model) = resource.model {
-            let references = self
-                .models_referenced
-                .entry(model.to_id(&mut self.interner))
-                .or_insert_with(Vec::default);
+impl ResourceManager {
+    pub fn compile_models(&mut self) {
+        let mut ids = self
+            .tiles
+            .iter()
+            .flat_map(|(id, _)| self.interner.resolve(*id))
+            .map(|id| IdRaw::parse(id))
+            .collect::<Vec<_>>();
 
-            references.push(id);
+        ids.sort_unstable_by_key(|id| id.clone());
+
+        if let Some(none_idx) =
+            ids.iter().enumerate().find_map(
+                |(idx, id)| {
+                    if id == &IdRaw::NONE {
+                        Some(idx)
+                    } else {
+                        None
+                    }
+                },
+            )
+        {
+            ids.swap(none_idx, 0);
         }
 
-        let scripts = resource.scripts.map(|v| {
-            v.into_iter()
-                .map(|id| id.to_id(&mut self.interner))
-                .collect()
-        });
+        let ids = ids
+            .into_iter()
+            .flat_map(|id| self.interner.get(id.to_string()))
+            .collect();
 
-        let resource_type = resource.resource_type;
+        self.ordered_ids = ids;
 
-        self.resources.insert(
-            id,
-            Resource {
-                resource_type,
-                scripts,
-                faces_index: None,
-            },
-        );
+        // indices vertices
+        let (vertices, raw_faces): (Vec<_>, Vec<_>) = self
+            .raw_models
+            .iter()
+            .map(|(id, model)| (model.vertices.clone(), (id, model.faces.clone())))
+            .unzip();
+
+        let mut index_offsets = vertices
+            .iter()
+            .scan(0, |offset, v| {
+                *offset += v.len();
+                Some(*offset)
+            })
+            .collect::<Vec<_>>();
+
+        drop(index_offsets.split_off(index_offsets.len() - 1));
+        index_offsets.insert(0, 0);
+
+        let all_vertices = vertices.into_iter().flatten().collect::<Vec<_>>();
+
+        let mut offset_count = 0;
+
+        let (all_raw_faces, all_faces): (Vec<_>, Vec<_>) = raw_faces // TODO we can just draw 3 indices a bunch of times
+            .into_iter()
+            .enumerate()
+            .map(|(i, (id, raw_faces))| {
+                self.models_referenced.get(&id).map(|references| {
+                    references.iter().for_each(|id| {
+                        if let Some(resource) = self.tiles.get_mut(id) {
+                            resource.faces_index = Some(i);
+                        }
+                    });
+                });
+
+                let faces = raw_faces
+                    .iter()
+                    .map(|face| {
+                        let size = face.indices.len() as u32;
+                        let offset = offset_count;
+
+                        offset_count += size;
+
+                        Face { size, offset }
+                    })
+                    .collect::<Vec<_>>();
+
+                let raw_faces = raw_faces
+                    .into_iter()
+                    .map(|face| face.index_offset(index_offsets[i] as u32))
+                    .collect::<Vec<_>>();
+
+                (raw_faces, faces)
+            })
+            .unzip();
+
+        /*
+        log::debug!("combined_vertices: {:?}", combined_vertices);
+        log::debug!("all_raw_faces: {:?}", all_raw_faces);
+        log::debug!("all_faces: {:?}", all_faces);
+         */
+
+        self.all_faces = all_faces;
+        self.all_vertices = all_vertices;
+        self.all_raw_faces = all_raw_faces;
     }
 }
 

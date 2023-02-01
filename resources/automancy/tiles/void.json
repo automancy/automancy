@@ -1,7 +1,7 @@
 {
     "id": "void",
     "model": "void",
-    "resource_type": {
+    "tile_type": {
         "type": "Void"
     }
 }

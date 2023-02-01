@@ -27,7 +27,7 @@ use automancy::game::game::GameMsg;
 use automancy::game::input;
 use automancy::game::input::InputState;
 use automancy::game::map::{MapRenderInfo, RenderContext};
-use automancy::game::tile::{TileCoord, TileMsg, TileUnit};
+use automancy::game::tile::{TileCoord, TileEntityMsg, TileUnit};
 use automancy::render::data::InstanceData;
 use automancy::render::gpu::{Gpu, RenderAlloc};
 use automancy::render::gui;
@@ -35,19 +35,18 @@ use automancy::util::cg::Num;
 use automancy::util::colors::Color;
 use automancy::util::discord;
 use automancy::util::id::Id;
-use automancy::util::init::InitData;
-use automancy::util::resource::{ResourceManager, ResourceType};
+use automancy::util::resource::{ResourceManager, TileType};
 use automancy::{
     game::map::Map,
     game::{game::Game, ticking::TICK_INTERVAL},
     render::{camera::Camera, gpu, renderer::Renderer},
-    LOGO, RESOURCE,
+    LOGO, RESOURCES,
 };
 
-fn init_data() -> Arc<InitData> {
+fn load_resources() -> Arc<ResourceManager> {
     let mut resource_man = ResourceManager::new();
 
-    fs::read_dir(RESOURCE)
+    fs::read_dir(RESOURCES)
         .unwrap()
         .flatten()
         .map(|v| v.path())
@@ -58,9 +57,9 @@ fn init_data() -> Arc<InitData> {
             resource_man.load_tiles(&dir);
         });
 
-    let init_data = InitData::new(resource_man);
+    resource_man.compile_models();
 
-    Arc::new(init_data)
+    Arc::new(resource_man)
 }
 
 fn get_icon() -> Icon {
@@ -82,7 +81,7 @@ fn main() {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
     // --- resources & data ---
-    let init_data = init_data();
+    let resource_man = load_resources();
     log::info!("loaded resources.");
 
     let icon = get_icon();
@@ -117,7 +116,7 @@ fn main() {
     let queue = queues.next().unwrap();
 
     let alloc = RenderAlloc::new(
-        init_data.clone(),
+        resource_man.clone(),
         device.clone(),
         queue.clone(),
         surface.clone(),
@@ -144,14 +143,14 @@ fn main() {
         game.clone(),
         None,
         GameMsg::Tick {
-            init_data: init_data.clone(),
+            resource_man: resource_man.clone(),
         },
     );
 
     log::info!("loading completed!");
 
     // last setup
-    let none = init_data.resource_man.none;
+    let none = resource_man.none;
     let frame = gui::default_frame();
 
     let start_time = discord::start_time();
@@ -161,7 +160,7 @@ fn main() {
         discord::set_status(client, start_time.clone(), discord::DiscordStatuses::InGame).unwrap()
     });
 
-    let mut renderer = Renderer::new(init_data.clone(), gpu);
+    let mut renderer = Renderer::new(resource_man.clone(), gpu);
     let mut camera = Camera::new(gpu::window_size(&renderer.gpu.window));
 
     // --- event-loop ---
@@ -189,7 +188,7 @@ fn main() {
             let mut extra_instances = vec![];
             let extra_vertices = vec![];
 
-            let init_data = init_data.clone();
+            let resource_man = resource_man.clone();
 
             match &event {
                 Event::WindowEvent {
@@ -275,31 +274,27 @@ fn main() {
 
                 gui.immediate_ui(|gui| {
                     // tile_selections
-                    gui::tile_selections(gui, init_data.clone(), &renderer, selection_send);
+                    gui::tile_selections(gui, resource_man.clone(), &renderer, selection_send);
 
                     // tile_info
-                    gui::tile_info(gui, init_data.clone(), &sys, game.clone(), pointing_at);
+                    gui::tile_info(gui, resource_man.clone(), &sys, game.clone(), pointing_at);
 
                     if let Some(config_open) = config_open {
-                        let result: Option<(Id, ActorRef<TileMsg>)> =
+                        let result: Option<(Id, ActorRef<TileEntityMsg>)> =
                             block_on(ask(&sys, &game, GameMsg::GetTile(config_open)));
 
                         if let Some((id, tile)) = result {
                             let current_script: Option<Id> =
-                                block_on(ask(&sys, &tile, TileMsg::GetScript));
+                                block_on(ask(&sys, &tile, TileEntityMsg::GetScript));
                             let mut new_script = current_script.clone();
 
                             let current_target_coord: Option<Hex<TileUnit>> =
-                                block_on(ask(&sys, &tile, TileMsg::GetTarget));
+                                block_on(ask(&sys, &tile, TileEntityMsg::GetTarget));
                             let mut new_target_coord = current_target_coord;
 
                             // tile_config
-                            if let ResourceType::Machine(_) =
-                                init_data.resource_man.resources[&id].resource_type
-                            {
-                                if let Some(scripts) =
-                                    init_data.resource_man.resources[&id].scripts.clone()
-                                {
+                            if let TileType::Machine(_) = resource_man.tiles[&id].tile_type {
+                                if let Some(scripts) = resource_man.tiles[&id].scripts.clone() {
                                     Window::new("Config")
                                         .resizable(false)
                                         .auto_sized()
@@ -309,12 +304,12 @@ fn main() {
                                             ui.set_max_width(300.0);
 
                                             let script_text =
-                                                init_data.resource_man.try_item_name(&new_script);
+                                                resource_man.try_item_name(&new_script);
 
                                             ui.label(format!("Script: {}", script_text));
                                             gui::scripts(
                                                 ui,
-                                                init_data.clone(),
+                                                resource_man.clone(),
                                                 &fuse,
                                                 scripts,
                                                 &mut new_script,
@@ -331,7 +326,7 @@ fn main() {
 
                             if new_script != current_script {
                                 if let Some(script) = new_script {
-                                    tile.tell(TileMsg::SetScript(script), None);
+                                    tile.tell(TileEntityMsg::SetScript(script), None);
                                 }
                             }
 
@@ -339,7 +334,7 @@ fn main() {
                                 game.send_msg(
                                     GameMsg::SendMsgToTile(
                                         config_open,
-                                        TileMsg::SetTarget(new_target_coord),
+                                        TileEntityMsg::SetTarget(new_target_coord),
                                     ),
                                     None,
                                 );
@@ -362,11 +357,8 @@ fn main() {
                 let camera_state = camera.camera_state();
                 if camera_state.is_at_max_height() {
                     if let Some(id) = selected_id {
-                        if let Some(faces_index) = init_data
-                            .resource_man
-                            .resources
-                            .get(&id)
-                            .and_then(|v| v.faces_index)
+                        if let Some(faces_index) =
+                            resource_man.tiles.get(&id).and_then(|v| v.faces_index)
                         {
                             let time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
 
@@ -386,7 +378,7 @@ fn main() {
                     &game,
                     GameMsg::RenderInfoRequest {
                         context: RenderContext {
-                            init_data: init_data.clone(),
+                            resource_man: resource_man.clone(),
                         },
                     },
                 ));

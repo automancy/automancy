@@ -3,10 +3,10 @@ use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use riker::actor::ActorRef;
 
-use crate::game::tile::TileMsg;
+use crate::game::tile::TileEntityMsg;
 use crate::render::data::InstanceData;
 use crate::util::id::Id;
-use crate::util::init::InitData;
+use crate::util::resource::ResourceManager;
 
 use super::tile::TileCoord;
 
@@ -16,7 +16,7 @@ const MAP_BUFFER_SIZE: usize = 128 * 1024;
 
 #[derive(Clone, Debug)]
 pub struct RenderContext {
-    pub init_data: Arc<InitData>,
+    pub resource_man: Arc<ResourceManager>,
 }
 
 #[derive(Clone, Debug)]
@@ -28,17 +28,17 @@ pub struct MapRenderInfo {
 pub struct Map {
     pub map_name: String,
 
-    pub tiles: HashMap<TileCoord, (Id, ActorRef<TileMsg>)>,
+    pub tiles: HashMap<TileCoord, (Id, ActorRef<TileEntityMsg>)>,
 }
 
 impl Map {
-    pub fn render_info(&self, RenderContext { init_data }: &RenderContext) -> MapRenderInfo {
+    pub fn render_info(&self, RenderContext { resource_man }: &RenderContext) -> MapRenderInfo {
         // TODO cache this
         let instances = self
             .tiles
             .iter()
             .map(|(a, b)| (a.clone(), b))
-            .flat_map(|(pos, (id, _))| InstanceData::from_id(&id, pos, init_data.clone()))
+            .flat_map(|(pos, (id, _))| InstanceData::from_id(&id, pos, resource_man.clone()))
             .collect();
 
         MapRenderInfo { instances }

@@ -33,10 +33,10 @@ use crate::render::gpu::Gpu;
 use crate::util::cg::{matrix, Matrix4, Num};
 use crate::util::colors::Color;
 use crate::util::id::Id;
-use crate::util::init::InitData;
+use crate::util::resource::ResourceManager;
 
 pub struct Renderer {
-    init_data: Arc<InitData>,
+    resource_man: Arc<ResourceManager>,
 
     pub recreate_swapchain: bool,
 
@@ -46,11 +46,11 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new(init_data: Arc<InitData>, gpu: Gpu) -> Self {
+    pub fn new(resource_man: Arc<ResourceManager>, gpu: Gpu) -> Self {
         let device = gpu.device.clone();
 
         Self {
-            init_data,
+            resource_man,
 
             recreate_swapchain: false,
 
@@ -88,11 +88,8 @@ impl Renderer {
             let min = pos - o;
             let max = pos + o;
 
-            let none = InstanceData::new().faces_index(
-                self.init_data.resource_man.resources[&none]
-                    .faces_index
-                    .unwrap(),
-            );
+            let none = InstanceData::new()
+                .faces_index(self.resource_man.tiles[&none].faces_index.unwrap());
 
             let mut instances = map_render_info.instances;
 
@@ -209,7 +206,7 @@ impl Renderer {
 
         game_builder.set_viewport(0, [gpu::viewport(&self.gpu.window)]);
 
-        let indirect_instance = gpu::indirect_instance(&allocator, &self.init_data, instances);
+        let indirect_instance = gpu::indirect_instance(&allocator, &self.resource_man, instances);
 
         let ubo = UniformBufferObject {
             matrix: matrix.into(),

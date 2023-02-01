@@ -1,7 +1,7 @@
 {
     "id": "extractor",
     "model": "extractor",
-    "resource_type": {
+    "tile_type": {
         "type": "Machine",
         "param": "extractor"
     },

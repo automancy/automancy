@@ -1,7 +1,7 @@
 {
     "id": "none",
     "model": "none",
-    "resource_type": {
-        "type": "None"
+    "tile_type": {
+        "type": "Empty"
     }
 }

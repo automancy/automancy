@@ -50,7 +50,7 @@ use crate::render::data::Vertex;
 use crate::render::gpu;
 use crate::util::cg::Double;
 use crate::util::cg::Num;
-use crate::util::init::InitData;
+use crate::util::resource::ResourceManager;
 
 use super::data::{InstanceData, UniformBufferObject};
 
@@ -320,7 +320,7 @@ pub fn framebuffers(
 
 pub fn indirect_buffer(
     allocator: &(impl MemoryAllocator + ?Sized),
-    init_data: &InitData,
+    resource_man: &ResourceManager,
     instances: &[InstanceData],
 ) -> (
     Arc<CpuAccessibleBuffer<[InstanceData]>>,
@@ -333,7 +333,7 @@ pub fn indirect_buffer(
 
             let first_instance = *init;
 
-            let faces = &init_data.resource_man.all_faces[instances[0].faces_index];
+            let faces = &resource_man.all_faces[instances[0].faces_index];
             let commands = faces
                 .iter()
                 .map(|face| DrawIndexedIndirectCommand {
@@ -366,7 +366,7 @@ pub fn indirect_buffer(
 
 pub fn indirect_instance(
     allocator: &(impl MemoryAllocator + ?Sized),
-    init_data: &InitData,
+    resource_man: &ResourceManager,
     instances: &[InstanceData],
 ) -> Option<(
     Arc<CpuAccessibleBuffer<[DrawIndexedIndirectCommand]>>,
@@ -375,7 +375,7 @@ pub fn indirect_instance(
     if instances.is_empty() {
         None
     } else {
-        let (instance_buffer, commands) = indirect_buffer(allocator, init_data, instances);
+        let (instance_buffer, commands) = indirect_buffer(allocator, resource_man, instances);
 
         if commands.is_empty() {
             None
@@ -458,7 +458,7 @@ impl RenderAlloc {
     }
 
     pub fn new(
-        init_data: Arc<InitData>,
+        resource_man: Arc<ResourceManager>,
         device: Arc<Device>,
         queue: Arc<Queue>,
         surface: Arc<Surface>,
@@ -490,7 +490,7 @@ impl RenderAlloc {
 
         let vertex_buffer = immutable_buffer(
             &allocator,
-            init_data.combined_vertices.clone(),
+            resource_man.all_vertices.clone(),
             BufferUsage {
                 vertex_buffer: true,
                 ..Default::default()
@@ -500,7 +500,7 @@ impl RenderAlloc {
 
         let index_buffer = immutable_buffer(
             &allocator,
-            init_data
+            resource_man
                 .all_raw_faces
                 .iter()
                 .flatten()

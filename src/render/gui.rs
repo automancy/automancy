@@ -22,12 +22,11 @@ use vulkano::buffer::BufferUsage;
 use vulkano::command_buffer::DrawIndexedIndirectCommand;
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::pipeline::{Pipeline, PipelineBindPoint};
+use winit::event_loop::EventLoop;
 
 use crate::game::data::Data;
 use crate::game::game::GameMsg;
-use winit::event_loop::EventLoop;
-
-use crate::game::tile::{TileCoord, TileMsg, TileUnit};
+use crate::game::tile::{TileCoord, TileEntityMsg, TileUnit};
 use crate::render::data::UniformBufferObject;
 use crate::render::gpu;
 use crate::render::gpu::Gpu;
@@ -35,8 +34,8 @@ use crate::render::renderer::Renderer;
 use crate::util::cg::{perspective, Matrix4, Vector3};
 use crate::util::colors::Color;
 use crate::util::id::Id;
-use crate::util::init::InitData;
-use crate::util::resource::ResourceType;
+use crate::util::resource::ResourceManager;
+use crate::util::resource::TileType;
 use crate::IOSEVKA_FONT;
 
 fn init_fonts(gui: &Gui) {
@@ -145,7 +144,7 @@ pub fn default_frame() -> Frame {
 
 fn tile_paint(
     ui: &mut Ui,
-    init_data: Arc<InitData>,
+    resource_man: Arc<ResourceManager>,
     gpu: &Gpu,
     size: f32,
     id: Id,
@@ -154,9 +153,7 @@ fn tile_paint(
 ) -> PaintCallback {
     let (rect, response) = ui.allocate_exact_size(vec2(size, size), Sense::click());
 
-    response
-        .clone()
-        .on_hover_text(init_data.resource_man.tile_name(&id));
+    response.clone().on_hover_text(resource_man.tile_name(&id));
     response.clone().on_hover_cursor(CursorIcon::Grab);
 
     let hover = if response.clone().hovered() {
@@ -185,7 +182,7 @@ fn tile_paint(
     PaintCallback {
         rect,
         callback: Arc::new(CallbackFn::new(move |_info, context| {
-            let faces = &init_data.resource_man.all_faces[faces_index];
+            let faces = &resource_man.all_faces[faces_index];
 
             let uniform_buffer = gpu::uniform_buffer(&context.resources.memory_allocator);
 
@@ -241,20 +238,19 @@ fn tile_paint(
 
 fn paint_tile_selection(
     ui: &mut Ui,
-    init_data: Arc<InitData>,
+    resource_man: Arc<ResourceManager>,
     gpu: &Gpu,
     mut selection_send: mpsc::Sender<Id>,
 ) {
     let size = ui.available_height();
-    let resource_man = &init_data.clone().resource_man;
 
     resource_man
         .ordered_ids
         .iter()
         .flat_map(|id| {
-            let resource = &resource_man.resources[id];
+            let resource = &resource_man.tiles[id];
 
-            if resource.resource_type == ResourceType::Model {
+            if resource.tile_type == TileType::Model {
                 return None;
             }
 
@@ -263,7 +259,7 @@ fn paint_tile_selection(
         .for_each(|(id, faces_index)| {
             let callback = tile_paint(
                 ui,
-                init_data.clone(),
+                resource_man.clone(),
                 &gpu,
                 size,
                 id,
@@ -277,7 +273,7 @@ fn paint_tile_selection(
 
 pub fn tile_selections(
     gui: &mut Gui,
-    init_data: Arc<InitData>,
+    resource_man: Arc<ResourceManager>,
     renderer: &Renderer,
     selection_send: mpsc::Sender<Id>,
 ) {
@@ -296,7 +292,12 @@ pub fn tile_selections(
                 .always_show_scroll(true)
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        paint_tile_selection(ui, init_data.clone(), &renderer.gpu, selection_send);
+                        paint_tile_selection(
+                            ui,
+                            resource_man.clone(),
+                            &renderer.gpu,
+                            selection_send,
+                        );
                     });
                 });
         });
@@ -304,7 +305,7 @@ pub fn tile_selections(
 
 pub fn tile_info(
     gui: &mut Gui,
-    init_data: Arc<InitData>,
+    resource_man: Arc<ResourceManager>,
     sys: &ActorSystem,
     game: ActorRef<GameMsg>,
     pointing_at: TileCoord,
@@ -317,19 +318,15 @@ pub fn tile_info(
         .show(&gui.context(), |ui| {
             ui.colored_label(Color::DARK_GRAY, pointing_at.to_string());
 
-            let result: Option<(Id, ActorRef<TileMsg>)> =
+            let result: Option<(Id, ActorRef<TileEntityMsg>)> =
                 block_on(ask(sys, &game, GameMsg::GetTile(pointing_at)));
 
             if let Some((id, tile)) = result {
-                ui.label(init_data.resource_man.tile_name(&id));
-                let data: Data = block_on(ask(sys, &tile, TileMsg::GetData));
+                ui.label(resource_man.tile_name(&id));
+                let data: Data = block_on(ask(sys, &tile, TileEntityMsg::GetData));
 
                 for (id, amount) in data.0.iter() {
-                    ui.label(format!(
-                        "{} - {}",
-                        init_data.resource_man.item_name(id),
-                        amount
-                    ));
+                    ui.label(format!("{} - {}", resource_man.item_name(id), amount));
                 }
             }
         });
@@ -356,7 +353,7 @@ pub fn add_direction(ui: &mut Ui, target_coord: &mut Option<Hex<TileUnit>>, n: u
 
 pub fn scripts(
     ui: &mut Ui,
-    init_data: Arc<InitData>,
+    resource_man: Arc<ResourceManager>,
     fuse: &Fuse,
     scripts: Vec<Id>,
     new_script: &mut Option<Id>,
@@ -373,7 +370,7 @@ pub fn scripts(
                 .flat_map(|id| {
                     let result = fuse.search_text_in_string(
                         &script_filter,
-                        init_data.resource_man.item_name(&id).as_str(),
+                        resource_man.item_name(&id).as_str(),
                     );
 
                     Some(id).zip(result.map(|v| v.score))
@@ -388,11 +385,7 @@ pub fn scripts(
         };
 
         scripts.iter().for_each(|script| {
-            ui.radio_value(
-                new_script,
-                Some(*script),
-                init_data.resource_man.item_name(&script),
-            );
+            ui.radio_value(new_script, Some(*script), resource_man.item_name(&script));
         })
     });
 }

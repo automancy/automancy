@@ -12,7 +12,7 @@ use crate::game::tile::TileCoord;
 use crate::render::camera::FAR;
 use crate::util::cg::{Matrix4, Num, Vector2};
 use crate::util::id::Id;
-use crate::util::init::InitData;
+use crate::util::resource::ResourceManager;
 
 fn color_to_num(color: u8) -> Num {
     color as Num / 255.0
@@ -115,10 +115,13 @@ pub const RENDER_LAYOUT: Layout = Layout {
 };
 
 impl InstanceData {
-    pub fn from_id(id: &Id, pos: TileCoord, init_data: Arc<InitData>) -> Option<(TileCoord, Self)> {
-        init_data
-            .resource_man
-            .resources
+    pub fn from_id(
+        id: &Id,
+        pos: TileCoord,
+        resource_man: Arc<ResourceManager>,
+    ) -> Option<(TileCoord, Self)> {
+        resource_man
+            .tiles
             .get(id)
             .and_then(|r| r.faces_index)
             .map(|face| {
@@ -225,12 +228,12 @@ impl PropertyAccess for RawFace {
 // model
 
 #[derive(Debug, Clone)]
-pub struct ModelRaw {
+pub struct Model {
     pub vertices: Vec<Vertex>,
     pub faces: Vec<RawFace>,
 }
 
-impl ModelRaw {
+impl Model {
     pub fn new(vertices: Vec<Vertex>, faces: Vec<RawFace>) -> Self {
         Self { vertices, faces }
     }

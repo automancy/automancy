@@ -8,9 +8,9 @@ use uuid::Uuid;
 use crate::game::data::Data;
 use crate::game::map::{Map, RenderContext};
 use crate::game::ticking::MAX_ALLOWED_TICK_INTERVAL;
-use crate::game::tile::{Tile, TileCoord, TileMsg};
+use crate::game::tile::{TileCoord, TileEntity, TileEntityMsg};
 use crate::util::id::Id;
-use crate::util::init::InitData;
+use crate::util::resource::ResourceManager;
 
 #[derive(Debug, Clone)]
 pub struct Ticked;
@@ -36,11 +36,11 @@ impl ActorFactoryArgs<Arc<Map>> for Game {
 
 #[derive(Debug, Clone)]
 pub enum GameMsg {
-    Tick { init_data: Arc<InitData> },
+    Tick { resource_man: Arc<ResourceManager> },
     RenderInfoRequest { context: RenderContext },
     PlaceTile { coord: TileCoord, id: Id, none: Id },
     GetTile(TileCoord),
-    SendMsgToTile(TileCoord, TileMsg),
+    SendMsgToTile(TileCoord, TileEntityMsg),
 }
 
 impl Actor for Game {
@@ -54,8 +54,8 @@ impl Actor for Game {
         let myself = Some(ctx.myself().into());
 
         match msg {
-            GameMsg::Tick { init_data } => {
-                self.tick(init_data);
+            GameMsg::Tick { resource_man } => {
+                self.tick(resource_man);
             }
             GameMsg::RenderInfoRequest { context } => {
                 let render_info = self.map.render_info(&context);
@@ -74,7 +74,7 @@ impl Actor for Game {
                 } else {
                     let tile = ctx
                         .system
-                        .actor_of_args::<Tile, (BasicActorRef, Id, TileCoord, Data)>(
+                        .actor_of_args::<TileEntity, (BasicActorRef, Id, TileCoord, Data)>(
                             &Uuid::new_v4().to_string(),
                             (ctx.myself().into(), id, coord, Data::default()),
                         )
@@ -103,11 +103,11 @@ impl Game {
         Self { tick_count: 0, map }
     }
 
-    fn inner_tick(&mut self, init_data: Arc<InitData>) {
+    fn inner_tick(&mut self, resource_man: Arc<ResourceManager>) {
         for (_, (_, tile)) in self.map.tiles.iter() {
             tile.tell(
-                TileMsg::Tick {
-                    init_data: init_data.clone(),
+                TileEntityMsg::Tick {
+                    resource_man: resource_man.clone(),
                     tick_count: self.tick_count,
                 },
                 None,
@@ -117,9 +117,9 @@ impl Game {
         self.tick_count = self.tick_count.overflowing_add(1).0;
     }
 
-    pub fn tick(&mut self, init_data: Arc<InitData>) {
+    pub fn tick(&mut self, resource_man: Arc<ResourceManager>) {
         let start = Instant::now();
-        self.inner_tick(init_data);
+        self.inner_tick(resource_man);
         let finish = Instant::now();
 
         let tick_time = finish - start;
