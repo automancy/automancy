@@ -297,6 +297,8 @@ fn main() {
 
                         selected_tile_states
                             .insert(id, new % resource_man.tiles[&id].faces_indices.len());
+
+                        already_placed_at = None;
                     }
                     if config_open == Some(pointing_at) {
                         config_open = None;

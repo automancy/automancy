@@ -85,7 +85,7 @@ impl Actor for Game {
                 tile_state,
             } => {
                 if let Some((old_id, tile, old_tile_state)) = self.map.tiles.get(&coord) {
-                    if *old_tile_state != tile_state && *old_id == id {
+                    if *old_tile_state == tile_state && *old_id == id {
                         sender.inspect(|v| v.try_tell(PlaceTileResponse::Ignored, myself).unwrap());
                         return;
                     }
