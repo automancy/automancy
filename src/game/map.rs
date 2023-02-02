@@ -28,7 +28,7 @@ pub struct MapRenderInfo {
 pub struct Map {
     pub map_name: String,
 
-    pub tiles: HashMap<TileCoord, (Id, ActorRef<TileEntityMsg>)>,
+    pub tiles: HashMap<TileCoord, (Id, ActorRef<TileEntityMsg>, usize)>,
 }
 
 impl Map {
@@ -38,7 +38,9 @@ impl Map {
             .tiles
             .iter()
             .map(|(a, b)| (a.clone(), b))
-            .flat_map(|(pos, (id, _))| InstanceData::from_id(&id, pos, resource_man.clone()))
+            .flat_map(|(pos, (id, _, tile_state))| {
+                InstanceData::from_id(&id, pos, *tile_state, resource_man.clone())
+            })
             .collect();
 
         MapRenderInfo { instances }

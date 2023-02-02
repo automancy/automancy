@@ -6,7 +6,11 @@ use cgmath::{point3, vec3};
 use egui::epaint::Shadow;
 use egui::style::{Margin, WidgetVisuals, Widgets};
 use egui::FontFamily::{Monospace, Proportional};
-use egui::{vec2, Align, Align2, Color32, CursorIcon, FontData, FontDefinitions, FontId, Frame, PaintCallback, Rounding, ScrollArea, Sense, Stroke, Style, TextStyle, TopBottomPanel, Ui, Visuals, Window, PointerButton};
+use egui::{
+    vec2, Align, Align2, Color32, CursorIcon, FontData, FontDefinitions, FontId, Frame,
+    PaintCallback, Rounding, ScrollArea, Sense, Stroke, Style, TextStyle, TopBottomPanel, Ui,
+    Visuals, Window,
+};
 use egui_winit_vulkano::{CallbackFn, Gui};
 use fuse_rust::Fuse;
 use futures::channel::mpsc;
@@ -219,6 +223,7 @@ fn tile_paint(
 fn paint_tile_selection(
     ui: &mut Ui,
     resource_man: Arc<ResourceManager>,
+    selected_tile_states: &HashMap<Id, usize>,
     gpu: &Gpu,
     mut selection_send: mpsc::Sender<Id>,
 ) {
@@ -234,7 +239,10 @@ fn paint_tile_selection(
                 return None;
             }
 
-            resource.faces_index.map(|v| (id.clone(), v))
+            resource
+                .faces_indices
+                .get(*selected_tile_states.get(id).unwrap_or(&0))
+                .map(|v| (id.clone(), *v))
         })
         .for_each(|(id, faces_index)| {
             let callback = tile_paint(
@@ -254,6 +262,7 @@ fn paint_tile_selection(
 pub fn tile_selections(
     gui: &mut Gui,
     resource_man: Arc<ResourceManager>,
+    selected_tile_states: &HashMap<Id, usize>,
     renderer: &Renderer,
     selection_send: mpsc::Sender<Id>,
 ) {
@@ -275,6 +284,7 @@ pub fn tile_selections(
                         paint_tile_selection(
                             ui,
                             resource_man.clone(),
+                            selected_tile_states,
                             &renderer.gpu,
                             selection_send,
                         );
@@ -298,10 +308,10 @@ pub fn tile_info(
         .show(&gui.context(), |ui| {
             ui.colored_label(Color::DARK_GRAY, pointing_at.to_string());
 
-            let result: Option<(Id, ActorRef<TileEntityMsg>)> =
+            let result: Option<(Id, ActorRef<TileEntityMsg>, usize)> =
                 block_on(ask(sys, &game, GameMsg::GetTile(pointing_at)));
 
-            if let Some((id, tile)) = result {
+            if let Some((id, tile, _)) = result {
                 ui.label(resource_man.tile_name(&id));
                 let data: Data = block_on(ask(sys, &tile, TileEntityMsg::GetData));
 

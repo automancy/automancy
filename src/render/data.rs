@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
-use cgmath::{Matrix, SquareMatrix};
 use hexagon_tiles::layout::{hex_to_pixel, Layout, LAYOUT_ORIENTATION_POINTY};
 use hexagon_tiles::point::Point;
 use ply_rs::ply::{Property, PropertyAccess};
@@ -9,7 +8,7 @@ use vulkano::impl_vertex;
 
 use crate::game::tile::TileCoord;
 use crate::render::camera::FAR;
-use crate::util::cg::{Matrix3, Matrix4, Num, Point3};
+use crate::util::cg::{Matrix4, Num, Point3};
 use crate::util::id::Id;
 use crate::util::resource::ResourceManager;
 
@@ -81,12 +80,13 @@ impl InstanceData {
     pub fn from_id(
         id: &Id,
         pos: TileCoord,
+        tile_state: usize,
         resource_man: Arc<ResourceManager>,
     ) -> Option<(TileCoord, Self)> {
         resource_man
             .tiles
             .get(id)
-            .and_then(|r| r.faces_index)
+            .and_then(|r| r.faces_indices.get(tile_state).cloned())
             .map(|face| {
                 let p = hex_to_pixel(RENDER_LAYOUT, pos.0);
 

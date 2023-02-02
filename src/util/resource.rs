@@ -52,7 +52,7 @@ pub enum TileType {
 pub struct Tile {
     pub tile_type: TileType,
     pub scripts: Option<Vec<Id>>,
-    pub faces_index: Option<usize>,
+    pub faces_indices: Vec<usize>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -242,7 +242,6 @@ impl ResourceManager {
                     .or_insert_with(Vec::default);
                 references.push(id);
             }
-
         }
 
         let scripts = tile.scripts.map(|v| {
@@ -258,7 +257,7 @@ impl ResourceManager {
             Tile {
                 tile_type,
                 scripts,
-                faces_index: None,
+                faces_indices: vec![],
             },
         );
 
@@ -419,7 +418,7 @@ impl ResourceManager {
                 self.models_referenced.get(&id).map(|references| {
                     references.iter().for_each(|id| {
                         if let Some(resource) = self.tiles.get_mut(id) {
-                            resource.faces_index = Some(i);
+                            resource.faces_indices.push(i);
                         }
                     });
                 });

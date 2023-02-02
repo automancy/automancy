@@ -39,8 +39,15 @@ impl ActorFactoryArgs<(Arc<ResourceManager>, Arc<Map>)> for Game {
 #[derive(Debug, Clone)]
 pub enum GameMsg {
     Tick,
-    RenderInfoRequest { context: RenderContext },
-    PlaceTile { coord: TileCoord, id: Id, none: Id, state: u8 },
+    RenderInfoRequest {
+        context: RenderContext,
+    },
+    PlaceTile {
+        coord: TileCoord,
+        id: Id,
+        none: Id,
+        tile_state: usize,
+    },
     GetTile(TileCoord),
     SendMsgToTile(TileCoord, TileEntityMsg),
 }
@@ -71,9 +78,14 @@ impl Actor for Game {
 
                 sender.inspect(|v| v.try_tell(render_info, myself).unwrap());
             }
-            PlaceTile { coord, id, none, state } => {
-                if let Some((old_id, tile)) = self.map.tiles.get(&coord) {
-                    if *old_id == id {
+            PlaceTile {
+                coord,
+                id,
+                none,
+                tile_state,
+            } => {
+                if let Some((old_id, tile, old_tile_state)) = self.map.tiles.get(&coord) {
+                    if *old_tile_state != tile_state && *old_id == id {
                         sender.inspect(|v| v.try_tell(PlaceTileResponse::Ignored, myself).unwrap());
                         return;
                     }
@@ -90,13 +102,13 @@ impl Actor for Game {
 
                 let tile = ctx
                     .system
-                    .actor_of_args::<TileEntity, (BasicActorRef, Id, TileCoord, Data, u8)>(
+                    .actor_of_args::<TileEntity, (BasicActorRef, Id, TileCoord, Data, usize)>(
                         &Uuid::new_v4().to_string(),
-                        (ctx.myself().into(), id, coord, Data::default(), state),
+                        (ctx.myself().into(), id, coord, Data::default(), tile_state),
                     )
                     .unwrap();
 
-                self.map.tiles.insert(coord, (id, tile));
+                self.map.tiles.insert(coord, (id, tile, tile_state));
                 sender.inspect(|v| v.try_tell(PlaceTileResponse::Placed, myself).unwrap());
             }
             GetTile(coord) => {
@@ -106,7 +118,7 @@ impl Actor for Game {
                 });
             }
             SendMsgToTile(coord, msg) => {
-                if let Some((_, tile)) = self.map.tiles.get(&coord) {
+                if let Some((_, tile, _)) = self.map.tiles.get(&coord) {
                     tile.tell(msg, sender);
                 }
             }
@@ -126,7 +138,7 @@ impl Game {
     }
 
     fn inner_tick(&mut self) {
-        for (_, (_, tile)) in self.map.tiles.iter() {
+        for (_, (_, tile, _)) in self.map.tiles.iter() {
             tile.tell(
                 TileEntityMsg::Tick {
                     resource_man: self.resource_man.clone(),

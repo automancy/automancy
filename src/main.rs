@@ -1,6 +1,7 @@
 #![feature(result_option_inspect)]
 #![feature(is_some_and)]
 
+use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{fs, sync::Arc};
 
@@ -189,7 +190,8 @@ fn main() {
 
         let mut pointing_at = TileCoord::ZERO;
 
-        let mut state_counter = 0u8;
+        let mut selected_tile_states = HashMap::<Id, usize>::new();
+
         let mut selected_id = None;
         let mut already_placed_at = None;
         let mut config_open = None;
@@ -273,14 +275,13 @@ fn main() {
                                     coord: pointing_at,
                                     id,
                                     none,
-                                    state: state_counter % 6 //
+                                    tile_state: selected_tile_states[&id],
                                 },
                             ));
 
                             match response {
                                 PlaceTileResponse::Placed => {
                                     audio_man.play(resource_man.audio["place"].clone()).unwrap();
-                                    state_counter = 0u8;
                                 }
                                 _ => {}
                             }
@@ -291,7 +292,12 @@ fn main() {
                 }
 
                 if input_state.alternate_pressed {
-                    state_counter += 1;
+                    if let Some(id) = selected_id {
+                        let new = selected_tile_states.get(&id).unwrap_or(&0) + 1;
+
+                        selected_tile_states
+                            .insert(id, new % resource_man.tiles[&id].faces_indices.len());
+                    }
                     if config_open == Some(pointing_at) {
                         config_open = None;
                         script_filter.clear();
@@ -306,16 +312,22 @@ fn main() {
 
                 gui.immediate_ui(|gui| {
                     // tile_selections
-                    gui::tile_selections(gui, resource_man.clone(), &renderer, selection_send);
+                    gui::tile_selections(
+                        gui,
+                        resource_man.clone(),
+                        &selected_tile_states,
+                        &renderer,
+                        selection_send,
+                    );
 
                     // tile_info
                     gui::tile_info(gui, resource_man.clone(), &sys, game.clone(), pointing_at);
 
                     if let Some(config_open) = config_open {
-                        let result: Option<(Id, ActorRef<TileEntityMsg>)> =
+                        let result: Option<(Id, ActorRef<TileEntityMsg>, usize)> =
                             block_on(ask(&sys, &game, GameMsg::GetTile(config_open)));
 
-                        if let Some((id, tile)) = result {
+                        if let Some((id, tile, _)) = result {
                             let current_script: Option<Id> =
                                 block_on(ask(&sys, &tile, TileEntityMsg::GetScript));
                             let mut new_script = current_script.clone();
@@ -396,15 +408,16 @@ fn main() {
                 let camera_state = camera.camera_state();
                 if camera_state.is_at_max_height() {
                     if let Some(id) = selected_id {
-                        if let Some(faces_index) =
-                            resource_man.tiles.get(&id).and_then(|v| v.faces_index)
-                        {
+                        if let Some(faces_index) = resource_man.tiles.get(&id).and_then(|v| {
+                            v.faces_indices
+                                .get(*selected_tile_states.get(&id).unwrap_or(&0))
+                        }) {
                             let time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
 
                             let glow = (time.as_secs_f64() * 3.0).sin() / 10.0;
 
                             let instance = InstanceData::new()
-                                .faces_index(faces_index)
+                                .faces_index(*faces_index)
                                 .position_offset([mouse_pos.x as Num, mouse_pos.y as Num, 0.1])
                                 .color_offset(Color::TRANSPARENT.with_alpha(glow as Num).into());
 

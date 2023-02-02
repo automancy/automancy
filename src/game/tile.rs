@@ -33,8 +33,7 @@ pub struct TileEntity {
 
     interval_offset: usize,
 
-    state: u8,
-
+    tile_state: usize,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -59,11 +58,14 @@ pub enum TileEntityMsg {
         resource_man: Arc<ResourceManager>,
     },
     TransactionResult(Result<(), TransactionError>),
+
     SetTarget(Option<Hex<TileUnit>>),
     GetTarget,
+
     SetScript(Id),
     GetScript,
-    GetData
+
+    GetData,
 }
 
 const SPLITTER: IdRaw = id_static("automancy", "splitter");
@@ -119,19 +121,26 @@ impl Actor for TileEntity {
                             }
 
                             if id == &SPLITTER {
-                                let SPLITTER_A: Hex<TileUnit> = Hex::<TileUnit>::NEIGHBORS[1 - self.state as usize];
-                                let SPLITTER_B: Hex<TileUnit> = Hex::<TileUnit>::NEIGHBORS[3 - self.state as usize];
-                                let SPLITTER_C: Hex<TileUnit> = Hex::<TileUnit>::NEIGHBORS[5 - self.state as usize];
-                                let (a, b) = match -direction {
-                                    SPLITTER_A => (SPLITTER_B, SPLITTER_C),
-                                    SPLITTER_B => (SPLITTER_A, SPLITTER_C),
-                                    SPLITTER_C => (SPLITTER_A, SPLITTER_B),
-                                    _ => {
-                                        return;
-                                    }
+                                let in_dir = -direction;
+
+                                let a: Hex<TileUnit> =
+                                    Hex::<TileUnit>::NEIGHBORS[1 - self.tile_state];
+                                let b: Hex<TileUnit> =
+                                    Hex::<TileUnit>::NEIGHBORS[3 - self.tile_state];
+                                let c: Hex<TileUnit> =
+                                    Hex::<TileUnit>::NEIGHBORS[5 - self.tile_state];
+
+                                let (first, second) = if in_dir == a {
+                                    (b, c)
+                                } else if in_dir == b {
+                                    (a, c)
+                                } else if in_dir == c {
+                                    (a, b)
+                                } else {
+                                    return;
                                 };
 
-                                let target = if tick_count % 2 == 0 { a } else { b };
+                                let target = if tick_count % 2 == 0 { first } else { second };
 
                                 let coord = TileCoord(self.coord.0 + target);
 
@@ -202,8 +211,8 @@ impl Actor for TileEntity {
     }
 }
 
-impl ActorFactoryArgs<(BasicActorRef, Id, TileCoord, Data, u8)> for TileEntity {
-    fn create_args(args: (BasicActorRef, Id, TileCoord, Data, u8)) -> Self {
+impl ActorFactoryArgs<(BasicActorRef, Id, TileCoord, Data, usize)> for TileEntity {
+    fn create_args(args: (BasicActorRef, Id, TileCoord, Data, usize)) -> Self {
         Self::new(args.0, args.1, args.2, args.3, args.4)
     }
 }
@@ -249,20 +258,18 @@ impl TileEntity {
                             );
                         }
                     }
-                } else {
-                    if let Some(output) = output {
-                        self.send_tile_msg(
-                            myself,
-                            coord,
-                            Transaction {
-                                item: output,
-                                tick_count,
-                                source_type: tile_type.clone(),
-                                direction,
-                                resource_man,
-                            },
-                        );
-                    }
+                } else if let Some(output) = output {
+                    self.send_tile_msg(
+                        myself,
+                        coord,
+                        Transaction {
+                            item: output,
+                            tick_count,
+                            source_type: tile_type.clone(),
+                            direction,
+                            resource_man,
+                        },
+                    );
                 }
             }
         } else {
@@ -355,7 +362,7 @@ impl TileEntity {
         }
     }
 
-    fn new(game: BasicActorRef, id: Id, coord: TileCoord, data: Data, state: u8) -> Self {
+    fn new(game: BasicActorRef, id: Id, coord: TileCoord, data: Data, tile_state: usize) -> Self {
         Self {
             id,
             coord,
@@ -367,7 +374,7 @@ impl TileEntity {
 
             interval_offset: 0,
 
-            state
+            tile_state,
         }
     }
 

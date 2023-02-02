@@ -28,7 +28,7 @@ use crate::render::camera::{CameraState, FAR};
 use crate::render::data::{GameUBO, GuiUBO, InstanceData, Vertex, RENDER_LAYOUT};
 use crate::render::gpu;
 use crate::render::gpu::Gpu;
-use crate::util::cg::{actual_pos, eye, matrix, view, Matrix4, Num, Point3};
+use crate::util::cg::{actual_pos, eye, matrix, Matrix4, Num, Point3};
 use crate::util::colors::Color;
 use crate::util::id::Id;
 use crate::util::resource::ResourceManager;
@@ -85,8 +85,8 @@ impl Renderer {
             let min = pos - o;
             let max = pos + o;
 
-            let none = InstanceData::new()
-                .faces_index(self.resource_man.tiles[&none].faces_index.unwrap());
+            let none =
+                InstanceData::new().faces_index(self.resource_man.tiles[&none].faces_indices[0]);
 
             let mut instances = map_render_info.instances;
 
@@ -140,7 +140,7 @@ impl Renderer {
         camera_pos: Point3,
         instances: &[InstanceData],
         gui_instances: &[InstanceData],
-        extra_vertices: Vec<Vertex>,
+        _extra_vertices: Vec<Vertex>,
         gui: &mut Gui,
     ) {
         let dimensions = gpu::window_size_u32(&self.gpu.window);
