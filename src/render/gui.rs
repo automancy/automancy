@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::f32::consts::FRAC_PI_4;
 use std::sync::Arc;
 
@@ -5,11 +6,7 @@ use cgmath::{point3, vec3};
 use egui::epaint::Shadow;
 use egui::style::{Margin, WidgetVisuals, Widgets};
 use egui::FontFamily::{Monospace, Proportional};
-use egui::{
-    vec2, Align, Align2, Color32, CursorIcon, FontData, FontDefinitions, FontId, Frame,
-    PaintCallback, Rounding, ScrollArea, Sense, Stroke, Style, TextStyle, TopBottomPanel, Ui,
-    Visuals, Window,
-};
+use egui::{vec2, Align, Align2, Color32, CursorIcon, FontData, FontDefinitions, FontId, Frame, PaintCallback, Rounding, ScrollArea, Sense, Stroke, Style, TextStyle, TopBottomPanel, Ui, Visuals, Window, PointerButton};
 use egui_winit_vulkano::{CallbackFn, Gui};
 use fuse_rust::Fuse;
 use futures::channel::mpsc;
@@ -161,7 +158,6 @@ fn tile_paint(
         ui.ctx()
             .animate_value_with_time(ui.next_auto_id(), 0.0, 0.3)
     };
-
     if response.clicked() {
         selection_send.try_send(id).unwrap();
     }
@@ -312,6 +308,7 @@ pub fn tile_info(
                 for (id, amount) in data.0.iter() {
                     ui.label(format!("{} - {}", resource_man.item_name(id), amount));
                 }
+                //ui.label(format!("State: {}", ask(sys, &game, )))
             }
         });
 }

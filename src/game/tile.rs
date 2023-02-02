@@ -32,6 +32,9 @@ pub struct TileEntity {
     target_direction: Option<Hex<TileUnit>>,
 
     interval_offset: usize,
+
+    state: u8,
+
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -60,18 +63,10 @@ pub enum TileEntityMsg {
     GetTarget,
     SetScript(Id),
     GetScript,
-    GetData,
+    GetData
 }
 
-const L_SPLITTER: IdRaw = id_static("automancy", "l_splitter");
-const L_SPLITTER_A: Hex<TileUnit> = Hex::<TileUnit>::NEIGHBORS[1];
-const L_SPLITTER_B: Hex<TileUnit> = Hex::<TileUnit>::NEIGHBORS[3];
-const L_SPLITTER_C: Hex<TileUnit> = Hex::<TileUnit>::NEIGHBORS[5];
-
-const R_SPLITTER: IdRaw = id_static("automancy", "r_splitter");
-const R_SPLITTER_A: Hex<TileUnit> = Hex::<TileUnit>::NEIGHBORS[0];
-const R_SPLITTER_B: Hex<TileUnit> = Hex::<TileUnit>::NEIGHBORS[2];
-const R_SPLITTER_C: Hex<TileUnit> = Hex::<TileUnit>::NEIGHBORS[4];
+const SPLITTER: IdRaw = id_static("automancy", "splitter");
 
 impl Actor for TileEntity {
     type Msg = TileEntityMsg;
@@ -123,40 +118,14 @@ impl Actor for TileEntity {
                                 return;
                             }
 
-                            if id == &L_SPLITTER {
+                            if id == &SPLITTER {
+                                let SPLITTER_A: Hex<TileUnit> = Hex::<TileUnit>::NEIGHBORS[1 - self.state as usize];
+                                let SPLITTER_B: Hex<TileUnit> = Hex::<TileUnit>::NEIGHBORS[3 - self.state as usize];
+                                let SPLITTER_C: Hex<TileUnit> = Hex::<TileUnit>::NEIGHBORS[5 - self.state as usize];
                                 let (a, b) = match -direction {
-                                    L_SPLITTER_A => (L_SPLITTER_B, L_SPLITTER_C),
-                                    L_SPLITTER_B => (L_SPLITTER_A, L_SPLITTER_C),
-                                    L_SPLITTER_C => (L_SPLITTER_A, L_SPLITTER_B),
-                                    _ => {
-                                        return;
-                                    }
-                                };
-
-                                let target = if tick_count % 2 == 0 { a } else { b };
-
-                                let coord = TileCoord(self.coord.0 + target);
-
-                                self.game
-                                    .try_tell(
-                                        GameMsg::SendMsgToTile(
-                                            coord,
-                                            Transaction {
-                                                item,
-                                                tick_count,
-                                                source_type: tile_type.clone(),
-                                                direction: target,
-                                                resource_man,
-                                            },
-                                        ),
-                                        Some(sender),
-                                    )
-                                    .unwrap();
-                            } else if id == &R_SPLITTER {
-                                let (a, b) = match -direction {
-                                    R_SPLITTER_A => (R_SPLITTER_B, R_SPLITTER_C),
-                                    R_SPLITTER_B => (R_SPLITTER_A, R_SPLITTER_C),
-                                    R_SPLITTER_C => (R_SPLITTER_A, R_SPLITTER_B),
+                                    SPLITTER_A => (SPLITTER_B, SPLITTER_C),
+                                    SPLITTER_B => (SPLITTER_A, SPLITTER_C),
+                                    SPLITTER_C => (SPLITTER_A, SPLITTER_B),
                                     _ => {
                                         return;
                                     }
@@ -233,9 +202,9 @@ impl Actor for TileEntity {
     }
 }
 
-impl ActorFactoryArgs<(BasicActorRef, Id, TileCoord, Data)> for TileEntity {
-    fn create_args(args: (BasicActorRef, Id, TileCoord, Data)) -> Self {
-        Self::new(args.0, args.1, args.2, args.3)
+impl ActorFactoryArgs<(BasicActorRef, Id, TileCoord, Data, u8)> for TileEntity {
+    fn create_args(args: (BasicActorRef, Id, TileCoord, Data, u8)) -> Self {
+        Self::new(args.0, args.1, args.2, args.3, args.4)
     }
 }
 
@@ -386,7 +355,7 @@ impl TileEntity {
         }
     }
 
-    fn new(game: BasicActorRef, id: Id, coord: TileCoord, data: Data) -> Self {
+    fn new(game: BasicActorRef, id: Id, coord: TileCoord, data: Data, state: u8) -> Self {
         Self {
             id,
             coord,
@@ -397,6 +366,8 @@ impl TileEntity {
             target_direction: None,
 
             interval_offset: 0,
+
+            state
         }
     }
 

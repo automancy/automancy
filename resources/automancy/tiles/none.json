@@ -1,6 +1,6 @@
 {
     "id": "none",
-    "model": "none",
+    "models": ["none"],
     "tile_type": {
         "type": "Empty"
     }

@@ -1,8 +1,0 @@
-{
-    "id": "l_splitter",
-    "model": "l_splitter",
-    "tile_type": {
-        "type": "Transfer",
-        "param": "l_splitter"
-    }
-}

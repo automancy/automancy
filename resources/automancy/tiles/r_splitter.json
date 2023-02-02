@@ -1,8 +1,0 @@
-{
-    "id": "r_splitter",
-    "model": "r_splitter",
-    "tile_type": {
-        "type": "Transfer",
-        "param": "r_splitter"
-    }
-}

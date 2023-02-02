@@ -40,7 +40,7 @@ impl ActorFactoryArgs<(Arc<ResourceManager>, Arc<Map>)> for Game {
 pub enum GameMsg {
     Tick,
     RenderInfoRequest { context: RenderContext },
-    PlaceTile { coord: TileCoord, id: Id, none: Id },
+    PlaceTile { coord: TileCoord, id: Id, none: Id, state: u8 },
     GetTile(TileCoord),
     SendMsgToTile(TileCoord, TileEntityMsg),
 }
@@ -71,7 +71,7 @@ impl Actor for Game {
 
                 sender.inspect(|v| v.try_tell(render_info, myself).unwrap());
             }
-            PlaceTile { coord, id, none } => {
+            PlaceTile { coord, id, none, state } => {
                 if let Some((old_id, tile)) = self.map.tiles.get(&coord) {
                     if *old_id == id {
                         sender.inspect(|v| v.try_tell(PlaceTileResponse::Ignored, myself).unwrap());
@@ -90,9 +90,9 @@ impl Actor for Game {
 
                 let tile = ctx
                     .system
-                    .actor_of_args::<TileEntity, (BasicActorRef, Id, TileCoord, Data)>(
+                    .actor_of_args::<TileEntity, (BasicActorRef, Id, TileCoord, Data, u8)>(
                         &Uuid::new_v4().to_string(),
-                        (ctx.myself().into(), id, coord, Data::default()),
+                        (ctx.myself().into(), id, coord, Data::default(), state),
                     )
                     .unwrap();
 

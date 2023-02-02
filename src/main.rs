@@ -189,6 +189,7 @@ fn main() {
 
         let mut pointing_at = TileCoord::ZERO;
 
+        let mut state_counter = 0u8;
         let mut selected_id = None;
         let mut already_placed_at = None;
         let mut config_open = None;
@@ -272,12 +273,14 @@ fn main() {
                                     coord: pointing_at,
                                     id,
                                     none,
+                                    state: state_counter % 6 //
                                 },
                             ));
 
                             match response {
                                 PlaceTileResponse::Placed => {
                                     audio_man.play(resource_man.audio["place"].clone()).unwrap();
+                                    state_counter = 0u8;
                                 }
                                 _ => {}
                             }
@@ -288,6 +291,7 @@ fn main() {
                 }
 
                 if input_state.alternate_pressed {
+                    state_counter += 1;
                     if config_open == Some(pointing_at) {
                         config_open = None;
                         script_filter.clear();

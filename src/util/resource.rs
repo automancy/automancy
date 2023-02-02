@@ -59,7 +59,7 @@ pub struct Tile {
 pub struct TileRaw {
     pub tile_type: TileType,
     pub id: IdRaw,
-    pub model: Option<IdRaw>,
+    pub models: Option<Vec<IdRaw>>,
     pub scripts: Option<Vec<IdRaw>>,
 }
 
@@ -234,13 +234,15 @@ impl ResourceManager {
 
         let id = tile.id.to_id(&mut self.interner);
 
-        if let Some(model) = tile.model {
-            let references = self
-                .models_referenced
-                .entry(model.to_id(&mut self.interner))
-                .or_insert_with(Vec::default);
+        if let Some(models) = tile.models {
+            for model in models {
+                let references = self
+                    .models_referenced
+                    .entry(model.to_id(&mut self.interner))
+                    .or_insert_with(Vec::default);
+                references.push(id);
+            }
 
-            references.push(id);
         }
 
         let scripts = tile.scripts.map(|v| {

@@ -1,6 +1,6 @@
 {
     "id": "void",
-    "model": "void",
+    "models": ["void"],
     "tile_type": {
         "type": "Void"
     }
