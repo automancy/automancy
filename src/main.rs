@@ -275,7 +275,7 @@ fn main() {
                                     coord: pointing_at,
                                     id,
                                     none,
-                                    tile_state: selected_tile_states[&id],
+                                    tile_state: *selected_tile_states.get(&id).unwrap_or(&0),
                                 },
                             ));
 
