@@ -1,14 +1,20 @@
-use kira::sound::static_sound::{StaticSoundData, StaticSoundSettings};
-use kira::track::TrackHandle;
 use std::convert::AsRef;
 use std::fmt::{Debug, Formatter};
 use std::fs::{read_dir, read_to_string};
+
+use std::sync::Arc;
 use std::{collections::HashMap, ffi::OsStr, fmt, fs::File, io::BufReader, path::Path};
 
+use kira::sound::static_sound::{StaticSoundData, StaticSoundSettings};
+use kira::track::TrackHandle;
 use ply_rs::parser::Parser;
+use rune::runtime::RuntimeContext;
+use rune::termcolor::{ColorChoice, StandardStream};
+use rune::{Context, Diagnostics, Module, Source, Sources, Unit};
 use serde::Deserialize;
 
 use crate::game::script::{Instructions, Script, ScriptRaw};
+use crate::game::tile::TileCoord;
 use crate::render::data::{Model, RawFace, Vertex};
 use crate::util::id::{Id, IdRaw, Interner};
 
@@ -40,7 +46,7 @@ pub struct ModelRaw {
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(tag = "type", content = "param")]
-pub enum TileType {
+pub enum TileTypeRaw {
     Empty,
     Void,
     Model,
@@ -48,19 +54,42 @@ pub enum TileType {
     Transfer(IdRaw),
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum TileType {
+    Empty,
+    Void,
+    Model,
+    Machine(Id),
+    Transfer(Id),
+}
+
 #[derive(Debug, Clone)]
 pub struct Tile {
     pub tile_type: TileType,
     pub scripts: Option<Vec<Id>>,
+    pub function: Option<Id>,
     pub faces_indices: Vec<usize>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct TileRaw {
-    pub tile_type: TileType,
+    pub tile_type: TileTypeRaw,
     pub id: IdRaw,
     pub models: Option<Vec<IdRaw>>,
     pub scripts: Option<Vec<IdRaw>>,
+    pub function: Option<IdRaw>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct FunctionRaw {
+    pub id: IdRaw,
+    pub file: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct Function {
+    pub context: Arc<RuntimeContext>,
+    pub unit: Arc<Unit>,
 }
 
 pub struct ResourceManager {
@@ -74,6 +103,7 @@ pub struct ResourceManager {
     pub scripts: HashMap<Id, Script>,
     pub translates: Translate,
     pub audio: HashMap<String, StaticSoundData>,
+    pub functions: HashMap<Id, Function>,
 
     pub raw_models: HashMap<Id, Model>,
     pub models_referenced: HashMap<Id, Vec<Id>>,
@@ -105,6 +135,7 @@ impl ResourceManager {
             scripts: Default::default(),
             translates: Default::default(),
             audio: Default::default(),
+            functions: Default::default(),
 
             raw_models: Default::default(),
             models_referenced: Default::default(),
@@ -118,7 +149,7 @@ impl ResourceManager {
 
 impl ResourceManager {
     fn load_translate(&mut self, file: &Path) -> Option<()> {
-        log::info!("loading translate at: {:?}", file);
+        log::info!("loading translate at: {file:?}");
 
         let translate: TranslateRaw = serde_json::from_str(
             &read_to_string(file).unwrap_or_else(|_| panic!("error loading {file:?}")),
@@ -142,7 +173,7 @@ impl ResourceManager {
     }
 
     fn load_script(&mut self, file: &Path) -> Option<()> {
-        log::info!("loading script at: {:?}", file);
+        log::info!("loading script at: {file:?}");
 
         let script: ScriptRaw = serde_json::from_str(
             &read_to_string(file).unwrap_or_else(|_| panic!("error loading {file:?}")),
@@ -172,7 +203,7 @@ impl ResourceManager {
     }
 
     fn load_model(&mut self, file: &Path) -> Option<()> {
-        log::info!("loading model at: {:?}", file);
+        log::info!("loading model at: {file:?}");
 
         let model: ModelRaw = serde_json::from_str(
             &read_to_string(file).unwrap_or_else(|_| panic!("error loading {file:?}")),
@@ -185,7 +216,7 @@ impl ResourceManager {
             .join("files")
             .join(model.file.as_str());
 
-        log::info!("loading model file at: {:?}", file);
+        log::info!("loading model file at: {file:?}");
 
         let file = File::open(file).ok().unwrap();
         let mut read = BufReader::new(file);
@@ -225,7 +256,7 @@ impl ResourceManager {
     }
 
     fn load_tile(&mut self, file: &Path) -> Option<()> {
-        log::info!("loading tile at {:?}", file);
+        log::info!("loading tile at {file:?}");
 
         let tile: TileRaw = serde_json::from_str(
             &read_to_string(file).unwrap_or_else(|_| panic!("error loading {file:?}")),
@@ -250,13 +281,22 @@ impl ResourceManager {
                 .collect()
         });
 
-        let tile_type = tile.tile_type;
+        let tile_type = match tile.tile_type {
+            TileTypeRaw::Empty => TileType::Empty,
+            TileTypeRaw::Void => TileType::Void,
+            TileTypeRaw::Model => TileType::Model,
+            TileTypeRaw::Machine(id) => TileType::Machine(id.to_id(&mut self.interner)),
+            TileTypeRaw::Transfer(id) => TileType::Transfer(id.to_id(&mut self.interner)),
+        };
+
+        let function = tile.function.map(|v| v.to_id(&mut self.interner));
 
         self.tiles.insert(
             id,
             Tile {
                 tile_type,
                 scripts,
+                function,
                 faces_indices: vec![],
             },
         );
@@ -273,7 +313,7 @@ impl ResourceManager {
             .flatten()
             .map(|v| v.path())
             .for_each(|file| {
-                log::info!("loading audio at {:?}", file);
+                log::info!("loading audio at {file:?}");
 
                 if let Ok(audio) = StaticSoundData::from_file(
                     file.clone(),
@@ -284,6 +324,68 @@ impl ResourceManager {
                         audio,
                     );
                 }
+            });
+
+        Some(())
+    }
+
+    pub fn load_functions(&mut self, dir: &Path) -> Option<()> {
+        let functions = dir.join("functions");
+        let functions = read_dir(functions).ok()?;
+
+        let mut module = Module::new();
+        TileCoord::install(&mut module).unwrap();
+
+        let mut diagnostics = Diagnostics::new();
+
+        let mut context = Context::with_default_modules().unwrap();
+        context.install(&module).unwrap();
+
+        let runtime = Arc::new(context.runtime());
+
+        functions
+            .into_iter()
+            .flatten()
+            .map(|v| v.path())
+            .filter(|v| v.extension() == Some(OsStr::new(JSON_EXT)))
+            .map(|file| {
+                log::info!("loading function at {file:?}");
+
+                let function: FunctionRaw = serde_json::from_str(
+                    &read_to_string(&file).unwrap_or_else(|_| panic!("error loading {file:?}")),
+                )
+                .unwrap_or_else(|_| panic!("error loading {file:?}"));
+
+                (function.id, file.parent().unwrap().join(function.file))
+            })
+            .for_each(|(id, rune)| {
+                log::info!("loading rune script at {rune:?}");
+
+                let mut sources = Sources::new();
+                sources.insert(Source::new(id.to_string(), read_to_string(rune).unwrap()));
+
+                let unit = rune::prepare(&mut sources)
+                    .with_context(&context)
+                    .with_diagnostics(&mut diagnostics)
+                    .build();
+
+                if !diagnostics.is_empty() {
+                    let mut writer = StandardStream::stderr(ColorChoice::Always);
+
+                    diagnostics.emit(&mut writer, &sources).unwrap();
+                }
+
+                let unit = unit.unwrap();
+
+                let id = id.to_id(&mut self.interner);
+
+                self.functions.insert(
+                    id,
+                    Function {
+                        context: runtime.clone(),
+                        unit: Arc::new(unit),
+                    },
+                );
             });
 
         Some(())

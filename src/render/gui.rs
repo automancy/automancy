@@ -15,7 +15,6 @@ use egui_winit_vulkano::{CallbackFn, Gui};
 use fuse_rust::Fuse;
 use futures::channel::mpsc;
 use futures_executor::block_on;
-use hexagon_tiles::hex::Hex;
 use hexagon_tiles::traits::HexDirection;
 use riker::actors::{ActorRef, ActorSystem};
 use riker_patterns::ask::ask;
@@ -25,7 +24,7 @@ use winit::event_loop::EventLoop;
 
 use crate::game::data::Data;
 use crate::game::game::GameMsg;
-use crate::game::tile::{TileCoord, TileEntityMsg, TileUnit};
+use crate::game::tile::{StateUnit, TileCoord, TileEntityMsg, TileHex};
 use crate::render::data::{GuiUBO, InstanceData};
 use crate::render::gpu;
 use crate::render::gpu::Gpu;
@@ -223,7 +222,7 @@ fn tile_paint(
 fn paint_tile_selection(
     ui: &mut Ui,
     resource_man: Arc<ResourceManager>,
-    selected_tile_states: &HashMap<Id, usize>,
+    selected_tile_states: &HashMap<Id, StateUnit>,
     gpu: &Gpu,
     mut selection_send: mpsc::Sender<Id>,
 ) {
@@ -241,7 +240,7 @@ fn paint_tile_selection(
 
             resource
                 .faces_indices
-                .get(*selected_tile_states.get(id).unwrap_or(&0))
+                .get(*selected_tile_states.get(id).unwrap_or(&0) as usize)
                 .map(|v| (*id, *v))
         })
         .for_each(|(id, faces_index)| {
@@ -262,7 +261,7 @@ fn paint_tile_selection(
 pub fn tile_selections(
     gui: &mut Gui,
     resource_man: Arc<ResourceManager>,
-    selected_tile_states: &HashMap<Id, usize>,
+    selected_tile_states: &HashMap<Id, StateUnit>,
     renderer: &Renderer,
     selection_send: mpsc::Sender<Id>,
 ) {
@@ -308,7 +307,7 @@ pub fn tile_info(
         .show(&gui.context(), |ui| {
             ui.colored_label(Color::DARK_GRAY, pointing_at.to_string());
 
-            let result: Option<(Id, ActorRef<TileEntityMsg>, usize)> =
+            let result: Option<(Id, ActorRef<TileEntityMsg>, StateUnit)> =
                 block_on(ask(sys, &game, GameMsg::GetTile(pointing_at)));
 
             if let Some((id, tile, _)) = result {
@@ -323,9 +322,9 @@ pub fn tile_info(
         });
 }
 
-pub fn add_direction(ui: &mut Ui, target_coord: &mut Option<Hex<TileUnit>>, n: usize) {
-    let coord = Hex::<TileUnit>::NEIGHBORS[(n + 2) % 6];
-    let coord = Some(coord);
+pub fn add_direction(ui: &mut Ui, target_coord: &mut Option<TileCoord>, n: usize) {
+    let coord = TileHex::NEIGHBORS[(n + 2) % 6];
+    let coord = Some(coord.into());
 
     ui.selectable_value(
         target_coord,
@@ -379,7 +378,7 @@ pub fn scripts(
     });
 }
 
-pub fn targets(ui: &mut Ui, new_target_coord: &mut Option<Hex<TileUnit>>) {
+pub fn targets(ui: &mut Ui, new_target_coord: &mut Option<TileCoord>) {
     ui.vertical(|ui| {
         ui.horizontal(|ui| {
             ui.add_space(15.0);

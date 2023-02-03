@@ -47,3 +47,5 @@ futures = "0.3.25"
 
 riker-patterns = "0.4.2"
 riker = "0.4.2"
+
+rune = "0.12.0"

@@ -13,7 +13,6 @@ use env_logger::Env;
 use fuse_rust::Fuse;
 use futures::channel::mpsc;
 use futures::executor::block_on;
-use hexagon_tiles::hex::Hex;
 use kira::manager::backend::cpal::CpalBackend;
 use kira::manager::{AudioManager, AudioManagerSettings};
 use kira::track::{TrackBuilder, TrackHandle};
@@ -31,7 +30,7 @@ use automancy::game::game::{GameMsg, PlaceTileResponse};
 use automancy::game::input;
 use automancy::game::input::InputState;
 use automancy::game::map::{MapRenderInfo, RenderContext};
-use automancy::game::tile::{TileCoord, TileEntityMsg, TileUnit};
+use automancy::game::tile::{StateUnit, TileCoord, TileEntityMsg};
 use automancy::render::camera::cursor_to_pos;
 use automancy::render::data::InstanceData;
 use automancy::render::gpu::{Gpu, RenderAlloc};
@@ -60,6 +59,7 @@ fn load_resources(track: TrackHandle) -> Arc<ResourceManager> {
             resource_man.load_scripts(&dir);
             resource_man.load_translates(&dir);
             resource_man.load_audio(&dir);
+            resource_man.load_functions(&dir);
             resource_man.load_tiles(&dir);
         });
 
@@ -190,7 +190,7 @@ fn main() {
 
         let mut pointing_at = TileCoord::ZERO;
 
-        let mut selected_tile_states = HashMap::<Id, usize>::new();
+        let mut selected_tile_states = HashMap::<Id, StateUnit>::new();
 
         let mut selected_id = None;
         let mut already_placed_at = None;
@@ -291,9 +291,9 @@ fn main() {
                 if input_state.alternate_pressed {
                     if let Some(id) = selected_id {
                         let new = selected_tile_states.get(&id).unwrap_or(&0) + 1;
+                        let max = resource_man.tiles[&id].faces_indices.len() as StateUnit;
 
-                        selected_tile_states
-                            .insert(id, new % resource_man.tiles[&id].faces_indices.len());
+                        selected_tile_states.insert(id, new % max);
 
                         already_placed_at = None;
                     }
@@ -323,7 +323,7 @@ fn main() {
                     gui::tile_info(gui, resource_man.clone(), &sys, game.clone(), pointing_at);
 
                     if let Some(config_open) = config_open {
-                        let result: Option<(Id, ActorRef<TileEntityMsg>, usize)> =
+                        let result: Option<(Id, ActorRef<TileEntityMsg>, StateUnit)> =
                             block_on(ask(&sys, &game, GameMsg::GetTile(config_open)));
 
                         if let Some((id, tile, _)) = result {
@@ -331,7 +331,7 @@ fn main() {
                                 block_on(ask(&sys, &tile, TileEntityMsg::GetScript));
                             let mut new_script = current_script;
 
-                            let current_target_coord: Option<Hex<TileUnit>> =
+                            let current_target_coord: Option<TileCoord> =
                                 block_on(ask(&sys, &tile, TileEntityMsg::GetTarget));
                             let mut new_target_coord = current_target_coord;
 
@@ -409,7 +409,7 @@ fn main() {
                     if let Some(id) = selected_id {
                         if let Some(faces_index) = resource_man.tiles.get(&id).and_then(|v| {
                             v.faces_indices
-                                .get(*selected_tile_states.get(&id).unwrap_or(&0))
+                                .get(*selected_tile_states.get(&id).unwrap_or(&0) as usize)
                         }) {
                             let time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
 

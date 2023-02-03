@@ -3,7 +3,7 @@ use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use riker::actor::ActorRef;
 
-use crate::game::tile::TileEntityMsg;
+use crate::game::tile::{StateUnit, TileEntityMsg};
 use crate::render::data::InstanceData;
 use crate::util::id::Id;
 use crate::util::resource::ResourceManager;
@@ -28,7 +28,7 @@ pub struct MapRenderInfo {
 pub struct Map {
     pub map_name: String,
 
-    pub tiles: HashMap<TileCoord, (Id, ActorRef<TileEntityMsg>, usize)>,
+    pub tiles: HashMap<TileCoord, (Id, ActorRef<TileEntityMsg>, StateUnit)>,
 }
 
 impl Map {

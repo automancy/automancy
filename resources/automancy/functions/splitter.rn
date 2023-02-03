@@ -1,0 +1,24 @@
+pub fn handle_transfer(tile_state, tick_count, self_coord, direction) {
+    if let (a, b, c) = if tile_state % 2 == 0 {
+        (TOP_LEFT(), BOTTOM_LEFT(), RIGHT())
+    } else {
+        (TOP_RIGHT(), BOTTOM_RIGHT(), LEFT())
+    } {
+        let direction = direction.neg();
+
+        if let (first, second) = match direction {
+            a => (b, c),
+            b => (a, c),
+            c => (a, b),
+            _ => {
+                return None;
+            }
+        } {
+            let target = if tick_count % 2 == 0 { first } else { second };
+
+            let target_coord = self_coord.add(target.clone());
+
+            return Some((target_coord, target));
+        }
+    }
+}

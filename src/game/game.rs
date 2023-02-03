@@ -9,21 +9,18 @@ use crate::game::data::Data;
 use crate::game::game::GameMsg::*;
 use crate::game::map::{Map, RenderContext};
 use crate::game::ticking::MAX_ALLOWED_TICK_INTERVAL;
-use crate::game::tile::{TileCoord, TileEntity, TileEntityMsg};
+use crate::game::tile::{StateUnit, TileCoord, TileEntity, TileEntityMsg};
 use crate::util::id::Id;
 use crate::util::resource::ResourceManager;
+
+pub type TickUnit = u16;
 
 #[derive(Debug, Clone)]
 pub struct Ticked;
 
-#[derive(Debug, Clone, Copy)]
-pub struct GameState {
-    pub tick_count: usize,
-}
-
 #[derive(Debug, Clone)]
 pub struct Game {
-    tick_count: usize,
+    tick_count: TickUnit,
 
     resource_man: Arc<ResourceManager>,
 
@@ -46,7 +43,7 @@ pub enum GameMsg {
         coord: TileCoord,
         id: Id,
         none: Id,
-        tile_state: usize,
+        tile_state: StateUnit,
     },
     GetTile(TileCoord),
     SendMsgToTile(TileCoord, TileEntityMsg),
@@ -102,7 +99,7 @@ impl Actor for Game {
 
                 let tile = ctx
                     .system
-                    .actor_of_args::<TileEntity, (BasicActorRef, Id, TileCoord, Data, usize)>(
+                    .actor_of_args::<TileEntity, (BasicActorRef, Id, TileCoord, Data, StateUnit)>(
                         &Uuid::new_v4().to_string(),
                         (ctx.myself().into(), id, coord, Data::default(), tile_state),
                     )

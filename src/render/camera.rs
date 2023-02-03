@@ -130,7 +130,7 @@ impl Camera {
         let p = pixel_to_hex(RENDER_LAYOUT, p);
         let p = p + pos;
 
-        self.camera_state.pointing_at = TileCoord(p.round());
+        self.camera_state.pointing_at = p.round().into();
     }
 }
 

@@ -1,25 +1,29 @@
 use std::fmt::{Display, Formatter};
-use std::ops::Add;
+use std::ops::{Add, Div, Mul, Neg, Sub};
 use std::sync::Arc;
 
 use egui::NumExt;
 use hexagon_tiles::hex::{hex, Hex};
 use hexagon_tiles::traits::HexDirection;
+
 use riker::actor::{Context, Sender};
 use riker::actors::{Actor, ActorFactoryArgs, BasicActorRef};
+use rune::{Any, FromValue, Module, Vm};
 use serde::de::{SeqAccess, Visitor};
 use serde::ser::SerializeTuple;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::game::data::Data;
-use crate::game::game::GameMsg;
+use crate::game::game::{GameMsg, TickUnit};
 use crate::game::item::Item;
 use crate::game::script::Script;
 use crate::game::tile::TileEntityMsg::*;
-use crate::util::id::{id_static, Id, IdRaw};
+use crate::util::id::Id;
 use crate::util::resource::ResourceManager;
 use crate::util::resource::TileType;
 use crate::util::resource::TileType::*;
+
+pub type StateUnit = i32;
 
 #[derive(Debug, Clone)]
 pub struct TileEntity {
@@ -29,11 +33,11 @@ pub struct TileEntity {
     script: Option<Id>,
 
     game: BasicActorRef,
-    target_direction: Option<Hex<TileUnit>>,
+    target_direction: Option<TileCoord>,
 
-    interval_offset: usize,
+    interval_offset: TickUnit,
 
-    tile_state: usize,
+    tile_state: StateUnit,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -48,18 +52,18 @@ pub enum TransactionError {
 pub enum TileEntityMsg {
     Tick {
         resource_man: Arc<ResourceManager>,
-        tick_count: usize,
+        tick_count: TickUnit,
     },
     Transaction {
-        item: Item,
-        tick_count: usize,
-        source_type: TileType,
-        direction: Hex<TileUnit>,
         resource_man: Arc<ResourceManager>,
+        tick_count: TickUnit,
+        item: Item,
+        source_type: TileType,
+        direction: TileCoord,
     },
     TransactionResult(Result<(), TransactionError>),
 
-    SetTarget(Option<Hex<TileUnit>>),
+    SetTarget(Option<TileCoord>),
     GetTarget,
 
     SetScript(Id),
@@ -67,8 +71,6 @@ pub enum TileEntityMsg {
 
     GetData,
 }
-
-const SPLITTER: IdRaw = id_static("automancy", "splitter");
 
 impl Actor for TileEntity {
     type Msg = TileEntityMsg;
@@ -99,11 +101,11 @@ impl Actor for TileEntity {
                 }
             }
             Transaction {
-                item,
+                resource_man,
                 tick_count,
+                item,
                 source_type,
                 direction,
-                resource_man,
             } => {
                 if let Some(sender) = sender {
                     let tile_type = resource_man.tiles[&self.id].tile_type.clone();
@@ -117,40 +119,29 @@ impl Actor for TileEntity {
                                 return;
                             }
 
-                            if id == &SPLITTER {
-                                let in_dir = -direction;
+                            let function = resource_man.functions[id].clone();
+                            let mut vm = Vm::new(function.context, function.unit);
 
-                                let a: Hex<TileUnit> =
-                                    Hex::<TileUnit>::NEIGHBORS[1 - self.tile_state];
-                                let b: Hex<TileUnit> =
-                                    Hex::<TileUnit>::NEIGHBORS[3 - self.tile_state];
-                                let c: Hex<TileUnit> =
-                                    Hex::<TileUnit>::NEIGHBORS[5 - self.tile_state];
+                            let output = vm
+                                .call(
+                                    ["handle_transfer"],
+                                    (self.tile_state, tick_count, self.coord, direction),
+                                )
+                                .unwrap();
 
-                                let (first, second) = if in_dir == a {
-                                    (b, c)
-                                } else if in_dir == b {
-                                    (a, c)
-                                } else if in_dir == c {
-                                    (a, b)
-                                } else {
-                                    return;
-                                };
-
-                                let target = if tick_count % 2 == 0 { first } else { second };
-
-                                let coord = TileCoord(self.coord.0 + target);
-
+                            if let Some((target_coord, target)) =
+                                <Option<(TileCoord, TileCoord)>>::from_value(output).unwrap()
+                            {
                                 self.game
                                     .try_tell(
                                         GameMsg::SendMsgToTile(
-                                            coord,
+                                            target_coord,
                                             Transaction {
-                                                item,
+                                                resource_man,
                                                 tick_count,
+                                                item,
                                                 source_type: tile_type.clone(),
                                                 direction: target,
-                                                resource_man,
                                             },
                                         ),
                                         Some(sender),
@@ -207,8 +198,8 @@ impl Actor for TileEntity {
     }
 }
 
-impl ActorFactoryArgs<(BasicActorRef, Id, TileCoord, Data, usize)> for TileEntity {
-    fn create_args(args: (BasicActorRef, Id, TileCoord, Data, usize)) -> Self {
+impl ActorFactoryArgs<(BasicActorRef, Id, TileCoord, Data, StateUnit)> for TileEntity {
+    fn create_args(args: (BasicActorRef, Id, TileCoord, Data, StateUnit)) -> Self {
         Self::new(args.0, args.1, args.2, args.3, args.4)
     }
 }
@@ -219,10 +210,10 @@ impl TileEntity {
         myself: Option<BasicActorRef>,
         resource_man: Arc<ResourceManager>,
         tile_type: TileType,
-        tick_count: usize,
+        tick_count: TickUnit,
     ) {
         if let Some(direction) = self.target_direction {
-            let coord = TileCoord(self.coord.0 + direction);
+            let coord = self.coord + direction;
 
             if let Some(script) = self
                 .script
@@ -245,11 +236,11 @@ impl TileEntity {
                                 myself,
                                 coord,
                                 Transaction {
-                                    item: output,
+                                    resource_man,
                                     tick_count,
+                                    item: output,
                                     source_type: tile_type,
                                     direction,
-                                    resource_man,
                                 },
                             );
                         }
@@ -259,11 +250,11 @@ impl TileEntity {
                         myself,
                         coord,
                         Transaction {
-                            item: output,
+                            resource_man,
                             tick_count,
+                            item: output,
                             source_type: tile_type,
                             direction,
-                            resource_man,
                         },
                     );
                 }
@@ -354,7 +345,13 @@ impl TileEntity {
         }
     }
 
-    fn new(game: BasicActorRef, id: Id, coord: TileCoord, data: Data, tile_state: usize) -> Self {
+    fn new(
+        game: BasicActorRef,
+        id: Id,
+        coord: TileCoord,
+        data: Data,
+        tile_state: StateUnit,
+    ) -> Self {
         Self {
             id,
             coord,
@@ -378,24 +375,69 @@ impl TileEntity {
     }
 }
 
+pub type TileHex = Hex<TileUnit>;
+
 pub type TileUnit = i32;
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub struct TileCoord(pub Hex<TileUnit>);
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Any)]
+pub struct TileCoord(TileHex);
 
-impl TileCoord {
-    pub const ZERO: Self = TileCoord(hex(0, 0, 0));
-
-    pub fn new(q: TileUnit, r: TileUnit) -> Self {
-        Self(Hex::new(q, r))
+impl From<TileHex> for TileCoord {
+    fn from(value: TileHex) -> Self {
+        Self(value)
     }
 }
 
-impl Add for TileCoord {
-    type Output = TileCoord;
+impl From<TileCoord> for TileHex {
+    fn from(value: TileCoord) -> Self {
+        value.0
+    }
+}
 
-    fn add(self, rhs: Self) -> Self::Output {
-        Self(self.0 + rhs.0)
+impl TileCoord {
+    pub fn install(module: &mut Module) -> Result<(), rune::ContextError> {
+        module.ty::<Self>()?;
+        module.inst_fn("neg", Self::neg)?;
+        module.inst_fn("add", Self::add)?;
+        module.inst_fn("sub", Self::sub)?;
+        module.inst_fn("mul", Self::mul)?;
+        module.inst_fn("div", Self::div)?;
+        module.inst_fn("clone", Self::clone)?;
+        module.function(["TOP_RIGHT"], || Self::TOP_RIGHT)?;
+        module.function(["RIGHT"], || Self::RIGHT)?;
+        module.function(["BOTTOM_RIGHT"], || Self::BOTTOM_RIGHT)?;
+        module.function(["BOTTOM_LEFT"], || Self::BOTTOM_LEFT)?;
+        module.function(["LEFT"], || Self::LEFT)?;
+        module.function(["TOP_LEFT"], || Self::TOP_LEFT)?;
+
+        Ok(())
+    }
+
+    pub const TOP_RIGHT: Self = Self(TileHex::NEIGHBORS[2]);
+    pub const RIGHT: Self = Self(TileHex::NEIGHBORS[3]);
+    pub const BOTTOM_RIGHT: Self = Self(TileHex::NEIGHBORS[4]);
+    pub const BOTTOM_LEFT: Self = Self(TileHex::NEIGHBORS[5]);
+    pub const LEFT: Self = Self(TileHex::NEIGHBORS[0]);
+    pub const TOP_LEFT: Self = Self(TileHex::NEIGHBORS[1]);
+
+    pub fn q(self) -> TileUnit {
+        self.0.q()
+    }
+
+    pub fn r(self) -> TileUnit {
+        self.0.r()
+    }
+
+    pub fn s(self) -> TileUnit {
+        self.0.s()
+    }
+}
+
+impl TileCoord {
+    pub const ZERO: Self = Self(hex(0, 0, 0));
+
+    pub fn new(q: TileUnit, r: TileUnit) -> Self {
+        Self(Hex::new(q, r))
     }
 }
 
@@ -446,5 +488,45 @@ where
         D: Deserializer<'de>,
     {
         deserializer.deserialize_tuple(2, TileCoordVisitor)
+    }
+}
+
+impl Add for TileCoord {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self(self.0 + rhs.0)
+    }
+}
+
+impl Sub for TileCoord {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self(self.0 - rhs.0)
+    }
+}
+
+impl Mul<TileUnit> for TileCoord {
+    type Output = Self;
+
+    fn mul(self, rhs: TileUnit) -> Self::Output {
+        Self(self.0 * rhs)
+    }
+}
+
+impl Div<TileUnit> for TileCoord {
+    type Output = Self;
+
+    fn div(self, rhs: TileUnit) -> Self::Output {
+        Self(self.0 / rhs)
+    }
+}
+
+impl Neg for TileCoord {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        Self(-self.0)
     }
 }

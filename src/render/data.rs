@@ -6,7 +6,7 @@ use hexagon_tiles::point::Point;
 use ply_rs::ply::{Property, PropertyAccess};
 use vulkano::impl_vertex;
 
-use crate::game::tile::TileCoord;
+use crate::game::tile::{StateUnit, TileCoord};
 use crate::render::camera::FAR;
 use crate::util::cg::{Matrix4, Num, Point3};
 use crate::util::id::Id;
@@ -80,15 +80,15 @@ impl InstanceData {
     pub fn from_id(
         id: &Id,
         pos: TileCoord,
-        tile_state: usize,
+        tile_state: StateUnit,
         resource_man: Arc<ResourceManager>,
     ) -> Option<(TileCoord, Self)> {
         resource_man
             .tiles
             .get(id)
-            .and_then(|r| r.faces_indices.get(tile_state).cloned())
+            .and_then(|r| r.faces_indices.get(tile_state as usize).cloned())
             .map(|face| {
-                let p = hex_to_pixel(RENDER_LAYOUT, pos.0);
+                let p = hex_to_pixel(RENDER_LAYOUT, pos.into());
 
                 (
                     pos,
