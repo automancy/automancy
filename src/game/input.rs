@@ -101,16 +101,15 @@ pub fn convert_input(
 
                 device = MainMove { delta };
             }
-            DeviceEvent::Key(keyboard_input) => match keyboard_input.virtual_keycode {
-                Some(VirtualKeyCode::Escape) => {
+            DeviceEvent::Key(keyboard_input) => {
+                if let Some(VirtualKeyCode::Escape) = keyboard_input.virtual_keycode {
                     device = if keyboard_input.state == Pressed {
                         ExitPressed
                     } else {
                         ExitReleased
                     }
                 }
-                _ => {}
-            },
+            }
             _ => {}
         }
     }

@@ -193,11 +193,8 @@ impl PropertyAccess for RawFace {
         }
     }
     fn set_property(&mut self, key: String, property: Property) {
-        match (key.as_ref(), property) {
-            ("vertex_indices", Property::ListUInt(vec)) => {
-                self.indices = vec;
-            }
-            (_, _) => {}
+        if let ("vertex_indices", Property::ListUInt(vec)) = (key.as_ref(), property) {
+            self.indices = vec;
         }
     }
 }

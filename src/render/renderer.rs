@@ -102,13 +102,11 @@ impl Renderer {
             }
 
             if camera_state.is_at_max_height() {
-                instances
-                    .get_mut(&camera_state.pointing_at)
-                    .map(|instance| {
-                        *instance = instance
-                            .add_position_offset([0.0, 0.0, 0.0001])
-                            .color_offset(Color::ORANGE.with_alpha(0.5).into())
-                    });
+                if let Some(instance) = instances.get_mut(&camera_state.pointing_at) {
+                    *instance = instance
+                        .add_position_offset([0.0, 0.0, 0.0001])
+                        .color_offset(Color::ORANGE.with_alpha(0.5).into())
+                }
             }
 
             let mut instances = instances.into_values().collect::<Vec<_>>();
@@ -168,7 +166,7 @@ impl Renderer {
                     self.recreate_swapchain = true;
                     return;
                 }
-                Err(e) => panic!("failed to acquire next image: {:?}", e),
+                Err(e) => panic!("failed to acquire next image: {e:?}"),
             }
         };
         if suboptimal {
@@ -220,7 +218,7 @@ impl Renderer {
 
             let ubo_set = PersistentDescriptorSet::new(
                 &self.gpu.alloc.descriptor_allocator,
-                ubo_layout.clone(),
+                ubo_layout,
                 [WriteDescriptorSet::buffer(
                     0,
                     self.gpu.alloc.game_uniform_buffer.clone(),
@@ -353,9 +351,9 @@ impl Renderer {
              */
         }
 
-        gui_builder.build().ok().map(|commands| {
+        if let Ok(commands) = gui_builder.build() {
             builder.execute_commands(commands).unwrap();
-        });
+        }
 
         // egui
         let egui_command_buffer = gui.draw_on_subpass_image(dimensions);

@@ -37,9 +37,9 @@ impl Map {
         let instances = self
             .tiles
             .iter()
-            .map(|(a, b)| (a.clone(), b))
+            .map(|(a, b)| (*a, b))
             .flat_map(|(pos, (id, _, tile_state))| {
-                InstanceData::from_id(&id, pos, *tile_state, resource_man.clone())
+                InstanceData::from_id(id, pos, *tile_state, resource_man.clone())
             })
             .collect();
 
@@ -54,7 +54,7 @@ impl Map {
     }
 
     pub fn path(map_name: &str) -> PathBuf {
-        PathBuf::from(format!("{}/{}.bin", MAP_PATH, map_name))
+        PathBuf::from(format!("{MAP_PATH}/{map_name}.bin"))
     }
 
     /*

@@ -12,9 +12,9 @@ pub struct IdRaw(SharedStr, SharedStr);
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Id(usize);
 
-impl Into<usize> for Id {
-    fn into(self) -> usize {
-        self.0
+impl From<Id> for usize {
+    fn from(value: Id) -> Self {
+        value.0
     }
 }
 

@@ -116,11 +116,11 @@ fn main() {
     };
 
     let (physical_device, queue_family_index) =
-        gpu::get_physical_device(instance.clone(), surface.clone(), &device_extensions);
+        gpu::get_physical_device(instance, surface.clone(), &device_extensions);
     log::info!(
         "Using device: {} (type: {:?})",
-        physical_device.clone().properties().device_name,
-        physical_device.clone().properties().device_type
+        physical_device.properties().device_name,
+        physical_device.properties().device_type
     );
 
     let (device, mut queues) = gpu::get_logical_device(
@@ -172,9 +172,9 @@ fn main() {
     let start_time = discord::start_time();
     let mut discord_client = discord::setup_rich_presence().ok();
 
-    discord_client.as_mut().map(|client| {
-        discord::set_status(client, start_time.clone(), discord::DiscordStatuses::InGame).unwrap()
-    });
+    if let Some(client) = discord_client.as_mut() {
+        discord::set_status(client, start_time, discord::DiscordStatuses::InGame).unwrap()
+    }
 
     let mut renderer = Renderer::new(resource_man.clone(), gpu);
     let mut camera = Camera::new(gpu::window_size(&renderer.gpu.window));
@@ -225,7 +225,7 @@ fn main() {
                 }
 
                 Event::WindowEvent { event, .. } => {
-                    if !gui.update(&event) {
+                    if !gui.update(event) {
                         window_event = Some(event);
                     }
 
@@ -279,11 +279,8 @@ fn main() {
                                 },
                             ));
 
-                            match response {
-                                PlaceTileResponse::Placed => {
-                                    audio_man.play(resource_man.audio["place"].clone()).unwrap();
-                                }
-                                _ => {}
+                            if let PlaceTileResponse::Placed = response {
+                                audio_man.play(resource_man.audio["place"].clone()).unwrap();
                             }
 
                             already_placed_at = Some(pointing_at)
@@ -332,7 +329,7 @@ fn main() {
                         if let Some((id, tile, _)) = result {
                             let current_script: Option<Id> =
                                 block_on(ask(&sys, &tile, TileEntityMsg::GetScript));
-                            let mut new_script = current_script.clone();
+                            let mut new_script = current_script;
 
                             let current_target_coord: Option<Hex<TileUnit>> =
                                 block_on(ask(&sys, &tile, TileEntityMsg::GetTarget));
@@ -352,7 +349,7 @@ fn main() {
                                             let script_text =
                                                 resource_man.try_item_name(&new_script);
 
-                                            ui.label(format!("Script: {}", script_text));
+                                            ui.label(format!("Script: {script_text}"));
                                             gui::scripts(
                                                 ui,
                                                 resource_man.clone(),

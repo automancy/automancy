@@ -94,11 +94,8 @@ impl Actor for TileEntity {
 
                 let tile_type = resource_man.tiles[&self.id].tile_type.clone();
 
-                match tile_type {
-                    Machine(_) => {
-                        self.machine_tell(myself, resource_man, tile_type, tick_count);
-                    }
-                    _ => {}
+                if let Machine(_) = tile_type {
+                    self.machine_tell(myself, resource_man, tile_type, tick_count);
                 }
             }
             Transaction {
@@ -184,7 +181,6 @@ impl Actor for TileEntity {
                     | TransactionError::NotSuitable
                     | TransactionError::Full => {
                         self.slow_down();
-                        return;
                     }
                     TransactionError::NotEnough => {
                         self.interval_offset = 0;
@@ -195,14 +191,14 @@ impl Actor for TileEntity {
                 self.target_direction = target_direction;
             }
             GetTarget => {
-                sender.inspect(|v| v.try_tell(self.target_direction.clone(), myself).unwrap());
+                sender.inspect(|v| v.try_tell(self.target_direction, myself).unwrap());
             }
             SetScript(id) => {
                 self.script = Some(id);
                 self.data.0.clear();
             }
             GetScript => {
-                sender.inspect(|v| v.try_tell(self.script.clone(), myself).unwrap());
+                sender.inspect(|v| v.try_tell(self.script, myself).unwrap());
             }
             GetData => {
                 sender.inspect(|v| v.try_tell(self.data.clone(), myself).unwrap());
@@ -234,9 +230,9 @@ impl TileEntity {
                 .and_then(|v| resource_man.scripts.get(v))
             {
                 let instructions = &script.instructions;
-                let output = instructions.output.clone();
+                let output = instructions.output;
 
-                if let Some(input) = instructions.input.clone() {
+                if let Some(input) = instructions.input {
                     let id = input.id;
 
                     // TODO send transaction result back to Game
@@ -251,7 +247,7 @@ impl TileEntity {
                                 Transaction {
                                     item: output,
                                     tick_count,
-                                    source_type: tile_type.clone(),
+                                    source_type: tile_type,
                                     direction,
                                     resource_man,
                                 },
@@ -265,7 +261,7 @@ impl TileEntity {
                         Transaction {
                             item: output,
                             tick_count,
-                            source_type: tile_type.clone(),
+                            source_type: tile_type,
                             direction,
                             resource_man,
                         },
@@ -300,7 +296,7 @@ impl TileEntity {
                     return;
                 }
 
-                let amount = self.data.0.entry(id.clone()).or_insert(0);
+                let amount = self.data.0.entry(id).or_insert(0);
                 *amount += has;
 
                 let limit = required * 2;
@@ -316,12 +312,10 @@ impl TileEntity {
 
                 if has >= required {
                     sender.try_tell(TransactionResult(Ok(())), myself).unwrap();
-                    return;
                 } else {
                     sender
                         .try_tell(TransactionResult(Err(TransactionError::NotEnough)), myself)
                         .unwrap();
-                    return;
                 }
             } else {
                 sender
@@ -330,13 +324,11 @@ impl TileEntity {
                         myself,
                     )
                     .unwrap();
-                return;
             }
         } else {
             sender
                 .try_tell(TransactionResult(Err(TransactionError::NoScript)), myself)
                 .unwrap();
-            return;
         }
     }
 

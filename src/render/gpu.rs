@@ -104,7 +104,7 @@ pub fn create_game_pipeline(device: Arc<Device>, subpass: &Subpass) -> Arc<Graph
         })
         .render_pass(subpass.clone());
 
-    pipeline.build(device.clone()).unwrap()
+    pipeline.build(device).unwrap()
 }
 
 pub fn create_gui_pipeline(device: Arc<Device>, subpass: &Subpass) -> Arc<GraphicsPipeline> {
@@ -129,7 +129,7 @@ pub fn create_gui_pipeline(device: Arc<Device>, subpass: &Subpass) -> Arc<Graphi
         })
         .render_pass(subpass.clone());
 
-    pipeline.build(device.clone()).unwrap()
+    pipeline.build(device).unwrap()
 }
 
 pub fn create_instance() -> Arc<Instance> {
@@ -158,7 +158,7 @@ pub fn create_window(icon: Icon, event_loop: &EventLoop<()>) -> Arc<Window> {
 }
 
 pub fn create_surface(window: Arc<Window>, instance: Arc<Instance>) -> Arc<Surface> {
-    create_surface_from_winit(window, instance.clone()).expect("could not create surface")
+    create_surface_from_winit(window, instance).expect("could not create surface")
 }
 
 pub fn get_physical_device(
@@ -195,7 +195,7 @@ pub fn get_logical_device(
     device_extensions: DeviceExtensions,
 ) -> (Arc<Device>, impl ExactSizeIterator<Item = Arc<Queue>>) {
     Device::new(
-        physical_device.clone(),
+        physical_device,
         DeviceCreateInfo {
             queue_create_infos: vec![QueueCreateInfo {
                 queue_family_index,
@@ -252,10 +252,8 @@ where
     D::IntoIter: ExactSizeIterator,
     [T]: BufferContents,
 {
-    let buffer = DeviceLocalBuffer::from_iter(allocator, data, buffer_usage, builder)
-        .expect("failed to create vertex buffer");
-
-    buffer
+    DeviceLocalBuffer::from_iter(allocator, data, buffer_usage, builder)
+        .expect("failed to create vertex buffer")
 }
 
 pub fn cpu_accessible_buffer<T, D>(
@@ -268,10 +266,8 @@ where
     D::IntoIter: ExactSizeIterator,
     [T]: BufferContents,
 {
-    let buffer = CpuAccessibleBuffer::from_iter(allocator, buffer_usage, false, data)
-        .expect("failed to create vertex buffer");
-
-    buffer
+    CpuAccessibleBuffer::from_iter(allocator, buffer_usage, false, data)
+        .expect("failed to create vertex buffer")
 }
 
 pub fn uniform_buffer<UBO: Default + Pod + Send + Sync>(
@@ -422,7 +418,6 @@ impl RenderAlloc {
         device: Arc<Device>,
     ) -> (Arc<Swapchain>, Vec<Arc<SwapchainImage>>) {
         let surface_capabilities = physical_device
-            .clone()
             .surface_capabilities(&surface, Default::default())
             .expect("failed to get surface capabilities");
 
@@ -436,13 +431,13 @@ impl RenderAlloc {
         log::debug!("image_format: {:?}", image_format);
 
         Swapchain::new(
-            device.clone(),
-            surface.clone(),
+            device,
+            surface,
             SwapchainCreateInfo {
                 min_image_count: surface_capabilities.min_image_count,
 
                 image_format,
-                image_extent: window_size_u32(window.clone().as_ref()),
+                image_extent: window_size_u32(window.as_ref()),
 
                 image_usage: ImageUsage {
                     color_attachment: true,
@@ -469,17 +464,13 @@ impl RenderAlloc {
         window: Arc<Window>,
         physical_device: Arc<PhysicalDevice>,
     ) -> Self {
-        let (swapchain, images) = Self::init_swapchain(
-            window.clone(),
-            surface.clone(),
-            physical_device.clone(),
-            device.clone(),
-        );
+        let (swapchain, images) =
+            Self::init_swapchain(window.clone(), surface, physical_device, device.clone());
 
         let allocator = StandardMemoryAllocator::new_default(device.clone());
         let descriptor_allocator = StandardDescriptorSetAllocator::new(device.clone());
         let command_allocator = StandardCommandBufferAllocator::new(
-            device.clone(),
+            device,
             StandardCommandBufferAllocatorCreateInfo {
                 ..Default::default()
             },
@@ -522,9 +513,9 @@ impl RenderAlloc {
 
         let color_image = AttachmentImage::multisampled_with_usage(
             &allocator,
-            window_size_u32(window.clone().as_ref()),
+            window_size_u32(window.as_ref()),
             Sample4,
-            swapchain.clone().image_format(),
+            swapchain.image_format(),
             ImageUsage {
                 color_attachment: true,
                 ..Default::default()
@@ -534,7 +525,7 @@ impl RenderAlloc {
 
         let game_depth_buffer = AttachmentImage::multisampled_with_usage(
             &allocator,
-            window_size_u32(window.clone().as_ref()),
+            window_size_u32(window.as_ref()),
             Sample4,
             Format::D32_SFLOAT,
             ImageUsage {
@@ -560,7 +551,7 @@ impl RenderAlloc {
 
         block_on(
             command_buffer
-                .execute(queue.clone())
+                .execute(queue)
                 .unwrap()
                 .then_signal_fence_and_flush()
                 .unwrap(),
@@ -678,7 +669,7 @@ impl Gpu {
             }) {
                 Ok(r) => r,
                 Err(SwapchainCreationError::ImageExtentNotSupported { .. }) => return,
-                Err(e) => panic!("failed to recreate swapchain: {:?}", e),
+                Err(e) => panic!("failed to recreate swapchain: {e:?}"),
             }
         };
 
@@ -734,7 +725,7 @@ impl Gpu {
 
     fn create_render_pass(swapchain: Arc<Swapchain>, device: Arc<Device>) -> Arc<RenderPass> {
         vulkano::ordered_passes_renderpass!(
-            device.clone(),
+            device,
             attachments: {
                 color_resolve: {
                     load: DontCare,

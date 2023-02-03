@@ -121,9 +121,9 @@ impl ResourceManager {
         log::info!("loading translate at: {:?}", file);
 
         let translate: TranslateRaw = serde_json::from_str(
-            &read_to_string(&file).expect(&format!("error loading {:?}", file)),
+            &read_to_string(file).unwrap_or_else(|_| panic!("error loading {file:?}")),
         )
-        .expect(&format!("error loading {:?}", file));
+        .unwrap_or_else(|_| panic!("error loading {file:?}"));
 
         let items = translate
             .items
@@ -145,9 +145,9 @@ impl ResourceManager {
         log::info!("loading script at: {:?}", file);
 
         let script: ScriptRaw = serde_json::from_str(
-            &read_to_string(&file).expect(&format!("error loading {:?}", file)),
+            &read_to_string(file).unwrap_or_else(|_| panic!("error loading {file:?}")),
         )
-        .expect(&format!("error loading {:?}", file));
+        .unwrap_or_else(|_| panic!("error loading {file:?}"));
 
         let id = script.id.to_id(&mut self.interner);
 
@@ -175,9 +175,9 @@ impl ResourceManager {
         log::info!("loading model at: {:?}", file);
 
         let model: ModelRaw = serde_json::from_str(
-            &read_to_string(&file).expect(&format!("error loading {:?}", file)),
+            &read_to_string(file).unwrap_or_else(|_| panic!("error loading {file:?}")),
         )
-        .expect(&format!("error loading {:?}", file));
+        .unwrap_or_else(|_| panic!("error loading {file:?}"));
 
         let file = file
             .parent()
@@ -202,12 +202,12 @@ impl ResourceManager {
             match element.name.as_ref() {
                 "vertex" => {
                     vertices = vertex_parser
-                        .read_payload_for_element(&mut read, &element, &header)
+                        .read_payload_for_element(&mut read, element, &header)
                         .ok();
                 }
                 "face" => {
                     faces = face_parser
-                        .read_payload_for_element(&mut read, &element, &header)
+                        .read_payload_for_element(&mut read, element, &header)
                         .ok();
                 }
                 _ => (),
@@ -228,9 +228,9 @@ impl ResourceManager {
         log::info!("loading tile at {:?}", file);
 
         let tile: TileRaw = serde_json::from_str(
-            &read_to_string(&file).expect(&format!("error loading {:?}", file)),
+            &read_to_string(file).unwrap_or_else(|_| panic!("error loading {file:?}")),
         )
-        .expect(&format!("error loading {:?}", file));
+        .unwrap_or_else(|_| panic!("error loading {file:?}"));
 
         let id = tile.id.to_id(&mut self.interner);
 
@@ -363,7 +363,7 @@ impl ResourceManager {
             .tiles
             .iter()
             .flat_map(|(id, _)| self.interner.resolve(*id))
-            .map(|id| IdRaw::parse(id))
+            .map(IdRaw::parse)
             .collect::<Vec<_>>();
 
         ids.sort_unstable_by_key(|id| id.clone());
@@ -415,13 +415,13 @@ impl ResourceManager {
             .into_iter()
             .enumerate()
             .map(|(i, (id, raw_faces))| {
-                self.models_referenced.get(&id).map(|references| {
+                if let Some(references) = self.models_referenced.get(id) {
                     references.iter().for_each(|id| {
                         if let Some(resource) = self.tiles.get_mut(id) {
                             resource.faces_indices.push(i);
                         }
                     });
-                });
+                }
 
                 let faces = raw_faces
                     .iter()

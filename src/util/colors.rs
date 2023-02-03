@@ -18,27 +18,27 @@ impl Color {
     }
 }
 
-impl Into<[Num; 3]> for Color {
-    fn into(self) -> [Num; 3] {
-        [self.r, self.g, self.b]
+impl From<Color> for [Num; 3] {
+    fn from(it: Color) -> Self {
+        [it.r, it.g, it.b]
     }
 }
 
-impl Into<[Num; 4]> for Color {
-    fn into(self) -> [Num; 4] {
-        [self.r, self.g, self.b, self.a]
+impl From<Color> for [Num; 4] {
+    fn from(it: Color) -> Self {
+        [it.r, it.g, it.b, it.a]
     }
 }
 
-impl Into<Rgba> for Color {
-    fn into(self) -> Rgba {
-        Rgba::from_rgba_premultiplied(self.r, self.g, self.b, self.a)
+impl From<Color> for Rgba {
+    fn from(it: Color) -> Self {
+        Self::from_rgba_premultiplied(it.r, it.g, it.b, it.a)
     }
 }
 
-impl Into<Color32> for Color {
-    fn into(self) -> Color32 {
-        let rgba: Rgba = self.into();
+impl From<Color> for Color32 {
+    fn from(it: Color) -> Self {
+        let rgba: Rgba = it.into();
 
         rgba.into()
     }

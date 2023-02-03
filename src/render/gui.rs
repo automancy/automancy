@@ -54,13 +54,13 @@ fn init_fonts(gui: &Gui) {
         .families
         .get_mut(&Monospace)
         .unwrap()
-        .insert(0, iosevka.clone());
+        .insert(0, iosevka);
 
     gui.context().set_fonts(fonts);
 }
 
 fn init_styles(gui: &Gui) {
-    gui.clone().context().set_style(Style {
+    gui.context().set_style(Style {
         override_text_style: None,
         override_font_id: None,
         text_styles: [
@@ -155,7 +155,7 @@ fn tile_paint(
     response.clone().on_hover_text(resource_man.tile_name(&id));
     response.clone().on_hover_cursor(CursorIcon::Grab);
 
-    let hover = if response.clone().hovered() {
+    let hover = if response.hovered() {
         ui.ctx()
             .animate_value_with_time(ui.next_auto_id(), 1.0, 0.3)
     } else {
@@ -191,7 +191,7 @@ fn tile_paint(
             let ubo_set = PersistentDescriptorSet::new(
                 context.resources.descriptor_set_allocator,
                 ubo_layout.clone(),
-                [WriteDescriptorSet::buffer(0, uniform_buffer.clone())],
+                [WriteDescriptorSet::buffer(0, uniform_buffer)],
             )
             .unwrap();
 
@@ -211,7 +211,7 @@ fn tile_paint(
                         PipelineBindPoint::Graphics,
                         pipeline.layout().clone(),
                         0,
-                        ubo_set.clone(),
+                        ubo_set,
                     )
                     .draw_indexed_indirect(indirect_commands)
                     .unwrap();
@@ -242,20 +242,20 @@ fn paint_tile_selection(
             resource
                 .faces_indices
                 .get(*selected_tile_states.get(id).unwrap_or(&0))
-                .map(|v| (id.clone(), *v))
+                .map(|v| (*id, *v))
         })
         .for_each(|(id, faces_index)| {
             let callback = tile_paint(
                 ui,
                 resource_man.clone(),
-                &gpu,
+                gpu,
                 size,
                 id,
                 faces_index,
                 &mut selection_send,
             );
 
-            ui.painter().add(callback.clone());
+            ui.painter().add(callback);
         });
 }
 
@@ -359,10 +359,8 @@ pub fn scripts(
             let mut filtered = scripts
                 .into_iter()
                 .flat_map(|id| {
-                    let result = fuse.search_text_in_string(
-                        &script_filter,
-                        resource_man.item_name(&id).as_str(),
-                    );
+                    let result = fuse
+                        .search_text_in_string(script_filter, resource_man.item_name(&id).as_str());
 
                     Some(id).zip(result.map(|v| v.score))
                 })
@@ -376,7 +374,7 @@ pub fn scripts(
         };
 
         scripts.iter().for_each(|script| {
-            ui.radio_value(new_script, Some(*script), resource_man.item_name(&script));
+            ui.radio_value(new_script, Some(*script), resource_man.item_name(script));
         })
     });
 }
