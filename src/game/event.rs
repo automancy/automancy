@@ -176,6 +176,10 @@ pub fn on_event(
                 persistent
                     .selected_tile_states
                     .insert(id, new % resource_man.tiles[&id].faces_indices.len());
+                setup
+                    .audio_man
+                    .play(resource_man.audio["rotate"].clone())
+                    .unwrap();
 
                 persistent.already_placed_at = None;
             }
