@@ -13,7 +13,7 @@ use vulkano::command_buffer::{
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType};
 use vulkano::device::{DeviceCreateInfo, DeviceExtensions, Features, QueueCreateInfo};
-use vulkano::format::Format;
+use vulkano::format::{Format, NumericType};
 use vulkano::image::SampleCount::Sample4;
 use vulkano::image::{ImageAccess, ImageUsage, SampleCount};
 use vulkano::instance::{Instance, InstanceCreateInfo};
@@ -424,7 +424,10 @@ impl RenderAlloc {
         let image_format = Some(
             physical_device
                 .surface_formats(&surface, Default::default())
-                .unwrap()[0]
+                .unwrap()
+                .iter()
+                .find(|(format, _color_space)| format.type_color() == Some(NumericType::UNORM))
+                .unwrap()
                 .0,
         );
 
