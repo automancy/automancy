@@ -1,18 +1,18 @@
 pub fn handle_transfer(tile_state, tick_count, self_coord, direction) {
-    if let (a, b, c) = if tile_state % 2 == 0 {
-        (TOP_LEFT(), BOTTOM_LEFT(), RIGHT())
-    } else {
-        (TOP_RIGHT(), BOTTOM_RIGHT(), LEFT())
+    if let (a, b, c) = match tile_state {
+        0 => (TOP_LEFT(), BOTTOM_LEFT(), RIGHT()),
+        1 => (TOP_RIGHT(), BOTTOM_RIGHT(), LEFT()),
     } {
         let direction = direction.neg();
 
-        if let (first, second) = match direction {
-            a => (b, c),
-            b => (a, c),
-            c => (a, b),
-            _ => {
-                return None;
-            }
+        if let (first, second) = if direction.eq(a) {
+            (b, c)
+        } else if direction.eq(b) {
+            (a, c)
+        } else if direction.eq(c) {
+            (a, b)
+        } else {
+            return None;
         } {
             let target = if tick_count % 2 == 0 { first } else { second };
 

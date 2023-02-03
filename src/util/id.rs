@@ -1,3 +1,4 @@
+use bytemuck::{Pod, PodInOption, Zeroable, ZeroableInOption};
 use std::fmt::{self, Display, Formatter};
 
 use flexstr::SharedStr;
@@ -9,8 +10,12 @@ use string_interner::{StringInterner, Symbol};
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct IdRaw(SharedStr, SharedStr);
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Zeroable, Pod)]
 pub struct Id(usize);
+
+unsafe impl ZeroableInOption for Id {}
+unsafe impl PodInOption for Id {}
 
 impl From<Id> for usize {
     fn from(value: Id) -> Self {

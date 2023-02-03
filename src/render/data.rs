@@ -71,7 +71,7 @@ pub struct InstanceData {
     pub scale: Num,
     pub color_offset: VertexColor,
 
-    pub faces_index: usize,
+    pub id: Option<Id>,
 }
 
 impl_vertex!(InstanceData, position_offset, scale, color_offset);
@@ -86,7 +86,7 @@ impl InstanceData {
         resource_man
             .tiles
             .get(id)
-            .and_then(|r| r.faces_indices.get(tile_state as usize).cloned())
+            .and_then(|r| r.models.get(tile_state as usize).cloned())
             .map(|face| {
                 let p = hex_to_pixel(RENDER_LAYOUT, pos.into());
 
@@ -94,7 +94,7 @@ impl InstanceData {
                     pos,
                     Self::new()
                         .position_offset([p.x as Num, p.y as Num, FAR as Num])
-                        .faces_index(face),
+                        .model(face),
                 )
             })
     }
@@ -103,7 +103,7 @@ impl InstanceData {
         InstanceData {
             position_offset: [0.0, 0.0, 0.0],
             scale: 1.0,
-            faces_index: 0,
+            id: None,
             color_offset: [0.0, 0.0, 0.0, 0.0],
         }
     }
@@ -128,8 +128,8 @@ impl InstanceData {
         self
     }
 
-    pub fn faces_index(mut self, faces_index: usize) -> Self {
-        self.faces_index = faces_index;
+    pub fn model(mut self, id: Id) -> Self {
+        self.id = Some(id);
 
         self
     }

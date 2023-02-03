@@ -1,50 +1,46 @@
+use std::collections::HashMap;
+use std::error::Error;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use cgmath::{point2, EuclideanSpace};
+use discord_rich_presence::DiscordIpc;
+use egui::style::Margin;
+use egui::Window;
+use fuse_rust::Fuse;
+use futures::channel::mpsc;
+use futures_executor::block_on;
+use riker::actor::{ActorRef, Tell};
+use riker_patterns::ask::ask;
+use winit::event::{Event, WindowEvent};
+use winit::event_loop::ControlFlow;
+
 use crate::game::game::{GameMsg, PlaceTileResponse};
 use crate::game::input;
 use crate::game::input::InputState;
-use crate::game::map::{Map, MapRenderInfo, RenderContext};
+use crate::game::map::{MapRenderInfo, RenderContext};
 use crate::game::setup::GameSetup;
-use crate::game::tile::{TileCoord, TileEntityMsg, TileUnit};
-use crate::render::camera::{cursor_to_pos, Camera};
+use crate::game::tile::{StateUnit, TileCoord, TileEntityMsg};
+use crate::render::camera::cursor_to_pos;
 use crate::render::data::InstanceData;
-use crate::render::gpu::Gpu;
-use crate::render::renderer::Renderer;
 use crate::render::{gpu, gui};
 use crate::util::cg::Num;
 use crate::util::colors::Color;
 use crate::util::id::Id;
-use crate::util::resource::{ResourceManager, TileType};
-use cgmath::{point2, EuclideanSpace};
-use discord_rich_presence::activity::Timestamps;
-use discord_rich_presence::{DiscordIpc, DiscordIpcClient};
-use egui::style::Margin;
-use egui::{Frame, Window};
-use egui_winit_vulkano::Gui;
-use fuse_rust::Fuse;
-use futures::channel::mpsc;
-use futures_executor::block_on;
-use hexagon_tiles::hex::Hex;
-use kira::manager::AudioManager;
-use riker::actor::{ActorRef, Tell};
-use riker::actors::ActorSystem;
-use riker_patterns::ask::ask;
-use std::collections::HashMap;
-use std::error::Error;
-use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
-use winit::event::{Event, WindowEvent};
-use winit::event_loop::ControlFlow;
+use crate::util::resource::TileType;
 
+// TODO: naming, Persistent means it's stored across sessions..
 pub struct PersistentEventStorage {
     fuse: Fuse,
     closed: bool,
     script_filter: String,
     input_state: InputState,
     pointing_at: TileCoord,
-    selected_tile_states: HashMap<Id, usize>,
+    selected_tile_states: HashMap<Id, StateUnit>,
     selected_id: Option<Id>,
     already_placed_at: Option<TileCoord>,
     config_open: Option<TileCoord>,
 }
+
 impl Default for PersistentEventStorage {
     fn default() -> Self {
         Self {
@@ -53,7 +49,7 @@ impl Default for PersistentEventStorage {
             script_filter: String::new(),
             input_state: InputState::default(),
             pointing_at: TileCoord::ZERO,
-            selected_tile_states: HashMap::<Id, usize>::new(),
+            selected_tile_states: HashMap::<Id, StateUnit>::new(),
             selected_id: None,
             already_placed_at: None,
             config_open: None,
@@ -152,7 +148,6 @@ pub fn on_event(
                         GameMsg::PlaceTile {
                             coord: persistent.pointing_at,
                             id,
-                            none: setup.resource_man.none,
                             tile_state: *persistent.selected_tile_states.get(&id).unwrap_or(&0),
                         },
                     ));
@@ -172,10 +167,9 @@ pub fn on_event(
         if persistent.input_state.alternate_pressed {
             if let Some(id) = persistent.selected_id {
                 let new = persistent.selected_tile_states.get(&id).unwrap_or(&0) + 1;
+                let max = resource_man.tiles[&id].models.len() as i32;
 
-                persistent
-                    .selected_tile_states
-                    .insert(id, new % resource_man.tiles[&id].faces_indices.len());
+                persistent.selected_tile_states.insert(id, new % max);
                 setup
                     .audio_man
                     .play(resource_man.audio["rotate"].clone())
@@ -215,7 +209,7 @@ pub fn on_event(
             );
 
             if let Some(config_open) = persistent.config_open {
-                let result: Option<(Id, ActorRef<TileEntityMsg>, usize)> =
+                let result: Option<(Id, ActorRef<TileEntityMsg>, StateUnit)> =
                     block_on(ask(&setup.sys, &setup.game, GameMsg::GetTile(config_open)));
 
                 if let Some((id, tile, _)) = result {
@@ -223,7 +217,7 @@ pub fn on_event(
                         block_on(ask(&setup.sys, &tile, TileEntityMsg::GetScript));
                     let mut new_script = current_script;
 
-                    let current_target_coord: Option<Hex<TileUnit>> =
+                    let current_target_coord: Option<TileCoord> =
                         block_on(ask(&setup.sys, &tile, TileEntityMsg::GetTarget));
                     let mut new_target_coord = current_target_coord;
 
@@ -298,16 +292,21 @@ pub fn on_event(
         let camera_state = setup.camera.camera_state();
         if camera_state.is_at_max_height() {
             if let Some(id) = persistent.selected_id {
-                if let Some(faces_index) = resource_man.tiles.get(&id).and_then(|v| {
-                    v.faces_indices
-                        .get(*persistent.selected_tile_states.get(&id).unwrap_or(&0))
+                if let Some(model) = resource_man.tiles.get(&id).and_then(|v| {
+                    v.models.get(
+                        persistent
+                            .selected_tile_states
+                            .get(&id)
+                            .cloned()
+                            .unwrap_or(0) as usize,
+                    )
                 }) {
                     let time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
 
                     let glow = (time.as_secs_f64() * 3.0).sin() / 10.0;
 
                     let instance = InstanceData::new()
-                        .faces_index(*faces_index)
+                        .model(*model)
                         .position_offset([mouse_pos.x as Num, mouse_pos.y as Num, 0.1])
                         .color_offset(Color::TRANSPARENT.with_alpha(glow as Num).into());
 
@@ -329,7 +328,6 @@ pub fn on_event(
         setup.renderer.render(
             render_info,
             setup.camera.camera_state(),
-            resource_man.none,
             gui_instances,
             extra_vertices,
             &mut setup.gui,

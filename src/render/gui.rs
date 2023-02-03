@@ -146,7 +146,7 @@ fn tile_paint(
     gpu: &Gpu,
     size: f32,
     id: Id,
-    faces_index: usize,
+    model: Id,
     selection_send: &mut mpsc::Sender<Id>,
 ) -> PaintCallback {
     let (rect, response) = ui.allocate_exact_size(vec2(size, size), Sense::click());
@@ -194,7 +194,7 @@ fn tile_paint(
             )
             .unwrap();
 
-            let instance = InstanceData::new().faces_index(faces_index);
+            let instance = InstanceData::new().model(model);
 
             if let Some((indirect_commands, instance_buffer)) = gpu::indirect_instance(
                 &context.resources.memory_allocator,
@@ -239,7 +239,7 @@ fn paint_tile_selection(
             }
 
             resource
-                .faces_indices
+                .models
                 .get(*selected_tile_states.get(id).unwrap_or(&0) as usize)
                 .map(|v| (*id, *v))
         })

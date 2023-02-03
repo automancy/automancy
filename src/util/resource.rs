@@ -19,6 +19,7 @@ use crate::render::data::{Model, RawFace, Vertex};
 use crate::util::id::{Id, IdRaw, Interner};
 
 pub static JSON_EXT: &str = "json";
+pub static OGG_EXT: &str = "ogg";
 
 #[derive(Debug, Default, Clone)]
 pub struct Face {
@@ -63,21 +64,21 @@ pub enum TileType {
     Transfer(Id),
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct TileRaw {
+    pub tile_type: TileTypeRaw,
+    pub id: IdRaw,
+    pub scripts: Option<Vec<IdRaw>>,
+    pub function: Option<IdRaw>,
+    pub models: Vec<IdRaw>,
+}
+
 #[derive(Debug, Clone)]
 pub struct Tile {
     pub tile_type: TileType,
     pub scripts: Option<Vec<Id>>,
     pub function: Option<Id>,
-    pub faces_indices: Vec<usize>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct TileRaw {
-    pub tile_type: TileTypeRaw,
-    pub id: IdRaw,
-    pub models: Option<Vec<IdRaw>>,
-    pub scripts: Option<Vec<IdRaw>>,
-    pub function: Option<IdRaw>,
+    pub models: Vec<Id>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -105,12 +106,11 @@ pub struct ResourceManager {
     pub audio: HashMap<String, StaticSoundData>,
     pub functions: HashMap<Id, Function>,
 
-    pub raw_models: HashMap<Id, Model>,
-    pub models_referenced: HashMap<Id, Vec<Id>>,
+    pub faces: HashMap<Id, Vec<Face>>,
 
-    pub all_faces: Vec<Vec<Face>>,
     pub all_vertices: Vec<Vertex>,
-    pub all_raw_faces: Vec<Vec<RawFace>>,
+    pub raw_models: HashMap<Id, Model>,
+    pub raw_faces: Vec<Vec<RawFace>>,
 }
 
 impl Debug for ResourceManager {
@@ -137,12 +137,11 @@ impl ResourceManager {
             audio: Default::default(),
             functions: Default::default(),
 
-            raw_models: Default::default(),
-            models_referenced: Default::default(),
+            faces: Default::default(),
 
-            all_faces: vec![],
-            all_vertices: vec![],
-            all_raw_faces: vec![],
+            all_vertices: Default::default(),
+            raw_models: Default::default(),
+            raw_faces: Default::default(),
         }
     }
 }
@@ -265,16 +264,6 @@ impl ResourceManager {
 
         let id = tile.id.to_id(&mut self.interner);
 
-        if let Some(models) = tile.models {
-            for model in models {
-                let references = self
-                    .models_referenced
-                    .entry(model.to_id(&mut self.interner))
-                    .or_insert_with(Vec::default);
-                references.push(id);
-            }
-        }
-
         let scripts = tile.scripts.map(|v| {
             v.into_iter()
                 .map(|id| id.to_id(&mut self.interner))
@@ -291,13 +280,19 @@ impl ResourceManager {
 
         let function = tile.function.map(|v| v.to_id(&mut self.interner));
 
+        let models = tile
+            .models
+            .into_iter()
+            .map(|v| v.to_id(&mut self.interner))
+            .collect();
+
         self.tiles.insert(
             id,
             Tile {
                 tile_type,
                 scripts,
                 function,
-                faces_indices: vec![],
+                models,
             },
         );
 
@@ -312,6 +307,7 @@ impl ResourceManager {
             .into_iter()
             .flatten()
             .map(|v| v.path())
+            .filter(|v| v.extension() == Some(OsStr::new(OGG_EXT)))
             .for_each(|file| {
                 log::info!("loading audio at {file:?}");
 
@@ -513,17 +509,14 @@ impl ResourceManager {
 
         let mut offset_count = 0;
 
-        let (all_raw_faces, all_faces): (Vec<_>, Vec<_>) = raw_faces // TODO we can just draw 3 indices a bunch of times
+        let (raw_faces, faces): (Vec<_>, Vec<_>) = raw_faces // TODO we can just draw 3 indices a bunch of times
             .into_iter()
             .enumerate()
             .map(|(i, (id, raw_faces))| {
-                if let Some(references) = self.models_referenced.get(id) {
-                    references.iter().for_each(|id| {
-                        if let Some(resource) = self.tiles.get_mut(id) {
-                            resource.faces_indices.push(i);
-                        }
-                    });
-                }
+                let raw_faces = raw_faces
+                    .into_iter()
+                    .map(|face| face.index_offset(index_offsets[i] as u32))
+                    .collect::<Vec<_>>();
 
                 let faces = raw_faces
                     .iter()
@@ -537,14 +530,11 @@ impl ResourceManager {
                     })
                     .collect::<Vec<_>>();
 
-                let raw_faces = raw_faces
-                    .into_iter()
-                    .map(|face| face.index_offset(index_offsets[i] as u32))
-                    .collect::<Vec<_>>();
-
-                (raw_faces, faces)
+                (raw_faces, (*id, faces))
             })
             .unzip();
+
+        let faces = HashMap::from_iter(faces.into_iter());
 
         /*
         log::debug!("combined_vertices: {:?}", combined_vertices);
@@ -552,9 +542,9 @@ impl ResourceManager {
         log::debug!("all_faces: {:?}", all_faces);
          */
 
-        self.all_faces = all_faces;
+        self.faces = faces;
         self.all_vertices = all_vertices;
-        self.all_raw_faces = all_raw_faces;
+        self.raw_faces = raw_faces;
     }
 }
 

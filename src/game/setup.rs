@@ -8,7 +8,6 @@ use crate::render::{gpu, gui};
 use crate::util::discord;
 use crate::util::resource::ResourceManager;
 use crate::{LOGO, RESOURCES};
-use discord_rich_presence::activity::Timestamps;
 use discord_rich_presence::DiscordIpcClient;
 use egui::Frame;
 use egui_winit_vulkano::Gui;
@@ -31,37 +30,11 @@ pub struct GameSetup {
     pub(crate) sys: ActorSystem,
     pub(crate) game: ActorRef<GameMsg>,
     pub(crate) frame: Frame,
-    pub(crate) start_time: Timestamps,
     pub(crate) discord_client: Option<DiscordIpcClient>,
     pub(crate) renderer: Renderer,
     pub(crate) camera: Camera,
 }
 impl GameSetup {
-    pub fn new(
-        audio_man: AudioManager,
-        resource_man: Arc<ResourceManager>,
-        gui: Gui,
-        sys: ActorSystem,
-        game: ActorRef<GameMsg>,
-        frame: Frame,
-        start_time: Timestamps,
-        discord_client: Option<DiscordIpcClient>,
-        renderer: Renderer,
-        camera: Camera,
-    ) -> Self {
-        Self {
-            audio_man,
-            resource_man,
-            gui,
-            sys,
-            game,
-            frame,
-            start_time,
-            discord_client,
-            renderer,
-            camera,
-        }
-    }
     pub fn setup() -> (EventLoop<()>, Self) {
         env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
@@ -120,7 +93,7 @@ impl GameSetup {
         );
         let gpu = Gpu::new(device, queue, surface, window, alloc);
 
-        let mut gui = gui::init_gui(&event_loop, &gpu);
+        let gui = gui::init_gui(&event_loop, &gpu);
 
         // --- setup game ---
         let sys = SystemBuilder::new().name("automancy").create().unwrap();
@@ -146,15 +119,14 @@ impl GameSetup {
         log::info!("loading completed!");
 
         // last setup
-        let none = resource_man.none;
         let frame = gui::default_frame();
 
         let start_time = discord::start_time();
-        let mut discord_client = discord::setup_rich_presence().ok();
+        //let mut discord_client = discord::setup_rich_presence().ok(); //TODO fix discord crate
+        let mut discord_client = None;
 
         if let Some(client) = discord_client.as_mut() {
-            discord::set_status(client, start_time.clone(), discord::DiscordStatuses::InGame)
-                .unwrap()
+            discord::set_status(client, start_time, discord::DiscordStatuses::InGame).unwrap()
         }
 
         let renderer = Renderer::new(resource_man.clone(), gpu);
@@ -163,18 +135,18 @@ impl GameSetup {
         // --- event-loop ---
         (
             event_loop,
-            GameSetup::new(
+            GameSetup {
+                // note by Madeline: don't make a new function that just directly calls the constructor...
                 audio_man,
                 resource_man,
                 gui,
                 sys,
                 game,
                 frame,
-                start_time,
                 discord_client,
                 renderer,
                 camera,
-            ),
+            },
         )
     }
 }
@@ -191,6 +163,7 @@ fn load_resources(track: TrackHandle) -> Arc<ResourceManager> {
             resource_man.load_scripts(&dir);
             resource_man.load_translates(&dir);
             resource_man.load_audio(&dir);
+            resource_man.load_functions(&dir);
             resource_man.load_tiles(&dir);
         });
 

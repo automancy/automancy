@@ -30,7 +30,6 @@ use crate::render::gpu;
 use crate::render::gpu::Gpu;
 use crate::util::cg::{actual_pos, eye, matrix, Matrix4, Num, Point3};
 use crate::util::colors::Color;
-use crate::util::id::Id;
 use crate::util::resource::ResourceManager;
 
 pub struct Renderer {
@@ -64,7 +63,6 @@ impl Renderer {
         &mut self,
         map_render_info: MapRenderInfo,
         camera_state: CameraState,
-        none: Id,
         gui_instances: Vec<InstanceData>,
         extra_vertices: Vec<Vertex>,
         gui: &mut Gui,
@@ -85,8 +83,12 @@ impl Renderer {
             let min = pos - o;
             let max = pos + o;
 
-            let none =
-                InstanceData::new().faces_index(self.resource_man.tiles[&none].faces_indices[0]);
+            let none = InstanceData::new().model(
+                *self.resource_man.tiles[&self.resource_man.none]
+                    .models
+                    .get(0)
+                    .unwrap(),
+            );
 
             let mut instances = map_render_info.instances;
 
@@ -111,7 +113,7 @@ impl Renderer {
 
             let mut instances = instances.into_values().collect::<Vec<_>>();
 
-            instances.sort_by_key(|v| v.faces_index);
+            instances.sort_by_key(|v| v.id);
 
             instances
         };

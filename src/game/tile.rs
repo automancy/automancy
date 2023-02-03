@@ -35,8 +35,6 @@ pub struct TileEntity {
     game: BasicActorRef,
     target_direction: Option<TileCoord>,
 
-    interval_offset: TickUnit,
-
     tile_state: StateUnit,
 }
 
@@ -88,12 +86,6 @@ impl Actor for TileEntity {
                 resource_man,
                 tick_count,
             } => {
-                let interval = 1 + self.interval_offset;
-
-                if (tick_count % interval) != 0 {
-                    return;
-                }
-
                 let tile_type = resource_man.tiles[&self.id].tile_type.clone();
 
                 if let Machine(_) = tile_type {
@@ -163,21 +155,7 @@ impl Actor for TileEntity {
                     }
                 }
             }
-            TransactionResult(result) => match result {
-                Ok(_) => {
-                    self.interval_offset = 0;
-                }
-                Err(error) => match error {
-                    TransactionError::NoScript
-                    | TransactionError::NotSuitable
-                    | TransactionError::Full => {
-                        self.slow_down();
-                    }
-                    TransactionError::NotEnough => {
-                        self.interval_offset = 0;
-                    }
-                },
-            },
+            TransactionResult(_) => {}
             SetTarget(target_direction) => {
                 self.target_direction = target_direction;
             }
@@ -259,8 +237,6 @@ impl TileEntity {
                     );
                 }
             }
-        } else {
-            self.slow_down();
         }
     }
 
@@ -323,11 +299,6 @@ impl TileEntity {
         }
     }
 
-    fn slow_down(&mut self) {
-        self.interval_offset += 2;
-        self.interval_offset = self.interval_offset.at_most(9);
-    }
-
     fn send_tile_msg(
         &mut self,
         myself: Option<BasicActorRef>,
@@ -360,8 +331,6 @@ impl TileEntity {
 
             game,
             target_direction: None,
-
-            interval_offset: 0,
 
             tile_state,
         }
@@ -402,6 +371,7 @@ impl TileCoord {
         module.inst_fn("sub", Self::sub)?;
         module.inst_fn("mul", Self::mul)?;
         module.inst_fn("div", Self::div)?;
+        module.inst_fn("eq", Self::eq)?;
         module.inst_fn("clone", Self::clone)?;
         module.function(["TOP_RIGHT"], || Self::TOP_RIGHT)?;
         module.function(["RIGHT"], || Self::RIGHT)?;

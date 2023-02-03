@@ -42,7 +42,6 @@ pub enum GameMsg {
     PlaceTile {
         coord: TileCoord,
         id: Id,
-        none: Id,
         tile_state: StateUnit,
     },
     GetTile(TileCoord),
@@ -78,7 +77,6 @@ impl Actor for Game {
             PlaceTile {
                 coord,
                 id,
-                none,
                 tile_state,
             } => {
                 if let Some((old_id, tile, old_tile_state)) = self.map.tiles.get(&coord) {
@@ -90,7 +88,7 @@ impl Actor for Game {
                     ctx.system.stop(tile);
                 }
 
-                if id == none {
+                if id == self.resource_man.none {
                     self.map.tiles.remove_entry(&coord);
 
                     sender.inspect(|v| v.try_tell(PlaceTileResponse::Removed, myself).unwrap());

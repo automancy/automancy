@@ -327,13 +327,13 @@ pub fn indirect_buffer(
     Vec<DrawIndexedIndirectCommand>,
 ) {
     let indirect_commands = instances
-        .group_by(|a, b| a.faces_index == b.faces_index)
+        .group_by(|a, b| a.id == b.id)
         .scan(0, |init, instances| {
             let instance_count = instances.len() as u32;
 
             let first_instance = *init;
 
-            let faces = &resource_man.all_faces[instances[0].faces_index];
+            let faces = &resource_man.faces[&instances[0].id.unwrap()];
             let commands = faces
                 .iter()
                 .map(|face| DrawIndexedIndirectCommand {
@@ -496,7 +496,7 @@ impl RenderAlloc {
         let index_buffer = immutable_buffer(
             &allocator,
             resource_man
-                .all_raw_faces
+                .raw_faces
                 .iter()
                 .flatten()
                 .flat_map(|v| v.indices.clone())

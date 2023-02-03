@@ -6,6 +6,6 @@ fn main() {
     let mut persistent = PersistentEventStorage::default();
 
     event_loop.run(move |event, _, control_flow| {
-        on_event(&mut setup, &mut persistent, event, control_flow);
+        on_event(&mut setup, &mut persistent, event, control_flow).unwrap();
     });
 }
