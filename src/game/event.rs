@@ -152,11 +152,24 @@ pub fn on_event(
                         },
                     ));
 
-                    if let PlaceTileResponse::Placed = response {
-                        setup
-                            .audio_man
-                            .play(resource_man.audio["place"].clone())
-                            .unwrap();
+                    match response {
+                        PlaceTileResponse::Placed => {
+                            setup
+                                .audio_man
+                                .play(resource_man.audio["place"].clone())
+                                .unwrap();
+                        }
+                        PlaceTileResponse::Removed => {
+                            setup
+                                .audio_man
+                                .play(
+                                    resource_man.audio["click"]
+                                        .clone()
+                                        .with_modified_settings(|s| s.playback_rate(0.5)),
+                                )
+                                .unwrap();
+                        }
+                        _ => {}
                     }
 
                     persistent.already_placed_at = Some(persistent.pointing_at)
@@ -172,7 +185,7 @@ pub fn on_event(
                 persistent.selected_tile_states.insert(id, new % max);
                 setup
                     .audio_man
-                    .play(resource_man.audio["rotate"].clone())
+                    .play(resource_man.audio["click"].clone())
                     .unwrap();
 
                 persistent.already_placed_at = None;
