@@ -35,8 +35,6 @@ pub struct GameSetup {
 }
 impl GameSetup {
     pub fn setup() -> (EventLoop<()>, Self) {
-        env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
-
         // --- resources & data ---
         let mut audio_man =
             AudioManager::<CpalBackend>::new(AudioManagerSettings::default()).unwrap();
@@ -47,7 +45,7 @@ impl GameSetup {
                 builder
             })
             .unwrap();
-
+        log::info!("Audio backend initialized");
         let resource_man = load_resources(track);
         log::info!("loaded resources.");
 
@@ -93,7 +91,7 @@ impl GameSetup {
         let gpu = Gpu::new(device, queue, surface, window, alloc);
 
         let gui = gui::init_gui(&event_loop, &gpu);
-
+        log::info!("Renderer setup complete");
         // --- setup game ---
         let sys = SystemBuilder::new().name("automancy").create().unwrap();
 
@@ -148,12 +146,15 @@ fn load_resources(track: TrackHandle) -> Arc<ResourceManager> {
         .flatten()
         .map(|v| v.path())
         .for_each(|dir| {
+            let namespace = dir.file_name().unwrap().to_str().unwrap();
+            log::info!("Loading namespace {namespace}");
             resource_man.load_models(&dir);
             resource_man.load_scripts(&dir);
             resource_man.load_translates(&dir);
             resource_man.load_audio(&dir);
             resource_man.load_functions(&dir);
             resource_man.load_tiles(&dir);
+            log::info!("Finished loading namespace {namespace}");
         });
 
     resource_man.compile_models();

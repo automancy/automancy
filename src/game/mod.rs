@@ -1,9 +1,8 @@
 pub mod data;
-pub mod event;
 pub mod game;
 pub mod input;
 pub mod item;
 pub mod map;
-pub mod setup;
+pub mod run;
 pub mod ticking;
 pub mod tile;
