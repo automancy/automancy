@@ -3,7 +3,6 @@ use std::error::Error;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use cgmath::{point2, EuclideanSpace};
-use discord_rich_presence::DiscordIpc;
 use egui::style::Margin;
 use egui::Window;
 use fuse_rust::Fuse;
@@ -80,8 +79,8 @@ pub fn on_event(
             event: WindowEvent::CloseRequested,
             ..
         } => {
+            // game shutdown
             block_on(setup.sys.shutdown())?;
-            setup.discord_client.as_mut().map(|client| client.close());
 
             *control_flow = ControlFlow::Exit;
 

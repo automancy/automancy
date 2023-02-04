@@ -1,11 +1,10 @@
-use crate::resource::{ResourceManager, OGG_EXT};
-use kira::sound::static_sound::{StaticSoundData, StaticSoundSettings};
-use kira::sound::Sound;
-use std::any::Any;
 use std::ffi::OsStr;
 use std::fs::read_dir;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::path::Path;
+
+use kira::sound::static_sound::{StaticSoundData, StaticSoundSettings};
+
+use crate::resource::{ResourceManager, OGG_EXT};
 
 impl ResourceManager {
     pub fn load_audio(&mut self, dir: &Path) -> Option<()> {

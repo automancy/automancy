@@ -18,7 +18,6 @@ winit = "0.27.5"
 egui_winit_vulkano = { git = "https://github.com/Mg138/egui_winit_vulkano" }
 egui = "0.20.1"
 
-discord-rich-presence = "0.2.3"
 string-interner = "0.14.0"
 hexagon_tiles = { git = "https://github.com/Mg138/hexagon-tiles" }
 fuse-rust = "0.3.1"

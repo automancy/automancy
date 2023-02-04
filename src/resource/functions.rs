@@ -1,14 +1,16 @@
-use crate::game::tile::TileCoord;
-use crate::resource::{ResourceManager, JSON_EXT};
-use crate::util::id::IdRaw;
-use rune::runtime::RuntimeContext;
-use rune::termcolor::{ColorChoice, StandardStream};
-use rune::{Context, Diagnostics, Module, Source, Sources, Unit};
-use serde::Deserialize;
 use std::ffi::OsStr;
 use std::fs::{read_dir, read_to_string};
 use std::path::Path;
 use std::sync::Arc;
+
+use rune::runtime::RuntimeContext;
+use rune::termcolor::{ColorChoice, StandardStream};
+use rune::{Diagnostics, Module, Source, Sources, Unit};
+use serde::Deserialize;
+
+use crate::game::tile::TileCoord;
+use crate::resource::{ResourceManager, JSON_EXT};
+use crate::util::id::IdRaw;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct FunctionRaw {

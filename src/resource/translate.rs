@@ -1,12 +1,11 @@
-use crate::resource::ResourceManager;
-use crate::resource::{Deserialize, JSON_EXT};
-use crate::util::id::{Id, IdRaw};
-use std::any::Any;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs::{read_dir, read_to_string};
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::path::Path;
+
+use crate::resource::ResourceManager;
+use crate::resource::{Deserialize, JSON_EXT};
+use crate::util::id::{Id, IdRaw};
 
 #[derive(Debug, Default, Clone, Deserialize)]
 pub struct TranslateRaw {
