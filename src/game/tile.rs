@@ -7,9 +7,9 @@ use riker::actors::{Actor, ActorFactoryArgs, BasicActorRef};
 use rune::{FromValue, Vm};
 
 use crate::game::data::{Data, TileCoord};
-use crate::game::game::{GameMsg, TickUnit};
 use crate::game::item::Item;
 use crate::game::tile::TileEntityMsg::*;
+use crate::game::{GameMsg, TickUnit};
 use crate::resource::script::Script;
 use crate::resource::tile::TileType;
 use crate::resource::tile::TileType::*;

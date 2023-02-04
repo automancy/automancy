@@ -1,3 +1,4 @@
+use flexstr::SharedStr;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs::{read_dir, read_to_string};
@@ -16,9 +17,9 @@ pub struct TranslateRaw {
 
 #[derive(Debug, Default, Clone)]
 pub struct Translate {
-    pub items: HashMap<Id, String>,
-    pub tiles: HashMap<Id, String>,
-    pub gui: HashMap<Id, String>,
+    pub items: HashMap<Id, SharedStr>,
+    pub tiles: HashMap<Id, SharedStr>,
+    pub gui: HashMap<Id, SharedStr>,
 }
 impl ResourceManager {
     fn load_translate(&mut self, file: &Path) -> Option<()> {
@@ -32,17 +33,17 @@ impl ResourceManager {
         let items = translate
             .items
             .into_iter()
-            .map(|(id, str)| (id.to_id(&mut self.interner), str))
+            .map(|(id, str)| (id.to_id(&mut self.interner), str.into()))
             .collect();
         let tiles = translate
             .tiles
             .into_iter()
-            .map(|(id, str)| (id.to_id(&mut self.interner), str))
+            .map(|(id, str)| (id.to_id(&mut self.interner), str.into()))
             .collect();
         let gui = translate
             .gui
             .into_iter()
-            .map(|(id, str)| (id.to_id(&mut self.interner), str))
+            .map(|(id, str)| (id.to_id(&mut self.interner), str.into()))
             .collect();
         self.translates = Translate { items, tiles, gui };
 

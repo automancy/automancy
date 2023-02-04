@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::error::Error;
-use std::fmt;
+
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::game::data::TileCoord;
@@ -15,12 +15,11 @@ use riker_patterns::ask::ask;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::ControlFlow;
 
-use crate::game::game::{GameMsg, PlaceTileResponse};
-use crate::game::input;
 use crate::game::input::InputState;
 use crate::game::map::{MapRenderInfo, RenderContext};
 use crate::game::run::setup::GameSetup;
 use crate::game::tile::{StateUnit, TileEntityMsg};
+use crate::game::{input, GameMsg, PlaceTileResponse};
 use crate::render::camera::cursor_to_pos;
 use crate::render::data::InstanceData;
 use crate::render::{gpu, gui};
@@ -237,11 +236,8 @@ pub fn on_event(
                     if let TileType::Machine(_) = resource_man.tiles[&id].tile_type {
                         if let Some(scripts) = resource_man.tiles[&id].scripts.clone() {
                             Window::new(
-                                resource_man
-                                    .translates
-                                    .gui
-                                    .get(&resource_man.gui_ids.tile_config)
-                                    .unwrap(),
+                                resource_man.translates.gui[&resource_man.gui_ids.tile_config]
+                                    .to_string(),
                             )
                             .resizable(false)
                             .auto_sized()
@@ -253,12 +249,9 @@ pub fn on_event(
                                 let script_text = resource_man.try_item_name(&new_script);
 
                                 ui.label(util::format(
-                                    resource_man
-                                        .translates
-                                        .gui
-                                        .get(&resource_man.gui_ids.tile_config_script)
-                                        .unwrap(),
-                                    vec![script_text.as_str()],
+                                    &resource_man.translates.gui
+                                        [&resource_man.gui_ids.tile_config_script],
+                                    vec![script_text],
                                 ));
                                 gui::scripts(
                                     ui,
@@ -272,12 +265,9 @@ pub fn on_event(
                                 ui.separator();
 
                                 ui.label(util::format(
-                                    resource_man
-                                        .translates
-                                        .gui
-                                        .get(&resource_man.gui_ids.tile_config_target)
-                                        .unwrap(),
-                                    vec![script_text.as_str()],
+                                    &resource_man.translates.gui
+                                        [&resource_man.gui_ids.tile_config_target],
+                                    vec![script_text],
                                 ));
                                 gui::targets(ui, &mut new_target_coord);
                             });

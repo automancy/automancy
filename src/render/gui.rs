@@ -1,4 +1,3 @@
-use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::f32::consts::FRAC_PI_4;
 use std::sync::Arc;
@@ -24,8 +23,8 @@ use vulkano::pipeline::{Pipeline, PipelineBindPoint};
 use winit::event_loop::EventLoop;
 
 use crate::game::data::{Data, TileCoord, TileHex};
-use crate::game::game::GameMsg;
 use crate::game::tile::{StateUnit, TileEntityMsg};
+use crate::game::GameMsg;
 use crate::render::data::{GuiUBO, InstanceData};
 use crate::render::gpu;
 use crate::render::gpu::Gpu;
@@ -318,33 +317,27 @@ pub fn tile_info(
     game: ActorRef<GameMsg>,
     pointing_at: TileCoord,
 ) {
-    Window::new(
-        resource_man
-            .translates
-            .gui
-            .get(&resource_man.gui_ids.tile_info)
-            .unwrap(),
-    )
-    .anchor(Align2([Align::RIGHT, Align::TOP]), vec2(-10.0, 10.0))
-    .resizable(false)
-    .default_width(300.0)
-    .frame(default_frame().inner_margin(Margin::same(10.0)))
-    .show(&gui.context(), |ui| {
-        ui.colored_label(Color::DARK_GRAY, pointing_at.to_string());
+    Window::new(resource_man.translates.gui[&resource_man.gui_ids.tile_info].to_string())
+        .anchor(Align2([Align::RIGHT, Align::TOP]), vec2(-10.0, 10.0))
+        .resizable(false)
+        .default_width(300.0)
+        .frame(default_frame().inner_margin(Margin::same(10.0)))
+        .show(&gui.context(), |ui| {
+            ui.colored_label(Color::DARK_GRAY, pointing_at.to_string());
 
-        let result: Option<(Id, ActorRef<TileEntityMsg>, StateUnit)> =
-            block_on(ask(sys, &game, GameMsg::GetTile(pointing_at)));
+            let result: Option<(Id, ActorRef<TileEntityMsg>, StateUnit)> =
+                block_on(ask(sys, &game, GameMsg::GetTile(pointing_at)));
 
-        if let Some((id, tile, _)) = result {
-            ui.label(resource_man.tile_name(&id));
-            let data: Data = block_on(ask(sys, &tile, TileEntityMsg::GetData));
+            if let Some((id, tile, _)) = result {
+                ui.label(resource_man.tile_name(&id));
+                let data: Data = block_on(ask(sys, &tile, TileEntityMsg::GetData));
 
-            for (id, amount) in data.0.iter() {
-                ui.label(format!("{} - {}", resource_man.item_name(id), amount));
+                for (id, amount) in data.0.iter() {
+                    ui.label(format!("{} - {}", resource_man.item_name(id), amount));
+                }
+                //ui.label(format!("State: {}", ask(sys, &game, )))
             }
-            //ui.label(format!("State: {}", ask(sys, &game, )))
-        }
-    });
+        });
 }
 
 pub fn add_direction(ui: &mut Ui, target_coord: &mut Option<TileCoord>, n: usize) {
@@ -383,8 +376,8 @@ pub fn scripts(
             let mut filtered = scripts
                 .into_iter()
                 .flat_map(|id| {
-                    let result = fuse
-                        .search_text_in_string(script_filter, resource_man.item_name(&id).as_str());
+                    let result =
+                        fuse.search_text_in_string(script_filter, resource_man.item_name(&id));
 
                     Some(id).zip(result.map(|v| v.score))
                 })

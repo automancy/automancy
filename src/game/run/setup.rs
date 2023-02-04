@@ -12,9 +12,9 @@ use vulkano::device::DeviceExtensions;
 use winit::event_loop::EventLoop;
 use winit::window::Icon;
 
-use crate::game::game::{Game, GameMsg};
 use crate::game::map::Map;
 use crate::game::ticking::TICK_INTERVAL;
+use crate::game::{Game, GameMsg};
 use crate::render::camera::Camera;
 use crate::render::gpu::{Gpu, RenderAlloc};
 use crate::render::renderer::Renderer;

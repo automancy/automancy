@@ -102,33 +102,33 @@ impl ResourceManager {
         Some(())
     }
 
-    pub fn item_name(&self, id: &Id) -> String {
+    pub fn item_name(&self, id: &Id) -> &str {
         match self.translates.items.get(id) {
-            Some(name) => name.to_owned(),
-            None => "<unnamed>".to_string(),
+            Some(name) => name,
+            None => "<unnamed>",
         }
     }
 
-    pub fn try_item_name(&self, id: &Option<Id>) -> String {
+    pub fn try_item_name(&self, id: &Option<Id>) -> &str {
         if let Some(id) = id {
             self.item_name(id)
         } else {
-            "<none>".to_owned()
+            "<none>"
         }
     }
 
-    pub fn tile_name(&self, id: &Id) -> String {
+    pub fn tile_name(&self, id: &Id) -> &str {
         match self.translates.tiles.get(id) {
-            Some(name) => name.to_owned(),
-            None => "<unnamed>".to_string(),
+            Some(name) => name,
+            None => "<unnamed>",
         }
     }
 
-    pub fn try_tile_name(&self, id: &Option<Id>) -> String {
+    pub fn try_tile_name(&self, id: &Option<Id>) -> &str {
         if let Some(id) = id {
             self.tile_name(id)
         } else {
-            "<none>".to_owned()
+            "<none>"
         }
     }
 }
