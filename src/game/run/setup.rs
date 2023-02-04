@@ -3,7 +3,6 @@ use std::sync::Arc;
 
 use egui::Frame;
 use egui_winit_vulkano::Gui;
-use env_logger::Env;
 use kira::manager::backend::cpal::CpalBackend;
 use kira::manager::{AudioManager, AudioManagerSettings};
 use kira::track::{TrackBuilder, TrackHandle};

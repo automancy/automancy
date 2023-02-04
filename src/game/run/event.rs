@@ -18,7 +18,7 @@ use crate::game::game::{GameMsg, PlaceTileResponse};
 use crate::game::input;
 use crate::game::input::InputState;
 use crate::game::map::{MapRenderInfo, RenderContext};
-use crate::game::setup::GameSetup;
+use crate::game::run::setup::GameSetup;
 use crate::game::tile::{StateUnit, TileEntityMsg};
 use crate::render::camera::cursor_to_pos;
 use crate::render::data::InstanceData;
@@ -181,15 +181,12 @@ pub fn on_event(
                 let max = resource_man.tiles[&id].models.len() as i32;
 
                 storage.selected_tile_states.insert(id, new % max);
-                persistent.selected_tile_states.insert(id, new % max);
-                persistent.already_placed_at = None;
+                storage.already_placed_at = None;
 
                 setup
                     .audio_man
                     .play(resource_man.audio["click"].clone())
                     .unwrap();
-
-                storage.already_placed_at = None;
             } else if storage.config_open == Some(storage.pointing_at) {
                 storage.config_open = None;
                 storage.script_filter.clear();
