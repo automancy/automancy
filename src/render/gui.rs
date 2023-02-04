@@ -22,9 +22,9 @@ use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::pipeline::{Pipeline, PipelineBindPoint};
 use winit::event_loop::EventLoop;
 
-use crate::game::data::Data;
+use crate::game::data::{Data, TileCoord, TileHex};
 use crate::game::game::GameMsg;
-use crate::game::tile::{StateUnit, TileCoord, TileEntityMsg, TileHex};
+use crate::game::tile::{StateUnit, TileEntityMsg};
 use crate::render::data::{GuiUBO, InstanceData};
 use crate::render::gpu;
 use crate::render::gpu::Gpu;

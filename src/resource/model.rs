@@ -4,13 +4,11 @@ use crate::resource::JSON_EXT;
 use crate::util::id::IdRaw;
 use ply_rs::parser::Parser;
 use serde::Deserialize;
-use std::any::Any;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs::{read_dir, read_to_string, File};
 use std::io::BufReader;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::path::Path;
 
 #[derive(Debug, Default, Clone)]
 pub struct Face {

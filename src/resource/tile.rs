@@ -1,13 +1,9 @@
 use crate::resource::{ResourceManager, JSON_EXT};
 use crate::util::id::{Id, IdRaw};
-use predicates::function::FnPredicate;
-use predicates::prelude::predicate;
-use predicates::Predicate;
 use serde::Deserialize;
-use std::any::Any;
 use std::ffi::OsStr;
 use std::fs::{read_dir, read_to_string};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(tag = "type", content = "param")]

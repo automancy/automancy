@@ -186,7 +186,6 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "cgmath",
- "discord-rich-presence",
  "egui",
  "egui_winit_vulkano",
  "env_logger",
@@ -198,7 +197,6 @@ dependencies = [
  "futures-timer",
  "futures-util",
  "hexagon_tiles",
- "json",
  "kira",
  "log",
  "num",
@@ -854,18 +852,6 @@ name = "discard"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "212d0f5754cb6769937f4501cc0e67f4f4483c8d2c3e1e922ee9edbe4ab4c7c0"
-
-[[package]]
-name = "discord-rich-presence"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "47fc4beffb85ee1461588499073a4d9c20dcc7728c4b13d6b282ab6c508947e5"
-dependencies = [
- "serde 1.0.152",
- "serde_derive",
- "serde_json",
- "uuid 0.8.2",
-]
 
 [[package]]
 name = "dispatch"
@@ -1607,12 +1593,6 @@ checksum = "445dde2150c55e483f3d8416706b97ec8e8237c307e5b7b4b8dd15e6af2a0730"
 dependencies = [
  "wasm-bindgen",
 ]
-
-[[package]]
-name = "json"
-version = "0.12.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "078e285eafdfb6c4b434e0d31e8cfcb5115b651496faca5749b88fafd4f23bfd"
 
 [[package]]
 name = "kira"

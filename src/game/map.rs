@@ -1,14 +1,13 @@
 use std::fmt::Debug;
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
+use crate::game::data::TileCoord;
 use riker::actor::ActorRef;
 
 use crate::game::tile::{StateUnit, TileEntityMsg};
 use crate::render::data::InstanceData;
 use crate::resource::ResourceManager;
 use crate::util::id::Id;
-
-use super::tile::TileCoord;
 
 pub const MAP_PATH: &str = "map";
 

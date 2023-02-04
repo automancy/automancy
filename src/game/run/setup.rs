@@ -1,14 +1,6 @@
-use crate::game::game::{Game, GameMsg};
-use crate::game::map::Map;
-use crate::game::ticking::TICK_INTERVAL;
-use crate::render::camera::Camera;
-use crate::render::gpu::{Gpu, RenderAlloc};
-use crate::render::renderer::Renderer;
-use crate::render::{gpu, gui};
-use crate::resource::{ResourceManager, RESOURCES_FOLDER};
-use crate::util::discord;
-use crate::LOGO;
-use discord_rich_presence::DiscordIpcClient;
+use std::fs;
+use std::sync::Arc;
+
 use egui::Frame;
 use egui_winit_vulkano::Gui;
 use env_logger::Env;
@@ -17,11 +9,19 @@ use kira::manager::{AudioManager, AudioManagerSettings};
 use kira::track::{TrackBuilder, TrackHandle};
 use riker::actor::{ActorRef, ActorRefFactory};
 use riker::actors::{ActorSystem, SystemBuilder, Timer};
-use std::fs;
-use std::sync::Arc;
 use vulkano::device::DeviceExtensions;
 use winit::event_loop::EventLoop;
 use winit::window::Icon;
+
+use crate::game::game::{Game, GameMsg};
+use crate::game::map::Map;
+use crate::game::ticking::TICK_INTERVAL;
+use crate::render::camera::Camera;
+use crate::render::gpu::{Gpu, RenderAlloc};
+use crate::render::renderer::Renderer;
+use crate::render::{gpu, gui};
+use crate::resource::{ResourceManager, RESOURCES_FOLDER};
+use crate::LOGO;
 
 pub struct GameSetup {
     pub(crate) audio_man: AudioManager,
@@ -30,7 +30,6 @@ pub struct GameSetup {
     pub(crate) sys: ActorSystem,
     pub(crate) game: ActorRef<GameMsg>,
     pub(crate) frame: Frame,
-    pub(crate) discord_client: Option<DiscordIpcClient>,
     pub(crate) renderer: Renderer,
     pub(crate) camera: Camera,
 }
@@ -119,14 +118,6 @@ impl GameSetup {
         // last setup
         let frame = gui::default_frame();
 
-        let start_time = discord::start_time();
-        //let mut discord_client = discord::setup_rich_presence().ok(); //TODO fix discord crate
-        let mut discord_client = None;
-
-        if let Some(client) = discord_client.as_mut() {
-            discord::set_status(client, start_time, discord::DiscordStatuses::InGame).unwrap()
-        }
-
         let renderer = Renderer::new(resource_man.clone(), gpu);
         let camera = Camera::new(gpu::window_size(&renderer.gpu.window));
 
@@ -134,14 +125,12 @@ impl GameSetup {
         (
             event_loop,
             GameSetup {
-                // note by Madeline: don't make a new function that just directly calls the constructor...
                 audio_man,
                 resource_man,
                 gui,
                 sys,
                 game,
                 frame,
-                discord_client,
                 renderer,
                 camera,
             },
