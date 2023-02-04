@@ -1,10 +1,10 @@
-use bytemuck::{Pod, PodInOption, Zeroable, ZeroableInOption};
 use std::fmt::{self, Display, Formatter};
 
+use bytemuck::{Pod, PodInOption, Zeroable, ZeroableInOption};
 use flexstr::SharedStr;
 use serde::de::{Error, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use string_interner::backend::BufferBackend;
+use string_interner::backend::StringBackend;
 use string_interner::{StringInterner, Symbol};
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -39,8 +39,7 @@ impl Symbol for Id {
     }
 }
 
-// TODO if saving is too bad with this, switch back to StringBackend
-pub type Interner = StringInterner<BufferBackend<Id>>;
+pub type Interner = StringInterner<StringBackend<Id>>;
 
 impl IdRaw {
     pub const NONE: IdRaw = id_static("automancy", "none");

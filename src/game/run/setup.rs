@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use egui::Frame;
 use egui_winit_vulkano::Gui;
+use flexstr::SharedStr;
 use kira::manager::backend::cpal::CpalBackend;
 use kira::manager::{AudioManager, AudioManagerSettings};
 use kira::track::{TrackBuilder, TrackHandle};
@@ -12,7 +13,6 @@ use vulkano::device::DeviceExtensions;
 use winit::event_loop::EventLoop;
 use winit::window::Icon;
 
-use crate::game::map::Map;
 use crate::game::ticking::TICK_INTERVAL;
 use crate::game::{Game, GameMsg};
 use crate::render::camera::Camera;
@@ -94,15 +94,16 @@ impl GameSetup {
         // --- setup game ---
         let sys = SystemBuilder::new().name("automancy").create().unwrap();
 
-        //let map = Map::load("test".to_owned());
-        let map = Map::new_empty("test".to_owned());
+        // TODO map selection
+        let map_name = SharedStr::from_static("test");
 
         let game = sys
-            .actor_of_args::<Game, (Arc<ResourceManager>, Arc<Map>)>(
+            .actor_of_args::<Game, (Arc<ResourceManager>, SharedStr)>(
                 "game",
-                (resource_man.clone(), Arc::new(map)),
+                (resource_man.clone(), map_name),
             )
             .unwrap();
+        game.send_msg(GameMsg::LoadMap(resource_man.clone()), None);
 
         sys.schedule(
             TICK_INTERVAL,

@@ -2,8 +2,10 @@
 /.fleet
 /.vscode
 /.cargo
+/map
 
 *.spv
 *.blend1
 
 /renderdoc.cap
+

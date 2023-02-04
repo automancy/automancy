@@ -9,11 +9,42 @@ use serde::de::{SeqAccess, Visitor};
 use serde::ser::SerializeTuple;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::game::item::ItemAmount;
-use crate::util::id::Id;
+use crate::game::item::{ItemAmount, ItemRaw};
+use crate::util::id::{Id, IdRaw, Interner};
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Data(pub HashMap<Id, ItemAmount>);
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct DataRaw(pub Vec<ItemRaw>);
+
+impl DataRaw {
+    pub fn to_data(self, interner: &Interner) -> Data {
+        Data(
+            self.0
+                .into_iter()
+                .flat_map(|item| {
+                    interner
+                        .get(item.id.to_string())
+                        .map(|id| (id, item.amount))
+                })
+                .collect(),
+        )
+    }
+
+    pub fn from_data(data: Data, interner: &Interner) -> Self {
+        Self(
+            data.0
+                .into_iter()
+                .map(|(id, amount)| {
+                    let id = IdRaw::parse(interner.resolve(id).unwrap());
+
+                    ItemRaw { id, amount }
+                })
+                .collect(),
+        )
+    }
+}
 
 pub type TileHex = Hex<TileUnit>;
 

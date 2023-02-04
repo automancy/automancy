@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::util::id::{Id, IdRaw, Interner};
 
@@ -10,7 +10,7 @@ pub struct Item {
     pub amount: ItemAmount,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ItemRaw {
     pub id: IdRaw,
     pub amount: ItemAmount,

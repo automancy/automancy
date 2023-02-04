@@ -325,10 +325,10 @@ pub fn tile_info(
         .show(&gui.context(), |ui| {
             ui.colored_label(Color::DARK_GRAY, pointing_at.to_string());
 
-            let result: Option<(Id, ActorRef<TileEntityMsg>, StateUnit)> =
+            let result: Option<(ActorRef<TileEntityMsg>, Id, StateUnit)> =
                 block_on(ask(sys, &game, GameMsg::GetTile(pointing_at)));
 
-            if let Some((id, tile, _)) = result {
+            if let Some((tile, id, _)) = result {
                 ui.label(resource_man.tile_name(&id));
                 let data: Data = block_on(ask(sys, &tile, TileEntityMsg::GetData));
 

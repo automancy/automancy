@@ -21,8 +21,9 @@ pub type StateUnit = i32;
 #[derive(Debug, Clone)]
 pub struct TileEntity {
     id: Id,
-    coord: TileCoord,
+
     data: Data,
+    coord: TileCoord,
     script: Option<Id>,
 
     game: BasicActorRef,
@@ -60,6 +61,7 @@ pub enum TileEntityMsg {
     SetScript(Id),
     GetScript,
 
+    SetData(Data),
     GetData,
 }
 
@@ -157,6 +159,9 @@ impl Actor for TileEntity {
             }
             GetScript => {
                 sender.inspect(|v| v.try_tell(self.script, myself).unwrap());
+            }
+            SetData(data) => {
+                self.data = data;
             }
             GetData => {
                 sender.inspect(|v| v.try_tell(self.data.clone(), myself).unwrap());

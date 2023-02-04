@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::error::Error;
+use std::sync::{Arc, Mutex};
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -16,7 +17,8 @@ use winit::event::{Event, WindowEvent};
 use winit::event_loop::ControlFlow;
 
 use crate::game::input::InputState;
-use crate::game::map::{MapRenderInfo, RenderContext};
+use crate::game::map::{Map, MapRenderInfo, RenderContext};
+use crate::game::run::setup;
 use crate::game::run::setup::GameSetup;
 use crate::game::tile::{StateUnit, TileEntityMsg};
 use crate::game::{input, GameMsg, PlaceTileResponse};
@@ -82,6 +84,11 @@ pub fn on_event(
             ..
         } => {
             // game shutdown
+            let map: Arc<Mutex<Map>> = block_on(ask(&setup.sys, &setup.game, GameMsg::GetMap));
+            map.lock()
+                .unwrap()
+                .save(&setup.sys, &setup.resource_man.interner);
+
             block_on(setup.sys.shutdown())?;
 
             *control_flow = ControlFlow::Exit;
@@ -220,10 +227,10 @@ pub fn on_event(
             );
 
             if let Some(config_open) = storage.config_open {
-                let result: Option<(Id, ActorRef<TileEntityMsg>, StateUnit)> =
+                let result: Option<(ActorRef<TileEntityMsg>, Id, StateUnit)> =
                     block_on(ask(&setup.sys, &setup.game, GameMsg::GetTile(config_open)));
 
-                if let Some((id, tile, _)) = result {
+                if let Some((tile, id, _)) = result {
                     let current_script: Option<Id> =
                         block_on(ask(&setup.sys, &tile, TileEntityMsg::GetScript));
                     let mut new_script = current_script;
