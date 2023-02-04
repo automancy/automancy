@@ -16,12 +16,12 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use crate::game::data::Data;
 use crate::game::game::{GameMsg, TickUnit};
 use crate::game::item::Item;
-use crate::game::script::Script;
 use crate::game::tile::TileEntityMsg::*;
+use crate::resource::script::Script;
+use crate::resource::tile::TileType;
+use crate::resource::tile::TileType::*;
+use crate::resource::ResourceManager;
 use crate::util::id::Id;
-use crate::util::resource::ResourceManager;
-use crate::util::resource::TileType;
-use crate::util::resource::TileType::*;
 
 pub type StateUnit = i32;
 

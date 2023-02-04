@@ -10,8 +10,8 @@ use crate::game::game::GameMsg::*;
 use crate::game::map::{Map, RenderContext};
 use crate::game::ticking::MAX_ALLOWED_TICK_INTERVAL;
 use crate::game::tile::{StateUnit, TileCoord, TileEntity, TileEntityMsg};
+use crate::resource::ResourceManager;
 use crate::util::id::Id;
-use crate::util::resource::ResourceManager;
 
 pub type TickUnit = u16;
 

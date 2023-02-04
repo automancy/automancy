@@ -5,9 +5,9 @@ use crate::render::camera::Camera;
 use crate::render::gpu::{Gpu, RenderAlloc};
 use crate::render::renderer::Renderer;
 use crate::render::{gpu, gui};
+use crate::resource::{ResourceManager, RESOURCES_FOLDER};
 use crate::util::discord;
-use crate::util::resource::ResourceManager;
-use crate::{LOGO, RESOURCES};
+use crate::LOGO;
 use discord_rich_presence::DiscordIpcClient;
 use egui::Frame;
 use egui_winit_vulkano::Gui;
@@ -154,7 +154,7 @@ impl GameSetup {
 fn load_resources(track: TrackHandle) -> Arc<ResourceManager> {
     let mut resource_man = ResourceManager::new(track);
 
-    fs::read_dir(RESOURCES)
+    fs::read_dir(RESOURCES_FOLDER)
         .unwrap()
         .flatten()
         .map(|v| v.path())

@@ -1,5 +1,5 @@
+use crate::resource::ResourceManager;
 use crate::resource::{Deserialize, JSON_EXT};
-use crate::resource::{LoadResource, ResourceManager};
 use crate::util::id::{Id, IdRaw};
 use std::any::Any;
 use std::collections::HashMap;
@@ -19,9 +19,9 @@ pub struct Translate {
     pub items: HashMap<Id, String>,
     pub tiles: HashMap<Id, String>,
 }
-impl LoadResource<Translate> for ResourceManager {
-    fn load(resource_man: &mut ResourceManager, file: &Path) -> Option<()> {
-        log::info!("loading translate at: {:?}", file);
+impl ResourceManager {
+    fn load_translate(&mut self, file: &Path) -> Option<()> {
+        log::info!("loading translate at: {file:?}");
 
         let translate: TranslateRaw = serde_json::from_str(
             &read_to_string(file).unwrap_or_else(|_| panic!("error loading {file:?}")),
@@ -31,18 +31,34 @@ impl LoadResource<Translate> for ResourceManager {
         let items = translate
             .items
             .into_iter()
-            .map(|(id, str)| (id.to_id(&mut resource_man.interner), str))
+            .map(|(id, str)| (id.to_id(&mut self.interner), str))
             .collect();
         let tiles = translate
             .tiles
             .into_iter()
-            .map(|(id, str)| (id.to_id(&mut resource_man.interner), str))
+            .map(|(id, str)| (id.to_id(&mut self.interner), str))
             .collect();
 
-        resource_man.translates = Translate { items, tiles };
+        self.translates = Translate { items, tiles };
 
         Some(())
     }
-    const FILTER: dyn FnMut(&PathBuf) -> bool = (|v| v.extension() == Some(OsStr::new(JSON_EXT)));
-    const DIR: String = String::from("translates");
+    pub fn load_translates(&mut self, dir: &Path) -> Option<()> {
+        let translates = dir.join("translates");
+        let translates = read_dir(translates).ok()?;
+
+        translates
+            .into_iter()
+            .flatten()
+            .map(|v| v.path())
+            .filter(|v| v.extension() == Some(OsStr::new(JSON_EXT)))
+            .for_each(|translate| {
+                // TODO language selection
+                if translate.file_stem() == Some(OsStr::new("en_US")) {
+                    self.load_translate(&translate);
+                }
+            });
+
+        Some(())
+    }
 }

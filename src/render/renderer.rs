@@ -28,9 +28,9 @@ use crate::render::camera::{CameraState, FAR};
 use crate::render::data::{GameUBO, GuiUBO, InstanceData, Vertex, RENDER_LAYOUT};
 use crate::render::gpu;
 use crate::render::gpu::Gpu;
+use crate::resource::ResourceManager;
 use crate::util::cg::{actual_pos, eye, matrix, Matrix4, Num, Point3};
 use crate::util::colors::Color;
-use crate::util::resource::ResourceManager;
 
 pub struct Renderer {
     resource_man: Arc<ResourceManager>,

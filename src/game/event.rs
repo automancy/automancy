@@ -23,10 +23,10 @@ use crate::game::tile::{StateUnit, TileCoord, TileEntityMsg};
 use crate::render::camera::cursor_to_pos;
 use crate::render::data::InstanceData;
 use crate::render::{gpu, gui};
+use crate::resource::tile::TileType;
 use crate::util::cg::Num;
 use crate::util::colors::Color;
 use crate::util::id::Id;
-use crate::util::resource::TileType;
 
 // TODO: naming, Persistent means it's stored across sessions..
 pub struct PersistentEventStorage {

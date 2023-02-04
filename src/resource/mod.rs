@@ -1,0 +1,90 @@
+pub mod audio;
+pub mod functions;
+pub mod model;
+pub mod script;
+pub mod tile;
+pub mod translate;
+
+use std::convert::AsRef;
+use std::fmt::{Debug, Formatter};
+use std::fs::{read_dir, read_to_string};
+
+use std::sync::Arc;
+use std::{collections::HashMap, ffi::OsStr, fmt, fs::File, io::BufReader, path::Path};
+
+use kira::sound::static_sound::{StaticSoundData, StaticSoundSettings};
+use kira::track::TrackHandle;
+use ply_rs::parser::Parser;
+use rune::runtime::RuntimeContext;
+use rune::Unit;
+use serde::Deserialize;
+
+use crate::game::tile::TileCoord;
+use crate::render::data::{Model, RawFace, Vertex};
+use crate::resource::functions::Function;
+use crate::resource::model::Face;
+use crate::resource::script::Script;
+use crate::resource::tile::Tile;
+use crate::resource::translate::Translate;
+use crate::util::id::{Id, IdRaw, Interner};
+
+pub static JSON_EXT: &str = "json";
+pub static OGG_EXT: &str = "ogg";
+pub static RESOURCES_FOLDER: &str = "resources";
+
+pub struct ResourceManager {
+    pub interner: Interner,
+    pub none: Id,
+    pub track: TrackHandle,
+
+    pub ordered_ids: Vec<Id>,
+
+    pub tiles: HashMap<Id, Tile>,
+    pub scripts: HashMap<Id, Script>,
+    pub translates: Translate,
+    pub audio: HashMap<String, StaticSoundData>,
+    pub functions: HashMap<Id, Function>,
+
+    pub faces: HashMap<Id, Vec<Face>>,
+
+    pub all_vertices: Vec<Vertex>,
+    pub raw_models: HashMap<Id, Model>,
+    pub raw_faces: Vec<Vec<RawFace>>,
+}
+
+impl Debug for ResourceManager {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("<resource manager>")
+    }
+}
+
+impl ResourceManager {
+    pub fn new(track: TrackHandle) -> Self {
+        let mut interner = Interner::new();
+        let none = IdRaw::NONE.to_id(&mut interner);
+
+        Self {
+            interner,
+            none,
+            track,
+
+            ordered_ids: vec![],
+
+            tiles: Default::default(),
+            scripts: Default::default(),
+            translates: Default::default(),
+            audio: Default::default(),
+            functions: Default::default(),
+
+            faces: Default::default(),
+
+            all_vertices: Default::default(),
+            raw_models: Default::default(),
+            raw_faces: Default::default(),
+        }
+    }
+}
+
+impl ResourceManager {}
+
+impl ResourceManager {}
