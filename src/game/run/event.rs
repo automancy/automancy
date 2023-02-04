@@ -18,7 +18,7 @@ use crate::game::game::{GameMsg, PlaceTileResponse};
 use crate::game::input;
 use crate::game::input::InputState;
 use crate::game::map::{MapRenderInfo, RenderContext};
-use crate::game::setup::GameSetup;
+use crate::game::run::setup::GameSetup;
 use crate::game::tile::{StateUnit, TileCoord, TileEntityMsg};
 use crate::render::camera::cursor_to_pos;
 use crate::render::data::InstanceData;
@@ -29,7 +29,7 @@ use crate::util::colors::Color;
 use crate::util::id::Id;
 
 // TODO: naming, Persistent means it's stored across sessions..
-pub struct PersistentEventStorage {
+pub struct EventLoopStorage {
     fuse: Fuse,
     closed: bool,
     script_filter: String,
@@ -41,7 +41,7 @@ pub struct PersistentEventStorage {
     config_open: Option<TileCoord>,
 }
 
-impl Default for PersistentEventStorage {
+impl Default for EventLoopStorage {
     fn default() -> Self {
         Self {
             fuse: Default::default(),
@@ -59,11 +59,11 @@ impl Default for PersistentEventStorage {
 
 pub fn on_event(
     setup: &mut GameSetup,
-    persistent: &mut PersistentEventStorage,
+    storage: &mut EventLoopStorage,
     event: Event<()>,
     control_flow: &mut ControlFlow,
 ) -> Result<(), Box<dyn Error>> {
-    if persistent.closed {
+    if storage.closed {
         return Ok(());
     }
 
@@ -85,7 +85,7 @@ pub fn on_event(
 
             *control_flow = ControlFlow::Exit;
 
-            persistent.closed = true;
+            storage.closed = true;
 
             return Ok(());
         }
@@ -112,7 +112,7 @@ pub fn on_event(
             setup.camera.update_pos();
             setup
                 .camera
-                .update_pointing_at(persistent.input_state.main_pos);
+                .update_pointing_at(storage.input_state.main_pos);
             setup.renderer.gpu.window.request_redraw();
         }
 
@@ -120,35 +120,33 @@ pub fn on_event(
     };
 
     if window_event.is_some() || device_event.is_some() {
-        persistent.input_state.reset();
-        persistent
+        storage.input_state.reset();
+        storage
             .input_state
             .update(input::convert_input(window_event, device_event));
 
-        let ignore_move = persistent.selected_id.is_some();
+        let ignore_move = storage.selected_id.is_some();
 
-        setup
-            .camera
-            .input_state(persistent.input_state, ignore_move);
+        setup.camera.input_state(storage.input_state, ignore_move);
 
-        persistent.pointing_at = setup.camera.camera_state().pointing_at;
+        storage.pointing_at = setup.camera.camera_state().pointing_at;
 
-        if persistent.input_state.exit_pressed {
-            persistent.selected_id = None;
+        if storage.input_state.exit_pressed {
+            storage.selected_id = None;
         }
 
-        if persistent.input_state.main_pressed
-            || (persistent.input_state.shift_held && persistent.input_state.main_held)
+        if storage.input_state.main_pressed
+            || (storage.input_state.shift_held && storage.input_state.main_held)
         {
-            if let Some(id) = persistent.selected_id {
-                if persistent.already_placed_at != Some(persistent.pointing_at) {
+            if let Some(id) = storage.selected_id {
+                if storage.already_placed_at != Some(storage.pointing_at) {
                     let response: PlaceTileResponse = block_on(ask(
                         &setup.sys,
                         &setup.game,
                         GameMsg::PlaceTile {
-                            coord: persistent.pointing_at,
+                            coord: storage.pointing_at,
                             id,
-                            tile_state: *persistent.selected_tile_states.get(&id).unwrap_or(&0),
+                            tile_state: *storage.selected_tile_states.get(&id).unwrap_or(&0),
                         },
                     ));
 
@@ -172,29 +170,29 @@ pub fn on_event(
                         _ => {}
                     }
 
-                    persistent.already_placed_at = Some(persistent.pointing_at)
+                    storage.already_placed_at = Some(storage.pointing_at)
                 }
             }
         }
 
-        if persistent.input_state.alternate_pressed {
-            if let Some(id) = persistent.selected_id {
-                let new = persistent.selected_tile_states.get(&id).unwrap_or(&0) + 1;
+        if storage.input_state.alternate_pressed {
+            if let Some(id) = storage.selected_id {
+                let new = storage.selected_tile_states.get(&id).unwrap_or(&0) + 1;
                 let max = resource_man.tiles[&id].models.len() as i32;
 
-                persistent.selected_tile_states.insert(id, new % max);
+                storage.selected_tile_states.insert(id, new % max);
                 setup
                     .audio_man
                     .play(resource_man.audio["click"].clone())
                     .unwrap();
 
-                persistent.already_placed_at = None;
+                storage.already_placed_at = None;
             }
-            if persistent.config_open == Some(persistent.pointing_at) {
-                persistent.config_open = None;
-                persistent.script_filter.clear();
+            if storage.config_open == Some(storage.pointing_at) {
+                storage.config_open = None;
+                storage.script_filter.clear();
             } else {
-                persistent.config_open = Some(persistent.pointing_at);
+                storage.config_open = Some(storage.pointing_at);
             }
         }
     }
@@ -207,7 +205,7 @@ pub fn on_event(
             gui::tile_selections(
                 gui,
                 resource_man.clone(),
-                &persistent.selected_tile_states,
+                &storage.selected_tile_states,
                 &setup.renderer,
                 selection_send,
             );
@@ -218,10 +216,10 @@ pub fn on_event(
                 resource_man.clone(),
                 &setup.sys,
                 setup.game.clone(),
-                persistent.pointing_at,
+                storage.pointing_at,
             );
 
-            if let Some(config_open) = persistent.config_open {
+            if let Some(config_open) = storage.config_open {
                 let result: Option<(Id, ActorRef<TileEntityMsg>, StateUnit)> =
                     block_on(ask(&setup.sys, &setup.game, GameMsg::GetTile(config_open)));
 
@@ -251,10 +249,10 @@ pub fn on_event(
                                     gui::scripts(
                                         ui,
                                         resource_man.clone(),
-                                        &persistent.fuse,
+                                        &storage.fuse,
                                         scripts,
                                         &mut new_script,
-                                        &mut persistent.script_filter,
+                                        &mut storage.script_filter,
                                     );
 
                                     ui.separator();
@@ -285,34 +283,29 @@ pub fn on_event(
         });
 
         if let Ok(Some(id)) = selection_recv.try_next() {
-            persistent.already_placed_at = None;
+            storage.already_placed_at = None;
 
-            if persistent.selected_id.is_some_and(|v| v == id) {
-                persistent.selected_id = None;
+            if storage.selected_id.is_some_and(|v| v == id) {
+                storage.selected_id = None;
             } else {
-                persistent.selected_id = Some(id);
+                storage.selected_id = Some(id);
             }
         }
 
         let mouse_pos = cursor_to_pos(
             setup.camera.window_size.0,
             setup.camera.window_size.1,
-            persistent.input_state.main_pos,
+            storage.input_state.main_pos,
         );
         let mouse_pos = point2(mouse_pos.x, mouse_pos.y);
         let mouse_pos = mouse_pos + setup.camera.camera_state().pos.to_vec().truncate();
 
         let camera_state = setup.camera.camera_state();
         if camera_state.is_at_max_height() {
-            if let Some(id) = persistent.selected_id {
+            if let Some(id) = storage.selected_id {
                 if let Some(model) = resource_man.tiles.get(&id).and_then(|v| {
-                    v.models.get(
-                        persistent
-                            .selected_tile_states
-                            .get(&id)
-                            .cloned()
-                            .unwrap_or(0) as usize,
-                    )
+                    v.models
+                        .get(storage.selected_tile_states.get(&id).cloned().unwrap_or(0) as usize)
                 }) {
                     let time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
 
