@@ -15,7 +15,7 @@ layout(location = 0) out vec4 out_color;
 
 void main() {
     vec3 direction = ubo.light_position - frag_pos;
-    float attenuation = 1.0 / length(direction);
+    float attenuation = 1.0 / dot(direction, direction);
 
     float diff = max(dot(normalize(frag_normal), normalize(direction)), 0.0);
 

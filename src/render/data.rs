@@ -159,9 +159,9 @@ impl GameUBO {
     pub fn new(matrix: Matrix4, camera_pos: Point3) -> Self {
         Self {
             matrix: matrix.into(),
-            ambient_light_color: [1.0, 1.0, 1.0, 0.85],
+            ambient_light_color: [1.0, 1.0, 1.0, 0.8],
             light_pos: camera_pos.into(),
-            light_color: [1.0, 1.0, 1.0, 0.1],
+            light_color: [1.0, 1.0, 1.0, 0.5],
         }
     }
 }
