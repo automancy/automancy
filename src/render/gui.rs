@@ -1,3 +1,4 @@
+use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::f32::consts::FRAC_PI_4;
 use std::sync::Arc;
@@ -33,8 +34,26 @@ use crate::resource::tile::TileType;
 use crate::resource::ResourceManager;
 use crate::util::cg::{perspective, Matrix4, Vector3};
 use crate::util::colors::Color;
-use crate::util::id::Id;
+use crate::util::id::{id_static, Id, Interner};
 use crate::IOSEVKA_FONT;
+
+pub struct GuiId {
+    pub tile_config: Id,
+    pub tile_info: Id,
+    pub tile_config_script: Id,
+    pub tile_config_target: Id,
+}
+
+impl GuiId {
+    pub fn new(interner: &mut Interner) -> Self {
+        Self {
+            tile_config: id_static("automancy", "tile_config").to_id(interner),
+            tile_info: id_static("automancy", "tile_info").to_id(interner),
+            tile_config_script: id_static("automancy", "tile_config_script").to_id(interner),
+            tile_config_target: id_static("automancy", "tile_config_target").to_id(interner),
+        }
+    }
+}
 
 fn init_fonts(gui: &Gui) {
     let mut fonts = FontDefinitions::default();
@@ -299,27 +318,33 @@ pub fn tile_info(
     game: ActorRef<GameMsg>,
     pointing_at: TileCoord,
 ) {
-    Window::new("Tile Info")
-        .anchor(Align2([Align::RIGHT, Align::TOP]), vec2(-10.0, 10.0))
-        .resizable(false)
-        .default_width(300.0)
-        .frame(default_frame().inner_margin(Margin::same(10.0)))
-        .show(&gui.context(), |ui| {
-            ui.colored_label(Color::DARK_GRAY, pointing_at.to_string());
+    Window::new(
+        resource_man
+            .translates
+            .gui
+            .get(&resource_man.gui_ids.tile_info)
+            .unwrap(),
+    )
+    .anchor(Align2([Align::RIGHT, Align::TOP]), vec2(-10.0, 10.0))
+    .resizable(false)
+    .default_width(300.0)
+    .frame(default_frame().inner_margin(Margin::same(10.0)))
+    .show(&gui.context(), |ui| {
+        ui.colored_label(Color::DARK_GRAY, pointing_at.to_string());
 
-            let result: Option<(Id, ActorRef<TileEntityMsg>, StateUnit)> =
-                block_on(ask(sys, &game, GameMsg::GetTile(pointing_at)));
+        let result: Option<(Id, ActorRef<TileEntityMsg>, StateUnit)> =
+            block_on(ask(sys, &game, GameMsg::GetTile(pointing_at)));
 
-            if let Some((id, tile, _)) = result {
-                ui.label(resource_man.tile_name(&id));
-                let data: Data = block_on(ask(sys, &tile, TileEntityMsg::GetData));
+        if let Some((id, tile, _)) = result {
+            ui.label(resource_man.tile_name(&id));
+            let data: Data = block_on(ask(sys, &tile, TileEntityMsg::GetData));
 
-                for (id, amount) in data.0.iter() {
-                    ui.label(format!("{} - {}", resource_man.item_name(id), amount));
-                }
-                //ui.label(format!("State: {}", ask(sys, &game, )))
+            for (id, amount) in data.0.iter() {
+                ui.label(format!("{} - {}", resource_man.item_name(id), amount));
             }
-        });
+            //ui.label(format!("State: {}", ask(sys, &game, )))
+        }
+    });
 }
 
 pub fn add_direction(ui: &mut Ui, target_coord: &mut Option<TileCoord>, n: usize) {

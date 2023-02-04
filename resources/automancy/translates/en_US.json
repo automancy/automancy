@@ -13,5 +13,11 @@
         "void": "Resource® Void™",
         "extractor": "Extractor",
         "refinery": "Refinery"
+    },
+    "gui": {
+        "tile_info": "Tile Info",
+        "tile_config": "Config",
+        "tile_config_script": "Script: {}",
+        "tile_config_target": "Target: {}"
     }
 }

@@ -11,12 +11,14 @@ use crate::util::id::{Id, IdRaw};
 pub struct TranslateRaw {
     pub items: HashMap<IdRaw, String>,
     pub tiles: HashMap<IdRaw, String>,
+    pub gui: HashMap<IdRaw, String>,
 }
 
 #[derive(Debug, Default, Clone)]
 pub struct Translate {
     pub items: HashMap<Id, String>,
     pub tiles: HashMap<Id, String>,
+    pub gui: HashMap<Id, String>,
 }
 impl ResourceManager {
     fn load_translate(&mut self, file: &Path) -> Option<()> {
@@ -37,8 +39,12 @@ impl ResourceManager {
             .into_iter()
             .map(|(id, str)| (id.to_id(&mut self.interner), str))
             .collect();
-
-        self.translates = Translate { items, tiles };
+        let gui = translate
+            .gui
+            .into_iter()
+            .map(|(id, str)| (id.to_id(&mut self.interner), str))
+            .collect();
+        self.translates = Translate { items, tiles, gui };
 
         Some(())
     }

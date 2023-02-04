@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::error::Error;
+use std::fmt;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::game::data::TileCoord;
@@ -24,6 +25,7 @@ use crate::render::camera::cursor_to_pos;
 use crate::render::data::InstanceData;
 use crate::render::{gpu, gui};
 use crate::resource::tile::TileType;
+use crate::util;
 use crate::util::cg::Num;
 use crate::util::colors::Color;
 use crate::util::id::Id;
@@ -234,31 +236,51 @@ pub fn on_event(
                     // tile_config
                     if let TileType::Machine(_) = resource_man.tiles[&id].tile_type {
                         if let Some(scripts) = resource_man.tiles[&id].scripts.clone() {
-                            Window::new("Config")
-                                .resizable(false)
-                                .auto_sized()
-                                .constrain(true)
-                                .frame(setup.frame.inner_margin(Margin::same(10.0)))
-                                .show(&gui.context(), |ui| {
-                                    ui.set_max_width(300.0);
+                            Window::new(
+                                resource_man
+                                    .translates
+                                    .gui
+                                    .get(&resource_man.gui_ids.tile_config)
+                                    .unwrap(),
+                            )
+                            .resizable(false)
+                            .auto_sized()
+                            .constrain(true)
+                            .frame(setup.frame.inner_margin(Margin::same(10.0)))
+                            .show(&gui.context(), |ui| {
+                                ui.set_max_width(300.0);
 
-                                    let script_text = resource_man.try_item_name(&new_script);
+                                let script_text = resource_man.try_item_name(&new_script);
 
-                                    ui.label(format!("Script: {script_text}"));
-                                    gui::scripts(
-                                        ui,
-                                        resource_man.clone(),
-                                        &storage.fuse,
-                                        scripts,
-                                        &mut new_script,
-                                        &mut storage.script_filter,
-                                    );
+                                ui.label(util::format(
+                                    resource_man
+                                        .translates
+                                        .gui
+                                        .get(&resource_man.gui_ids.tile_config_script)
+                                        .unwrap(),
+                                    vec![script_text.as_str()],
+                                ));
+                                gui::scripts(
+                                    ui,
+                                    resource_man.clone(),
+                                    &storage.fuse,
+                                    scripts,
+                                    &mut new_script,
+                                    &mut storage.script_filter,
+                                );
 
-                                    ui.separator();
+                                ui.separator();
 
-                                    ui.label("Target:");
-                                    gui::targets(ui, &mut new_target_coord);
-                                });
+                                ui.label(util::format(
+                                    resource_man
+                                        .translates
+                                        .gui
+                                        .get(&resource_man.gui_ids.tile_config_target)
+                                        .unwrap(),
+                                    vec![script_text.as_str()],
+                                ));
+                                gui::targets(ui, &mut new_target_coord);
+                            });
                         }
                     }
 

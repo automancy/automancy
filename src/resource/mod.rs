@@ -6,6 +6,7 @@ use kira::track::TrackHandle;
 use serde::Deserialize;
 
 use crate::render::data::{Model, RawFace, Vertex};
+use crate::render::gui::GuiId;
 use crate::resource::functions::Function;
 use crate::resource::model::Face;
 use crate::resource::script::Script;
@@ -42,6 +43,8 @@ pub struct ResourceManager {
     pub all_vertices: Vec<Vertex>,
     pub raw_models: HashMap<Id, Model>,
     pub raw_faces: Vec<Vec<RawFace>>,
+
+    pub gui_ids: GuiId,
 }
 
 impl Debug for ResourceManager {
@@ -54,7 +57,7 @@ impl ResourceManager {
     pub fn new(track: TrackHandle) -> Self {
         let mut interner = Interner::new();
         let none = IdRaw::NONE.to_id(&mut interner);
-
+        let gui_ids = GuiId::new(&mut interner);
         Self {
             interner,
             none,
@@ -73,6 +76,8 @@ impl ResourceManager {
             all_vertices: Default::default(),
             raw_models: Default::default(),
             raw_faces: Default::default(),
+
+            gui_ids,
         }
     }
 }
