@@ -89,6 +89,11 @@ impl Actor for Game {
                 }
 
                 if id == self.resource_man.none {
+                    if !self.map.tiles.contains_key(&coord) {
+                        sender.inspect(|v| v.try_tell(PlaceTileResponse::Ignored, myself).unwrap());
+                        return;
+                    }
+
                     self.map.tiles.remove_entry(&coord);
 
                     sender.inspect(|v| v.try_tell(PlaceTileResponse::Removed, myself).unwrap());
