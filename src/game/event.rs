@@ -183,14 +183,13 @@ pub fn on_event(
                 let max = resource_man.tiles[&id].models.len() as i32;
 
                 persistent.selected_tile_states.insert(id, new % max);
+                persistent.already_placed_at = None;
+
                 setup
                     .audio_man
                     .play(resource_man.audio["click"].clone())
                     .unwrap();
-
-                persistent.already_placed_at = None;
-            }
-            if persistent.config_open == Some(persistent.pointing_at) {
+            } else if persistent.config_open == Some(persistent.pointing_at) {
                 persistent.config_open = None;
                 persistent.script_filter.clear();
             } else {

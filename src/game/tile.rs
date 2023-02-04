@@ -117,21 +117,17 @@ impl Actor for TileEntity {
                             if let Some((target_coord, target)) =
                                 <Option<(TileCoord, TileCoord)>>::from_value(output).unwrap()
                             {
-                                self.game
-                                    .try_tell(
-                                        GameMsg::SendMsgToTile(
-                                            target_coord,
-                                            Transaction {
-                                                resource_man,
-                                                tick_count,
-                                                item,
-                                                source_type: tile_type.clone(),
-                                                direction: target,
-                                            },
-                                        ),
-                                        Some(sender),
-                                    )
-                                    .unwrap();
+                                self.send_tile_msg(
+                                    Some(sender),
+                                    target_coord,
+                                    Transaction {
+                                        resource_man,
+                                        tick_count,
+                                        item,
+                                        source_type: tile_type.clone(),
+                                        direction: target,
+                                    },
+                                );
                             }
                         }
                         Void => {
@@ -186,11 +182,7 @@ impl TileEntity {
         if let Some(direction) = self.target_direction {
             let coord = self.coord + direction;
 
-            if let Some(script) = self
-                .script
-                .as_ref()
-                .and_then(|v| resource_man.scripts.get(v))
-            {
+            if let Some(script) = self.get_script(resource_man.clone()) {
                 let instructions = &script.instructions;
                 let output = instructions.output;
 
@@ -240,7 +232,7 @@ impl TileEntity {
         resource_man: Arc<ResourceManager>,
         item: Item,
     ) {
-        if let Some(script) = self.get_script(resource_man) {
+        if let Some(script) = self.get_script(resource_man.clone()) {
             if let Some(input) = script.instructions.input {
                 let id = item.id;
                 let has = item.amount;
@@ -294,19 +286,26 @@ impl TileEntity {
 
     fn send_tile_msg(
         &mut self,
-        myself: Option<BasicActorRef>,
+        sender: Option<BasicActorRef>,
         coord: TileCoord,
         msg: TileEntityMsg,
     ) {
         match self
             .game
-            .try_tell(GameMsg::SendMsgToTile(coord, msg), myself)
+            .try_tell(GameMsg::SendMsgToTile(coord, msg), sender)
         {
             Ok(_) => {}
             Err(_) => {
                 self.target_direction = None;
             }
         }
+    }
+
+    fn get_script(&self, resource_man: Arc<ResourceManager>) -> Option<Script> {
+        self.script
+            .as_ref()
+            .and_then(|v| resource_man.scripts.get(v))
+            .cloned()
     }
 
     fn new(
@@ -327,12 +326,5 @@ impl TileEntity {
 
             tile_state,
         }
-    }
-
-    fn get_script(&self, resource_man: Arc<ResourceManager>) -> Option<Script> {
-        self.script
-            .as_ref()
-            .and_then(|v| resource_man.scripts.get(v))
-            .cloned()
     }
 }
