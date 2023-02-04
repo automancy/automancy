@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::game::data::TileCoord;
 use cgmath::{point2, EuclideanSpace};
 use egui::style::Margin;
 use egui::Window;
@@ -18,7 +19,7 @@ use crate::game::input;
 use crate::game::input::InputState;
 use crate::game::map::{MapRenderInfo, RenderContext};
 use crate::game::setup::GameSetup;
-use crate::game::tile::{StateUnit, TileCoord, TileEntityMsg};
+use crate::game::tile::{StateUnit, TileEntityMsg};
 use crate::render::camera::cursor_to_pos;
 use crate::render::data::InstanceData;
 use crate::render::{gpu, gui};

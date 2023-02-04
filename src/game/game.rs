@@ -5,11 +5,11 @@ use riker::actor::{Actor, BasicActorRef};
 use riker::actors::{ActorFactoryArgs, ActorRefFactory, Context, Sender, Strategy, Tell};
 use uuid::Uuid;
 
-use crate::game::data::Data;
+use crate::game::data::{Data, TileCoord};
 use crate::game::game::GameMsg::*;
 use crate::game::map::{Map, RenderContext};
 use crate::game::ticking::MAX_ALLOWED_TICK_INTERVAL;
-use crate::game::tile::{StateUnit, TileCoord, TileEntity, TileEntityMsg};
+use crate::game::tile::{StateUnit, TileEntity, TileEntityMsg};
 use crate::resource::ResourceManager;
 use crate::util::id::Id;
 
