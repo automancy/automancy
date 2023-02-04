@@ -29,11 +29,11 @@ use crate::render::data::{GuiUBO, InstanceData};
 use crate::render::gpu;
 use crate::render::gpu::Gpu;
 use crate::render::renderer::Renderer;
+use crate::resource::ResourceManager;
+use crate::resource::TileType;
 use crate::util::cg::{perspective, Matrix4, Vector3};
 use crate::util::colors::Color;
 use crate::util::id::Id;
-use crate::util::resource::ResourceManager;
-use crate::util::resource::TileType;
 use crate::IOSEVKA_FONT;
 
 fn init_fonts(gui: &Gui) {

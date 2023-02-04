@@ -8,9 +8,9 @@ use vulkano::impl_vertex;
 
 use crate::game::tile::{StateUnit, TileCoord};
 use crate::render::camera::FAR;
+use crate::resource::ResourceManager;
 use crate::util::cg::{Matrix4, Num, Point3};
 use crate::util::id::Id;
-use crate::util::resource::ResourceManager;
 
 pub const RENDER_LAYOUT: Layout = Layout {
     orientation: LAYOUT_ORIENTATION_POINTY,

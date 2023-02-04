@@ -5,8 +5,8 @@ use riker::actor::ActorRef;
 
 use crate::game::tile::{StateUnit, TileEntityMsg};
 use crate::render::data::InstanceData;
+use crate::resource::ResourceManager;
 use crate::util::id::Id;
-use crate::util::resource::ResourceManager;
 
 use super::tile::TileCoord;
 

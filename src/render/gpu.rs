@@ -48,9 +48,9 @@ use winit::window::{Icon, WindowBuilder};
 use winit::{dpi::LogicalSize, window::Window};
 
 use crate::render::data::{GuiUBO, Vertex};
+use crate::resource::ResourceManager;
 use crate::util::cg::Double;
 use crate::util::cg::Num;
-use crate::util::resource::ResourceManager;
 
 use super::data::{GameUBO, InstanceData};
 
