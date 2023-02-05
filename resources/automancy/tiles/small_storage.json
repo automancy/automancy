@@ -6,6 +6,7 @@
         "param": "small_storage"
     },
     "scripts": [
+        "tiny_storage",
         "small_storage"
     ]
 }

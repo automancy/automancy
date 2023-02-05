@@ -110,7 +110,11 @@ impl Map {
         encoder.do_finish().unwrap();
     }
 
-    pub fn load(ctx: &Context<GameMsg>, interner: &Interner, map_name: String) -> Self {
+    pub fn load(
+        ctx: &Context<GameMsg>,
+        resource_man: Arc<ResourceManager>,
+        map_name: String,
+    ) -> Self {
         let path = Self::path(&map_name);
 
         let file = if let Ok(file) = File::open(path) {
@@ -127,18 +131,18 @@ impl Map {
         let tiles = raw
             .into_iter()
             .flat_map(|(coord, TileData(id, tile_state, data, target, script))| {
-                if let Some(id) = interner.get(id.to_string()) {
+                if let Some(id) = resource_man.interner.get(id.to_string()) {
                     let tile = Game::new_tile(ctx, coord, id, tile_state);
 
                     tile.send_msg(SetTarget(target), None);
 
                     if let Some(script) = script {
-                        if let Some(script) = interner.get(script.to_string()) {
-                            tile.send_msg(SetScript(script), None);
+                        if let Some(script) = resource_man.interner.get(script.to_string()) {
+                            tile.send_msg(SetScript(script, resource_man.clone()), None);
                         }
                     }
 
-                    tile.send_msg(SetData(data.to_inventory(interner)), None);
+                    tile.send_msg(SetData(data.to_inventory(&resource_man.interner)), None);
 
                     Some((coord, (tile, id, tile_state)))
                 } else {

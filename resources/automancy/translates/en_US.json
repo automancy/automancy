@@ -7,6 +7,7 @@
         "tin_ingot": "Tin Ingot",
         "stone": "Stone",
         "#any": "[Any Items]",
+        "tiny_storage": "Tiny Storage",
         "small_storage": "Small Storage"
     },
     "tiles": {

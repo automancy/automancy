@@ -23,7 +23,7 @@ use vulkano::sync;
 use vulkano::sync::GpuFuture;
 
 use crate::game::map::MapRenderInfo;
-use crate::game::tile::TileUnit;
+use crate::game::tile::coord::TileUnit;
 use crate::render::camera::{CameraState, FAR};
 use crate::render::data::{GameUBO, GuiUBO, InstanceData, Vertex, RENDER_LAYOUT};
 use crate::render::gpu;

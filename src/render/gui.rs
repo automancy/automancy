@@ -24,8 +24,8 @@ use winit::event_loop::EventLoop;
 
 use crate::game::inventory::Inventory;
 use crate::game::tile::coord::TileCoord;
+use crate::game::tile::coord::TileHex;
 use crate::game::tile::entity::{StateUnit, TileEntityMsg};
-use crate::game::tile::TileHex;
 use crate::game::GameMsg;
 use crate::render::data::{GuiUBO, InstanceData};
 use crate::render::gpu;

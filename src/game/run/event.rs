@@ -24,31 +24,29 @@ use crate::render::camera::cursor_to_pos;
 use crate::render::data::InstanceData;
 use crate::render::{gpu, gui};
 use crate::resource::tile::TileType;
-use crate::util;
 use crate::util::cg::Num;
 use crate::util::colors::Color;
 use crate::util::format;
 use crate::util::id::Id;
 
-// TODO: naming, Persistent means it's stored across sessions..
 /// Stores information that lives for the entire lifetime of the session, and is not dropped at the end of one event cycle or handled elsewhere.
 pub struct EventLoopStorage {
-    /// TODO i don't really know what this does lmao
+    /// fuzzy search engine
     fuse: Fuse,
     /// whether or not the game should close.
     closed: bool,
     // TODO most of the following elements should be moved out of here...
-    /// the filter for the script search GUI element.
+    /// the filter for the scripts.
     script_filter: String,
     /// the state of the input peripherals.
     input_state: InputState,
     /// the tile the cursor is pointing at.
     pointing_at: TileCoord,
-    /// the tile states of the currently selected tile.
+    /// the tile states of the selected tiles.
     selected_tile_states: HashMap<Id, StateUnit>,
     /// the currently selected tile.
     selected_id: Option<Id>,
-    /// the tile at the currently selected position.
+    /// the last placed tile, to prevent repeatedly sending place requests
     already_placed_at: Option<TileCoord>,
     /// the tile that has its config menu open.
     config_open: Option<TileCoord>,
@@ -333,7 +331,7 @@ pub fn on_event(
 
                     if new_script != current_script {
                         if let Some(script) = new_script {
-                            tile.tell(TileEntityMsg::SetScript(script), None);
+                            tile.tell(TileEntityMsg::SetScript(script, resource_man.clone()), None);
                         }
                     }
 

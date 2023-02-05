@@ -18,7 +18,7 @@ pub struct Tag {
     pub entries: HashSet<Id>,
 }
 
-pub fn id_eq_or_tag_of(resource_man: &ResourceManager, id: Id, other: Id) -> bool {
+pub fn id_eq_or_of_tag(resource_man: &ResourceManager, id: Id, other: Id) -> bool {
     if id == other {
         return true;
     }

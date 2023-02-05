@@ -1,14 +1,13 @@
-use flexstr::SharedStr;
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
 
+use flexstr::SharedStr;
 use riker::actor::{Actor, BasicActorRef};
 use riker::actors::{ActorFactoryArgs, ActorRef, ActorRefFactory, Context, Sender, Strategy, Tell};
 use uuid::Uuid;
 
 use crate::game::inventory::Inventory;
 use crate::game::map::{Map, RenderContext};
-use crate::game::ticking::{TickUnit, MAX_ALLOWED_TICK_INTERVAL};
+use crate::game::ticking::TickUnit;
 use crate::game::tile::coord::TileCoord;
 use crate::game::tile::entity::{StateUnit, TileEntity, TileEntityMsg};
 use crate::game::GameMsg::*;
@@ -153,7 +152,7 @@ impl Actor for Game {
 
                 drop(map);
 
-                self.map = Arc::new(Mutex::new(Map::load(ctx, &resource_man.interner, name)));
+                self.map = Arc::new(Mutex::new(Map::load(ctx, resource_man.clone(), name)));
             }
         }
     }

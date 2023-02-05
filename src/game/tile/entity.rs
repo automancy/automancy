@@ -5,7 +5,6 @@ use egui::NumExt;
 use riker::actor::{Context, Sender};
 use riker::actors::{Actor, ActorFactoryArgs, BasicActorRef};
 use rune::{FromValue, Vm};
-use serde_json::from_value;
 
 use crate::game::inventory::Inventory;
 use crate::game::item::Item;
@@ -13,7 +12,7 @@ use crate::game::tile::coord::TileCoord;
 use crate::game::tile::entity::TileEntityMsg::*;
 use crate::game::{GameMsg, TickUnit};
 use crate::resource::script::Script;
-use crate::resource::tag::id_eq_or_tag_of;
+use crate::resource::tag::id_eq_or_of_tag;
 use crate::resource::tile::TileType;
 use crate::resource::tile::TileType::*;
 use crate::resource::ResourceManager;
@@ -61,7 +60,7 @@ pub enum TileEntityMsg {
     SetTarget(Option<TileCoord>),
     GetTarget,
 
-    SetScript(Id),
+    SetScript(Id, Arc<ResourceManager>),
     GetScript,
 
     SetData(Inventory),
@@ -141,7 +140,7 @@ impl Actor for TileEntity {
                         Storage(_) => {
                             if let Some(script) = self.get_script(resource_man.clone()) {
                                 if let Some(input) = script.instructions.input {
-                                    if id_eq_or_tag_of(&resource_man, item.id, input.id) {
+                                    if id_eq_or_of_tag(&resource_man, item.id, input.id) {
                                         let amount = self.data.0.entry(item.id).or_insert(0);
 
                                         *amount += item.amount;
@@ -186,9 +185,25 @@ impl Actor for TileEntity {
             GetTarget => {
                 sender.inspect(|v| v.try_tell(self.target_direction, myself).unwrap());
             }
-            SetScript(id) => {
+            SetScript(id, resource_man) => {
                 self.script = Some(id);
-                self.data.0.clear();
+                if let Some(script) = resource_man.scripts[&id].instructions.input {
+                    self.data.0 = self
+                        .data
+                        .0
+                        .iter()
+                        .map(|(id, amount)| {
+                            if id_eq_or_of_tag(&resource_man, *id, script.id) {
+                                Some((*id, amount.at_most(script.amount)))
+                            } else {
+                                None
+                            }
+                        })
+                        .flatten()
+                        .collect();
+                } else {
+                    self.data.0.clear();
+                }
             }
             GetScript => {
                 sender.inspect(|v| v.try_tell(self.script, myself).unwrap());
@@ -276,7 +291,7 @@ impl TileEntity {
                 let has = item.amount;
                 let required = input.amount;
 
-                if !id_eq_or_tag_of(&resource_man, id, input.id) {
+                if !id_eq_or_of_tag(&resource_man, id, input.id) {
                     sender
                         .try_tell(
                             TransactionResult(Err(TransactionError::NotSuitable)),
