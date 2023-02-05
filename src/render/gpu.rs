@@ -498,7 +498,6 @@ impl RenderAlloc {
             resource_man
                 .raw_faces
                 .iter()
-                .flatten()
                 .flat_map(|v| v.indices.clone())
                 .collect::<Vec<_>>(),
             BufferUsage {

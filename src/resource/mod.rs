@@ -42,7 +42,7 @@ pub struct ResourceManager {
 
     pub all_vertices: Vec<Vertex>,
     pub raw_models: HashMap<Id, Model>,
-    pub raw_faces: Vec<Vec<RawFace>>,
+    pub raw_faces: Vec<RawFace>,
 
     pub gui_ids: GuiId,
 }
