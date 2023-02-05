@@ -151,19 +151,15 @@ impl ResourceManager {
                     .map(|face| face.index_offset(index_offsets[i] as u32))
                     .collect::<Vec<_>>();
 
-                let faces = raw_faces
-                    .iter()
-                    .map(|face| {
-                        let size = face.indices.len() as u32;
-                        let offset = offset_count;
+                let size: u32 = raw_faces.iter().map(|face| face.indices.len() as u32).sum();
+                let face = Face {
+                    offset: offset_count,
+                    size,
+                };
 
-                        offset_count += size;
+                offset_count += face.size;
 
-                        Face { size, offset }
-                    })
-                    .collect::<Vec<_>>();
-
-                (raw_faces, (*id, faces))
+                (raw_faces, (*id, face))
             })
             .unzip();
 

@@ -333,23 +333,20 @@ pub fn indirect_buffer(
 
             let first_instance = *init;
 
-            let faces = &resource_man.faces[&instances[0].id.unwrap()];
-            let commands = faces
-                .iter()
-                .map(|face| DrawIndexedIndirectCommand {
-                    index_count: face.size,
-                    instance_count,
-                    first_index: face.offset,
-                    vertex_offset: 0,
-                    first_instance,
-                })
-                .collect::<Vec<_>>();
+            let face = &resource_man.faces[&instances[0].id.unwrap()];
+
+            let command = DrawIndexedIndirectCommand {
+                index_count: face.size,
+                instance_count,
+                first_index: face.offset,
+                vertex_offset: 0,
+                first_instance,
+            };
 
             *init += instance_count;
 
-            Some(commands)
+            Some(command)
         })
-        .flatten()
         .collect::<Vec<_>>();
 
     let instance_buffer = cpu_accessible_buffer(

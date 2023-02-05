@@ -38,7 +38,7 @@ pub struct ResourceManager {
     pub audio: HashMap<String, StaticSoundData>,
     pub functions: HashMap<Id, Function>,
 
-    pub faces: HashMap<Id, Vec<Face>>,
+    pub faces: HashMap<Id, Face>,
 
     pub all_vertices: Vec<Vertex>,
     pub raw_models: HashMap<Id, Model>,
