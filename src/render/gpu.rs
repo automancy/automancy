@@ -23,7 +23,7 @@ use vulkano::pipeline::graphics::input_assembly::{InputAssemblyState, PrimitiveT
 use vulkano::pipeline::graphics::multisample::MultisampleState;
 use vulkano::pipeline::graphics::rasterization::RasterizationState;
 use vulkano::pipeline::graphics::vertex_input::BuffersDefinition;
-use vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
+use vulkano::pipeline::graphics::viewport::{Scissor, Viewport, ViewportState};
 use vulkano::pipeline::GraphicsPipeline;
 use vulkano::render_pass::Subpass;
 use vulkano::swapchain::{
@@ -95,7 +95,7 @@ pub fn create_game_pipeline(device: Arc<Device>, subpass: &Subpass) -> Arc<Graph
         )
         .input_assembly_state(InputAssemblyState::new().topology(PrimitiveTopology::TriangleList))
         .fragment_shader(fs.entry_point("main").unwrap(), ())
-        .viewport_state(ViewportState::viewport_dynamic_scissor_irrelevant())
+        .viewport_state(ViewportState::viewport_dynamic_scissor_dynamic(1))
         .rasterization_state(RasterizationState::new())
         .depth_stencil_state(DepthStencilState::simple_depth_test())
         .multisample_state(MultisampleState {
@@ -225,6 +225,15 @@ pub fn window_size_u32(window: &Window) -> [u32; 2] {
     let size = get_window_size(window);
 
     [size.width, size.height]
+}
+
+pub fn scissor(window: &Window) -> Scissor {
+    let (width, height) = window_size(window);
+
+    Scissor {
+        origin: [0, 0],
+        dimensions: [width as u32, height as u32],
+    }
 }
 
 pub fn viewport(window: &Window) -> Viewport {
