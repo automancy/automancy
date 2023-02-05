@@ -231,7 +231,6 @@ impl Renderer {
             if let Some((indirect_commands, instance_buffer)) = indirect_instance {
                 game_builder
                     .set_viewport(0, [gpu::viewport(&self.gpu.window)])
-                    .set_scissor(0, [gpu::scissor(&self.gpu.window)])
                     .bind_pipeline_graphics(self.gpu.game_pipeline.clone())
                     .bind_vertex_buffers(0, (self.gpu.alloc.vertex_buffer.clone(), instance_buffer))
                     .bind_index_buffer(self.gpu.alloc.index_buffer.clone())
@@ -270,7 +269,7 @@ impl Renderer {
         {
             gui_builder
                 .set_viewport(0, [gpu::viewport(&self.gpu.window)])
-                .set_scissor(0, [gpu::scissor(&self.gpu.window)]);
+                .set_scissor(0, [Scissor::irrelevant()]);
 
             if !gui_instances.is_empty() {
                 let ubo = GuiUBO {
