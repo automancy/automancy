@@ -44,7 +44,7 @@ impl GameSetup {
                 builder
             })
             .unwrap();
-        log::info!("Audio backend initialized");
+        log::info!("audio backend initialized");
         let resource_man = load_resources(track);
         log::info!("loaded resources.");
 
@@ -147,14 +147,15 @@ fn load_resources(track: TrackHandle) -> Arc<ResourceManager> {
         .map(|v| v.path())
         .for_each(|dir| {
             let namespace = dir.file_name().unwrap().to_str().unwrap();
-            log::info!("Loading namespace {namespace}");
+            log::info!("loading namespace {namespace}");
             resource_man.load_models(&dir);
             resource_man.load_scripts(&dir);
             resource_man.load_translates(&dir);
             resource_man.load_audio(&dir);
             resource_man.load_functions(&dir);
+            resource_man.load_tags(&dir);
             resource_man.load_tiles(&dir);
-            log::info!("Finished loading namespace {namespace}");
+            log::info!("finished loading namespace {namespace}");
         });
 
     resource_man.compile_models();

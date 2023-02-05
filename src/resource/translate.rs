@@ -49,6 +49,7 @@ impl ResourceManager {
 
         Some(())
     }
+
     pub fn load_translates(&mut self, dir: &Path) -> Option<()> {
         let translates = dir.join("translates");
         let translates = read_dir(translates).ok()?;

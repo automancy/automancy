@@ -27,6 +27,7 @@ use crate::resource::tile::TileType;
 use crate::util;
 use crate::util::cg::Num;
 use crate::util::colors::Color;
+use crate::util::format;
 use crate::util::id::Id;
 
 // TODO: naming, Persistent means it's stored across sessions..
@@ -238,45 +239,84 @@ pub fn on_event(
                     let mut new_target_coord = current_target_coord;
 
                     // tile_config
-                    if let TileType::Machine(_) = resource_man.tiles[&id].tile_type {
-                        if let Some(scripts) = resource_man.tiles[&id].scripts.clone() {
-                            Window::new(
-                                resource_man.translates.gui[&resource_man.gui_ids.tile_config]
-                                    .to_string(),
-                            )
-                            .resizable(false)
-                            .auto_sized()
-                            .constrain(true)
-                            .frame(setup.frame.inner_margin(Margin::same(10.0)))
-                            .show(&gui.context(), |ui| {
-                                ui.set_max_width(300.0);
+                    if let Some(scripts) = resource_man.tiles[&id].scripts.clone() {
+                        Window::new(
+                            resource_man.translates.gui[&resource_man.gui_ids.tile_config]
+                                .to_string(),
+                        )
+                        .resizable(false)
+                        .auto_sized()
+                        .constrain(true)
+                        .frame(setup.frame.inner_margin(Margin::same(10.0)))
+                        .show(&gui.context(), |ui| {
+                            ui.set_max_width(300.0);
 
-                                let script_text = resource_man.try_item_name(&new_script);
+                            match resource_man.tiles[&id].tile_type {
+                                TileType::Machine(_) | TileType::Storage(_) => {
+                                    let script_text = if let Some(script) = new_script
+                                        .and_then(|script| resource_man.scripts.get(&script))
+                                    {
+                                        let input = if let Some(input) = script.instructions.input {
+                                            format!(
+                                                "{} ({})",
+                                                resource_man.item_name(&input.id),
+                                                input.amount
+                                            )
+                                        } else {
+                                            String::new()
+                                        };
 
-                                ui.label(util::format(
-                                    &resource_man.translates.gui
-                                        [&resource_man.gui_ids.tile_config_script],
-                                    vec![script_text],
-                                ));
-                                gui::scripts(
-                                    ui,
-                                    resource_man.clone(),
-                                    &storage.fuse,
-                                    scripts,
-                                    &mut new_script,
-                                    &mut storage.script_filter,
-                                );
+                                        let output =
+                                            if let Some(output) = script.instructions.output {
+                                                format!(
+                                                    "{} ({})",
+                                                    resource_man.item_name(&output.id),
+                                                    output.amount
+                                                )
+                                            } else {
+                                                String::new()
+                                            };
 
-                                ui.separator();
+                                        if !input.is_empty() && !output.is_empty() {
+                                            format!("{}\n=> {}", input, output)
+                                        } else {
+                                            format!("{}{}", input, output)
+                                        }
+                                    } else {
+                                        "<none>".to_string()
+                                    };
 
-                                ui.label(util::format(
-                                    &resource_man.translates.gui
-                                        [&resource_man.gui_ids.tile_config_target],
-                                    vec![script_text],
-                                ));
-                                gui::targets(ui, &mut new_target_coord);
-                            });
-                        }
+                                    ui.label(format(
+                                        &resource_man.translates.gui
+                                            [&resource_man.gui_ids.tile_config_script],
+                                        &[&script_text],
+                                    ));
+                                    gui::scripts(
+                                        ui,
+                                        resource_man.clone(),
+                                        &storage.fuse,
+                                        scripts,
+                                        &mut new_script,
+                                        &mut storage.script_filter,
+                                    );
+                                }
+                                _ => {}
+                            }
+
+                            ui.separator();
+
+                            match resource_man.tiles[&id].tile_type {
+                                TileType::Machine(_) => {
+                                    ui.label(format(
+                                        &resource_man.translates.gui
+                                            [&resource_man.gui_ids.tile_config_target],
+                                        &[],
+                                    ));
+                                    gui::targets(ui, &mut new_target_coord);
+                                }
+                                _ => {}
+                            }
+                        });
                     }
 
                     if new_script != current_script {

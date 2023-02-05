@@ -10,14 +10,16 @@ use crate::render::gui::GuiId;
 use crate::resource::functions::Function;
 use crate::resource::model::Face;
 use crate::resource::script::Script;
+use crate::resource::tag::Tag;
 use crate::resource::tile::Tile;
 use crate::resource::translate::Translate;
-use crate::util::id::{Id, IdRaw, Interner};
+use crate::util::id::{id_static, Id, IdRaw, Interner};
 
 pub mod audio;
 pub mod functions;
 pub mod model;
 pub mod script;
+pub mod tag;
 pub mod tile;
 pub mod translate;
 
@@ -27,7 +29,6 @@ pub static RESOURCES_FOLDER: &str = "resources";
 
 pub struct ResourceManager {
     pub interner: Interner,
-    pub none: Id,
     pub track: TrackHandle,
 
     pub ordered_ids: Vec<Id>,
@@ -37,6 +38,7 @@ pub struct ResourceManager {
     pub translates: Translate,
     pub audio: HashMap<String, StaticSoundData>,
     pub functions: HashMap<Id, Function>,
+    pub tags: HashMap<Id, Tag>,
 
     pub faces: HashMap<Id, Face>,
 
@@ -44,6 +46,8 @@ pub struct ResourceManager {
     pub raw_models: HashMap<Id, Model>,
     pub raw_faces: Vec<RawFace>,
 
+    pub none: Id,
+    pub any: Id,
     pub gui_ids: GuiId,
 }
 
@@ -57,10 +61,11 @@ impl ResourceManager {
     pub fn new(track: TrackHandle) -> Self {
         let mut interner = Interner::new();
         let none = IdRaw::NONE.to_id(&mut interner);
+        let any = id_static("automancy", "#any").to_id(&mut interner);
         let gui_ids = GuiId::new(&mut interner);
+
         Self {
             interner,
-            none,
             track,
 
             ordered_ids: vec![],
@@ -70,6 +75,7 @@ impl ResourceManager {
             translates: Default::default(),
             audio: Default::default(),
             functions: Default::default(),
+            tags: Default::default(),
 
             faces: Default::default(),
 
@@ -77,11 +83,9 @@ impl ResourceManager {
             raw_models: Default::default(),
             raw_faces: Default::default(),
 
+            none,
+            any,
             gui_ids,
         }
     }
 }
-
-impl ResourceManager {}
-
-impl ResourceManager {}

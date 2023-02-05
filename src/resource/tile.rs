@@ -13,6 +13,7 @@ pub enum TileTypeRaw {
     Model,
     Machine(IdRaw),
     Transfer(IdRaw),
+    Storage(IdRaw),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -22,6 +23,7 @@ pub enum TileType {
     Model,
     Machine(Id),
     Transfer(Id),
+    Storage(Id),
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -64,6 +66,7 @@ impl ResourceManager {
             TileTypeRaw::Model => TileType::Model,
             TileTypeRaw::Machine(id) => TileType::Machine(id.to_id(&mut self.interner)),
             TileTypeRaw::Transfer(id) => TileType::Transfer(id.to_id(&mut self.interner)),
+            TileTypeRaw::Storage(id) => TileType::Storage(id.to_id(&mut self.interner)),
         };
 
         let function = tile.function.map(|v| v.to_id(&mut self.interner));

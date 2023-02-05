@@ -11,6 +11,7 @@ use crate::game::item::Item;
 use crate::game::tile::TileEntityMsg::*;
 use crate::game::{GameMsg, TickUnit};
 use crate::resource::script::Script;
+use crate::resource::tag::id_eq_or_tag_of;
 use crate::resource::tile::TileType;
 use crate::resource::tile::TileType::*;
 use crate::resource::ResourceManager;
@@ -135,6 +136,36 @@ impl Actor for TileEntity {
                         Void => {
                             sender.try_tell(TransactionResult(Ok(())), myself).unwrap();
                         }
+                        Storage(_) => {
+                            if let Some(script) = self.get_script(resource_man.clone()) {
+                                if let Some(input) = script.instructions.input {
+                                    if id_eq_or_tag_of(&resource_man, item.id, input.id) {
+                                        let amount = self.data.0.entry(item.id).or_insert(0);
+
+                                        *amount += item.amount;
+                                        *amount = amount.at_most(input.amount);
+
+                                        if *amount == input.amount {
+                                            sender
+                                                .try_tell(
+                                                    TransactionResult(Err(TransactionError::Full)),
+                                                    myself,
+                                                )
+                                                .unwrap();
+                                            return;
+                                        }
+                                        sender.try_tell(TransactionResult(Ok(())), myself).unwrap();
+                                        return;
+                                    }
+                                }
+                            }
+                            sender
+                                .try_tell(
+                                    TransactionResult(Err(TransactionError::NotSuitable)),
+                                    myself,
+                                )
+                                .unwrap();
+                        }
                         _ => {
                             sender
                                 .try_tell(
@@ -191,15 +222,15 @@ impl TileEntity {
                 let instructions = &script.instructions;
                 let output = instructions.output;
 
-                if let Some(input) = instructions.input {
-                    let id = input.id;
+                if let Some(output) = output {
+                    if let Some(input) = instructions.input {
+                        let id = input.id;
 
-                    // TODO send transaction result back to Game
-                    let stored = *self.data.0.get(&id).unwrap_or(&0);
-                    if stored >= input.amount {
-                        self.data.0.insert(id, stored - input.amount);
+                        // TODO send transaction result back to Game
+                        let stored = *self.data.0.get(&id).unwrap_or(&0);
+                        if stored >= input.amount {
+                            self.data.0.insert(id, stored - input.amount);
 
-                        if let Some(output) = output {
                             self.send_tile_msg(
                                 myself,
                                 coord,
@@ -212,19 +243,19 @@ impl TileEntity {
                                 },
                             );
                         }
+                    } else {
+                        self.send_tile_msg(
+                            myself,
+                            coord,
+                            Transaction {
+                                resource_man,
+                                tick_count,
+                                item: output,
+                                source_type: tile_type,
+                                direction,
+                            },
+                        );
                     }
-                } else if let Some(output) = output {
-                    self.send_tile_msg(
-                        myself,
-                        coord,
-                        Transaction {
-                            resource_man,
-                            tick_count,
-                            item: output,
-                            source_type: tile_type,
-                            direction,
-                        },
-                    );
                 }
             }
         }
@@ -243,7 +274,7 @@ impl TileEntity {
                 let has = item.amount;
                 let required = input.amount;
 
-                if input.id != id {
+                if !id_eq_or_tag_of(&resource_man, id, input.id) {
                     sender
                         .try_tell(
                             TransactionResult(Err(TransactionError::NotSuitable)),

@@ -74,6 +74,7 @@ impl ResourceManager {
 
         Some(())
     }
+
     pub fn load_models(&mut self, dir: &Path) -> Option<()> {
         let models = dir.join("models");
         let models = read_dir(models).ok()?;
@@ -89,6 +90,7 @@ impl ResourceManager {
 
         Some(())
     }
+
     pub fn compile_models(&mut self) {
         let mut ids = self
             .tiles

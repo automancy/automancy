@@ -31,6 +31,7 @@ pub struct InstructionsRaw {
     pub input: Option<ItemRaw>,
     pub output: Option<ItemRaw>,
 }
+
 impl ResourceManager {
     fn load_script(&mut self, file: &Path) -> Option<()> {
         log::info!("loading script at: {file:?}");
@@ -61,6 +62,7 @@ impl ResourceManager {
 
         Some(())
     }
+
     pub fn load_scripts(&mut self, dir: &Path) -> Option<()> {
         let scripts = dir.join("scripts");
         let scripts = read_dir(scripts).ok()?;

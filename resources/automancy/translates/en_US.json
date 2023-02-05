@@ -5,19 +5,22 @@
         "gold_ingot": "Gold Ingot",
         "copper_ingot": "Copper Ingot",
         "tin_ingot": "Tin Ingot",
-        "stone": "Stone"
+        "stone": "Stone",
+        "#any": "[Any Items]",
+        "small_storage": "Small Storage"
     },
     "tiles": {
         "none": "None",
         "splitter": "Splitter",
         "void": "Resource® Void™",
         "extractor": "Extractor",
-        "refinery": "Refinery"
+        "refinery": "Refinery",
+        "small_storage": "Small Storage"
     },
     "gui": {
         "tile_info": "Tile Info",
         "tile_config": "Config",
-        "tile_config_script": "Script: {}",
-        "tile_config_target": "Target: {}"
+        "tile_config_script": "Script:\n{}",
+        "tile_config_target": "Target:"
     }
 }
