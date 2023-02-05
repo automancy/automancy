@@ -1,10 +1,8 @@
 use std::collections::HashMap;
 use std::error::Error;
 use std::sync::{Arc, Mutex};
-
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::game::data::TileCoord;
 use cgmath::{point2, EuclideanSpace};
 use egui::style::Margin;
 use egui::Window;
@@ -16,9 +14,9 @@ use riker_patterns::ask::ask;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::ControlFlow;
 
+use crate::game::data::TileCoord;
 use crate::game::input::InputState;
 use crate::game::map::{Map, MapRenderInfo, RenderContext};
-use crate::game::run::setup;
 use crate::game::run::setup::GameSetup;
 use crate::game::tile::{StateUnit, TileEntityMsg};
 use crate::game::{input, GameMsg, PlaceTileResponse};

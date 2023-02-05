@@ -9,6 +9,7 @@ use crate::game::{Game, GameMsg};
 use riker::actor::ActorRef;
 use riker::actors::{ActorSystem, Context};
 use riker_patterns::ask::ask;
+use serde::{Deserialize, Serialize};
 use zstd::{Decoder, Encoder};
 
 use crate::game::tile::TileEntityMsg::{
@@ -39,6 +40,9 @@ pub struct Map {
 
     pub tiles: HashMap<TileCoord, (ActorRef<TileEntityMsg>, Id, StateUnit)>,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+struct TileData(IdRaw, StateUnit, DataRaw, Option<TileCoord>, Option<IdRaw>);
 
 impl Map {
     pub fn render_info(&self, RenderContext { resource_man }: &RenderContext) -> MapRenderInfo {
@@ -78,20 +82,19 @@ impl Map {
 
         let raw = self
             .tiles
-            .clone() // cloning it is okay because this is inherently trivial to copy
-            .into_iter()
+            .iter()
             .map(|(coord, (tile, id, tile_state))| {
-                let id = IdRaw::parse(interner.resolve(id).unwrap());
+                let id = IdRaw::parse(interner.resolve(*id).unwrap());
 
-                let target: Option<TileCoord> = block_on(ask(sys, &tile, GetTarget));
+                let target: Option<TileCoord> = block_on(ask(sys, tile, GetTarget));
 
-                let script: Option<Id> = block_on(ask(sys, &tile, GetScript));
+                let script: Option<Id> = block_on(ask(sys, tile, GetScript));
                 let script = script.map(|script| IdRaw::parse(interner.resolve(script).unwrap()));
 
-                let data: Data = block_on(ask(sys, &tile, GetData));
+                let data: Data = block_on(ask(sys, tile, GetData));
                 let data = DataRaw::from_data(data, interner);
 
-                (coord, (id, tile_state, target, script, data))
+                (coord, TileData(id, *tile_state, data, target, script))
             })
             .collect::<Vec<_>>();
 
@@ -112,14 +115,11 @@ impl Map {
         let reader = BufReader::with_capacity(MAP_BUFFER_SIZE, file);
         let decoder = Decoder::new(reader).unwrap();
 
-        let raw: Vec<(
-            TileCoord,
-            (IdRaw, StateUnit, Option<TileCoord>, Option<IdRaw>, DataRaw),
-        )> = serde_json::from_reader(decoder).unwrap();
+        let raw: Vec<(TileCoord, TileData)> = serde_json::from_reader(decoder).unwrap();
 
         let tiles = raw
             .into_iter()
-            .flat_map(|(coord, (id, tile_state, target, script, data))| {
+            .flat_map(|(coord, TileData(id, tile_state, data, target, script))| {
                 if let Some(id) = interner.get(id.to_string()) {
                     let tile = Game::new_tile(ctx, coord, id, tile_state);
 
