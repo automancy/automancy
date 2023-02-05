@@ -4,7 +4,7 @@ use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-use crate::game::data::{Data, DataRaw, TileCoord};
+use crate::game::inventory::{Inventory, InventoryRaw};
 use crate::game::{Game, GameMsg};
 use riker::actor::ActorRef;
 use riker::actors::{ActorSystem, Context};
@@ -12,10 +12,11 @@ use riker_patterns::ask::ask;
 use serde::{Deserialize, Serialize};
 use zstd::{Decoder, Encoder};
 
-use crate::game::tile::TileEntityMsg::{
+use crate::game::tile::coord::TileCoord;
+use crate::game::tile::entity::TileEntityMsg::{
     GetData, GetScript, GetTarget, SetData, SetScript, SetTarget,
 };
-use crate::game::tile::{StateUnit, TileEntityMsg};
+use crate::game::tile::entity::{StateUnit, TileEntityMsg};
 use crate::render::data::InstanceData;
 use crate::resource::ResourceManager;
 use crate::util::id::{Id, IdRaw, Interner};
@@ -42,7 +43,13 @@ pub struct Map {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct TileData(IdRaw, StateUnit, DataRaw, Option<TileCoord>, Option<IdRaw>);
+struct TileData(
+    IdRaw,
+    StateUnit,
+    InventoryRaw,
+    Option<TileCoord>,
+    Option<IdRaw>,
+);
 
 impl Map {
     pub fn render_info(&self, RenderContext { resource_man }: &RenderContext) -> MapRenderInfo {
@@ -91,8 +98,8 @@ impl Map {
                 let script: Option<Id> = block_on(ask(sys, tile, GetScript));
                 let script = script.map(|script| IdRaw::parse(interner.resolve(script).unwrap()));
 
-                let data: Data = block_on(ask(sys, tile, GetData));
-                let data = DataRaw::from_data(data, interner);
+                let data: Inventory = block_on(ask(sys, tile, GetData));
+                let data = InventoryRaw::from_inventory(data, interner);
 
                 (coord, TileData(id, *tile_state, data, target, script))
             })
@@ -131,7 +138,7 @@ impl Map {
                         }
                     }
 
-                    tile.send_msg(SetData(data.to_data(interner)), None);
+                    tile.send_msg(SetData(data.to_inventory(interner)), None);
 
                     Some((coord, (tile, id, tile_state)))
                 } else {

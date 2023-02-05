@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
-use crate::game::data::TileCoord;
+use crate::game::tile::coord::TileCoord;
+use crate::game::tile::entity::StateUnit;
 use bytemuck::{Pod, Zeroable};
 use hexagon_tiles::layout::{hex_to_pixel, Layout, LAYOUT_ORIENTATION_POINTY};
 use hexagon_tiles::point::Point;
 use ply_rs::ply::{Property, PropertyAccess};
 use vulkano::impl_vertex;
 
-use crate::game::tile::StateUnit;
 use crate::render::camera::FAR;
 use crate::resource::ResourceManager;
 use crate::util::cg::{Matrix4, Num, Point3};

@@ -3,7 +3,7 @@ use std::fs::{read_dir, read_to_string};
 use std::path::Path;
 use std::sync::Arc;
 
-use crate::game::data::TileCoord;
+use crate::game::tile::coord::TileCoord;
 use rune::runtime::RuntimeContext;
 use rune::termcolor::{ColorChoice, StandardStream};
 use rune::{Diagnostics, Module, Source, Sources, Unit};

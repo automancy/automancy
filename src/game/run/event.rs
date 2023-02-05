@@ -14,11 +14,11 @@ use riker_patterns::ask::ask;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::ControlFlow;
 
-use crate::game::data::TileCoord;
 use crate::game::input::InputState;
 use crate::game::map::{Map, MapRenderInfo, RenderContext};
 use crate::game::run::setup::GameSetup;
-use crate::game::tile::{StateUnit, TileEntityMsg};
+use crate::game::tile::coord::TileCoord;
+use crate::game::tile::entity::{StateUnit, TileEntityMsg};
 use crate::game::{input, GameMsg, PlaceTileResponse};
 use crate::render::camera::cursor_to_pos;
 use crate::render::data::InstanceData;
@@ -31,15 +31,26 @@ use crate::util::format;
 use crate::util::id::Id;
 
 // TODO: naming, Persistent means it's stored across sessions..
+/// Stores information that lives for the entire lifetime of the session, and is not dropped at the end of one event cycle or handled elsewhere.
 pub struct EventLoopStorage {
+    /// TODO i don't really know what this does lmao
     fuse: Fuse,
+    /// whether or not the game should close.
     closed: bool,
+    // TODO most of the following elements should be moved out of here...
+    /// the filter for the script search GUI element.
     script_filter: String,
+    /// the state of the input peripherals.
     input_state: InputState,
+    /// the tile the cursor is pointing at.
     pointing_at: TileCoord,
+    /// the tile states of the currently selected tile.
     selected_tile_states: HashMap<Id, StateUnit>,
+    /// the currently selected tile.
     selected_id: Option<Id>,
+    /// the tile at the currently selected position.
     already_placed_at: Option<TileCoord>,
+    /// the tile that has its config menu open.
     config_open: Option<TileCoord>,
 }
 
@@ -59,6 +70,7 @@ impl Default for EventLoopStorage {
     }
 }
 
+/// Triggers every time the event loop is run once.
 pub fn on_event(
     setup: &mut GameSetup,
     storage: &mut EventLoopStorage,

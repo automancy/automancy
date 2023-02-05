@@ -22,8 +22,10 @@ use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::pipeline::{Pipeline, PipelineBindPoint};
 use winit::event_loop::EventLoop;
 
-use crate::game::data::{Data, TileCoord, TileHex};
-use crate::game::tile::{StateUnit, TileEntityMsg};
+use crate::game::inventory::Inventory;
+use crate::game::tile::coord::TileCoord;
+use crate::game::tile::entity::{StateUnit, TileEntityMsg};
+use crate::game::tile::TileHex;
 use crate::game::GameMsg;
 use crate::render::data::{GuiUBO, InstanceData};
 use crate::render::gpu;
@@ -330,7 +332,7 @@ pub fn tile_info(
 
             if let Some((tile, id, _)) = result {
                 ui.label(resource_man.tile_name(&id));
-                let data: Data = block_on(ask(sys, &tile, TileEntityMsg::GetData));
+                let data: Inventory = block_on(ask(sys, &tile, TileEntityMsg::GetData));
 
                 for (id, amount) in data.0.iter() {
                     ui.label(format!("{} - {}", resource_man.item_name(id), amount));

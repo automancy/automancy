@@ -22,17 +22,28 @@ use crate::render::{gpu, gui};
 use crate::resource::{ResourceManager, RESOURCES_FOLDER};
 use crate::LOGO;
 
+/// Stores what the game initializes on startup.
 pub struct GameSetup {
+    /// the audio manager
     pub(crate) audio_man: AudioManager,
+    /// the resource manager
     pub(crate) resource_man: Arc<ResourceManager>,
+    /// the GUI system
     pub(crate) gui: Gui,
+    /// the Riker actor system
     pub(crate) sys: ActorSystem,
+    /// the game messaging system
     pub(crate) game: ActorRef<GameMsg>,
+    /// the current frame
     pub(crate) frame: Frame,
+    /// the renderer
     pub(crate) renderer: Renderer,
+    /// the camera
     pub(crate) camera: Camera,
 }
+
 impl GameSetup {
+    /// Initializes the game, filling all the necessary fields as well as creating an event loop.
     pub fn setup() -> (EventLoop<()>, Self) {
         // --- resources & data ---
         let mut audio_man =
@@ -138,6 +149,7 @@ impl GameSetup {
     }
 }
 
+/// Initialize the Resource Manager system, and loads all the resources in all namespaces.
 fn load_resources(track: TrackHandle) -> Arc<ResourceManager> {
     let mut resource_man = ResourceManager::new(track);
 
@@ -163,6 +175,7 @@ fn load_resources(track: TrackHandle) -> Arc<ResourceManager> {
     Arc::new(resource_man)
 }
 
+/// Gets the game icon.
 fn get_icon() -> Icon {
     let (bytes, width, height) = {
         let decoder = png::Decoder::new(LOGO);

@@ -5,10 +5,12 @@ use egui::NumExt;
 use riker::actor::{Context, Sender};
 use riker::actors::{Actor, ActorFactoryArgs, BasicActorRef};
 use rune::{FromValue, Vm};
+use serde_json::from_value;
 
-use crate::game::data::{Data, TileCoord};
+use crate::game::inventory::Inventory;
 use crate::game::item::Item;
-use crate::game::tile::TileEntityMsg::*;
+use crate::game::tile::coord::TileCoord;
+use crate::game::tile::entity::TileEntityMsg::*;
 use crate::game::{GameMsg, TickUnit};
 use crate::resource::script::Script;
 use crate::resource::tag::id_eq_or_tag_of;
@@ -17,13 +19,19 @@ use crate::resource::tile::TileType::*;
 use crate::resource::ResourceManager;
 use crate::util::id::Id;
 
-pub type StateUnit = i32;
+#[derive(Debug, Copy, Clone)]
+pub enum TransactionError {
+    NotEnough,
+    NoScript,
+    NotSuitable,
+    Full,
+}
 
 #[derive(Debug, Clone)]
 pub struct TileEntity {
     id: Id,
 
-    data: Data,
+    data: Inventory,
     coord: TileCoord,
     script: Option<Id>,
 
@@ -33,13 +41,7 @@ pub struct TileEntity {
     tile_state: StateUnit,
 }
 
-#[derive(Debug, Copy, Clone)]
-pub enum TransactionError {
-    NotEnough,
-    NoScript,
-    NotSuitable,
-    Full,
-}
+pub type StateUnit = i32;
 
 #[derive(Debug, Clone)]
 pub enum TileEntityMsg {
@@ -62,7 +64,7 @@ pub enum TileEntityMsg {
     SetScript(Id),
     GetScript,
 
-    SetData(Data),
+    SetData(Inventory),
     GetData,
 }
 
@@ -201,8 +203,8 @@ impl Actor for TileEntity {
     }
 }
 
-impl ActorFactoryArgs<(BasicActorRef, Id, TileCoord, Data, StateUnit)> for TileEntity {
-    fn create_args(args: (BasicActorRef, Id, TileCoord, Data, StateUnit)) -> Self {
+impl ActorFactoryArgs<(BasicActorRef, Id, TileCoord, Inventory, StateUnit)> for TileEntity {
+    fn create_args(args: (BasicActorRef, Id, TileCoord, Inventory, StateUnit)) -> Self {
         Self::new(args.0, args.1, args.2, args.3, args.4)
     }
 }
@@ -348,7 +350,7 @@ impl TileEntity {
         game: BasicActorRef,
         id: Id,
         coord: TileCoord,
-        data: Data,
+        data: Inventory,
         tile_state: StateUnit,
     ) -> Self {
         Self {

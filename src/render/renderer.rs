@@ -15,7 +15,6 @@ use vulkano::command_buffer::{
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::format::ClearValue;
 
-use crate::game::data::TileUnit;
 use vulkano::memory::allocator::FastMemoryAllocator;
 use vulkano::pipeline::graphics::viewport::Scissor;
 use vulkano::pipeline::{Pipeline, PipelineBindPoint};
@@ -24,6 +23,7 @@ use vulkano::sync;
 use vulkano::sync::GpuFuture;
 
 use crate::game::map::MapRenderInfo;
+use crate::game::tile::TileUnit;
 use crate::render::camera::{CameraState, FAR};
 use crate::render::data::{GameUBO, GuiUBO, InstanceData, Vertex, RENDER_LAYOUT};
 use crate::render::gpu;

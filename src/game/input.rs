@@ -6,15 +6,24 @@ use winit::event::{
 
 use crate::util::cg::{DPoint2, DVector2, Double};
 
+/// The various controls of the game.
 #[derive(Debug, Copy, Clone)]
 pub enum GameWindowEvent {
+    /// no keys pressed
     None,
+    /// mouse cursor moved
     MainPos { pos: DPoint2 },
+    /// mouse 1 pressed
     MainPressed,
+    /// mouse 1 released
     MainReleased,
+    /// mouse 2 pressed
     AlternatePressed,
+    /// mouse 2 released
     AlternateReleased,
+    /// mouse wheel scrolled
     MouseWheel { delta: DVector2 },
+    /// modifier key pressed
     ModifierChanged { modifier: ModifiersState },
 }
 

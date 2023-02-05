@@ -1,54 +1,13 @@
-use std::collections::HashMap;
-use std::fmt::{Display, Formatter};
-use std::ops::{Add, Div, Mul, Neg, Sub};
-
+use crate::game::tile::{TileHex, TileUnit};
 use hexagon_tiles::hex::{hex, Hex};
 use hexagon_tiles::traits::HexDirection;
-use rune::{Any, Module};
+use rune::Any;
+use rune::Module;
 use serde::de::{SeqAccess, Visitor};
 use serde::ser::SerializeTuple;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
-use crate::game::item::{ItemAmount, ItemRaw};
-use crate::util::id::{Id, IdRaw, Interner};
-
-#[derive(Debug, Default, Clone)]
-pub struct Data(pub HashMap<Id, ItemAmount>);
-
-#[derive(Debug, Default, Serialize, Deserialize)]
-pub struct DataRaw(pub Vec<ItemRaw>);
-
-impl DataRaw {
-    pub fn to_data(self, interner: &Interner) -> Data {
-        Data(
-            self.0
-                .into_iter()
-                .flat_map(|item| {
-                    interner
-                        .get(item.id.to_string())
-                        .map(|id| (id, item.amount))
-                })
-                .collect(),
-        )
-    }
-
-    pub fn from_data(data: Data, interner: &Interner) -> Self {
-        Self(
-            data.0
-                .into_iter()
-                .map(|(id, amount)| {
-                    let id = IdRaw::parse(interner.resolve(id).unwrap());
-
-                    ItemRaw { id, amount }
-                })
-                .collect(),
-        )
-    }
-}
-
-pub type TileHex = Hex<TileUnit>;
-
-pub type TileUnit = i32;
+use std::fmt::{Display, Formatter};
+use std::ops::{Add, Div, Mul, Neg, Sub};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Any)]
 pub struct TileCoord(TileHex);

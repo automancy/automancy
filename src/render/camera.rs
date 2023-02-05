@@ -1,7 +1,6 @@
 use std::f64::consts::PI;
 use std::ops::{Div, Sub};
 
-use crate::game::data::TileCoord;
 use cgmath::num_traits::clamp;
 use cgmath::{point3, vec2, EuclideanSpace, Zero};
 use hexagon_tiles::layout::pixel_to_hex;
@@ -9,6 +8,7 @@ use hexagon_tiles::point::point;
 use hexagon_tiles::traits::HexRound;
 
 use crate::game::input::InputState;
+use crate::game::tile::coord::TileCoord;
 use crate::render::data::RENDER_LAYOUT;
 use crate::util::cg::{matrix, DPoint2, DPoint3, DVector2, Double};
 
