@@ -1,5 +1,5 @@
 use crate::resource::{ResourceManager, JSON_EXT};
-use crate::util::id::{Id, IdRaw};
+use crate::util::id::{id_static, Id, IdRaw, Interner};
 use serde::Deserialize;
 use std::ffi::OsStr;
 use std::fs::{read_dir, read_to_string};
@@ -48,9 +48,9 @@ impl ResourceManager {
         log::info!("loading tile at {file:?}");
 
         let tile: TileRaw = serde_json::from_str(
-            &read_to_string(file).unwrap_or_else(|_| panic!("error loading {file:?}")),
+            &read_to_string(file).unwrap_or_else(|e| panic!("error loading {file:?} {e:?}")),
         )
-        .unwrap_or_else(|_| panic!("error loading {file:?}"));
+        .unwrap_or_else(|e| panic!("error loading {file:?} {e:?}"));
 
         let id = tile.id.to_id(&mut self.interner);
 
@@ -106,7 +106,7 @@ impl ResourceManager {
     }
 
     pub fn item_name(&self, id: &Id) -> &str {
-        match self.translates.items.get(id) {
+        match self.translates.items.get(&id) {
             Some(name) => name,
             None => "<unnamed>",
         }
@@ -132,6 +132,18 @@ impl ResourceManager {
             self.tile_name(id)
         } else {
             "<none>"
+        }
+    }
+}
+
+pub struct TileIds {
+    pub inventory_linker: Id,
+}
+
+impl TileIds {
+    pub fn new(interner: &mut Interner) -> Self {
+        Self {
+            inventory_linker: id_static("automancy", "inventory_linker").to_id(interner),
         }
     }
 }

@@ -2,14 +2,15 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::game::item::{ItemAmount, ItemRaw};
+use crate::game::item::{ItemAmount, ItemStackRaw};
+use crate::resource::item::ItemRaw;
 use crate::util::id::{Id, IdRaw, Interner};
 
 #[derive(Debug, Default, Clone)]
 pub struct Inventory(pub HashMap<Id, ItemAmount>);
 
 #[derive(Debug, Default, Serialize, Deserialize)]
-pub struct InventoryRaw(pub Vec<ItemRaw>);
+pub struct InventoryRaw(pub Vec<ItemStackRaw>);
 
 impl InventoryRaw {
     pub fn to_inventory(self, interner: &Interner) -> Inventory {
@@ -18,7 +19,7 @@ impl InventoryRaw {
                 .into_iter()
                 .flat_map(|item| {
                     interner
-                        .get(item.id.to_string())
+                        .get(item.item.id.to_string())
                         .map(|id| (id, item.amount))
                 })
                 .collect(),
@@ -32,7 +33,9 @@ impl InventoryRaw {
                 .map(|(id, amount)| {
                     let id = IdRaw::parse(interner.resolve(id).unwrap());
 
-                    ItemRaw { id, amount }
+                    let item = ItemRaw { id };
+
+                    ItemStackRaw { item, amount }
                 })
                 .collect(),
         )

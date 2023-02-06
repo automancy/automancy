@@ -1,9 +1,0 @@
-{
-    "id": "tiny_storage",
-    "instructions": {
-        "input": {
-            "id": "#any",
-            "amount": 512
-        }
-    }
-}

@@ -4,9 +4,5 @@
     "tile_type": {
         "type": "Storage",
         "param": "small_storage"
-    },
-    "scripts": [
-        "tiny_storage",
-        "small_storage"
-    ]
+    }
 }

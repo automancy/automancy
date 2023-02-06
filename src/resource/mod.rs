@@ -6,17 +6,19 @@ use kira::track::TrackHandle;
 use serde::Deserialize;
 
 use crate::render::data::{Model, RawFace, Vertex};
-use crate::render::gui::GuiId;
+use crate::render::gui::GuiIds;
 use crate::resource::functions::Function;
+use crate::resource::item::Item;
 use crate::resource::model::Face;
 use crate::resource::script::Script;
 use crate::resource::tag::Tag;
-use crate::resource::tile::Tile;
+use crate::resource::tile::{Tile, TileIds};
 use crate::resource::translate::Translate;
 use crate::util::id::{id_static, Id, IdRaw, Interner};
 
 pub mod audio;
 pub mod functions;
+pub mod item;
 pub mod model;
 pub mod script;
 pub mod tag;
@@ -39,6 +41,7 @@ pub struct ResourceManager {
     pub audio: HashMap<String, StaticSoundData>,
     pub functions: HashMap<Id, Function>,
     pub tags: HashMap<Id, Tag>,
+    pub items: HashMap<Id, Item>,
 
     pub faces: HashMap<Id, Face>,
 
@@ -48,7 +51,8 @@ pub struct ResourceManager {
 
     pub none: Id,
     pub any: Id,
-    pub gui_ids: GuiId,
+    pub tile_ids: TileIds,
+    pub gui_ids: GuiIds,
 }
 
 impl Debug for ResourceManager {
@@ -62,7 +66,8 @@ impl ResourceManager {
         let mut interner = Interner::new();
         let none = IdRaw::NONE.to_id(&mut interner);
         let any = id_static("automancy", "#any").to_id(&mut interner);
-        let gui_ids = GuiId::new(&mut interner);
+        let gui_ids = GuiIds::new(&mut interner);
+        let tile_ids = TileIds::new(&mut interner);
 
         Self {
             interner,
@@ -76,6 +81,7 @@ impl ResourceManager {
             audio: Default::default(),
             functions: Default::default(),
             tags: Default::default(),
+            items: Default::default(),
 
             faces: Default::default(),
 
@@ -85,6 +91,7 @@ impl ResourceManager {
 
             none,
             any,
+            tile_ids,
             gui_ids,
         }
     }

@@ -2,11 +2,15 @@
     "id": "iron_ingot",
     "instructions": {
         "input": {
-            "id": "iron_ore",
+            "item": {
+                "id": "iron_ore"
+            },
             "amount": 10
         },
         "output": {
-            "id": "iron_ingot",
+            "item": {
+                "id": "iron_ingot"
+            },
             "amount": 1
         }
     }

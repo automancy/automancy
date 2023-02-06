@@ -1,0 +1,8 @@
+{
+  "id": "inventory_linker",
+  "models": ["void"],
+  "tile_type": {
+    "type": "Machine",
+    "param": "inventory_linker"
+  }
+}

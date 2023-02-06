@@ -23,6 +23,7 @@ use crate::game::{input, GameMsg, PlaceTileResponse};
 use crate::render::camera::cursor_to_pos;
 use crate::render::data::InstanceData;
 use crate::render::{gpu, gui};
+use crate::resource::item::Item;
 use crate::resource::tile::TileType;
 use crate::util::cg::Num;
 use crate::util::colors::Color;
@@ -50,6 +51,8 @@ pub struct EventLoopStorage {
     already_placed_at: Option<TileCoord>,
     /// the tile that has its config menu open.
     config_open: Option<TileCoord>,
+    /// tag searching cache
+    tag_cache: HashMap<Id, Arc<Vec<Item>>>,
 }
 
 impl Default for EventLoopStorage {
@@ -58,12 +61,13 @@ impl Default for EventLoopStorage {
             fuse: Default::default(),
             closed: false,
             script_filter: String::new(),
-            input_state: InputState::default(),
+            input_state: Default::default(),
             pointing_at: TileCoord::ZERO,
-            selected_tile_states: HashMap::<Id, StateUnit>::new(),
+            selected_tile_states: Default::default(),
             selected_id: None,
             already_placed_at: None,
             config_open: None,
+            tag_cache: Default::default(),
         }
     }
 }
@@ -249,85 +253,85 @@ pub fn on_event(
                     let mut new_target_coord = current_target_coord;
 
                     // tile_config
-                    if let Some(scripts) = resource_man.tiles[&id].scripts.clone() {
-                        Window::new(
-                            resource_man.translates.gui[&resource_man.gui_ids.tile_config]
-                                .to_string(),
-                        )
-                        .resizable(false)
-                        .auto_sized()
-                        .constrain(true)
-                        .frame(setup.frame.inner_margin(Margin::same(10.0)))
-                        .show(&gui.context(), |ui| {
-                            ui.set_max_width(300.0);
+                    Window::new(
+                        resource_man.translates.gui[&resource_man.gui_ids.tile_config].to_string(),
+                    )
+                    .resizable(false)
+                    .auto_sized()
+                    .constrain(true)
+                    .frame(setup.frame.inner_margin(Margin::same(10.0)))
+                    .show(&gui.context(), |ui| {
+                        const MARGIN: Num = 8.0;
 
-                            match resource_man.tiles[&id].tile_type {
-                                TileType::Machine(_) | TileType::Storage(_) => {
-                                    let script_text = if let Some(script) = new_script
-                                        .and_then(|script| resource_man.scripts.get(&script))
-                                    {
-                                        let input = if let Some(input) = script.instructions.input {
-                                            format!(
-                                                "{} ({})",
-                                                resource_man.item_name(&input.id),
-                                                input.amount
-                                            )
-                                        } else {
-                                            String::new()
-                                        };
+                        ui.set_max_width(300.0);
 
-                                        let output =
-                                            if let Some(output) = script.instructions.output {
-                                                format!(
-                                                    "{} ({})",
-                                                    resource_man.item_name(&output.id),
-                                                    output.amount
-                                                )
-                                            } else {
-                                                String::new()
-                                            };
+                        if let Some(scripts) = resource_man.tiles[&id].scripts.clone() {
+                            let script_text = if let Some(script) =
+                                new_script.and_then(|script| resource_man.scripts.get(&script))
+                            {
+                                let input = if let Some(input) = script.instructions.input {
+                                    format!(
+                                        "{} ({})",
+                                        resource_man.item_name(&input.item.id),
+                                        input.amount
+                                    )
+                                } else {
+                                    String::new()
+                                };
 
-                                        if !input.is_empty() && !output.is_empty() {
-                                            format!("{}\n=> {}", input, output)
-                                        } else {
-                                            format!("{}{}", input, output)
-                                        }
-                                    } else {
-                                        "<none>".to_string()
-                                    };
+                                let output = if let Some(output) = script.instructions.output {
+                                    format!(
+                                        "=> {} ({})",
+                                        resource_man.item_name(&output.item.id),
+                                        output.amount
+                                    )
+                                } else {
+                                    String::new()
+                                };
 
-                                    ui.label(format(
-                                        &resource_man.translates.gui
-                                            [&resource_man.gui_ids.tile_config_script],
-                                        &[&script_text],
-                                    ));
-                                    gui::scripts(
-                                        ui,
-                                        resource_man.clone(),
-                                        &storage.fuse,
-                                        scripts,
-                                        &mut new_script,
-                                        &mut storage.script_filter,
-                                    );
+                                if !input.is_empty() && !output.is_empty() {
+                                    format!("{}\n{}", input, output)
+                                } else {
+                                    format!("{}{}", input, output)
                                 }
-                                _ => {}
-                            }
+                            } else {
+                                "<none>".to_string()
+                            };
 
-                            ui.separator();
+                            ui.add_space(MARGIN);
 
-                            match resource_man.tiles[&id].tile_type {
-                                TileType::Machine(_) => {
-                                    ui.label(format(
-                                        &resource_man.translates.gui
-                                            [&resource_man.gui_ids.tile_config_target],
-                                        &[],
-                                    ));
-                                    gui::targets(ui, &mut new_target_coord);
-                                }
-                                _ => {}
+                            ui.label(format(
+                                &resource_man.translates.gui
+                                    [&resource_man.gui_ids.tile_config_script],
+                                &[&script_text],
+                            ));
+                            gui::scripts(
+                                ui,
+                                resource_man.clone(),
+                                &storage.fuse,
+                                &scripts,
+                                &mut new_script,
+                                &mut storage.script_filter,
+                            );
+
+                            ui.add_space(MARGIN);
+                        }
+
+                        match resource_man.tiles[&id].tile_type {
+                            TileType::Machine(_) => {
+                                ui.add_space(MARGIN);
+
+                                ui.label(format(
+                                    //TODO just have a "can have target"
+                                    &resource_man.translates.gui
+                                        [&resource_man.gui_ids.tile_config_target],
+                                    &[],
+                                ));
+                                gui::targets(ui, &mut new_target_coord);
                             }
-                        });
-                    }
+                            _ => {}
+                        }
+                    });
 
                     if new_script != current_script {
                         if let Some(script) = new_script {

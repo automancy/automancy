@@ -38,14 +38,14 @@ use crate::util::colors::Color;
 use crate::util::id::{id_static, Id, Interner};
 use crate::IOSEVKA_FONT;
 
-pub struct GuiId {
+pub struct GuiIds {
     pub tile_config: Id,
     pub tile_info: Id,
     pub tile_config_script: Id,
     pub tile_config_target: Id,
 }
 
-impl GuiId {
+impl GuiIds {
     pub fn new(interner: &mut Interner) -> Self {
         Self {
             tile_config: id_static("automancy", "tile_config").to_id(interner),
@@ -365,7 +365,7 @@ pub fn scripts(
     ui: &mut Ui,
     resource_man: Arc<ResourceManager>,
     fuse: &Fuse,
-    scripts: Vec<Id>,
+    scripts: &[Id],
     new_script: &mut Option<Id>,
     script_filter: &mut String,
 ) {
@@ -381,7 +381,7 @@ pub fn scripts(
                     let result =
                         fuse.search_text_in_string(script_filter, resource_man.item_name(&id));
 
-                    Some(id).zip(result.map(|v| v.score))
+                    Some(*id).zip(result.map(|v| v.score))
                 })
                 .collect::<Vec<_>>();
 
@@ -389,7 +389,7 @@ pub fn scripts(
 
             filtered.into_iter().map(|v| v.0).collect::<Vec<_>>()
         } else {
-            scripts
+            scripts.to_vec()
         };
 
         scripts.iter().for_each(|script| {

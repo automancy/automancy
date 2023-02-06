@@ -6,6 +6,7 @@
         "param": "extractor"
     },
     "scripts": [
-        "copper_ore"
+        "copper_ore",
+        "iron_ore"
     ]
 }

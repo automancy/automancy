@@ -18,18 +18,6 @@ pub struct Tag {
     pub entries: HashSet<Id>,
 }
 
-pub fn id_eq_or_of_tag(resource_man: &ResourceManager, id: Id, other: Id) -> bool {
-    if id == other {
-        return true;
-    }
-
-    if let Some(tag) = resource_man.tags.get(&other) {
-        return tag.of(resource_man, id);
-    }
-
-    false
-}
-
 impl Tag {
     pub fn of(&self, resource_man: &ResourceManager, id: Id) -> bool {
         if self.id == resource_man.any {
@@ -45,9 +33,9 @@ impl ResourceManager {
         log::info!("loading tag at: {file:?}");
 
         let tag: TagRaw = serde_json::from_str(
-            &read_to_string(file).unwrap_or_else(|_| panic!("error loading {file:?}")),
+            &read_to_string(file).unwrap_or_else(|e| panic!("error loading {file:?} {e:?}")),
         )
-        .unwrap_or_else(|_| panic!("error loading {file:?}"));
+        .unwrap_or_else(|e| panic!("error loading {file:?} {e:?}"));
 
         let id = tag.id.to_id(&mut self.interner);
 

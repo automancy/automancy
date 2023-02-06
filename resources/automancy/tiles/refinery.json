@@ -6,10 +6,7 @@
         "param": "refinery"
     },
     "scripts": [
-        "iron_ingot",
-        "gold_ingot",
-        "tin_ingot",
         "copper_ingot",
-        "stone"
+        "iron_ingot"
     ]
 }

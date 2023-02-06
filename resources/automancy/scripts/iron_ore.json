@@ -1,9 +1,9 @@
 {
-    "id": "copper_ore",
+    "id": "iron_ore",
     "instructions": {
         "output": {
             "item": {
-                "id": "copper_ore"
+                "id": "iron_ore"
             },
             "amount": 5
         }

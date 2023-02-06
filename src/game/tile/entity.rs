@@ -7,12 +7,12 @@ use riker::actors::{Actor, ActorFactoryArgs, BasicActorRef};
 use rune::{FromValue, Vm};
 
 use crate::game::inventory::Inventory;
-use crate::game::item::Item;
+use crate::game::item::ItemStack;
 use crate::game::tile::coord::TileCoord;
 use crate::game::tile::entity::TileEntityMsg::*;
 use crate::game::{GameMsg, TickUnit};
+use crate::resource::item::id_eq_or_of_tag;
 use crate::resource::script::Script;
-use crate::resource::tag::id_eq_or_of_tag;
 use crate::resource::tile::TileType;
 use crate::resource::tile::TileType::*;
 use crate::resource::ResourceManager;
@@ -50,7 +50,7 @@ pub enum TileEntityMsg {
     Transaction {
         resource_man: Arc<ResourceManager>,
         tick_count: TickUnit,
-        item: Item,
+        item: ItemStack,
         source_type: TileType,
         direction: TileCoord,
     },
@@ -91,7 +91,7 @@ impl Actor for TileEntity {
             Transaction {
                 resource_man,
                 tick_count,
-                item,
+                item: item_stack,
                 source_type,
                 direction,
             } => {
@@ -100,7 +100,7 @@ impl Actor for TileEntity {
 
                     match &tile_type {
                         Machine(_) => {
-                            self.machine_result(myself, sender, resource_man, item);
+                            self.machine_result(myself, sender, resource_man, item_stack);
                         }
                         Transfer(id) => {
                             if let Transfer(_) = source_type {
@@ -126,7 +126,7 @@ impl Actor for TileEntity {
                                     Transaction {
                                         resource_man,
                                         tick_count,
-                                        item,
+                                        item: item_stack,
                                         source_type: tile_type.clone(),
                                         direction: target,
                                     },
@@ -140,11 +140,16 @@ impl Actor for TileEntity {
                         }
                         Storage(_) => {
                             if let Some(script) = self.get_script(resource_man.clone()) {
-                                if let Some(input) = script.instructions.input {
-                                    if id_eq_or_of_tag(&resource_man, item.id, input.id) {
-                                        let amount = self.data.0.entry(item.id).or_insert(0);
+                                if let Some(output) = script.instructions.output {
+                                    if id_eq_or_of_tag(
+                                        &resource_man,
+                                        item_stack.item.id,
+                                        output.item.id,
+                                    ) {
+                                        let amount =
+                                            self.data.0.entry(item_stack.item.id).or_insert(0);
 
-                                        if *amount == input.amount {
+                                        if *amount == output.amount {
                                             sender
                                                 .try_tell(
                                                     TransactionResult(
@@ -157,8 +162,8 @@ impl Actor for TileEntity {
                                             return;
                                         }
 
-                                        *amount += item.amount;
-                                        *amount = amount.at_most(input.amount);
+                                        *amount += item_stack.amount;
+                                        *amount = amount.at_most(output.amount);
 
                                         sender
                                             .try_tell(
@@ -200,13 +205,13 @@ impl Actor for TileEntity {
                         .get_script(resource_man)
                         .and_then(|script| script.instructions.input)
                     {
-                        let stored = *self.data.0.get(&input.id).unwrap_or(&0);
+                        let stored = *self.data.0.get(&input.item.id).unwrap_or(&0);
                         if stored < input.amount {
                             log::error!("in transaction result: tile does not have enough input for the supposed output!");
                             return;
                         }
 
-                        self.data.0.insert(input.id, stored - input.amount);
+                        self.data.0.insert(input.item.id, stored - input.amount);
                     }
                 }
                 _ => {}
@@ -219,14 +224,19 @@ impl Actor for TileEntity {
             }
             SetScript(id, resource_man) => {
                 self.script = Some(id);
-                if let Some(script) = resource_man.scripts[&id].instructions.input {
+
+                if let Some(input) = resource_man
+                    .scripts
+                    .get(&id)
+                    .and_then(|script| script.instructions.input)
+                {
                     self.data.0 = self
                         .data
                         .0
                         .iter()
                         .map(|(id, amount)| {
-                            if id_eq_or_of_tag(&resource_man, *id, script.id) {
-                                Some((*id, amount.at_most(script.amount)))
+                            if id_eq_or_of_tag(&resource_man, *id, input.item.id) {
+                                Some((*id, amount.at_most(input.amount)))
                             } else {
                                 None
                             }
@@ -273,7 +283,7 @@ impl TileEntity {
 
                 if let Some(output) = output {
                     if let Some(input) = instructions.input {
-                        let stored = *self.data.0.get(&input.id).unwrap_or(&0);
+                        let stored = *self.data.0.get(&input.item.id).unwrap_or(&0);
                         if stored >= input.amount {
                             self.send_tile_msg(
                                 myself,
@@ -310,11 +320,11 @@ impl TileEntity {
         myself: Option<BasicActorRef>,
         sender: BasicActorRef,
         resource_man: Arc<ResourceManager>,
-        item: Item,
+        item: ItemStack,
     ) {
         if let Some(script) = self.get_script(resource_man.clone()) {
             if let Some(input) = script.instructions.input {
-                if !id_eq_or_of_tag(&resource_man, item.id, input.id) {
+                if !id_eq_or_of_tag(&resource_man, item.item.id, input.item.id) {
                     sender
                         .try_tell(
                             TransactionResult(
@@ -327,7 +337,7 @@ impl TileEntity {
                     return;
                 }
 
-                let amount = self.data.0.entry(item.id).or_insert(0);
+                let amount = self.data.0.entry(item.item.id).or_insert(0);
                 if *amount == input.amount {
                     sender
                         .try_tell(

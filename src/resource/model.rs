@@ -26,9 +26,9 @@ impl ResourceManager {
         log::info!("loading model at: {file:?}");
 
         let model: ModelRaw = serde_json::from_str(
-            &read_to_string(file).unwrap_or_else(|_| panic!("error loading {file:?}")),
+            &read_to_string(file).unwrap_or_else(|e| panic!("error loading {file:?} {e:?}")),
         )
-        .unwrap_or_else(|_| panic!("error loading {file:?}"));
+        .unwrap_or_else(|e| panic!("error loading {file:?} {e:?}"));
 
         let file = file
             .parent()

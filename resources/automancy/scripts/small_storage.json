@@ -1,9 +1,0 @@
-{
-    "id": "small_storage",
-    "instructions": {
-        "input": {
-            "id": "#any",
-            "amount": 1024
-        }
-    }
-}

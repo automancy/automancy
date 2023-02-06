@@ -1,14 +1,14 @@
 {
     "items": {
         "copper_ore": "Copper Ore",
+        "copper_ingot": "Copper Ingot",
+        "iron_ore": "Iron Ore",
         "iron_ingot": "Iron Ingot",
         "gold_ingot": "Gold Ingot",
-        "copper_ingot": "Copper Ingot",
         "tin_ingot": "Tin Ingot",
         "stone": "Stone",
-        "#any": "[Any Items]",
-        "tiny_storage": "Tiny Storage",
-        "small_storage": "Small Storage"
+
+        "#any": "[Any Items]"
     },
     "tiles": {
         "none": "None",
@@ -16,7 +16,9 @@
         "void": "Resource® Void™",
         "extractor": "Extractor",
         "refinery": "Refinery",
-        "small_storage": "Small Storage"
+        "small_storage": "Small Storage",
+        "inventory_linker": "Inventory Linker",
+        "inventory_provider": "Inventory Provider"
     },
     "gui": {
         "tile_info": "Tile Info",

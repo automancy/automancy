@@ -5,7 +5,7 @@ use std::path::Path;
 
 use serde::Deserialize;
 
-use crate::game::item::{Item, ItemRaw};
+use crate::game::item::{ItemStack, ItemStackRaw};
 use crate::util::id::{Id, IdRaw};
 
 #[derive(Debug, Clone, Copy)]
@@ -16,8 +16,8 @@ pub struct Script {
 
 #[derive(Debug, Clone, Copy)]
 pub struct Instructions {
-    pub input: Option<Item>,
-    pub output: Option<Item>,
+    pub input: Option<ItemStack>,
+    pub output: Option<ItemStack>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -28,8 +28,8 @@ pub struct ScriptRaw {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct InstructionsRaw {
-    pub input: Option<ItemRaw>,
-    pub output: Option<ItemRaw>,
+    pub input: Option<ItemStackRaw>,
+    pub output: Option<ItemStackRaw>,
 }
 
 impl ResourceManager {
@@ -37,9 +37,9 @@ impl ResourceManager {
         log::info!("loading script at: {file:?}");
 
         let script: ScriptRaw = serde_json::from_str(
-            &read_to_string(file).unwrap_or_else(|_| panic!("error loading {file:?}")),
+            &read_to_string(file).unwrap_or_else(|e| panic!("error loading {file:?} {e:?}")),
         )
-        .unwrap_or_else(|_| panic!("error loading {file:?}"));
+        .unwrap_or_else(|e| panic!("error loading {file:?}: {e:?}"));
 
         let id = script.id.to_id(&mut self.interner);
 
