@@ -20,7 +20,6 @@ use crate::util::id::Id;
 
 #[derive(Debug, Copy, Clone)]
 pub enum TransactionError {
-    NotEnough,
     NoScript,
     NotSuitable,
     Full,
@@ -55,7 +54,7 @@ pub enum TileEntityMsg {
         source_type: TileType,
         direction: TileCoord,
     },
-    TransactionResult(Result<(), TransactionError>),
+    TransactionResult(Result<(), TransactionError>, Arc<ResourceManager>),
 
     SetTarget(Option<TileCoord>),
     GetTarget,
@@ -135,7 +134,9 @@ impl Actor for TileEntity {
                             }
                         }
                         Void => {
-                            sender.try_tell(TransactionResult(Ok(())), myself).unwrap();
+                            sender
+                                .try_tell(TransactionResult(Ok(()), resource_man.clone()), myself)
+                                .unwrap();
                         }
                         Storage(_) => {
                             if let Some(script) = self.get_script(resource_man.clone()) {
@@ -143,26 +144,38 @@ impl Actor for TileEntity {
                                     if id_eq_or_of_tag(&resource_man, item.id, input.id) {
                                         let amount = self.data.0.entry(item.id).or_insert(0);
 
-                                        *amount += item.amount;
-                                        *amount = amount.at_most(input.amount);
-
                                         if *amount == input.amount {
                                             sender
                                                 .try_tell(
-                                                    TransactionResult(Err(TransactionError::Full)),
+                                                    TransactionResult(
+                                                        Err(TransactionError::Full),
+                                                        resource_man.clone(),
+                                                    ),
                                                     myself,
                                                 )
                                                 .unwrap();
                                             return;
                                         }
-                                        sender.try_tell(TransactionResult(Ok(())), myself).unwrap();
+
+                                        *amount += item.amount;
+                                        *amount = amount.at_most(input.amount);
+
+                                        sender
+                                            .try_tell(
+                                                TransactionResult(Ok(()), resource_man.clone()),
+                                                myself,
+                                            )
+                                            .unwrap();
                                         return;
                                     }
                                 }
                             }
                             sender
                                 .try_tell(
-                                    TransactionResult(Err(TransactionError::NotSuitable)),
+                                    TransactionResult(
+                                        Err(TransactionError::NotSuitable),
+                                        resource_man.clone(),
+                                    ),
                                     myself,
                                 )
                                 .unwrap();
@@ -170,7 +183,10 @@ impl Actor for TileEntity {
                         _ => {
                             sender
                                 .try_tell(
-                                    TransactionResult(Err(TransactionError::NotSuitable)),
+                                    TransactionResult(
+                                        Err(TransactionError::NotSuitable),
+                                        resource_man.clone(),
+                                    ),
                                     myself,
                                 )
                                 .unwrap();
@@ -178,7 +194,23 @@ impl Actor for TileEntity {
                     }
                 }
             }
-            TransactionResult(_) => {}
+            TransactionResult(result, resource_man) => match result {
+                Ok(_) => {
+                    if let Some(input) = self
+                        .get_script(resource_man)
+                        .and_then(|script| script.instructions.input)
+                    {
+                        let stored = *self.data.0.get(&input.id).unwrap_or(&0);
+                        if stored < input.amount {
+                            log::error!("in transaction result: tile does not have enough input for the supposed output!");
+                            return;
+                        }
+
+                        self.data.0.insert(input.id, stored - input.amount);
+                    }
+                }
+                _ => {}
+            },
             SetTarget(target_direction) => {
                 self.target_direction = target_direction;
             }
@@ -241,13 +273,9 @@ impl TileEntity {
 
                 if let Some(output) = output {
                     if let Some(input) = instructions.input {
-                        let id = input.id;
-
                         // TODO send transaction result back to Game
-                        let stored = *self.data.0.get(&id).unwrap_or(&0);
+                        let stored = *self.data.0.get(&input.id).unwrap_or(&0);
                         if stored >= input.amount {
-                            self.data.0.insert(id, stored - input.amount);
-
                             self.send_tile_msg(
                                 myself,
                                 coord,
@@ -287,52 +315,50 @@ impl TileEntity {
     ) {
         if let Some(script) = self.get_script(resource_man.clone()) {
             if let Some(input) = script.instructions.input {
-                let id = item.id;
-                let has = item.amount;
-                let required = input.amount;
-
-                if !id_eq_or_of_tag(&resource_man, id, input.id) {
+                if !id_eq_or_of_tag(&resource_man, item.id, input.id) {
                     sender
                         .try_tell(
-                            TransactionResult(Err(TransactionError::NotSuitable)),
+                            TransactionResult(
+                                Err(TransactionError::NotSuitable),
+                                resource_man.clone(),
+                            ),
                             myself,
                         )
                         .unwrap();
                     return;
                 }
 
-                let amount = self.data.0.entry(id).or_insert(0);
-                *amount += has;
-
-                let limit = required * 2;
-
-                if *amount > limit {
-                    *amount = amount.at_most(limit);
-
+                let amount = self.data.0.entry(item.id).or_insert(0);
+                if *amount == input.amount {
                     sender
-                        .try_tell(TransactionResult(Err(TransactionError::Full)), myself)
+                        .try_tell(
+                            TransactionResult(Err(TransactionError::Full), resource_man.clone()),
+                            myself,
+                        )
                         .unwrap();
                     return;
                 }
 
-                if has >= required {
-                    sender.try_tell(TransactionResult(Ok(())), myself).unwrap();
-                } else {
-                    sender
-                        .try_tell(TransactionResult(Err(TransactionError::NotEnough)), myself)
-                        .unwrap();
-                }
+                *amount += item.amount;
+                *amount = amount.at_most(input.amount);
+
+                sender
+                    .try_tell(TransactionResult(Ok(()), resource_man.clone()), myself)
+                    .unwrap();
             } else {
                 sender
                     .try_tell(
-                        TransactionResult(Err(TransactionError::NotSuitable)),
+                        TransactionResult(Err(TransactionError::NotSuitable), resource_man.clone()),
                         myself,
                     )
                     .unwrap();
             }
         } else {
             sender
-                .try_tell(TransactionResult(Err(TransactionError::NoScript)), myself)
+                .try_tell(
+                    TransactionResult(Err(TransactionError::NoScript), resource_man.clone()),
+                    myself,
+                )
                 .unwrap();
         }
     }
