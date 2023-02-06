@@ -273,7 +273,6 @@ impl TileEntity {
 
                 if let Some(output) = output {
                     if let Some(input) = instructions.input {
-                        // TODO send transaction result back to Game
                         let stored = *self.data.0.get(&input.id).unwrap_or(&0);
                         if stored >= input.amount {
                             self.send_tile_msg(
