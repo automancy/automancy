@@ -6,9 +6,7 @@
         "iron_ingot": "Iron Ingot",
         "gold_ingot": "Gold Ingot",
         "tin_ingot": "Tin Ingot",
-        "stone": "Stone",
-
-        "#any": "[Any Items]"
+        "stone": "Stone"
     },
     "tiles": {
         "none": "None",
@@ -24,6 +22,7 @@
         "tile_info": "Tile Info",
         "tile_config": "Config",
         "tile_config_script": "Script:\n{}",
+        "tile_config_storage": "Storage:\n{}",
         "tile_config_target": "Target:"
     }
 }

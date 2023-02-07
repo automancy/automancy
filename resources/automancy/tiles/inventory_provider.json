@@ -2,7 +2,7 @@
   "id": "inventory_provider",
   "models": ["void"],
   "tile_type": {
-    "type": "Machine",
+    "type": "Transfer",
     "param": "inventory_provider"
   }
 }

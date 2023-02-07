@@ -3,10 +3,9 @@
     "models": ["extractor"],
     "tile_type": {
         "type": "Machine",
-        "param": "extractor"
-    },
-    "scripts": [
-        "copper_ore",
-        "iron_ore"
-    ]
+        "param": [
+            "copper_ore",
+            "iron_ore"
+        ]
+    }
 }

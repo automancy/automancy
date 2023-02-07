@@ -7,12 +7,12 @@ use std::fs::{read_dir, read_to_string};
 use std::path::Path;
 use std::sync::Arc;
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct ItemRaw {
     pub id: IdRaw,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct Item {
     pub id: Id,
 }

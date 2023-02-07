@@ -3,6 +3,12 @@
     "models": ["small_storage"],
     "tile_type": {
         "type": "Storage",
-        "param": "small_storage"
-    }
+        "param": {
+            "item": {
+                "id": "#any"
+            },
+            "amount": 1024
+        }
+    },
+    "targeted": false
 }

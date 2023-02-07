@@ -5,15 +5,15 @@ use crate::util::id::Interner;
 
 pub type ItemAmount = u64;
 
-#[derive(Debug, Clone, Copy)]
-pub struct ItemStack {
-    pub item: Item,
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ItemStackRaw {
+    pub item: ItemRaw,
     pub amount: ItemAmount,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ItemStackRaw {
-    pub item: ItemRaw,
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub struct ItemStack {
+    pub item: Item,
     pub amount: ItemAmount,
 }
 

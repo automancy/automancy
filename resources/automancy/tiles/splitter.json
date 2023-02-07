@@ -4,5 +4,6 @@
   "tile_type": {
     "type": "Transfer",
     "param": "splitter"
-  }
+  },
+  "targeted": false
 }

@@ -42,6 +42,7 @@ pub struct GuiIds {
     pub tile_config: Id,
     pub tile_info: Id,
     pub tile_config_script: Id,
+    pub tile_config_storage: Id,
     pub tile_config_target: Id,
 }
 
@@ -51,6 +52,7 @@ impl GuiIds {
             tile_config: id_static("automancy", "tile_config").to_id(interner),
             tile_info: id_static("automancy", "tile_info").to_id(interner),
             tile_config_script: id_static("automancy", "tile_config_script").to_id(interner),
+            tile_config_storage: id_static("automancy", "tile_config_storage").to_id(interner),
             tile_config_target: id_static("automancy", "tile_config_target").to_id(interner),
         }
     }
@@ -332,9 +334,9 @@ pub fn tile_info(
 
             if let Some((tile, id, _)) = result {
                 ui.label(resource_man.tile_name(&id));
-                let data: Inventory = block_on(ask(sys, &tile, TileEntityMsg::GetData));
+                let inventory: Inventory = block_on(ask(sys, &tile, TileEntityMsg::GetInventory));
 
-                for (id, amount) in data.0.iter() {
+                for (id, amount) in inventory.0.iter() {
                     ui.label(format!("{} - {}", resource_man.item_name(id), amount));
                 }
                 //ui.label(format!("State: {}", ask(sys, &game, )))
@@ -361,25 +363,24 @@ pub fn add_direction(ui: &mut Ui, target_coord: &mut Option<TileCoord>, n: usize
     );
 }
 
-pub fn scripts(
+pub fn searchable_id(
     ui: &mut Ui,
     resource_man: Arc<ResourceManager>,
     fuse: &Fuse,
-    scripts: &[Id],
-    new_script: &mut Option<Id>,
-    script_filter: &mut String,
+    ids: &[Id],
+    new_id: &mut Option<Id>,
+    filter: &mut String,
 ) {
-    ui.text_edit_singleline(script_filter);
+    ui.text_edit_singleline(filter);
 
     ScrollArea::vertical().max_height(80.0).show(ui, |ui| {
         ui.set_width(ui.available_width());
 
-        let scripts = if !script_filter.is_empty() {
-            let mut filtered = scripts
+        let scripts = if !filter.is_empty() {
+            let mut filtered = ids
                 .into_iter()
                 .flat_map(|id| {
-                    let result =
-                        fuse.search_text_in_string(script_filter, resource_man.item_name(&id));
+                    let result = fuse.search_text_in_string(filter, resource_man.item_name(&id));
 
                     Some(*id).zip(result.map(|v| v.score))
                 })
@@ -389,11 +390,11 @@ pub fn scripts(
 
             filtered.into_iter().map(|v| v.0).collect::<Vec<_>>()
         } else {
-            scripts.to_vec()
+            ids.to_vec()
         };
 
         scripts.iter().for_each(|script| {
-            ui.radio_value(new_script, Some(*script), resource_man.item_name(script));
+            ui.radio_value(new_id, Some(*script), resource_man.item_name(script));
         })
     });
 }

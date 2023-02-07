@@ -26,9 +26,10 @@ impl InventoryRaw {
         )
     }
 
-    pub fn from_inventory(data: Inventory, interner: &Interner) -> Self {
+    pub fn from_inventory(inventory: Inventory, interner: &Interner) -> Self {
         Self(
-            data.0
+            inventory
+                .0
                 .into_iter()
                 .map(|(id, amount)| {
                     let id = IdRaw::parse(interner.resolve(id).unwrap());

@@ -1,3 +1,4 @@
+use crate::game::item::{ItemStack, ItemStackRaw};
 use crate::resource::{ResourceManager, JSON_EXT};
 use crate::util::id::{id_static, Id, IdRaw, Interner};
 use serde::Deserialize;
@@ -11,9 +12,9 @@ pub enum TileTypeRaw {
     Empty,
     Void,
     Model,
-    Machine(IdRaw),
+    Machine(Vec<IdRaw>),
     Transfer(IdRaw),
-    Storage(IdRaw),
+    Storage(ItemStackRaw),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -21,26 +22,34 @@ pub enum TileType {
     Empty,
     Void,
     Model,
-    Machine(Id),
+    Machine(Vec<Id>),
     Transfer(Id),
-    Storage(Id),
+    Storage(ItemStack),
 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct TileRaw {
     pub tile_type: TileTypeRaw,
     pub id: IdRaw,
-    pub scripts: Option<Vec<IdRaw>>,
     pub function: Option<IdRaw>,
     pub models: Vec<IdRaw>,
+
+    #[serde(default = "TileRaw::targeted_default")]
+    pub targeted: bool,
+}
+
+impl TileRaw {
+    fn targeted_default() -> bool {
+        true
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct Tile {
     pub tile_type: TileType,
-    pub scripts: Option<Vec<Id>>,
     pub function: Option<Id>,
     pub models: Vec<Id>,
+    pub targeted: bool,
 }
 
 impl ResourceManager {
@@ -54,19 +63,18 @@ impl ResourceManager {
 
         let id = tile.id.to_id(&mut self.interner);
 
-        let scripts = tile.scripts.map(|v| {
-            v.into_iter()
-                .map(|id| id.to_id(&mut self.interner))
-                .collect()
-        });
-
         let tile_type = match tile.tile_type {
             TileTypeRaw::Empty => TileType::Empty,
             TileTypeRaw::Void => TileType::Void,
             TileTypeRaw::Model => TileType::Model,
-            TileTypeRaw::Machine(id) => TileType::Machine(id.to_id(&mut self.interner)),
+            TileTypeRaw::Machine(scripts) => TileType::Machine(
+                scripts
+                    .into_iter()
+                    .map(|script| script.to_id(&mut self.interner))
+                    .collect(),
+            ),
             TileTypeRaw::Transfer(id) => TileType::Transfer(id.to_id(&mut self.interner)),
-            TileTypeRaw::Storage(id) => TileType::Storage(id.to_id(&mut self.interner)),
+            TileTypeRaw::Storage(storage) => TileType::Storage(storage.to_item(&mut self.interner)),
         };
 
         let function = tile.function.map(|v| v.to_id(&mut self.interner));
@@ -81,9 +89,9 @@ impl ResourceManager {
             id,
             Tile {
                 tile_type,
-                scripts,
                 function,
                 models,
+                targeted: tile.targeted,
             },
         );
 

@@ -29,9 +29,9 @@ pub enum TransactionError {
 pub struct TileEntity {
     id: Id,
 
-    data: Inventory,
+    inventory: Inventory,
     coord: TileCoord,
-    script: Option<Id>,
+    extra_id: Option<Id>,
 
     game: BasicActorRef,
     target_direction: Option<TileCoord>,
@@ -59,18 +59,18 @@ pub enum TileEntityMsg {
     SetTarget(Option<TileCoord>),
     GetTarget,
 
-    SetScript(Id, Arc<ResourceManager>),
-    GetScript,
+    SetExtraId(Id, Arc<ResourceManager>),
+    GetExtraId,
 
-    SetData(Inventory),
-    GetData,
+    SetInventory(Inventory),
+    GetInventory,
 }
 
 impl Actor for TileEntity {
     type Msg = TileEntityMsg;
 
     fn post_stop(&mut self) {
-        self.script = None;
+        self.extra_id = None;
         self.target_direction = None;
     }
 
@@ -138,41 +138,36 @@ impl Actor for TileEntity {
                                 .try_tell(TransactionResult(Ok(()), resource_man.clone()), myself)
                                 .unwrap();
                         }
-                        Storage(_) => {
-                            if let Some(script) = self.get_script(resource_man.clone()) {
-                                if let Some(output) = script.instructions.output {
-                                    if id_eq_or_of_tag(
-                                        &resource_man,
-                                        item_stack.item.id,
-                                        output.item.id,
-                                    ) {
-                                        let amount =
-                                            self.data.0.entry(item_stack.item.id).or_insert(0);
+                        Storage(storage) => {
+                            if let Some(item) =
+                                self.extra_id.and_then(|id| resource_man.items.get(&id))
+                            {
+                                if item_stack.item == *item {
+                                    let amount = self.inventory.0.entry(item.id).or_insert(0);
 
-                                        if *amount == output.amount {
-                                            sender
-                                                .try_tell(
-                                                    TransactionResult(
-                                                        Err(TransactionError::Full),
-                                                        resource_man.clone(),
-                                                    ),
-                                                    myself,
-                                                )
-                                                .unwrap();
-                                            return;
-                                        }
-
-                                        *amount += item_stack.amount;
-                                        *amount = amount.at_most(output.amount);
-
+                                    if *amount == storage.amount {
                                         sender
                                             .try_tell(
-                                                TransactionResult(Ok(()), resource_man.clone()),
+                                                TransactionResult(
+                                                    Err(TransactionError::Full),
+                                                    resource_man.clone(),
+                                                ),
                                                 myself,
                                             )
                                             .unwrap();
                                         return;
                                     }
+
+                                    *amount += item_stack.amount;
+                                    *amount = amount.at_most(storage.amount);
+
+                                    sender
+                                        .try_tell(
+                                            TransactionResult(Ok(()), resource_man.clone()),
+                                            myself,
+                                        )
+                                        .unwrap();
+                                    return;
                                 }
                             }
                             sender
@@ -205,13 +200,15 @@ impl Actor for TileEntity {
                         .get_script(resource_man)
                         .and_then(|script| script.instructions.input)
                     {
-                        let stored = *self.data.0.get(&input.item.id).unwrap_or(&0);
+                        let stored = *self.inventory.0.get(&input.item.id).unwrap_or(&0);
                         if stored < input.amount {
                             log::error!("in transaction result: tile does not have enough input for the supposed output!");
                             return;
                         }
 
-                        self.data.0.insert(input.item.id, stored - input.amount);
+                        self.inventory
+                            .0
+                            .insert(input.item.id, stored - input.amount);
                     }
                 }
                 _ => {}
@@ -222,16 +219,16 @@ impl Actor for TileEntity {
             GetTarget => {
                 sender.inspect(|v| v.try_tell(self.target_direction, myself).unwrap());
             }
-            SetScript(id, resource_man) => {
-                self.script = Some(id);
+            SetExtraId(id, resource_man) => {
+                self.extra_id = Some(id);
 
                 if let Some(input) = resource_man
                     .scripts
                     .get(&id)
                     .and_then(|script| script.instructions.input)
                 {
-                    self.data.0 = self
-                        .data
+                    self.inventory.0 = self
+                        .inventory
                         .0
                         .iter()
                         .map(|(id, amount)| {
@@ -244,17 +241,17 @@ impl Actor for TileEntity {
                         .flatten()
                         .collect();
                 } else {
-                    self.data.0.clear();
+                    self.inventory.0.clear();
                 }
             }
-            GetScript => {
-                sender.inspect(|v| v.try_tell(self.script, myself).unwrap());
+            GetExtraId => {
+                sender.inspect(|v| v.try_tell(self.extra_id, myself).unwrap());
             }
-            SetData(data) => {
-                self.data = data;
+            SetInventory(inventory) => {
+                self.inventory = inventory;
             }
-            GetData => {
-                sender.inspect(|v| v.try_tell(self.data.clone(), myself).unwrap());
+            GetInventory => {
+                sender.inspect(|v| v.try_tell(self.inventory.clone(), myself).unwrap());
             }
         }
     }
@@ -283,7 +280,7 @@ impl TileEntity {
 
                 if let Some(output) = output {
                     if let Some(input) = instructions.input {
-                        let stored = *self.data.0.get(&input.item.id).unwrap_or(&0);
+                        let stored = *self.inventory.0.get(&input.item.id).unwrap_or(&0);
                         if stored >= input.amount {
                             self.send_tile_msg(
                                 myself,
@@ -337,7 +334,7 @@ impl TileEntity {
                     return;
                 }
 
-                let amount = self.data.0.entry(item.item.id).or_insert(0);
+                let amount = self.inventory.0.entry(item.item.id).or_insert(0);
                 if *amount == input.amount {
                     sender
                         .try_tell(
@@ -390,7 +387,7 @@ impl TileEntity {
     }
 
     fn get_script(&self, resource_man: Arc<ResourceManager>) -> Option<Script> {
-        self.script
+        self.extra_id
             .as_ref()
             .and_then(|v| resource_man.scripts.get(v))
             .cloned()
@@ -400,14 +397,14 @@ impl TileEntity {
         game: BasicActorRef,
         id: Id,
         coord: TileCoord,
-        data: Inventory,
+        inventory: Inventory,
         tile_state: StateUnit,
     ) -> Self {
         Self {
             id,
             coord,
-            data,
-            script: None,
+            inventory,
+            extra_id: None,
 
             game,
             target_direction: None,

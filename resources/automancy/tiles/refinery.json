@@ -3,10 +3,9 @@
     "models": ["refinery"],
     "tile_type": {
         "type": "Machine",
-        "param": "refinery"
-    },
-    "scripts": [
-        "copper_ingot",
-        "iron_ingot"
-    ]
+        "param": [
+            "copper_ingot",
+            "iron_ingot"
+        ]
+    }
 }

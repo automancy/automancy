@@ -14,7 +14,7 @@ use zstd::{Decoder, Encoder};
 
 use crate::game::tile::coord::TileCoord;
 use crate::game::tile::entity::TileEntityMsg::{
-    GetData, GetScript, GetTarget, SetData, SetScript, SetTarget,
+    GetExtraId, GetInventory, GetTarget, SetExtraId, SetInventory, SetTarget,
 };
 use crate::game::tile::entity::{StateUnit, TileEntityMsg};
 use crate::render::data::InstanceData;
@@ -95,13 +95,13 @@ impl Map {
 
                 let target: Option<TileCoord> = block_on(ask(sys, tile, GetTarget));
 
-                let script: Option<Id> = block_on(ask(sys, tile, GetScript));
+                let script: Option<Id> = block_on(ask(sys, tile, GetExtraId));
                 let script = script.map(|script| IdRaw::parse(interner.resolve(script).unwrap()));
 
-                let data: Inventory = block_on(ask(sys, tile, GetData));
-                let data = InventoryRaw::from_inventory(data, interner);
+                let inventory: Inventory = block_on(ask(sys, tile, GetInventory));
+                let inventory = InventoryRaw::from_inventory(inventory, interner);
 
-                (coord, TileData(id, *tile_state, data, target, script))
+                (coord, TileData(id, *tile_state, inventory, target, script))
             })
             .collect::<Vec<_>>();
 
@@ -130,25 +130,30 @@ impl Map {
 
         let tiles = raw
             .into_iter()
-            .flat_map(|(coord, TileData(id, tile_state, data, target, script))| {
-                if let Some(id) = resource_man.interner.get(id.to_string()) {
-                    let tile = Game::new_tile(ctx, coord, id, tile_state);
+            .flat_map(
+                |(coord, TileData(id, tile_state, inventory, target, script))| {
+                    if let Some(id) = resource_man.interner.get(id.to_string()) {
+                        let tile = Game::new_tile(ctx, coord, id, tile_state);
 
-                    tile.send_msg(SetTarget(target), None);
+                        tile.send_msg(SetTarget(target), None);
 
-                    if let Some(script) = script {
-                        if let Some(script) = resource_man.interner.get(script.to_string()) {
-                            tile.send_msg(SetScript(script, resource_man.clone()), None);
+                        if let Some(script) = script {
+                            if let Some(script) = resource_man.interner.get(script.to_string()) {
+                                tile.send_msg(SetExtraId(script, resource_man.clone()), None);
+                            }
                         }
+
+                        tile.send_msg(
+                            SetInventory(inventory.to_inventory(&resource_man.interner)),
+                            None,
+                        );
+
+                        Some((coord, (tile, id, tile_state)))
+                    } else {
+                        None
                     }
-
-                    tile.send_msg(SetData(data.to_inventory(&resource_man.interner)), None);
-
-                    Some((coord, (tile, id, tile_state)))
-                } else {
-                    None
-                }
-            })
+                },
+            )
             .collect::<HashMap<_, _>>();
 
         Self { map_name, tiles }
