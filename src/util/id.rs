@@ -2,6 +2,7 @@ use std::fmt::{self, Display, Formatter};
 
 use bytemuck::{Pod, PodInOption, Zeroable, ZeroableInOption};
 use flexstr::SharedStr;
+use rune::Any;
 use serde::de::{Error, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use string_interner::backend::StringBackend;
@@ -11,8 +12,8 @@ use string_interner::{StringInterner, Symbol};
 pub struct IdRaw(SharedStr, SharedStr);
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Zeroable, Pod)]
-pub struct Id(usize);
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Zeroable, Pod, Any)]
+pub struct Id(#[rune(get, copy)] usize);
 
 unsafe impl ZeroableInOption for Id {}
 unsafe impl PodInOption for Id {}

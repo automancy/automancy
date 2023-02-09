@@ -4,7 +4,6 @@ use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-use crate::game::inventory::{Inventory, InventoryRaw};
 use crate::game::{Game, GameMsg};
 use riker::actor::ActorRef;
 use riker::actors::{ActorSystem, Context};
@@ -13,10 +12,10 @@ use serde::{Deserialize, Serialize};
 use zstd::{Decoder, Encoder};
 
 use crate::game::tile::coord::TileCoord;
-use crate::game::tile::entity::TileEntityMsg::{
-    GetExtraId, GetInventory, GetTarget, SetExtraId, SetInventory, SetTarget,
+use crate::game::tile::entity::TileEntityMsg::{GetData, SetData};
+use crate::game::tile::entity::{
+    data_from_raw, data_to_raw, DataMap, DataMapRaw, TileEntityMsg, TileState,
 };
-use crate::game::tile::entity::{StateUnit, TileEntityMsg};
 use crate::render::data::InstanceData;
 use crate::resource::ResourceManager;
 use crate::util::id::{Id, IdRaw, Interner};
@@ -39,17 +38,11 @@ pub struct MapRenderInfo {
 pub struct Map {
     pub map_name: String,
 
-    pub tiles: HashMap<TileCoord, (ActorRef<TileEntityMsg>, Id, StateUnit)>,
+    pub tiles: HashMap<TileCoord, (ActorRef<TileEntityMsg>, Id, TileState)>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct TileData(
-    IdRaw,
-    StateUnit,
-    InventoryRaw,
-    Option<TileCoord>,
-    Option<IdRaw>,
-);
+struct TileData(IdRaw, TileState, DataMapRaw);
 
 impl Map {
     pub fn render_info(&self, RenderContext { resource_man }: &RenderContext) -> MapRenderInfo {
@@ -59,7 +52,7 @@ impl Map {
             .iter()
             .map(|(a, b)| (*a, b))
             .flat_map(|(pos, (_, id, tile_state))| {
-                InstanceData::from_id(id, pos, *tile_state, resource_man.clone())
+                InstanceData::from_id(*id, pos, *tile_state, resource_man.clone())
             })
             .collect();
 
@@ -93,15 +86,10 @@ impl Map {
             .map(|(coord, (tile, id, tile_state))| {
                 let id = IdRaw::parse(interner.resolve(*id).unwrap());
 
-                let target: Option<TileCoord> = block_on(ask(sys, tile, GetTarget));
+                let data: DataMap = block_on(ask(sys, tile, GetData));
+                let data = data_to_raw(data, interner);
 
-                let script: Option<Id> = block_on(ask(sys, tile, GetExtraId));
-                let script = script.map(|script| IdRaw::parse(interner.resolve(script).unwrap()));
-
-                let inventory: Inventory = block_on(ask(sys, tile, GetInventory));
-                let inventory = InventoryRaw::from_inventory(inventory, interner);
-
-                (coord, TileData(id, *tile_state, inventory, target, script))
+                (coord, TileData(id, *tile_state, data))
             })
             .collect::<Vec<_>>();
 
@@ -130,30 +118,20 @@ impl Map {
 
         let tiles = raw
             .into_iter()
-            .flat_map(
-                |(coord, TileData(id, tile_state, inventory, target, script))| {
-                    if let Some(id) = resource_man.interner.get(id.to_string()) {
-                        let tile = Game::new_tile(ctx, coord, id, tile_state);
+            .flat_map(|(coord, TileData(id, tile_state, data))| {
+                if let Some(id) = resource_man.interner.get(id.to_string()) {
+                    let tile = Game::new_tile(ctx, coord, id, tile_state);
+                    let data = data_from_raw(data, &resource_man.interner);
 
-                        tile.send_msg(SetTarget(target), None);
+                    data.into_iter().for_each(|(key, value)| {
+                        tile.send_msg(SetData(key, value), None);
+                    });
 
-                        if let Some(script) = script {
-                            if let Some(script) = resource_man.interner.get(script.to_string()) {
-                                tile.send_msg(SetExtraId(script, resource_man.clone()), None);
-                            }
-                        }
-
-                        tile.send_msg(
-                            SetInventory(inventory.to_inventory(&resource_man.interner)),
-                            None,
-                        );
-
-                        Some((coord, (tile, id, tile_state)))
-                    } else {
-                        None
-                    }
-                },
-            )
+                    Some((coord, (tile, id, tile_state)))
+                } else {
+                    None
+                }
+            })
             .collect::<HashMap<_, _>>();
 
         Self { map_name, tiles }

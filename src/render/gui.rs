@@ -18,14 +18,14 @@ use futures_executor::block_on;
 use hexagon_tiles::traits::HexDirection;
 use riker::actors::{ActorRef, ActorSystem};
 use riker_patterns::ask::ask;
+use rune::Any;
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::pipeline::{Pipeline, PipelineBindPoint};
 use winit::event_loop::EventLoop;
 
-use crate::game::inventory::Inventory;
 use crate::game::tile::coord::TileCoord;
 use crate::game::tile::coord::TileHex;
-use crate::game::tile::entity::{StateUnit, TileEntityMsg};
+use crate::game::tile::entity::{Data, DataMap, TileEntityMsg, TileState};
 use crate::game::GameMsg;
 use crate::render::data::{GuiUBO, InstanceData};
 use crate::render::gpu;
@@ -38,11 +38,17 @@ use crate::util::colors::Color;
 use crate::util::id::{id_static, Id, Interner};
 use crate::IOSEVKA_FONT;
 
+#[derive(Clone, Copy, Any)]
 pub struct GuiIds {
+    #[rune(get, copy)]
     pub tile_config: Id,
+    #[rune(get, copy)]
     pub tile_info: Id,
+    #[rune(get, copy)]
     pub tile_config_script: Id,
+    #[rune(get, copy)]
     pub tile_config_storage: Id,
+    #[rune(get, copy)]
     pub tile_config_target: Id,
 }
 
@@ -244,7 +250,7 @@ fn tile_paint(
 fn paint_tile_selection(
     ui: &mut Ui,
     resource_man: Arc<ResourceManager>,
-    selected_tile_states: &HashMap<Id, StateUnit>,
+    selected_tile_states: &HashMap<Id, TileState>,
     gpu: &Gpu,
     mut selection_send: mpsc::Sender<Id>,
 ) {
@@ -254,7 +260,7 @@ fn paint_tile_selection(
         .ordered_ids
         .iter()
         .flat_map(|id| {
-            let resource = &resource_man.tiles[id];
+            let resource = &resource_man.registry.get_tile(*id).unwrap();
 
             if resource.tile_type == TileType::Model {
                 return None;
@@ -283,7 +289,7 @@ fn paint_tile_selection(
 pub fn tile_selections(
     gui: &mut Gui,
     resource_man: Arc<ResourceManager>,
-    selected_tile_states: &HashMap<Id, StateUnit>,
+    selected_tile_states: &HashMap<Id, TileState>,
     renderer: &Renderer,
     selection_send: mpsc::Sender<Id>,
 ) {
@@ -321,7 +327,7 @@ pub fn tile_info(
     game: ActorRef<GameMsg>,
     pointing_at: TileCoord,
 ) {
-    Window::new(resource_man.translates.gui[&resource_man.gui_ids.tile_info].to_string())
+    Window::new(resource_man.translates.gui[&resource_man.registry.gui_ids.tile_info].to_string())
         .anchor(Align2([Align::RIGHT, Align::TOP]), vec2(-10.0, 10.0))
         .resizable(false)
         .default_width(300.0)
@@ -329,15 +335,17 @@ pub fn tile_info(
         .show(&gui.context(), |ui| {
             ui.colored_label(Color::DARK_GRAY, pointing_at.to_string());
 
-            let result: Option<(ActorRef<TileEntityMsg>, Id, StateUnit)> =
+            let result: Option<(ActorRef<TileEntityMsg>, Id, TileState)> =
                 block_on(ask(sys, &game, GameMsg::GetTile(pointing_at)));
 
             if let Some((tile, id, _)) = result {
                 ui.label(resource_man.tile_name(&id));
-                let inventory: Inventory = block_on(ask(sys, &tile, TileEntityMsg::GetInventory));
+                let data: DataMap = block_on(ask(sys, &tile, TileEntityMsg::GetData));
 
-                for (id, amount) in inventory.0.iter() {
-                    ui.label(format!("{} - {}", resource_man.item_name(id), amount));
+                if let Some(inventory) = data.get("buffer").and_then(Data::as_inventory) {
+                    for (id, amount) in inventory.0.iter() {
+                        ui.label(format!("{} - {}", resource_man.item_name(id), amount));
+                    }
                 }
                 //ui.label(format!("State: {}", ask(sys, &game, )))
             }
@@ -378,9 +386,9 @@ pub fn searchable_id(
 
         let scripts = if !filter.is_empty() {
             let mut filtered = ids
-                .into_iter()
+                .iter()
                 .flat_map(|id| {
-                    let result = fuse.search_text_in_string(filter, resource_man.item_name(&id));
+                    let result = fuse.search_text_in_string(filter, resource_man.item_name(id));
 
                     Some(*id).zip(result.map(|v| v.score))
                 })

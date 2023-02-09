@@ -1,5 +1,5 @@
-pub fn handle_transfer(tile_state, tick_count, self_coord, direction) {
-    if let (a, b, c) = match tile_state {
+pub fn handle_transaction(entity, registry, tick_count, item_stack, source_type, direction) {
+    if let (a, b, c) = match entity.tile_state {
         0 => (TOP_LEFT(), BOTTOM_LEFT(), RIGHT()),
         1 => (TOP_RIGHT(), BOTTOM_RIGHT(), LEFT()),
     } {
@@ -11,14 +11,16 @@ pub fn handle_transfer(tile_state, tick_count, self_coord, direction) {
             (a, c)
         } else if direction.eq(c) {
             (a, b)
-        } else {
-            return None;
         } {
             let target = if tick_count % 2 == 0 { first } else { second };
 
-            let target_coord = self_coord.add(target.clone());
+            let target_coord = entity.coord.add(target.clone());
 
-            return Some((target_coord, target));
+            (
+                target_coord,
+                item_stack,
+                target,
+            )
         }
     }
 }

@@ -1,13 +1,24 @@
 use std::collections::HashMap;
 
+use rune::Any;
 use serde::{Deserialize, Serialize};
 
 use crate::game::item::{ItemAmount, ItemStackRaw};
 use crate::resource::item::ItemRaw;
 use crate::util::id::{Id, IdRaw, Interner};
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Any)]
 pub struct Inventory(pub HashMap<Id, ItemAmount>);
+
+impl Inventory {
+    pub fn get(&mut self, id: Id) -> ItemAmount {
+        *self.0.entry(id).or_insert(0)
+    }
+
+    pub fn insert(&mut self, id: Id, amount: ItemAmount) {
+        self.0.insert(id, amount);
+    }
+}
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct InventoryRaw(pub Vec<ItemStackRaw>);

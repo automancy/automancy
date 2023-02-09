@@ -1,4 +1,5 @@
 use crate::resource::item::{Item, ItemRaw};
+use rune::Any;
 use serde::{Deserialize, Serialize};
 
 use crate::util::id::Interner;
@@ -11,9 +12,11 @@ pub struct ItemStackRaw {
     pub amount: ItemAmount,
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Any)]
 pub struct ItemStack {
+    #[rune(get, copy)]
     pub item: Item,
+    #[rune(get, copy)]
     pub amount: ItemAmount,
 }
 

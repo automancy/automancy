@@ -93,6 +93,7 @@ impl ResourceManager {
 
     pub fn compile_models(&mut self) {
         let mut ids = self
+            .registry
             .tiles
             .iter()
             .flat_map(|(id, _)| self.interner.resolve(*id))
@@ -147,7 +148,7 @@ impl ResourceManager {
         let (raw_faces, faces): (Vec<_>, Vec<_>) = raw_faces // TODO we can just draw 3 indices a bunch of times
             .into_iter()
             .enumerate()
-            .map(|(i, (id, raw_faces))| {
+            .filter_map(|(i, (id, raw_faces))| {
                 let raw_face = raw_faces
                     .into_iter()
                     .map(|face| face.index_offset(index_offsets[i] as u32))
@@ -159,7 +160,6 @@ impl ResourceManager {
 
                 raw_face.map(|raw_face| (*id, raw_face))
             })
-            .flatten()
             .map(|(id, raw_face)| {
                 let size: u32 = raw_face.indices.len() as u32;
 

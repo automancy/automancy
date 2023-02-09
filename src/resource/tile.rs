@@ -1,6 +1,7 @@
 use crate::game::item::{ItemStack, ItemStackRaw};
 use crate::resource::{ResourceManager, JSON_EXT};
 use crate::util::id::{id_static, Id, IdRaw, Interner};
+use rune::Any;
 use serde::Deserialize;
 use std::ffi::OsStr;
 use std::fs::{read_dir, read_to_string};
@@ -17,7 +18,7 @@ pub enum TileTypeRaw {
     Storage(ItemStackRaw),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Any)]
 pub enum TileType {
     Empty,
     Void,
@@ -44,9 +45,11 @@ impl TileRaw {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Any)]
 pub struct Tile {
+    #[rune(get)]
     pub tile_type: TileType,
+
     pub function: Option<Id>,
     pub models: Vec<Id>,
     pub targeted: bool,
@@ -85,7 +88,7 @@ impl ResourceManager {
             .map(|v| v.to_id(&mut self.interner))
             .collect();
 
-        self.tiles.insert(
+        self.registry.tiles.insert(
             id,
             Tile {
                 tile_type,
@@ -114,7 +117,7 @@ impl ResourceManager {
     }
 
     pub fn item_name(&self, id: &Id) -> &str {
-        match self.translates.items.get(&id) {
+        match self.translates.items.get(id) {
             Some(name) => name,
             None => "<unnamed>",
         }
@@ -144,13 +147,18 @@ impl ResourceManager {
     }
 }
 
+#[derive(Copy, Clone, Any)]
 pub struct TileIds {
+    #[rune(get, copy)]
+    pub machine: Id,
+    #[rune(get, copy)]
     pub inventory_linker: Id,
 }
 
 impl TileIds {
     pub fn new(interner: &mut Interner) -> Self {
         Self {
+            machine: id_static("automancy", "machine").to_id(interner),
             inventory_linker: id_static("automancy", "inventory_linker").to_id(interner),
         }
     }

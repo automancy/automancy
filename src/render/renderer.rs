@@ -84,7 +84,11 @@ impl Renderer {
             let max = pos + o;
 
             let none = InstanceData::new().model(
-                *self.resource_man.tiles[&self.resource_man.none]
+                *self
+                    .resource_man
+                    .registry
+                    .get_tile(self.resource_man.registry.none)
+                    .unwrap()
                     .models
                     .get(0)
                     .unwrap(),

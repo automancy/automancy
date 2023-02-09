@@ -5,11 +5,10 @@ use riker::actor::{Actor, BasicActorRef};
 use riker::actors::{ActorFactoryArgs, ActorRef, ActorRefFactory, Context, Sender, Strategy, Tell};
 use uuid::Uuid;
 
-use crate::game::inventory::Inventory;
 use crate::game::map::{Map, RenderContext};
 use crate::game::ticking::TickUnit;
 use crate::game::tile::coord::TileCoord;
-use crate::game::tile::entity::{StateUnit, TileEntity, TileEntityMsg};
+use crate::game::tile::entity::{TileEntity, TileEntityMsg, TileState};
 use crate::game::GameMsg::*;
 use crate::resource::ResourceManager;
 use crate::util::id::Id;
@@ -58,7 +57,7 @@ pub enum GameMsg {
     PlaceTile {
         coord: TileCoord,
         id: Id,
-        tile_state: StateUnit,
+        tile_state: TileState,
     },
     /// get the tile at the given position
     GetTile(TileCoord),
@@ -112,7 +111,7 @@ impl Actor for Game {
                     ctx.system.stop(tile);
                 }
 
-                if id == self.resource_man.none {
+                if id == self.resource_man.registry.none {
                     if !map.tiles.contains_key(&coord) {
                         sender.inspect(|v| v.try_tell(PlaceTileResponse::Ignored, myself).unwrap());
                         return;
@@ -122,7 +121,7 @@ impl Actor for Game {
                     sender.inspect(|v| v.try_tell(PlaceTileResponse::Removed, myself).unwrap());
                     return;
                 }
-                let tile = Self::new_tile(&ctx, coord, id, tile_state);
+                let tile = Self::new_tile(ctx, coord, id, tile_state);
 
                 map.tiles.insert(coord, (tile, id, tile_state));
                 sender.inspect(|v| v.try_tell(PlaceTileResponse::Placed, myself).unwrap());
@@ -152,7 +151,7 @@ impl Actor for Game {
 
                 drop(map);
 
-                self.map = Arc::new(Mutex::new(Map::load(ctx, resource_man.clone(), name)));
+                self.map = Arc::new(Mutex::new(Map::load(ctx, resource_man, name)));
             }
         }
     }
@@ -175,18 +174,12 @@ impl Game {
         ctx: &Context<GameMsg>,
         coord: TileCoord,
         id: Id,
-        tile_state: StateUnit,
+        tile_state: TileState,
     ) -> ActorRef<TileEntityMsg> {
         ctx.system
-            .actor_of_args::<TileEntity, (BasicActorRef, Id, TileCoord, Inventory, StateUnit)>(
+            .actor_of_args::<TileEntity, (BasicActorRef, Id, TileCoord, TileState)>(
                 &Uuid::new_v4().to_string(),
-                (
-                    ctx.myself().into(),
-                    id,
-                    coord,
-                    Inventory::default(),
-                    tile_state,
-                ),
+                (ctx.myself().into(), id, coord, tile_state),
             )
             .unwrap()
     }

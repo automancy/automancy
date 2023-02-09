@@ -1,5 +1,6 @@
-use crate::resource::{ResourceManager, JSON_EXT};
+use crate::resource::{Registry, ResourceManager, JSON_EXT};
 use crate::util::id::{Id, IdRaw};
+use rune::Any;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::ffi::OsStr;
@@ -12,18 +13,19 @@ pub struct ItemRaw {
     pub id: IdRaw,
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Any)]
 pub struct Item {
+    #[rune(get, copy)]
     pub id: Id,
 }
 
-pub fn id_eq_or_of_tag(resource_man: &ResourceManager, item: Id, other: Id) -> bool {
+pub fn id_eq_or_of_tag(registry: &Registry, item: Id, other: Id) -> bool {
     if item == other {
         return true;
     }
 
-    if let Some(tag) = resource_man.tags.get(&other) {
-        return tag.of(resource_man, item);
+    if let Some(tag) = registry.tags.get(&other) {
+        return tag.of(registry, item);
     }
 
     false
@@ -42,7 +44,7 @@ impl ResourceManager {
 
         let item = Item { id };
 
-        self.items.insert(id, item);
+        self.registry.items.insert(id, item);
 
         Some(())
     }
@@ -64,19 +66,20 @@ impl ResourceManager {
     }
 
     pub fn get_items(&self, id: Id, tag_cache: &mut HashMap<Id, Arc<Vec<Item>>>) -> Arc<Vec<Item>> {
-        if let Some(item) = self.items.get(&id) {
+        if let Some(item) = self.registry.items.get(&id) {
             Arc::new(vec![*item])
         } else {
-            if !tag_cache.contains_key(&id) {
+            tag_cache.entry(id).or_insert_with(|| {
                 let items = self
+                    .registry
                     .items
                     .values()
-                    .filter(|v| id_eq_or_of_tag(&self, v.id, id))
+                    .filter(|v| id_eq_or_of_tag(&self.registry, v.id, id))
                     .cloned()
                     .collect();
 
-                tag_cache.insert(id, Arc::new(items));
-            }
+                Arc::new(items)
+            });
 
             tag_cache[&id].clone()
         }

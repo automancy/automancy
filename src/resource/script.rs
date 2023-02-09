@@ -1,4 +1,5 @@
 use crate::resource::{ResourceManager, JSON_EXT};
+use rune::Any;
 use std::ffi::OsStr;
 use std::fs::{read_dir, read_to_string};
 use std::path::Path;
@@ -8,15 +9,19 @@ use serde::Deserialize;
 use crate::game::item::{ItemStack, ItemStackRaw};
 use crate::util::id::{Id, IdRaw};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Any)]
 pub struct Script {
+    #[rune(get, copy)]
     pub id: Id,
+    #[rune(get, copy)]
     pub instructions: Instructions,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Any)]
 pub struct Instructions {
+    #[rune(get, copy)]
     pub input: Option<ItemStack>,
+    #[rune(get, copy)]
     pub output: Option<ItemStack>,
 }
 
@@ -58,7 +63,7 @@ impl ResourceManager {
 
         let script = Script { id, instructions };
 
-        self.scripts.insert(id, script);
+        self.registry.scripts.insert(id, script);
 
         Some(())
     }

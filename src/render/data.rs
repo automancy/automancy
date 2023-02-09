@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::game::tile::coord::TileCoord;
-use crate::game::tile::entity::StateUnit;
+use crate::game::tile::entity::TileState;
 use bytemuck::{Pod, Zeroable};
 use hexagon_tiles::layout::{hex_to_pixel, Layout, LAYOUT_ORIENTATION_POINTY};
 use hexagon_tiles::point::Point;
@@ -79,14 +79,14 @@ impl_vertex!(InstanceData, position_offset, scale, color_offset);
 
 impl InstanceData {
     pub fn from_id(
-        id: &Id,
+        id: Id,
         pos: TileCoord,
-        tile_state: StateUnit,
+        tile_state: TileState,
         resource_man: Arc<ResourceManager>,
     ) -> Option<(TileCoord, Self)> {
         resource_man
-            .tiles
-            .get(id)
+            .registry
+            .get_tile(id)
             .and_then(|r| r.models.get(tile_state as usize).cloned())
             .map(|face| {
                 let p = hex_to_pixel(RENDER_LAYOUT, pos.into());

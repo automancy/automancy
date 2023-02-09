@@ -1,6 +1,7 @@
-use crate::resource::{ResourceManager, JSON_EXT};
+use crate::resource::{Registry, ResourceManager, JSON_EXT};
 use crate::util::id::{Id, IdRaw};
 use egui::epaint::ahash::HashSet;
+use rune::Any;
 use serde::{Deserialize, Serialize};
 use std::ffi::OsStr;
 use std::fs::{read_dir, read_to_string};
@@ -12,15 +13,16 @@ pub struct TagRaw {
     pub entries: Vec<IdRaw>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Any)]
 pub struct Tag {
+    #[rune(get, copy)]
     pub id: Id,
     pub entries: HashSet<Id>,
 }
 
 impl Tag {
-    pub fn of(&self, resource_man: &ResourceManager, id: Id) -> bool {
-        if self.id == resource_man.any {
+    pub fn of(&self, registry: &Registry, id: Id) -> bool {
+        if self.id == registry.any {
             true
         } else {
             self.entries.contains(&id)
@@ -48,7 +50,7 @@ impl ResourceManager {
                 .collect(),
         };
 
-        self.tags.insert(id, tag);
+        self.registry.tags.insert(id, tag);
 
         Some(())
     }

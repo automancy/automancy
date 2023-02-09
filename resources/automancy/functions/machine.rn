@@ -1,0 +1,77 @@
+pub fn handle_tick(entity, registry, tile_type, tick_count) {
+    if let Data::Coord(direction) = entity.data.get("target")?.clone() {
+        let coord = entity.coord.add(direction.clone());
+
+        if let Data::Id(script) = entity.data.get("script")?.clone() {
+            let script = registry.get_script(script)?;
+
+            let instructions = script.instructions;
+
+            let output = instructions.output?;
+
+            if let Some(input) = instructions.input {
+                if let Data::Inventory(buffer) = entity.data.get("buffer")? {
+                    let stored = buffer.get(input.item.id);
+
+                    if stored >= input.amount {
+                        return (
+                            coord,
+                            direction,
+                            output,
+                        );
+                    }
+                }
+            } else {
+                return (
+                    coord,
+                    direction,
+                    output,
+                );
+            }
+        }
+    }
+}
+
+pub fn handle_transaction(entity, registry, tick_count, item_stack, source_type, direction) {
+    let data = entity.data;
+
+    let script = data.get("script");
+
+    if script == None {
+        return Err(TransactionError::NoScript);
+    }
+
+    if let Data::Id(script) = script.unwrap() {
+        let script = registry.get_script(script)?;
+
+        if !data.contains_key("buffer") {
+            data.insert("buffer", Data::inventory());
+        }
+
+        if let Data::Inventory(buffer) = data.get("buffer")? {
+            let input = script.instructions.input?;
+
+            if !id_eq_or_of_tag(registry, item_stack.item.id, input.item.id) {
+                return Err(TransactionError::NotSuitable);
+            }
+
+            let amount = buffer.get(item_stack.item.id);
+            if amount == input.amount {
+                return Err(TransactionError::Full);
+            }
+
+            amount += item_stack.amount;
+            if amount > input.amount {
+                amount = input.amount;
+            }
+
+            buffer.insert(item_stack.item.id, amount);
+    
+
+            data.insert("buffer", Data::Inventory(buffer));
+            entity.data = data;
+
+            Ok(())
+        }
+    }
+}

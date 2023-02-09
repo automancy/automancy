@@ -4,13 +4,21 @@ use std::path::Path;
 use std::sync::Arc;
 
 use crate::game::tile::coord::TileCoord;
+use crate::game::tile::entity::TileEntity;
+
+use crate::game::item::ItemStack;
 use rune::runtime::RuntimeContext;
-use rune::termcolor::{ColorChoice, StandardStream};
-use rune::{Diagnostics, Module, Source, Sources, Unit};
+use rune::termcolor::StandardStream;
+use rune::{Context, Diagnostics, Module, Source, Sources, Unit};
 use serde::Deserialize;
 
-use crate::resource::{ResourceManager, JSON_EXT};
-use crate::util::id::IdRaw;
+use crate::resource::item::{id_eq_or_of_tag, Item};
+
+use crate::resource::script::{Instructions, Script};
+use crate::resource::tag::Tag;
+use crate::resource::tile::{Tile, TileType};
+use crate::resource::{Registry, ResourceManager, JSON_EXT};
+use crate::util::id::{Id, IdRaw};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct FunctionRaw {
@@ -30,11 +38,35 @@ impl ResourceManager {
         let functions = read_dir(functions).ok()?;
 
         let mut module = Module::new();
+        module.ty::<Id>().unwrap();
+
+        module.ty::<Tile>().unwrap();
+        module.ty::<TileType>().unwrap();
+
+        module.ty::<Script>().unwrap();
+        module.ty::<Instructions>().unwrap();
+
+        module.ty::<Tag>().unwrap();
+
+        module.ty::<Item>().unwrap();
+
+        module.ty::<ItemStack>().unwrap();
+
+        module.ty::<Registry>().unwrap();
+        module.inst_fn("get_tile", Registry::get_tile).unwrap();
+        module.inst_fn("get_script", Registry::get_script).unwrap();
+        module.inst_fn("get_tag", Registry::get_tag).unwrap();
+        module.inst_fn("get_item", Registry::get_item).unwrap();
+
+        module
+            .function(&["id_eq_or_of_tag"], id_eq_or_of_tag)
+            .unwrap();
         TileCoord::install(&mut module).unwrap();
+        TileEntity::install(&mut module).unwrap();
 
         let mut diagnostics = Diagnostics::new();
 
-        let mut context = rune::Context::with_default_modules().unwrap();
+        let mut context = Context::with_default_modules().unwrap();
         context.install(&module).unwrap();
 
         let runtime = Arc::new(context.runtime());
@@ -67,7 +99,7 @@ impl ResourceManager {
                     .build();
 
                 if !diagnostics.is_empty() {
-                    let mut writer = StandardStream::stderr(ColorChoice::Always);
+                    let mut writer = StandardStream::stderr(Default::default());
 
                     diagnostics.emit(&mut writer, &sources).unwrap();
                 }
