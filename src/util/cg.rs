@@ -74,12 +74,12 @@ pub fn matrix<N: BaseFloat>(pos: cgmath::Point3<N>, aspect: N, pi: N) -> cgmath:
 
 pub fn eye<N: BaseFloat>(z: N, pi: N) -> cgmath::Vector3<N> {
     let one = N::one();
-    let a = one + one;
-    let b = a + (one / (a * a));
+    let two = one + one;
+    let two_point_two_five = two + (one / (two * two));
 
     let z = one - z;
-    let r = z.mul(pi / a).sin();
-    let o = r.mul(pi / b).cos();
+    let r = z.mul(pi / two).sin();
+    let o = r.mul(pi / two_point_two_five).cos();
 
     cgmath::vec3(N::zero(), r, o)
 }
@@ -92,7 +92,7 @@ pub fn actual_pos<N: BaseFloat>(
     let two = one + one;
     let six = two + two + two;
 
-    cgmath::point3(pos.x, pos.y, pos.z * six + eye.z)
+    cgmath::point3(pos.x, pos.y, (pos.z * six) + (one / two) + eye.z)
 }
 
 pub fn view<N: BaseFloat>(pos: cgmath::Point3<N>, pi: N) -> cgmath::Matrix4<N> {
