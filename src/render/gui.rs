@@ -11,7 +11,7 @@ use egui::{
     PaintCallback, Rounding, ScrollArea, Sense, Stroke, Style, TextStyle, TopBottomPanel, Ui,
     Visuals, Window,
 };
-use egui_winit_vulkano::{CallbackFn, Gui};
+use egui_winit_vulkano::{CallbackFn, Gui, GuiConfig};
 use fuse_rust::Fuse;
 use futures::channel::mpsc;
 use futures_executor::block_on;
@@ -20,6 +20,7 @@ use riker::actors::{ActorRef, ActorSystem};
 use riker_patterns::ask::ask;
 use rune::Any;
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
+use vulkano::image::SampleCount::Sample4;
 use vulkano::pipeline::{Pipeline, PipelineBindPoint};
 use winit::event_loop::EventLoop;
 
@@ -34,7 +35,7 @@ use crate::render::renderer::Renderer;
 use crate::resource::tile::TileType;
 use crate::resource::ResourceManager;
 use crate::util::cg::{perspective, Matrix4, Vector3};
-use crate::util::colors::Color;
+use crate::util::colors;
 use crate::util::id::{id_static, Id, Interner};
 use crate::IOSEVKA_FONT;
 
@@ -109,7 +110,8 @@ fn init_styles(gui: &Gui) {
                     expansion: 0.0,
                 },
                 inactive: WidgetVisuals {
-                    bg_fill: Color32::from_gray(180), // button background
+                    //weak_bg_fill: Color32::from_gray(180), // button background
+                    bg_fill: Color32::from_gray(180), // checkbox background
                     bg_stroke: Default::default(),
                     fg_stroke: Stroke::new(1.0, Color32::from_gray(60)), // button text
                     rounding: Rounding::same(2.0),
@@ -147,9 +149,13 @@ pub fn init_gui(event_loop: &EventLoop<()>, gpu: &Gpu) -> Gui {
     let gui = Gui::new_with_subpass(
         event_loop,
         gpu.surface.clone(),
-        Some(gpu.alloc.swapchain.image_format()),
         gpu.queue.clone(),
         gpu.gui_subpass.clone(),
+        GuiConfig {
+            preferred_format: Some(gpu.alloc.swapchain.image_format()),
+            is_overlay: true,
+            samples: Sample4,
+        },
     );
 
     init_fonts(&gui);
@@ -160,10 +166,10 @@ pub fn init_gui(event_loop: &EventLoop<()>, gpu: &Gpu) -> Gui {
 
 pub fn default_frame() -> Frame {
     Frame::none()
-        .fill(Color::WHITE.with_alpha(0.7).into())
+        .fill(colors::WHITE.multiply(0.7).into())
         .shadow(Shadow {
             extrusion: 8.0,
-            color: Color::DARK_GRAY.with_alpha(0.5).into(),
+            color: colors::DARK_GRAY.multiply(0.5).into(),
         })
         .rounding(Rounding::same(5.0))
 }
@@ -333,7 +339,7 @@ pub fn tile_info(
         .default_width(300.0)
         .frame(default_frame().inner_margin(Margin::same(10.0)))
         .show(&gui.context(), |ui| {
-            ui.colored_label(Color::DARK_GRAY, pointing_at.to_string());
+            ui.colored_label(colors::DARK_GRAY, pointing_at.to_string());
 
             let result: Option<(ActorRef<TileEntityMsg>, Id, TileState)> =
                 block_on(ask(sys, &game, GameMsg::GetTile(pointing_at)));

@@ -30,7 +30,8 @@ use crate::render::gpu;
 use crate::render::gpu::Gpu;
 use crate::resource::ResourceManager;
 use crate::util::cg::{actual_pos, eye, matrix, Matrix4, Num, Point3};
-use crate::util::colors::Color;
+use crate::util::colors;
+use crate::util::colors::WithAlpha;
 
 pub struct Renderer {
     resource_man: Arc<ResourceManager>,
@@ -109,9 +110,7 @@ impl Renderer {
 
             if camera_state.is_at_max_height() {
                 if let Some(instance) = instances.get_mut(&camera_state.pointing_at) {
-                    *instance = instance
-                        .add_position_offset([0.0, 0.0, 0.0001])
-                        .color_offset(Color::ORANGE.with_alpha(0.5).into())
+                    *instance = instance.color_offset(colors::ORANGE.with_alpha(0.5).to_array())
                 }
             }
 

@@ -5,7 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use cgmath::{point2, EuclideanSpace};
 use egui::style::Margin;
-use egui::Window;
+use egui::{Rgba, Window};
 use fuse_rust::Fuse;
 use futures::channel::mpsc;
 use futures_executor::block_on;
@@ -26,9 +26,9 @@ use crate::render::{gpu, gui};
 use crate::resource::item::Item;
 use crate::resource::tile::TileType;
 use crate::util::cg::Num;
-use crate::util::colors::Color;
-use crate::util::format;
+use crate::util::colors::WithAlpha;
 use crate::util::id::Id;
+use crate::util::{colors, format};
 
 /// Stores information that lives for the entire lifetime of the session, and is not dropped at the end of one event cycle or handled elsewhere.
 pub struct EventLoopStorage {
@@ -457,7 +457,7 @@ pub fn on_event(
                     let instance = InstanceData::new()
                         .model(model)
                         .position_offset([mouse_pos.x as Num, mouse_pos.y as Num, 0.1])
-                        .color_offset(Color::TRANSPARENT.with_alpha(glow as Num).into());
+                        .color_offset(colors::TRANSPARENT.with_alpha(glow as Num).to_array());
 
                     gui_instances.push(instance);
                 }

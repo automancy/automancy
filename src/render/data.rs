@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::game::tile::coord::TileCoord;
 use crate::game::tile::entity::TileState;
 use bytemuck::{Pod, Zeroable};
+use egui::ecolor::{linear_f32_from_gamma_u8, linear_f32_from_linear_u8};
 use hexagon_tiles::layout::{hex_to_pixel, Layout, LAYOUT_ORIENTATION_POINTY};
 use hexagon_tiles::point::Point;
 use ply_rs::ply::{Property, PropertyAccess};
@@ -33,10 +34,6 @@ pub struct Vertex {
 }
 impl_vertex!(Vertex, pos, color, normal);
 
-fn color_to_num(color: u8) -> Num {
-    color as Num / 255.0
-}
-
 impl PropertyAccess for Vertex {
     fn new() -> Self {
         Self {
@@ -51,10 +48,10 @@ impl PropertyAccess for Vertex {
             ("x", Property::Float(v)) => self.pos[0] = v,
             ("y", Property::Float(v)) => self.pos[1] = v,
             ("z", Property::Float(v)) => self.pos[2] = v,
-            ("red", Property::UChar(v)) => self.color[0] = color_to_num(v),
-            ("green", Property::UChar(v)) => self.color[1] = color_to_num(v),
-            ("blue", Property::UChar(v)) => self.color[2] = color_to_num(v),
-            ("alpha", Property::UChar(v)) => self.color[3] = color_to_num(v),
+            ("red", Property::UChar(v)) => self.color[0] = linear_f32_from_gamma_u8(v),
+            ("green", Property::UChar(v)) => self.color[1] = linear_f32_from_gamma_u8(v),
+            ("blue", Property::UChar(v)) => self.color[2] = linear_f32_from_gamma_u8(v),
+            ("alpha", Property::UChar(v)) => self.color[3] = linear_f32_from_linear_u8(v),
             ("nx", Property::Float(v)) => self.normal[0] = v,
             ("ny", Property::Float(v)) => self.normal[1] = v,
             ("nz", Property::Float(v)) => self.normal[2] = v,

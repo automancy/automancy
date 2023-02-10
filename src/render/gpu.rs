@@ -423,7 +423,7 @@ impl RenderAlloc {
                 .surface_formats(&surface, Default::default())
                 .unwrap()
                 .iter()
-                .find(|(format, _color_space)| format.type_color() == Some(NumericType::UNORM))
+                .find(|(format, _color_space)| format.type_color() == Some(NumericType::SRGB))
                 .unwrap()
                 .0,
         );

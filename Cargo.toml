@@ -15,7 +15,7 @@ vulkano-win = "0.32.0"
 vulkano = "0.32.3"
 winit = "0.27.5"
 
-egui_winit_vulkano = { git = "https://github.com/Mg138/egui_winit_vulkano" }
+egui_winit_vulkano = "0.23.0"
 egui = "0.20.1"
 
 string-interner = "0.14.0"
