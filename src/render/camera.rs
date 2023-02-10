@@ -35,7 +35,7 @@ impl Default for CameraState {
 
 impl CameraState {
     pub fn is_at_max_height(&self) -> bool {
-        self.pos.z > 0.998
+        self.pos.z > 0.9985
     }
 }
 

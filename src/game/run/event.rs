@@ -220,203 +220,213 @@ pub fn on_event(
     }
 
     if event == Event::RedrawRequested(setup.renderer.gpu.window.id()) {
+        let camera_state = setup.camera.camera_state();
+
         let (selection_send, mut selection_recv) = mpsc::channel(1);
 
-        setup.gui.immediate_ui(|gui| {
-            // tile_selections
-            gui::tile_selections(
-                gui,
-                resource_man.clone(),
-                &loop_store.selected_tile_states,
-                &setup.renderer,
-                selection_send,
-            );
+        if camera_state.is_at_max_height() {
+            setup.gui.immediate_ui(|gui| {
+                // tile_selections
+                gui::tile_selections(
+                    gui,
+                    resource_man.clone(),
+                    &loop_store.selected_tile_states,
+                    &setup.renderer,
+                    selection_send,
+                );
 
-            // tile_info
-            gui::tile_info(
-                gui,
-                resource_man.clone(),
-                &setup.sys,
-                setup.game.clone(),
-                loop_store.pointing_at,
-            );
+                // tile_info
+                gui::tile_info(
+                    gui,
+                    resource_man.clone(),
+                    &setup.sys,
+                    setup.game.clone(),
+                    loop_store.pointing_at,
+                );
 
-            if let Some(config_open) = loop_store.config_open {
-                let result: Option<(ActorRef<TileEntityMsg>, Id, TileState)> =
-                    block_on(ask(&setup.sys, &setup.game, GameMsg::GetTile(config_open)));
+                if let Some(config_open) = loop_store.config_open {
+                    let result: Option<(ActorRef<TileEntityMsg>, Id, TileState)> =
+                        block_on(ask(&setup.sys, &setup.game, GameMsg::GetTile(config_open)));
 
-                if let Some((tile, id, _)) = result {
-                    let data: DataMap = block_on(ask(&setup.sys, &tile, TileEntityMsg::GetData));
+                    if let Some((tile, id, _)) = result {
+                        let data: DataMap =
+                            block_on(ask(&setup.sys, &tile, TileEntityMsg::GetData));
 
-                    let current_script = data.get("script").and_then(Data::as_id).cloned();
-                    let mut new_script = current_script;
+                        let current_script = data.get("script").and_then(Data::as_id).cloned();
+                        let mut new_script = current_script;
 
-                    let current_storage = data.get("storage").and_then(Data::as_id).cloned();
-                    let mut new_storage = current_storage;
+                        let current_storage = data.get("storage").and_then(Data::as_id).cloned();
+                        let mut new_storage = current_storage;
 
-                    let current_target_coord = data.get("target").and_then(Data::as_coord).cloned();
-                    let mut new_target_coord = current_target_coord;
+                        let current_target_coord =
+                            data.get("target").and_then(Data::as_coord).cloned();
+                        let mut new_target_coord = current_target_coord;
 
-                    // tile_config
-                    Window::new(
-                        resource_man.translates.gui[&resource_man.registry.gui_ids.tile_config]
-                            .to_string(),
-                    )
-                    .resizable(false)
-                    .auto_sized()
-                    .constrain(true)
-                    .frame(setup.frame.inner_margin(Margin::same(10.0)))
-                    .show(&gui.context(), |ui| {
-                        const MARGIN: Num = 8.0;
+                        // tile_config
+                        Window::new(
+                            resource_man.translates.gui[&resource_man.registry.gui_ids.tile_config]
+                                .to_string(),
+                        )
+                        .resizable(false)
+                        .auto_sized()
+                        .constrain(true)
+                        .frame(setup.frame.inner_margin(Margin::same(10.0)))
+                        .show(&gui.context(), |ui| {
+                            const MARGIN: Num = 8.0;
 
-                        ui.set_max_width(300.0);
+                            ui.set_max_width(300.0);
 
-                        match &resource_man.registry.get_tile(id).unwrap().tile_type {
-                            TileType::Machine(scripts) => {
-                                let script_text = if let Some(script) =
-                                    new_script.and_then(|id| resource_man.registry.get_script(id))
-                                {
-                                    let input = if let Some(input) = script.instructions.input {
+                            match &resource_man.registry.get_tile(id).unwrap().tile_type {
+                                TileType::Machine(scripts) => {
+                                    let script_text = if let Some(script) = new_script
+                                        .and_then(|id| resource_man.registry.get_script(id))
+                                    {
+                                        let input = if let Some(input) = script.instructions.input {
+                                            format!(
+                                                "{} ({})",
+                                                resource_man.item_name(&input.item.id),
+                                                input.amount
+                                            )
+                                        } else {
+                                            String::new()
+                                        };
+
+                                        let output =
+                                            if let Some(output) = script.instructions.output {
+                                                format!(
+                                                    "=> {} ({})",
+                                                    resource_man.item_name(&output.item.id),
+                                                    output.amount
+                                                )
+                                            } else {
+                                                String::new()
+                                            };
+
+                                        if !input.is_empty() && !output.is_empty() {
+                                            format!("{input}\n{output}")
+                                        } else {
+                                            format!("{input}{output}")
+                                        }
+                                    } else {
+                                        "<none>".to_string()
+                                    };
+
+                                    ui.add_space(MARGIN);
+
+                                    ui.label(format(
+                                        &resource_man.translates.gui
+                                            [&resource_man.registry.gui_ids.tile_config_script],
+                                        &[&script_text],
+                                    ));
+                                    gui::searchable_id(
+                                        ui,
+                                        resource_man.clone(),
+                                        &loop_store.fuse,
+                                        scripts.as_slice(),
+                                        &mut new_script,
+                                        &mut loop_store.filter,
+                                    );
+
+                                    ui.add_space(MARGIN);
+                                }
+                                TileType::Storage(storage) => {
+                                    let storage_text = if let Some(item) = new_storage
+                                        .and_then(|id| resource_man.registry.get_item(id))
+                                    {
                                         format!(
                                             "{} ({})",
-                                            resource_man.item_name(&input.item.id),
-                                            input.amount
+                                            resource_man.item_name(&item.id),
+                                            storage.amount
                                         )
                                     } else {
-                                        String::new()
+                                        "<none>".to_string()
                                     };
 
-                                    let output = if let Some(output) = script.instructions.output {
-                                        format!(
-                                            "=> {} ({})",
-                                            resource_man.item_name(&output.item.id),
-                                            output.amount
-                                        )
-                                    } else {
-                                        String::new()
-                                    };
+                                    ui.add_space(MARGIN);
 
-                                    if !input.is_empty() && !output.is_empty() {
-                                        format!("{input}\n{output}")
-                                    } else {
-                                        format!("{input}{output}")
-                                    }
-                                } else {
-                                    "<none>".to_string()
-                                };
+                                    ui.label(format(
+                                        &resource_man.translates.gui
+                                            [&resource_man.registry.gui_ids.tile_config_storage],
+                                        &[&storage_text],
+                                    ));
 
+                                    let items = resource_man
+                                        .get_items(storage.item.id, &mut loop_store.tag_cache)
+                                        .iter()
+                                        .map(|item| item.id)
+                                        .collect::<Vec<_>>();
+
+                                    gui::searchable_id(
+                                        ui,
+                                        resource_man.clone(),
+                                        &loop_store.fuse,
+                                        items.as_slice(),
+                                        &mut new_storage,
+                                        &mut loop_store.filter,
+                                    );
+                                }
+                                _ => {}
+                            }
+
+                            if resource_man.registry.get_tile(id).unwrap().targeted {
                                 ui.add_space(MARGIN);
 
                                 ui.label(format(
                                     &resource_man.translates.gui
-                                        [&resource_man.registry.gui_ids.tile_config_script],
-                                    &[&script_text],
+                                        [&resource_man.registry.gui_ids.tile_config_target],
+                                    &[],
                                 ));
-                                gui::searchable_id(
-                                    ui,
-                                    resource_man.clone(),
-                                    &loop_store.fuse,
-                                    scripts.as_slice(),
-                                    &mut new_script,
-                                    &mut loop_store.filter,
-                                );
-
-                                ui.add_space(MARGIN);
+                                gui::targets(ui, &mut new_target_coord);
                             }
-                            TileType::Storage(storage) => {
-                                let storage_text = if let Some(item) =
-                                    new_storage.and_then(|id| resource_man.registry.get_item(id))
-                                {
-                                    format!(
-                                        "{} ({})",
-                                        resource_man.item_name(&item.id),
-                                        storage.amount
-                                    )
-                                } else {
-                                    "<none>".to_string()
-                                };
+                        });
 
-                                ui.add_space(MARGIN);
-
-                                ui.label(format(
-                                    &resource_man.translates.gui
-                                        [&resource_man.registry.gui_ids.tile_config_storage],
-                                    &[&storage_text],
-                                ));
-
-                                let items = resource_man
-                                    .get_items(storage.item.id, &mut loop_store.tag_cache)
-                                    .iter()
-                                    .map(|item| item.id)
-                                    .collect::<Vec<_>>();
-
-                                gui::searchable_id(
-                                    ui,
-                                    resource_man.clone(),
-                                    &loop_store.fuse,
-                                    items.as_slice(),
-                                    &mut new_storage,
-                                    &mut loop_store.filter,
+                        if new_script != current_script {
+                            if let Some(script) = new_script {
+                                tile.tell(
+                                    TileEntityMsg::SetData("script".to_string(), Data::Id(script)),
+                                    None,
                                 );
                             }
-                            _ => {}
                         }
 
-                        if resource_man.registry.get_tile(id).unwrap().targeted {
-                            ui.add_space(MARGIN);
-
-                            ui.label(format(
-                                &resource_man.translates.gui
-                                    [&resource_man.registry.gui_ids.tile_config_target],
-                                &[],
-                            ));
-                            gui::targets(ui, &mut new_target_coord);
-                        }
-                    });
-
-                    if new_script != current_script {
-                        if let Some(script) = new_script {
-                            tile.tell(
-                                TileEntityMsg::SetData("script".to_string(), Data::Id(script)),
-                                None,
-                            );
-                        }
-                    }
-
-                    if new_storage != current_storage {
-                        if let Some(storage) = new_storage {
-                            tile.tell(
-                                TileEntityMsg::SetData("storage".to_string(), Data::Id(storage)),
-                                None,
-                            );
-                        }
-                    }
-
-                    if new_target_coord != current_target_coord {
-                        if let Some(target_coord) = new_target_coord {
-                            setup.game.send_msg(
-                                GameMsg::SendMsgToTile(
-                                    config_open,
+                        if new_storage != current_storage {
+                            if let Some(storage) = new_storage {
+                                tile.tell(
                                     TileEntityMsg::SetData(
-                                        "target".to_string(),
-                                        Data::Coord(target_coord),
+                                        "storage".to_string(),
+                                        Data::Id(storage),
                                     ),
-                                ),
-                                None,
-                            );
-                        } else {
-                            setup.game.send_msg(
-                                GameMsg::SendMsgToTile(
-                                    config_open,
-                                    TileEntityMsg::RemoveData("target".to_string()),
-                                ),
-                                None,
-                            );
+                                    None,
+                                );
+                            }
+                        }
+
+                        if new_target_coord != current_target_coord {
+                            if let Some(target_coord) = new_target_coord {
+                                setup.game.send_msg(
+                                    GameMsg::SendMsgToTile(
+                                        config_open,
+                                        TileEntityMsg::SetData(
+                                            "target".to_string(),
+                                            Data::Coord(target_coord),
+                                        ),
+                                    ),
+                                    None,
+                                );
+                            } else {
+                                setup.game.send_msg(
+                                    GameMsg::SendMsgToTile(
+                                        config_open,
+                                        TileEntityMsg::RemoveData("target".to_string()),
+                                    ),
+                                    None,
+                                );
+                            }
                         }
                     }
                 }
-            }
-        });
+            });
+        }
 
         if let Ok(Some(id)) = selection_recv.try_next() {
             loop_store.already_placed_at = None;
@@ -434,9 +444,8 @@ pub fn on_event(
             loop_store.input_state.main_pos,
         );
         let mouse_pos = point2(mouse_pos.x, mouse_pos.y);
-        let mouse_pos = mouse_pos + setup.camera.camera_state().pos.to_vec().truncate();
+        let mouse_pos = mouse_pos + camera_state.pos.to_vec().truncate();
 
-        let camera_state = setup.camera.camera_state();
         if camera_state.is_at_max_height() {
             if let Some(id) = loop_store.selected_id {
                 if let Some(model) = resource_man.registry.get_tile(id).and_then(|v| {
@@ -476,7 +485,7 @@ pub fn on_event(
 
         setup.renderer.render(
             render_info,
-            setup.camera.camera_state(),
+            camera_state,
             gui_instances,
             extra_vertices,
             &mut setup.gui,
