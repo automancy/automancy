@@ -5,7 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use cgmath::{point2, EuclideanSpace};
 use egui::style::Margin;
-use egui::{Rgba, Window};
+use egui::Window;
 use fuse_rust::Fuse;
 use futures::channel::mpsc;
 use futures_executor::block_on;
