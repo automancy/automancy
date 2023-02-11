@@ -27,7 +27,7 @@ use vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
 use vulkano::pipeline::GraphicsPipeline;
 use vulkano::render_pass::Subpass;
 use vulkano::swapchain::{
-    Swapchain, SwapchainAcquireFuture, SwapchainCreateInfo, SwapchainCreationError,
+    PresentMode, Swapchain, SwapchainAcquireFuture, SwapchainCreateInfo, SwapchainCreationError,
     SwapchainPresentInfo,
 };
 use vulkano::sync::FlushError;
@@ -361,14 +361,15 @@ pub fn indirect_buffer(
     (instance_buffer, indirect_commands)
 }
 
+type IndirectInstance = (
+    Arc<CpuAccessibleBuffer<[DrawIndexedIndirectCommand]>>,
+    Arc<CpuAccessibleBuffer<[InstanceData]>>,
+);
 pub fn indirect_instance(
     allocator: &(impl MemoryAllocator + ?Sized),
     resource_man: &ResourceManager,
     instances: &[InstanceData],
-) -> Option<(
-    Arc<CpuAccessibleBuffer<[DrawIndexedIndirectCommand]>>,
-    Arc<CpuAccessibleBuffer<[InstanceData]>>,
-)> {
+) -> Option<IndirectInstance> {
     if instances.is_empty() {
         None
     } else {
@@ -449,7 +450,7 @@ impl RenderAlloc {
                     .iter()
                     .next()
                     .unwrap(),
-
+                present_mode: PresentMode::Immediate,
                 ..Default::default()
             },
         )
