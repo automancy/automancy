@@ -386,6 +386,7 @@ pub fn on_event(
                                     TileEntityMsg::SetData("script".to_string(), Data::Id(script)),
                                     None,
                                 );
+                                tile.tell(TileEntityMsg::RemoveData("buffer".to_string()), None);
                             }
                         }
 
@@ -398,6 +399,7 @@ pub fn on_event(
                                     ),
                                     None,
                                 );
+                                tile.tell(TileEntityMsg::RemoveData("buffer".to_string()), None);
                             }
                         }
 

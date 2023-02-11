@@ -395,8 +395,13 @@ pub fn searchable_id(
                 .iter()
                 .flat_map(|id| {
                     let result = fuse.search_text_in_string(filter, resource_man.item_name(id));
+                    let score = result.map(|v| v.score);
 
-                    Some(*id).zip(result.map(|v| v.score))
+                    if score.unwrap_or(0.0) > 0.4 {
+                        None
+                    } else {
+                        Some(*id).zip(score)
+                    }
                 })
                 .collect::<Vec<_>>();
 
