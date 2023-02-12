@@ -171,6 +171,7 @@ fn load_resources(track: TrackHandle) -> Arc<ResourceManager> {
             log::info!("finished loading namespace {namespace}");
         });
 
+    resource_man.ordered_items();
     resource_man.compile_models();
 
     Arc::new(resource_man)

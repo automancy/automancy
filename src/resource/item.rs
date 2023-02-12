@@ -77,11 +77,10 @@ impl ResourceManager {
         } else {
             tag_cache.entry(id).or_insert_with(|| {
                 let items = self
-                    .registry
-                    .items
-                    .values()
-                    .filter(|v| id_eq_or_of_tag(&self.registry, v.id, id))
-                    .cloned()
+                    .ordered_items
+                    .iter()
+                    .filter(|v| id_eq_or_of_tag(&self.registry, **v, id))
+                    .map(|v| Item { id: *v })
                     .collect();
 
                 Arc::new(items)
@@ -89,5 +88,13 @@ impl ResourceManager {
 
             tag_cache[&id].clone()
         }
+    }
+
+    pub fn ordered_items(&mut self) {
+        let mut ids = self.registry.items.keys().cloned().collect::<Vec<_>>();
+
+        ids.sort_unstable_by_key(|id| self.item_name(id));
+
+        self.ordered_items = ids;
     }
 }

@@ -100,7 +100,7 @@ impl ResourceManager {
             .map(IdRaw::parse)
             .collect::<Vec<_>>();
 
-        ids.sort_unstable_by_key(|id| id.clone());
+        ids.sort_unstable();
 
         if let Some(none_idx) =
             ids.iter().enumerate().find_map(
@@ -121,7 +121,7 @@ impl ResourceManager {
             .flat_map(|id| self.interner.get(id.to_string()))
             .collect();
 
-        self.ordered_ids = ids;
+        self.ordered_tiles = ids;
 
         // indices vertices
         let (vertices, raw_faces): (Vec<_>, Vec<_>) = self

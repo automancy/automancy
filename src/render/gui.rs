@@ -263,7 +263,7 @@ fn paint_tile_selection(
     let size = ui.available_height();
 
     resource_man
-        .ordered_ids
+        .ordered_tiles
         .iter()
         .flat_map(|id| {
             let resource = &resource_man.registry.get_tile(*id).unwrap();
@@ -390,7 +390,7 @@ pub fn searchable_id(
     ScrollArea::vertical().max_height(80.0).show(ui, |ui| {
         ui.set_width(ui.available_width());
 
-        let scripts = if !filter.is_empty() {
+        let ids = if !filter.is_empty() {
             let mut filtered = ids
                 .iter()
                 .flat_map(|id| {
@@ -412,7 +412,7 @@ pub fn searchable_id(
             ids.to_vec()
         };
 
-        scripts.iter().for_each(|script| {
+        ids.iter().for_each(|script| {
             ui.radio_value(new_id, Some(*script), resource_man.item_name(script));
         })
     });

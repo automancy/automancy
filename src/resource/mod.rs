@@ -69,7 +69,8 @@ pub struct ResourceManager {
     pub interner: Interner,
     pub track: TrackHandle,
 
-    pub ordered_ids: Vec<Id>,
+    pub ordered_tiles: Vec<Id>,
+    pub ordered_items: Vec<Id>,
 
     pub registry: Registry,
 
@@ -101,7 +102,8 @@ impl ResourceManager {
             interner,
             track,
 
-            ordered_ids: vec![],
+            ordered_tiles: vec![],
+            ordered_items: vec![],
 
             registry: Registry {
                 tiles: Default::default(),
