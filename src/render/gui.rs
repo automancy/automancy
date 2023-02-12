@@ -36,6 +36,7 @@ use crate::resource::tile::TileType;
 use crate::resource::ResourceManager;
 use crate::util::cg::{perspective, Matrix4, Vector3};
 use crate::util::colors;
+use crate::util::colors::WithAlpha;
 use crate::util::id::{id_static, Id, Interner};
 use crate::IOSEVKA_FONT;
 
@@ -103,36 +104,35 @@ fn init_styles(gui: &Gui) {
         visuals: Visuals {
             widgets: Widgets {
                 noninteractive: WidgetVisuals {
-                    bg_fill: Color32::from_gray(190),
-                    bg_stroke: Stroke::new(1.0, Color32::from_gray(190)), // separators, indentation lines
+                    bg_fill: Color32::from_gray(170),
+                    bg_stroke: Stroke::new(1.0, Color32::from_gray(160)), // separators, indentation lines
                     fg_stroke: Stroke::new(1.0, Color32::from_gray(80)),  // normal text color
                     rounding: Rounding::same(2.0),
                     expansion: 0.0,
                 },
                 inactive: WidgetVisuals {
-                    //weak_bg_fill: Color32::from_gray(180), // button background
-                    bg_fill: Color32::from_gray(180), // checkbox background
+                    bg_fill: Color32::from_gray(200), // checkbox background
                     bg_stroke: Default::default(),
                     fg_stroke: Stroke::new(1.0, Color32::from_gray(60)), // button text
                     rounding: Rounding::same(2.0),
                     expansion: 0.0,
                 },
                 hovered: WidgetVisuals {
-                    bg_fill: Color32::from_gray(170),
+                    bg_fill: Color32::from_gray(190),
                     bg_stroke: Stroke::new(1.0, Color32::from_gray(105)), // e.g. hover over window edge or button
                     fg_stroke: Stroke::new(1.5, Color32::BLACK),
                     rounding: Rounding::same(3.0),
                     expansion: 1.0,
                 },
                 active: WidgetVisuals {
-                    bg_fill: Color32::from_gray(160),
+                    bg_fill: Color32::from_gray(180),
                     bg_stroke: Stroke::new(1.0, Color32::BLACK),
                     fg_stroke: Stroke::new(2.0, Color32::BLACK),
                     rounding: Rounding::same(2.0),
                     expansion: 1.0,
                 },
                 open: WidgetVisuals {
-                    bg_fill: Color32::from_gray(170),
+                    bg_fill: Color32::from_gray(210),
                     bg_stroke: Stroke::new(1.0, Color32::from_gray(160)),
                     fg_stroke: Stroke::new(1.0, Color32::BLACK),
                     rounding: Rounding::same(2.0),
@@ -166,7 +166,7 @@ pub fn init_gui(event_loop: &EventLoop<()>, gpu: &Gpu) -> Gui {
 
 pub fn default_frame() -> Frame {
     Frame::none()
-        .fill(colors::WHITE.multiply(0.7).into())
+        .fill(colors::WHITE.multiply(0.65).into())
         .shadow(Shadow {
             extrusion: 8.0,
             color: colors::DARK_GRAY.multiply(0.5).into(),

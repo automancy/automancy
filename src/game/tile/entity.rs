@@ -8,7 +8,7 @@ use rune::{Any, ContextError, Module, Vm};
 use serde::{Deserialize, Serialize};
 
 use crate::game::inventory::{Inventory, InventoryRaw};
-use crate::game::item::ItemStack;
+use crate::game::item::{ItemAmount, ItemStack};
 use crate::game::tile::coord::TileCoord;
 use crate::game::tile::entity::TileEntityMsg::*;
 use crate::game::tile::entity::TransactionError::*;
@@ -38,6 +38,9 @@ pub enum Data {
 
     #[rune(constructor)]
     Id(#[rune(get, copy)] Id),
+
+    #[rune(constructor)]
+    Amount(#[rune(get)] ItemAmount),
 }
 
 impl Data {
@@ -66,6 +69,13 @@ impl Data {
         None
     }
 
+    pub fn as_amount_mut(&mut self) -> Option<&mut ItemAmount> {
+        if let Self::Amount(amount) = self {
+            return Some(amount);
+        }
+        None
+    }
+
     pub fn as_inventory(&self) -> Option<&Inventory> {
         if let Self::Inventory(inventory) = self {
             return Some(inventory);
@@ -86,6 +96,13 @@ impl Data {
         }
         None
     }
+
+    pub fn as_amount(&self) -> Option<&ItemAmount> {
+        if let Self::Amount(amount) = self {
+            return Some(amount);
+        }
+        None
+    }
 }
 
 pub type DataMap = HashMap<String, Data>;
@@ -95,6 +112,7 @@ pub enum DataRaw {
     Inventory(InventoryRaw),
     Coord(TileCoord),
     Id(IdRaw),
+    Amount(ItemAmount),
 }
 
 pub type DataMapRaw = HashMap<String, DataRaw>;
@@ -108,6 +126,7 @@ pub fn data_to_raw(data: DataMap, interner: &Interner) -> DataMapRaw {
                 }
                 Data::Coord(coord) => DataRaw::Coord(coord),
                 Data::Id(id) => DataRaw::Id(IdRaw::parse(interner.resolve(id).unwrap())),
+                Data::Amount(amount) => DataRaw::Amount(amount),
             };
 
             (key, value)
@@ -122,6 +141,7 @@ pub fn data_from_raw(data: DataMapRaw, interner: &Interner) -> DataMap {
                 DataRaw::Inventory(inventory) => Data::Inventory(inventory.to_inventory(interner)),
                 DataRaw::Coord(coord) => Data::Coord(coord),
                 DataRaw::Id(id) => Data::Id(interner.get(id.to_string()).unwrap()),
+                DataRaw::Amount(amount) => Data::Amount(amount),
             };
 
             (key, value)
@@ -398,12 +418,13 @@ impl Actor for TileEntity {
                                 )
                                 .unwrap();
                         }
-                        Storage(storage) => {
-                            if let Some(item) = self
+                        Storage(_) => {
+                            if let Some((item, amount)) = self
                                 .data
                                 .get("storage")
                                 .and_then(Data::as_id)
                                 .and_then(|id| resource_man.registry.get_item(*id))
+                                .zip(self.data.get("amount").and_then(Data::as_amount).cloned())
                             {
                                 if item_stack.item == item {
                                     let buffer = self
@@ -412,9 +433,9 @@ impl Actor for TileEntity {
                                         .or_insert_with(Data::inventory)
                                         .as_inventory_mut()
                                         .unwrap();
-                                    let amount = buffer.0.entry(item.id).or_insert(0);
+                                    let stored = buffer.0.entry(item.id).or_insert(0);
 
-                                    if *amount == storage.amount {
+                                    if *stored == amount {
                                         sender
                                             .try_tell(
                                                 TransactionResult {
@@ -427,8 +448,8 @@ impl Actor for TileEntity {
                                         return;
                                     }
 
-                                    *amount += item_stack.amount;
-                                    *amount = amount.at_most(storage.amount);
+                                    *stored += item_stack.amount;
+                                    *stored = stored.at_most(amount);
 
                                     sender
                                         .try_tell(

@@ -27,7 +27,7 @@ use vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
 use vulkano::pipeline::GraphicsPipeline;
 use vulkano::render_pass::Subpass;
 use vulkano::swapchain::{
-    PresentMode, Swapchain, SwapchainAcquireFuture, SwapchainCreateInfo, SwapchainCreationError,
+    Swapchain, SwapchainAcquireFuture, SwapchainCreateInfo, SwapchainCreationError,
     SwapchainPresentInfo,
 };
 use vulkano::sync::FlushError;
@@ -450,7 +450,6 @@ impl RenderAlloc {
                     .iter()
                     .next()
                     .unwrap(),
-                present_mode: PresentMode::Immediate,
                 ..Default::default()
             },
         )

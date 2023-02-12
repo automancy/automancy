@@ -52,12 +52,10 @@ impl ResourceManager {
             input: script
                 .instructions
                 .input
-                .as_ref()
                 .map(|v| v.to_item(&mut self.interner)),
             output: script
                 .instructions
                 .output
-                .as_ref()
                 .map(|v| v.to_item(&mut self.interner)),
         };
 

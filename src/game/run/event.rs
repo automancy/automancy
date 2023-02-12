@@ -252,6 +252,13 @@ pub fn on_event(
                         let data: DataMap =
                             block_on(ask(&setup.sys, &tile, TileEntityMsg::GetData));
 
+                        let current_amount = data
+                            .get("amount")
+                            .and_then(Data::as_amount)
+                            .cloned()
+                            .unwrap_or(0);
+                        let mut new_amount = current_amount;
+
                         let current_script = data.get("script").and_then(Data::as_id).cloned();
                         let mut new_script = current_script;
 
@@ -313,11 +320,15 @@ pub fn on_event(
 
                                     ui.add_space(MARGIN);
 
-                                    ui.label(format(
-                                        &resource_man.translates.gui
-                                            [&resource_man.registry.gui_ids.tile_config_script],
-                                        &[&script_text],
-                                    ));
+                                    ui.label(
+                                        resource_man.translates.gui
+                                            [&resource_man.registry.gui_ids.tile_config_script]
+                                            .as_str(),
+                                    );
+                                    ui.label(script_text);
+
+                                    ui.add_space(MARGIN);
+
                                     gui::searchable_id(
                                         ui,
                                         resource_man.clone(),
@@ -326,35 +337,40 @@ pub fn on_event(
                                         &mut new_script,
                                         &mut loop_store.filter,
                                     );
-
-                                    ui.add_space(MARGIN);
                                 }
                                 TileType::Storage(storage) => {
                                     let storage_text = if let Some(item) = new_storage
                                         .and_then(|id| resource_man.registry.get_item(id))
                                     {
-                                        format!(
-                                            "{} ({})",
-                                            resource_man.item_name(&item.id),
-                                            storage.amount
-                                        )
+                                        resource_man.item_name(&item.id).to_string()
                                     } else {
                                         "<none>".to_string()
                                     };
 
-                                    ui.add_space(MARGIN);
-
-                                    ui.label(format(
-                                        &resource_man.translates.gui
-                                            [&resource_man.registry.gui_ids.tile_config_storage],
-                                        &[&storage_text],
-                                    ));
-
                                     let items = resource_man
-                                        .get_items(storage.item.id, &mut loop_store.tag_cache)
+                                        .get_items(storage.id, &mut loop_store.tag_cache)
                                         .iter()
                                         .map(|item| item.id)
                                         .collect::<Vec<_>>();
+
+                                    ui.add_space(MARGIN);
+
+                                    ui.label(
+                                        resource_man.translates.gui
+                                            [&resource_man.registry.gui_ids.tile_config_storage]
+                                            .as_str(),
+                                    );
+                                    ui.horizontal(|ui| {
+                                        ui.label(storage_text);
+                                        ui.add(
+                                            egui::DragValue::new(&mut new_amount)
+                                                .clamp_range(0..=65535)
+                                                .speed(1.0)
+                                                .prefix("Amount:"), // TODO translate
+                                        );
+                                    });
+
+                                    ui.add_space(MARGIN);
 
                                     gui::searchable_id(
                                         ui,
@@ -378,7 +394,19 @@ pub fn on_event(
                                 ));
                                 gui::targets(ui, &mut new_target_coord);
                             }
+
+                            ui.add_space(MARGIN);
                         });
+
+                        if new_amount != current_amount {
+                            tile.tell(
+                                TileEntityMsg::SetData(
+                                    "amount".to_string(),
+                                    Data::Amount(new_amount),
+                                ),
+                                None,
+                            );
+                        }
 
                         if new_script != current_script {
                             if let Some(script) = new_script {

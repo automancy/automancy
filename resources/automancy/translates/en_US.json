@@ -21,8 +21,8 @@
     "gui": {
         "tile_info": "Tile Info",
         "tile_config": "Config",
-        "tile_config_script": "Script:\n{}",
-        "tile_config_storage": "Storage:\n{}",
+        "tile_config_script": "Script:",
+        "tile_config_storage": "Storage:",
         "tile_config_target": "Target:"
     }
 }

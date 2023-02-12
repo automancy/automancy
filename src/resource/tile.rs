@@ -1,4 +1,4 @@
-use crate::game::item::{ItemStack, ItemStackRaw};
+use crate::resource::item::{Item, ItemRaw};
 use crate::resource::{ResourceManager, JSON_EXT};
 use crate::util::id::{id_static, Id, IdRaw, Interner};
 use rune::Any;
@@ -15,7 +15,7 @@ pub enum TileTypeRaw {
     Model,
     Machine(Vec<IdRaw>),
     Transfer(IdRaw),
-    Storage(ItemStackRaw),
+    Storage(ItemRaw),
 }
 
 #[derive(Debug, Clone, PartialEq, Any)]
@@ -25,7 +25,7 @@ pub enum TileType {
     Model,
     Machine(Vec<Id>),
     Transfer(Id),
-    Storage(ItemStack),
+    Storage(Item),
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -153,6 +153,8 @@ pub struct TileIds {
     pub machine: Id,
     #[rune(get, copy)]
     pub inventory_linker: Id,
+    #[rune(get, copy)]
+    pub inventory_provider: Id,
 }
 
 impl TileIds {
@@ -160,6 +162,7 @@ impl TileIds {
         Self {
             machine: id_static("automancy", "machine").to_id(interner),
             inventory_linker: id_static("automancy", "inventory_linker").to_id(interner),
+            inventory_provider: id_static("automancy", "inventory_provider").to_id(interner),
         }
     }
 }

@@ -1,5 +1,5 @@
 use crate::resource::{Registry, ResourceManager, JSON_EXT};
-use crate::util::id::{Id, IdRaw};
+use crate::util::id::{Id, IdRaw, Interner};
 use rune::Any;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -11,6 +11,14 @@ use std::sync::Arc;
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct ItemRaw {
     pub id: IdRaw,
+}
+
+impl ItemRaw {
+    pub fn to_item(self, interner: &mut Interner) -> Item {
+        Item {
+            id: self.id.to_id(interner),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Any)]
@@ -40,11 +48,9 @@ impl ResourceManager {
         )
         .unwrap_or_else(|e| panic!("error loading {file:?} {e:?}"));
 
-        let id = item.id.to_id(&mut self.interner);
+        let item = item.to_item(&mut self.interner);
 
-        let item = Item { id };
-
-        self.registry.items.insert(id, item);
+        self.registry.items.insert(item.id, item);
 
         Some(())
     }

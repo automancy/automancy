@@ -21,11 +21,9 @@ pub struct ItemStack {
 }
 
 impl ItemStackRaw {
-    pub fn to_item(&self, interner: &mut Interner) -> ItemStack {
+    pub fn to_item(self, interner: &mut Interner) -> ItemStack {
         ItemStack {
-            item: Item {
-                id: self.item.id.to_id(interner),
-            },
+            item: self.item.to_item(interner),
             amount: self.amount,
         }
     }

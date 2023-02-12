@@ -115,7 +115,7 @@ impl Camera {
     }
 
     fn on_moving_main(&mut self, delta: DVector2) {
-        self.camera_state.move_vel += delta / 300.0;
+        self.camera_state.move_vel += delta / 250.0;
     }
 
     pub fn update_pointing_at(&mut self, main_pos: DPoint2) {
