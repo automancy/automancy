@@ -3,12 +3,13 @@ use std::error::Error;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use cgmath::{point2, EuclideanSpace};
+use cgmath::{point2, vec2, EuclideanSpace, MetricSpace};
 use egui::style::Margin;
 use egui::Window;
 use fuse_rust::Fuse;
 use futures::channel::mpsc;
 use futures_executor::block_on;
+use genmesh::{EmitTriangles, Quad};
 use riker::actor::{ActorRef, Tell};
 use riker_patterns::ask::ask;
 use winit::event::{Event, WindowEvent};
@@ -20,12 +21,12 @@ use crate::game::run::setup::GameSetup;
 use crate::game::tile::coord::TileCoord;
 use crate::game::tile::entity::{Data, DataMap, TileEntityMsg, TileState};
 use crate::game::{input, GameMsg, PlaceTileResponse};
-use crate::render::camera::cursor_to_pos;
-use crate::render::data::InstanceData;
+use crate::render::camera::{hex_to_normalized, screen_to_normalized, screen_to_world};
+use crate::render::data::{InstanceData, Vertex};
 use crate::render::{gpu, gui};
 use crate::resource::item::Item;
 use crate::resource::tile::TileType;
-use crate::util::cg::Num;
+use crate::util::cg::{DPoint3, Num};
 use crate::util::colors::WithAlpha;
 use crate::util::id::Id;
 use crate::util::{colors, format};
@@ -53,6 +54,8 @@ pub struct EventLoopStorage {
     config_open: Option<TileCoord>,
     /// tag searching cache
     tag_cache: HashMap<Id, Arc<Vec<Item>>>,
+    /// tile currently linking
+    linking_tile: Option<TileCoord>,
 }
 
 impl Default for EventLoopStorage {
@@ -68,6 +71,7 @@ impl Default for EventLoopStorage {
             already_placed_at: None,
             config_open: None,
             tag_cache: Default::default(),
+            linking_tile: None,
         }
     }
 }
@@ -87,7 +91,7 @@ pub fn on_event(
     let mut device_event = None;
 
     let mut gui_instances = vec![];
-    let extra_vertices = vec![];
+    let mut extra_vertices = vec![];
 
     let resource_man = setup.resource_man.clone();
 
@@ -381,6 +385,18 @@ pub fn on_event(
                                         &mut loop_store.filter,
                                     );
                                 }
+                                TileType::Transfer(id) => {
+                                    if id == &resource_man.registry.tile_ids.inventory_linker {
+                                        ui.add_space(MARGIN);
+
+                                        if ui.button("Link Network!").clicked() {
+                                            loop_store.linking_tile = Some(config_open);
+                                        };
+                                        ui.label("(Right click to link Destination)");
+
+                                        ui.add_space(MARGIN);
+                                    }
+                                }
                                 _ => {}
                             }
 
@@ -468,7 +484,7 @@ pub fn on_event(
             }
         }
 
-        let mouse_pos = cursor_to_pos(
+        let mouse_pos = screen_to_world(
             setup.camera.window_size.0,
             setup.camera.window_size.1,
             loop_store.input_state.main_pos,
@@ -500,6 +516,59 @@ pub fn on_event(
 
                     gui_instances.push(instance);
                 }
+            }
+
+            if let Some(coord) = loop_store.linking_tile {
+                let DPoint3 { x, y, .. } = hex_to_normalized(
+                    setup.camera.window_size.0,
+                    setup.camera.window_size.1,
+                    camera_state.pos,
+                    coord,
+                );
+                let a = point2(x, y);
+
+                let b = screen_to_normalized(
+                    setup.camera.window_size.0,
+                    setup.camera.window_size.1,
+                    loop_store.input_state.main_pos,
+                );
+
+                let v = b - a;
+                let l = a.distance(b) * 128.0;
+                let w = vec2(-v.y / l, v.x / l);
+
+                let a0 = (a + w).cast::<Num>().unwrap();
+                let a1 = (b + w).cast::<Num>().unwrap();
+                let b0 = (b - w).cast::<Num>().unwrap();
+                let b1 = (a - w).cast::<Num>().unwrap();
+
+                let mut line = vec![];
+
+                Quad::new(
+                    Vertex {
+                        pos: [a0.x, a0.y, 0.0],
+                        color: colors::ORANGE.to_array(),
+                        normal: [0.0, 0.0, 0.0],
+                    },
+                    Vertex {
+                        pos: [a1.x, a1.y, 0.0],
+                        color: colors::ORANGE.to_array(),
+                        normal: [0.0, 0.0, 0.0],
+                    },
+                    Vertex {
+                        pos: [b0.x, b0.y, 0.0],
+                        color: colors::ORANGE.to_array(),
+                        normal: [0.0, 0.0, 0.0],
+                    },
+                    Vertex {
+                        pos: [b1.x, b1.y, 0.0],
+                        color: colors::ORANGE.to_array(),
+                        normal: [0.0, 0.0, 0.0],
+                    },
+                )
+                .emit_triangles(|v| line.append(&mut vec![v.x, v.y, v.z]));
+
+                extra_vertices.append(&mut line);
             }
         }
 

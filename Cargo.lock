@@ -198,6 +198,7 @@ dependencies = [
  "flexstr",
  "fuse-rust",
  "futures",
+ "futures-executor",
  "genmesh",
  "hexagon_tiles",
  "kira",

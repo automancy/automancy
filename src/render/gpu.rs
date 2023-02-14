@@ -82,6 +82,20 @@ pub mod gui_frag_shader {
     }
 }
 
+pub mod overlay_vert_shader {
+    vulkano_shaders::shader! {
+        ty: "vertex",
+        path: "compile/shaders/vert_overlay.glsl"
+    }
+}
+
+pub mod overlay_frag_shader {
+    vulkano_shaders::shader! {
+        ty: "fragment",
+        path: "compile/shaders/frag_overlay.glsl"
+    }
+}
+
 pub fn create_game_pipeline(device: Arc<Device>, subpass: &Subpass) -> Arc<GraphicsPipeline> {
     let vs = vert_shader::load(device.clone()).unwrap();
     let fs = frag_shader::load(device.clone()).unwrap();
@@ -121,6 +135,27 @@ pub fn create_gui_pipeline(device: Arc<Device>, subpass: &Subpass) -> Arc<Graphi
         .input_assembly_state(InputAssemblyState::new().topology(PrimitiveTopology::TriangleList))
         .fragment_shader(fs_gui.entry_point("main").unwrap(), ())
         .viewport_state(ViewportState::viewport_dynamic_scissor_dynamic(1))
+        .rasterization_state(RasterizationState::new())
+        .depth_stencil_state(DepthStencilState::simple_depth_test())
+        .multisample_state(MultisampleState {
+            rasterization_samples: Sample4,
+            ..Default::default()
+        })
+        .render_pass(subpass.clone());
+
+    pipeline.build(device).unwrap()
+}
+
+pub fn create_overlay_pipeline(device: Arc<Device>, subpass: &Subpass) -> Arc<GraphicsPipeline> {
+    let vs_gui = overlay_vert_shader::load(device.clone()).unwrap();
+    let fs_gui = overlay_frag_shader::load(device.clone()).unwrap();
+
+    let pipeline = GraphicsPipeline::start()
+        .vertex_shader(vs_gui.entry_point("main").unwrap(), ())
+        .vertex_input_state(BuffersDefinition::new().vertex::<Vertex>())
+        .input_assembly_state(InputAssemblyState::new().topology(PrimitiveTopology::TriangleList))
+        .fragment_shader(fs_gui.entry_point("main").unwrap(), ())
+        .viewport_state(ViewportState::viewport_dynamic_scissor_irrelevant())
         .rasterization_state(RasterizationState::new())
         .depth_stencil_state(DepthStencilState::simple_depth_test())
         .multisample_state(MultisampleState {
@@ -399,6 +434,7 @@ pub struct RenderAlloc {
     pub index_buffer: Arc<DeviceLocalBuffer<[u32]>>,
     pub game_uniform_buffer: Arc<CpuAccessibleBuffer<GameUBO>>,
     pub gui_uniform_buffer: Arc<CpuAccessibleBuffer<GuiUBO>>,
+    pub overlay_uniform_buffer: Arc<CpuAccessibleBuffer<GuiUBO>>,
 
     pub color_image: Arc<AttachmentImage>,
     pub game_depth_buffer: Arc<AttachmentImage>,
@@ -509,6 +545,7 @@ impl RenderAlloc {
 
         let game_uniform_buffer = uniform_buffer(&allocator);
         let gui_uniform_buffer = uniform_buffer(&allocator);
+        let overlay_uniform_buffer = uniform_buffer(&allocator);
 
         let color_image = AttachmentImage::multisampled_with_usage(
             &allocator,
@@ -567,6 +604,7 @@ impl RenderAlloc {
             index_buffer,
             game_uniform_buffer,
             gui_uniform_buffer,
+            overlay_uniform_buffer,
 
             color_image,
             game_depth_buffer,
@@ -587,6 +625,7 @@ pub struct Gpu {
 
     pub game_pipeline: Arc<GraphicsPipeline>,
     pub gui_pipeline: Arc<GraphicsPipeline>,
+    pub overlay_pipeline: Arc<GraphicsPipeline>,
 
     pub game_subpass: Subpass,
     pub gui_subpass: Subpass,
@@ -771,6 +810,7 @@ impl Gpu {
 
         let game_pipeline = create_game_pipeline(device.clone(), &game_subpass);
         let gui_pipeline = create_gui_pipeline(device.clone(), &gui_subpass);
+        let overlay_pipeline = create_overlay_pipeline(device.clone(), &gui_subpass);
 
         let framebuffers = framebuffers(
             &alloc.images,
@@ -789,6 +829,7 @@ impl Gpu {
 
             game_pipeline,
             gui_pipeline,
+            overlay_pipeline,
 
             game_subpass,
             gui_subpass,

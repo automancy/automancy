@@ -37,6 +37,9 @@ pub enum Data {
     Coord(#[rune(get, copy)] TileCoord),
 
     #[rune(constructor)]
+    VecCoord(#[rune(get)] Vec<TileCoord>),
+
+    #[rune(constructor)]
     Id(#[rune(get, copy)] Id),
 
     #[rune(constructor)]
@@ -46,6 +49,9 @@ pub enum Data {
 impl Data {
     pub fn inventory() -> Self {
         Self::Inventory(Default::default())
+    }
+    pub fn vec_coord() -> Self {
+        Self::VecCoord(Default::default())
     }
 
     pub fn as_inventory_mut(&mut self) -> Option<&mut Inventory> {
@@ -58,6 +64,13 @@ impl Data {
     pub fn as_coord_mut(&mut self) -> Option<&mut TileCoord> {
         if let Self::Coord(coord) = self {
             return Some(coord);
+        }
+        None
+    }
+
+    pub fn as_vec_coord_mut(&mut self) -> Option<&mut Vec<TileCoord>> {
+        if let Self::VecCoord(vec) = self {
+            return Some(vec);
         }
         None
     }
@@ -90,6 +103,13 @@ impl Data {
         None
     }
 
+    pub fn as_vec_coord(&self) -> Option<&Vec<TileCoord>> {
+        if let Self::VecCoord(vec) = self {
+            return Some(vec);
+        }
+        None
+    }
+
     pub fn as_id(&self) -> Option<&Id> {
         if let Self::Id(id) = self {
             return Some(id);
@@ -111,6 +131,7 @@ pub type DataMap = HashMap<String, Data>;
 pub enum DataRaw {
     Inventory(InventoryRaw),
     Coord(TileCoord),
+    VecCoord(Vec<TileCoord>),
     Id(IdRaw),
     Amount(ItemAmount),
 }
@@ -127,6 +148,7 @@ pub fn data_to_raw(data: DataMap, interner: &Interner) -> DataMapRaw {
                 Data::Coord(coord) => DataRaw::Coord(coord),
                 Data::Id(id) => DataRaw::Id(IdRaw::parse(interner.resolve(id).unwrap())),
                 Data::Amount(amount) => DataRaw::Amount(amount),
+                Data::VecCoord(vec) => DataRaw::VecCoord(vec),
             };
 
             (key, value)
@@ -142,6 +164,7 @@ pub fn data_from_raw(data: DataMapRaw, interner: &Interner) -> DataMap {
                 DataRaw::Coord(coord) => Data::Coord(coord),
                 DataRaw::Id(id) => Data::Id(interner.get(id.to_string()).unwrap()),
                 DataRaw::Amount(amount) => Data::Amount(amount),
+                DataRaw::VecCoord(vec) => Data::VecCoord(vec),
             };
 
             (key, value)
@@ -347,64 +370,65 @@ impl Actor for TileEntity {
                                 return;
                             }
 
-                            let function = resource_man.functions[id].clone();
-                            let mut vm = Vm::new(function.context, function.unit);
+                            if let Some(function) = resource_man.functions.get(id).cloned() {
+                                let mut vm = Vm::new(function.context, function.unit);
 
-                            let output = vm
-                                .call(
-                                    ["handle_transaction"],
-                                    (
-                                        &mut *self,
-                                        &resource_man.registry,
-                                        tick_count,
-                                        item_stack,
-                                        &source_type,
-                                        direction,
-                                    ),
-                                )
-                                .unwrap();
-
-                            if let Ok(output) = output.into_tuple() {
-                                let output = output.take().unwrap();
-
-                                let target_coord: TileCoord = output
-                                    .get(0)
-                                    .unwrap()
-                                    .clone()
-                                    .into_any()
-                                    .unwrap()
-                                    .take_downcast()
+                                let output = vm
+                                    .call(
+                                        ["handle_transaction"],
+                                        (
+                                            &mut *self,
+                                            &resource_man.registry,
+                                            tick_count,
+                                            item_stack,
+                                            &source_type,
+                                            direction,
+                                        ),
+                                    )
                                     .unwrap();
 
-                                let item_stack: ItemStack = output
-                                    .get(1)
-                                    .unwrap()
-                                    .clone()
-                                    .into_any()
-                                    .unwrap()
-                                    .take_downcast()
-                                    .unwrap();
+                                if let Ok(output) = output.into_tuple() {
+                                    let output = output.take().unwrap();
 
-                                let target: TileCoord = output
-                                    .get(2)
-                                    .unwrap()
-                                    .clone()
-                                    .into_any()
-                                    .unwrap()
-                                    .take_downcast()
-                                    .unwrap();
+                                    let target_coord: TileCoord = output
+                                        .get(0)
+                                        .unwrap()
+                                        .clone()
+                                        .into_any()
+                                        .unwrap()
+                                        .take_downcast()
+                                        .unwrap();
 
-                                self.send_tile_msg(
-                                    Some(sender),
-                                    target_coord,
-                                    Transaction {
-                                        resource_man,
-                                        tick_count,
-                                        item_stack,
-                                        source_type,
-                                        direction: target,
-                                    },
-                                );
+                                    let item_stack: ItemStack = output
+                                        .get(1)
+                                        .unwrap()
+                                        .clone()
+                                        .into_any()
+                                        .unwrap()
+                                        .take_downcast()
+                                        .unwrap();
+
+                                    let target: TileCoord = output
+                                        .get(2)
+                                        .unwrap()
+                                        .clone()
+                                        .into_any()
+                                        .unwrap()
+                                        .take_downcast()
+                                        .unwrap();
+
+                                    self.send_tile_msg(
+                                        Some(sender),
+                                        target_coord,
+                                        Transaction {
+                                            resource_man,
+                                            tick_count,
+                                            item_stack,
+                                            source_type,
+                                            direction: target,
+                                        },
+                                    );
+                                }
                             }
                         }
                         Void => {

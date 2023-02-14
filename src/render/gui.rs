@@ -36,7 +36,6 @@ use crate::resource::tile::TileType;
 use crate::resource::ResourceManager;
 use crate::util::cg::{perspective, Matrix4, Vector3};
 use crate::util::colors;
-use crate::util::colors::WithAlpha;
 use crate::util::id::{id_static, Id, Interner};
 use crate::IOSEVKA_FONT;
 

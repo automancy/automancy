@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::game::map::{Map, RenderContext};
 use crate::game::ticking::TickUnit;
 use crate::game::tile::coord::TileCoord;
-use crate::game::tile::entity::{TileEntity, TileEntityMsg, TileState};
+use crate::game::tile::entity::{Data, TileEntity, TileEntityMsg, TileState};
 use crate::game::GameMsg::*;
 use crate::resource::ResourceManager;
 use crate::util::id::Id;
@@ -52,7 +52,9 @@ pub enum GameMsg {
     /// tick the tile once
     Tick,
     /// get rendering information
-    RenderInfoRequest { context: RenderContext },
+    RenderInfoRequest {
+        context: RenderContext,
+    },
     /// place a tile at the given position
     PlaceTile {
         coord: TileCoord,
@@ -67,6 +69,10 @@ pub enum GameMsg {
     GetMap,
     /// load a map
     LoadMap(Arc<ResourceManager>),
+    GetData,
+    GetDataValue(String),
+    SetData(String, Data),
+    RemoveData(String),
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -152,6 +158,26 @@ impl Actor for Game {
                 drop(map);
 
                 self.map = Arc::new(Mutex::new(Map::load(ctx, resource_man, name)));
+            }
+            GetData => {
+                let map = self.map.lock().unwrap();
+
+                sender.inspect(|v| v.try_tell(map.data.clone(), myself).unwrap());
+            }
+            GetDataValue(key) => {
+                let map = self.map.lock().unwrap();
+
+                sender.inspect(|v| v.try_tell(map.data.get(&key).cloned(), myself).unwrap());
+            }
+            SetData(key, value) => {
+                let mut map = self.map.lock().unwrap();
+
+                map.data.insert(key, value);
+            }
+            RemoveData(key) => {
+                let mut map = self.map.lock().unwrap();
+
+                map.data.remove(&key);
             }
         }
     }

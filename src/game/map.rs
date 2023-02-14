@@ -39,6 +39,8 @@ pub struct Map {
     pub map_name: String,
 
     pub tiles: HashMap<TileCoord, (ActorRef<TileEntityMsg>, Id, TileState)>,
+
+    pub data: DataMap,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -62,7 +64,8 @@ impl Map {
     pub fn new_empty(map_name: String) -> Self {
         Self {
             map_name,
-            tiles: HashMap::new(),
+            tiles: Default::default(),
+            data: Default::default(),
         }
     }
 
@@ -80,7 +83,7 @@ impl Map {
         let writer = BufWriter::with_capacity(MAP_BUFFER_SIZE, file);
         let mut encoder = Encoder::new(writer, 0).unwrap();
 
-        let raw = self
+        let tiles = self
             .tiles
             .iter()
             .map(|(coord, (tile, id, tile_state))| {
@@ -93,7 +96,9 @@ impl Map {
             })
             .collect::<Vec<_>>();
 
-        serde_json::to_writer(&mut encoder, &raw).unwrap();
+        let data = data_to_raw(self.data.clone(), interner);
+
+        serde_json::to_writer(&mut encoder, &(tiles, data)).unwrap();
 
         encoder.do_finish().unwrap();
     }
@@ -114,9 +119,10 @@ impl Map {
         let reader = BufReader::with_capacity(MAP_BUFFER_SIZE, file);
         let decoder = Decoder::new(reader).unwrap();
 
-        let raw: Vec<(TileCoord, TileData)> = serde_json::from_reader(decoder).unwrap();
+        let (tiles, data): (Vec<(TileCoord, TileData)>, DataMapRaw) =
+            serde_json::from_reader(decoder).unwrap();
 
-        let tiles = raw
+        let tiles = tiles
             .into_iter()
             .flat_map(|(coord, TileData(id, tile_state, data))| {
                 if let Some(id) = resource_man.interner.get(id.to_string()) {
@@ -134,6 +140,12 @@ impl Map {
             })
             .collect::<HashMap<_, _>>();
 
-        Self { map_name, tiles }
+        let data = data_from_raw(data, &resource_man.interner);
+
+        Self {
+            map_name,
+            tiles,
+            data,
+        }
     }
 }

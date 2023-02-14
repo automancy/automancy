@@ -1,3 +1,4 @@
+use cgmath::SquareMatrix;
 use std::f32::consts::PI;
 use std::sync::Arc;
 
@@ -6,6 +7,7 @@ use hexagon_tiles::hex::Hex;
 use hexagon_tiles::layout::{hex_to_pixel, pixel_to_hex};
 use hexagon_tiles::point::point;
 use hexagon_tiles::traits::HexRound;
+use vulkano::buffer::BufferUsage;
 
 use vulkano::command_buffer::{
     AutoCommandBufferBuilder, CommandBufferInheritanceInfo, CommandBufferUsage,
@@ -143,7 +145,7 @@ impl Renderer {
         camera_pos: Point3,
         instances: &[InstanceData],
         gui_instances: &[InstanceData],
-        _extra_vertices: Vec<Vertex>,
+        extra_vertices: Vec<Vertex>,
         gui: &mut Gui,
     ) {
         let dimensions = gpu::window_size_u32(&self.gpu.window);
@@ -312,20 +314,19 @@ impl Renderer {
                 }
             }
 
-            /*
             if !extra_vertices.is_empty() {
                 let ubo = GuiUBO {
                     matrix: Matrix4::identity().into(),
                 };
 
-                *self.gpu.alloc.gui_uniform_buffer.write().unwrap() = ubo;
+                *self.gpu.alloc.overlay_uniform_buffer.write().unwrap() = ubo;
 
-                let gui_ubo_set = PersistentDescriptorSet::new(
+                let overlay_ubo_set = PersistentDescriptorSet::new(
                     &self.gpu.alloc.descriptor_allocator,
-                    self.gpu.gui_pipeline.layout().set_layouts()[0].clone(),
+                    self.gpu.overlay_pipeline.layout().set_layouts()[0].clone(),
                     [WriteDescriptorSet::buffer(
                         0,
-                        self.gpu.alloc.gui_uniform_buffer.clone(),
+                        self.gpu.alloc.overlay_uniform_buffer.clone(),
                     )],
                 )
                 .unwrap();
@@ -342,18 +343,17 @@ impl Renderer {
                 );
 
                 gui_builder
-                    .bind_pipeline_graphics(self.gpu.gui_pipeline.clone())
+                    .bind_pipeline_graphics(self.gpu.overlay_pipeline.clone())
                     .bind_vertex_buffers(0, extra_vertex_buffer)
                     .bind_descriptor_sets(
                         PipelineBindPoint::Graphics,
-                        self.gpu.gui_pipeline.layout().clone(),
+                        self.gpu.overlay_pipeline.layout().clone(),
                         0,
-                        gui_ubo_set,
+                        overlay_ubo_set,
                     )
                     .draw(vertex_count as u32, 1, 0, 0)
                     .unwrap();
             }
-             */
         }
 
         if let Ok(commands) = gui_builder.build() {

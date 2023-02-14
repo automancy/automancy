@@ -15,6 +15,7 @@ pub struct Face {
     pub offset: u32,
     pub size: u32,
 }
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct ModelRaw {
     pub id: IdRaw,
