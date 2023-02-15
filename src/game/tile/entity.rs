@@ -185,6 +185,8 @@ pub struct TileEntity {
     data: DataMap,
 
     game: BasicActorRef,
+
+    tick_pause: bool,
 }
 
 impl TileEntity {
@@ -196,6 +198,7 @@ impl TileEntity {
             data: DataMap::default(),
 
             game,
+            tick_pause: false,
         }
     }
 
@@ -262,6 +265,8 @@ impl Actor for TileEntity {
                 resource_man,
                 tick_count,
             } => {
+                self.tick_pause = false;
+
                 let tile_type = &resource_man.registry.get_tile(self.id).unwrap().tile_type;
 
                 match tile_type {
@@ -618,6 +623,10 @@ impl Actor for TileEntity {
                 coord,
                 direction,
             } => {
+                if self.tick_pause {
+                    return;
+                }
+
                 let tile_type = &resource_man.registry.get_tile(self.id).unwrap().tile_type;
 
                 match tile_type {
@@ -648,6 +657,7 @@ impl Actor for TileEntity {
                                         direction,
                                     },
                                 );
+                                self.tick_pause = true;
                             }
                         }
                     }

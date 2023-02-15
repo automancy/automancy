@@ -18,13 +18,17 @@ impl Inventory {
     pub fn insert(&mut self, id: Id, amount: ItemAmount) {
         self.0.insert(id, amount);
     }
-    
+
     pub fn take(&mut self, id: Id, amount: ItemAmount) -> Option<ItemAmount> {
         let stored = *self.0.get(&id)?;
+        if stored == 0 {
+            return None;
+        }
+
         let taking = amount.min(stored);
-        
+
         self.insert(id, stored - taking);
-        
+
         Some(taking)
     }
 }

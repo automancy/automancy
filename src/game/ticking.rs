@@ -13,7 +13,7 @@ pub type TickUnit = u16;
 pub struct Ticked;
 impl Game {
     fn inner_tick(&mut self) {
-        for (_, (tile, _, _)) in self.map.lock().unwrap().tiles.iter() {
+        for (tile, _, _) in self.map.lock().unwrap().tiles.values() {
             tile.send_msg(
                 TileEntityMsg::Tick {
                     resource_man: self.resource_man.clone(),
