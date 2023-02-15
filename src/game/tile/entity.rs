@@ -233,12 +233,18 @@ pub enum TileEntityMsg {
     },
     TransactionResult {
         resource_man: Arc<ResourceManager>,
-        result: Result<(), TransactionError>,
+        result: Result<ItemStack, TransactionError>,
     },
-
+    ExtractRequest {
+        resource_man: Arc<ResourceManager>,
+        tick_count: TickUnit,
+        coord: TileCoord,
+        direction: TileCoord,
+    },
     SetData(String, Data),
     RemoveData(String),
     GetData,
+    GetDataValue(String),
 }
 
 impl Actor for TileEntity {
@@ -258,60 +264,85 @@ impl Actor for TileEntity {
             } => {
                 let tile_type = &resource_man.registry.get_tile(self.id).unwrap().tile_type;
 
-                if let Machine(_) = tile_type {
-                    let function =
-                        resource_man.functions[&resource_man.registry.tile_ids.machine].clone();
-                    let mut vm = Vm::new(function.context, function.unit);
+                match tile_type {
+                    Machine(_) => {
+                        let function =
+                            resource_man.functions[&resource_man.registry.tile_ids.machine].clone();
+                        let mut vm = Vm::new(function.context, function.unit);
 
-                    let output = vm
-                        .call(
-                            ["handle_tick"],
-                            (&mut *self, &resource_man.registry, tile_type, tick_count),
-                        )
-                        .unwrap();
-
-                    if let Ok(output) = output.into_tuple() {
-                        let output = output.take().unwrap();
-
-                        let target_coord: TileCoord = output
-                            .get(0)
-                            .unwrap()
-                            .clone()
-                            .into_any()
-                            .unwrap()
-                            .take_downcast()
+                        let output = vm
+                            .call(
+                                ["handle_tick"],
+                                (&mut *self, &resource_man.registry, tile_type, tick_count),
+                            )
                             .unwrap();
 
-                        let direction: TileCoord = output
-                            .get(1)
-                            .unwrap()
-                            .clone()
-                            .into_any()
-                            .unwrap()
-                            .take_downcast()
-                            .unwrap();
+                        if let Ok(output) = output.into_tuple() {
+                            let output = output.take().unwrap();
 
-                        let item_stack: ItemStack = output
-                            .get(2)
-                            .unwrap()
-                            .clone()
-                            .into_any()
-                            .unwrap()
-                            .take_downcast()
-                            .unwrap();
+                            let target_coord: TileCoord = output
+                                .get(0)
+                                .unwrap()
+                                .clone()
+                                .into_any()
+                                .unwrap()
+                                .take_downcast()
+                                .unwrap();
 
-                        self.send_tile_msg(
-                            myself,
-                            target_coord,
-                            Transaction {
-                                resource_man: resource_man.clone(),
-                                tick_count,
-                                item_stack,
-                                source_type: tile_type.clone(),
-                                direction,
-                            },
-                        );
+                            let direction: TileCoord = output
+                                .get(1)
+                                .unwrap()
+                                .clone()
+                                .into_any()
+                                .unwrap()
+                                .take_downcast()
+                                .unwrap();
+
+                            let item_stack: ItemStack = output
+                                .get(2)
+                                .unwrap()
+                                .clone()
+                                .into_any()
+                                .unwrap()
+                                .take_downcast()
+                                .unwrap();
+
+                            self.send_tile_msg(
+                                myself,
+                                target_coord,
+                                Transaction {
+                                    resource_man: resource_man.clone(),
+                                    tick_count,
+                                    item_stack,
+                                    source_type: tile_type.clone(),
+                                    direction,
+                                },
+                            );
+                        }
                     }
+                    Transfer(id) => {
+                        if id == &resource_man.registry.tile_ids.inventory_provider {
+                            if let Some((target, link)) = self
+                                .data
+                                .get("target")
+                                .and_then(Data::as_coord)
+                                .cloned()
+                                .zip(self.data.get("link").and_then(Data::as_coord).cloned())
+                            {
+                                self.send_tile_msg(
+                                    myself,
+                                    self.coord + link,
+                                    ExtractRequest {
+                                        resource_man,
+                                        tick_count,
+                                        coord: self.coord + target,
+                                        direction: target,
+                                    },
+                                )
+                            }
+                        }
+                    }
+                    _ => {}
                 }
             }
             Transaction {
@@ -346,8 +377,13 @@ impl Actor for TileEntity {
                                 .unwrap();
 
                             if let Ok(output) = output.into_result() {
-                                let result: Result<(), TransactionError> =
-                                    output.take().unwrap().map(|_v| ()).map_err(|v| {
+                                let result: Result<ItemStack, TransactionError> = output
+                                    .take()
+                                    .unwrap()
+                                    .map(|v| {
+                                        v.into_any().unwrap().take_downcast::<ItemStack>().unwrap()
+                                    })
+                                    .map_err(|v| {
                                         v.into_any()
                                             .unwrap()
                                             .take_downcast::<TransactionError>()
@@ -369,7 +405,6 @@ impl Actor for TileEntity {
                             if let Transfer(_) = &source_type {
                                 return;
                             }
-
                             if let Some(function) = resource_man.functions.get(id).cloned() {
                                 let mut vm = Vm::new(function.context, function.unit);
 
@@ -436,7 +471,7 @@ impl Actor for TileEntity {
                                 .try_tell(
                                     TransactionResult {
                                         resource_man,
-                                        result: Ok(()),
+                                        result: Ok(item_stack),
                                     },
                                     myself,
                                 )
@@ -459,6 +494,10 @@ impl Actor for TileEntity {
                                         .unwrap();
                                     let stored = buffer.0.entry(item.id).or_insert(0);
 
+                                    if *stored > amount {
+                                        *stored = amount;
+                                    }
+
                                     if *stored == amount {
                                         sender
                                             .try_tell(
@@ -472,14 +511,17 @@ impl Actor for TileEntity {
                                         return;
                                     }
 
-                                    *stored += item_stack.amount;
-                                    *stored = stored.at_most(amount);
+                                    let inserting = item_stack.amount.at_most(amount - *stored);
+                                    *stored += inserting;
 
                                     sender
                                         .try_tell(
                                             TransactionResult {
                                                 resource_man,
-                                                result: Ok(()),
+                                                result: Ok(ItemStack {
+                                                    item,
+                                                    amount: inserting,
+                                                }),
                                             },
                                             myself,
                                         )
@@ -515,29 +557,43 @@ impl Actor for TileEntity {
                 resource_man,
                 result,
             } => {
-                if result.is_ok() {
-                    if let Some(input) = self
-                        .data
-                        .get("script")
-                        .and_then(Data::as_id)
-                        .and_then(|script| resource_man.registry.get_script(*script))
-                        .and_then(|script| script.instructions.input)
-                    {
-                        let stored = self
-                            .data
-                            .get_mut("buffer")
-                            .and_then(Data::as_inventory_mut)
-                            .unwrap()
-                            .0
-                            .entry(input.item.id)
-                            .or_insert(0);
+                if let Ok(transferred) = result {
+                    let tile_type = &resource_man.registry.get_tile(self.id).unwrap().tile_type;
 
-                        if *stored < input.amount {
-                            log::error!("in transaction result: tile does not have enough input for the supposed output!");
-                            *stored = 0;
-                        } else {
-                            *stored -= input.amount
+                    match tile_type {
+                        Machine(_) => {
+                            if let Some(input) = self
+                                .data
+                                .get("script")
+                                .and_then(Data::as_id)
+                                .and_then(|script| resource_man.registry.get_script(*script))
+                                .and_then(|script| script.instructions.input)
+                            {
+                                let stored = self
+                                    .data
+                                    .get_mut("buffer")
+                                    .and_then(Data::as_inventory_mut)
+                                    .unwrap()
+                                    .0
+                                    .entry(input.item.id)
+                                    .or_insert(0);
+
+                                if *stored < input.amount {
+                                    log::error!("in transaction result: tile does not have enough input for the supposed output!");
+                                    *stored = 0;
+                                } else {
+                                    *stored -= input.amount
+                                }
+                            }
                         }
+                        Storage(_) => {
+                            if let Some(buffer) =
+                                self.data.get_mut("buffer").and_then(Data::as_inventory_mut)
+                            {
+                                buffer.take(transferred.item.id, transferred.amount);
+                            }
+                        }
+                        _ => {}
                     }
                 }
             }
@@ -547,8 +603,74 @@ impl Actor for TileEntity {
             GetData => {
                 sender.inspect(|v| v.try_tell(self.data.clone(), myself).unwrap());
             }
+            GetDataValue(key) => {
+                sender.inspect(|v| {
+                    v.try_tell(self.data.get(key.as_str()).cloned(), myself)
+                        .unwrap()
+                });
+            }
             RemoveData(key) => {
                 self.data.remove(&key);
+            }
+            ExtractRequest {
+                resource_man,
+                tick_count,
+                coord,
+                direction,
+            } => {
+                let tile_type = &resource_man.registry.get_tile(self.id).unwrap().tile_type;
+
+                match tile_type {
+                    Storage(_) => {
+                        if let Some(((item, amount), inventory)) = self
+                            .data
+                            .get("storage")
+                            .and_then(Data::as_id)
+                            .and_then(|id| resource_man.registry.get_item(*id))
+                            .zip(self.data.get("amount").and_then(Data::as_amount).cloned())
+                            .zip(self.data.get_mut("buffer").and_then(Data::as_inventory_mut))
+                        {
+                            let stored = inventory.get(item.id);
+                            let extracting = stored.min(amount);
+
+                            if extracting > 0 {
+                                self.send_tile_msg(
+                                    myself,
+                                    coord,
+                                    Transaction {
+                                        resource_man,
+                                        tick_count,
+                                        item_stack: ItemStack {
+                                            item,
+                                            amount: extracting,
+                                        },
+                                        source_type: tile_type.clone(),
+                                        direction,
+                                    },
+                                );
+                            }
+                        }
+                    }
+                    Transfer(id) => {
+                        if id == &resource_man.registry.tile_ids.inventory_linker {
+                            if let Some(target) =
+                                self.data.get("target").and_then(Data::as_coord).cloned()
+                            {
+                                self.send_tile_msg(
+                                    sender,
+                                    self.coord + target,
+                                    ExtractRequest {
+                                        resource_man,
+                                        tick_count,
+                                        coord,
+                                        direction,
+                                    },
+                                );
+                            }
+                        }
+                    }
+                    _ => {}
+                }
             }
         }
     }

@@ -10,7 +10,7 @@ impl WithAlpha for Rgba {
         Rgba::from_rgba_premultiplied(self.r(), self.g(), self.b(), a)
     }
 }
-
+pub const RED: Rgba = Rgba::from_rgba_premultiplied(1.0, 0.1, 0.1, 1.0);
 pub const ORANGE: Rgba = Rgba::from_rgba_premultiplied(1.0, 0.745, 0.447, 1.0);
 pub const WHITE: Rgba = Rgba::from_rgba_premultiplied(1.0, 1.0, 1.0, 1.0);
 pub const LIGHT_GRAY: Rgba = Rgba::from_rgba_premultiplied(0.75, 0.75, 0.75, 1.0);

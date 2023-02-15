@@ -2,21 +2,22 @@ use std::collections::HashMap;
 use std::f32::consts::FRAC_PI_4;
 use std::sync::Arc;
 
-use cgmath::{point3, vec3};
+use cgmath::{point2, point3, vec3, MetricSpace};
 use egui::epaint::Shadow;
 use egui::style::{Margin, WidgetVisuals, Widgets};
 use egui::FontFamily::{Monospace, Proportional};
 use egui::{
-    vec2, Align, Align2, Color32, CursorIcon, FontData, FontDefinitions, FontId, Frame,
-    PaintCallback, Rounding, ScrollArea, Sense, Stroke, Style, TextStyle, TopBottomPanel, Ui,
+    vec2, Align, Align2, Color32, CursorIcon, DragValue, FontData, FontDefinitions, FontId, Frame,
+    PaintCallback, Rgba, Rounding, ScrollArea, Sense, Stroke, Style, TextStyle, TopBottomPanel, Ui,
     Visuals, Window,
 };
 use egui_winit_vulkano::{CallbackFn, Gui, GuiConfig};
 use fuse_rust::Fuse;
 use futures::channel::mpsc;
 use futures_executor::block_on;
+use genmesh::{EmitTriangles, Quad};
 use hexagon_tiles::traits::HexDirection;
-use riker::actors::{ActorRef, ActorSystem};
+use riker::actors::{ActorRef, ActorSystem, Tell};
 use riker_patterns::ask::ask;
 use rune::Any;
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
@@ -24,17 +25,19 @@ use vulkano::image::SampleCount::Sample4;
 use vulkano::pipeline::{Pipeline, PipelineBindPoint};
 use winit::event_loop::EventLoop;
 
+use crate::game::run::event::EventLoopStorage;
 use crate::game::tile::coord::TileCoord;
 use crate::game::tile::coord::TileHex;
 use crate::game::tile::entity::{Data, DataMap, TileEntityMsg, TileState};
 use crate::game::GameMsg;
-use crate::render::data::{GuiUBO, InstanceData};
-use crate::render::gpu;
+use crate::render::camera::{hex_to_normalized, Camera};
+use crate::render::data::{GuiUBO, InstanceData, Vertex};
 use crate::render::gpu::Gpu;
 use crate::render::renderer::Renderer;
+use crate::render::{gpu, gui};
 use crate::resource::tile::TileType;
 use crate::resource::ResourceManager;
-use crate::util::cg::{perspective, Matrix4, Vector3};
+use crate::util::cg::{perspective, DPoint2, DPoint3, Matrix4, Num, Vector3};
 use crate::util::colors;
 use crate::util::id::{id_static, Id, Interner};
 use crate::IOSEVKA_FONT;
@@ -437,4 +440,296 @@ pub fn targets(ui: &mut Ui, new_target_coord: &mut Option<TileCoord>) {
             add_direction(ui, new_target_coord, 2);
         });
     });
+}
+
+pub fn tile_config(
+    gui: &mut Gui,
+    resource_man: Arc<ResourceManager>,
+    loop_store: &mut EventLoopStorage,
+    extra_vertices: &mut Vec<Vertex>,
+    camera: &Camera,
+    sys: &ActorSystem,
+    game: ActorRef<GameMsg>,
+    frame: Frame,
+) {
+    if let Some(config_open) = loop_store.config_open {
+        let result: Option<(ActorRef<TileEntityMsg>, Id, TileState)> =
+            block_on(ask(sys, &game, GameMsg::GetTile(config_open)));
+
+        if let Some((tile, id, _c)) = result {
+            let data: DataMap = block_on(ask(sys, &tile, TileEntityMsg::GetData));
+
+            let current_amount = data
+                .get("amount")
+                .and_then(Data::as_amount)
+                .cloned()
+                .unwrap_or(0);
+            let mut new_amount = current_amount;
+
+            let current_script = data.get("script").and_then(Data::as_id).cloned();
+            let mut new_script = current_script;
+
+            let current_storage = data.get("storage").and_then(Data::as_id).cloned();
+            let mut new_storage = current_storage;
+
+            let current_target_coord = data.get("target").and_then(Data::as_coord).cloned();
+            let mut new_target_coord = current_target_coord;
+
+            // tile_config
+            Window::new(
+                resource_man.translates.gui[&resource_man.registry.gui_ids.tile_config].to_string(),
+            )
+            .resizable(false)
+            .auto_sized()
+            .constrain(true)
+            .frame(frame.inner_margin(Margin::same(10.0)))
+            .show(&gui.context(), |ui| {
+                const MARGIN: Num = 8.0;
+
+                ui.set_max_width(300.0);
+
+                match &resource_man.registry.get_tile(id).unwrap().tile_type {
+                    TileType::Machine(scripts) => {
+                        let script_text = if let Some(script) =
+                            new_script.and_then(|id| resource_man.registry.get_script(id))
+                        {
+                            let input = if let Some(input) = script.instructions.input {
+                                format!(
+                                    "{} ({})",
+                                    resource_man.item_name(&input.item.id),
+                                    input.amount
+                                )
+                            } else {
+                                String::new()
+                            };
+
+                            let output = if let Some(output) = script.instructions.output {
+                                format!(
+                                    "=> {} ({})",
+                                    resource_man.item_name(&output.item.id),
+                                    output.amount
+                                )
+                            } else {
+                                String::new()
+                            };
+
+                            if !input.is_empty() && !output.is_empty() {
+                                format!("{input}\n{output}")
+                            } else {
+                                format!("{input}{output}")
+                            }
+                        } else {
+                            "<none>".to_string()
+                        };
+
+                        ui.add_space(MARGIN);
+
+                        ui.label(
+                            resource_man.translates.gui
+                                [&resource_man.registry.gui_ids.tile_config_script]
+                                .as_str(),
+                        );
+                        ui.label(script_text);
+
+                        ui.add_space(MARGIN);
+
+                        searchable_id(
+                            ui,
+                            resource_man.clone(),
+                            &loop_store.fuse,
+                            scripts.as_slice(),
+                            &mut new_script,
+                            &mut loop_store.filter,
+                        );
+                    }
+                    TileType::Storage(storage) => {
+                        let storage_text = if let Some(item) =
+                            new_storage.and_then(|id| resource_man.registry.get_item(id))
+                        {
+                            resource_man.item_name(&item.id).to_string()
+                        } else {
+                            "<none>".to_string()
+                        };
+
+                        let items = resource_man
+                            .get_items(storage.id, &mut loop_store.tag_cache)
+                            .iter()
+                            .map(|item| item.id)
+                            .collect::<Vec<_>>();
+
+                        ui.add_space(MARGIN);
+
+                        ui.label(
+                            resource_man.translates.gui
+                                [&resource_man.registry.gui_ids.tile_config_storage]
+                                .as_str(),
+                        );
+                        ui.horizontal(|ui| {
+                            ui.label(storage_text);
+                            ui.add(
+                                DragValue::new(&mut new_amount)
+                                    .clamp_range(0..=65535)
+                                    .speed(1.0)
+                                    .prefix("Amount:"), // TODO translate
+                            );
+                        });
+
+                        ui.add_space(MARGIN);
+
+                        searchable_id(
+                            ui,
+                            resource_man.clone(),
+                            &loop_store.fuse,
+                            items.as_slice(),
+                            &mut new_storage,
+                            &mut loop_store.filter,
+                        );
+                    }
+                    TileType::Transfer(id) => {
+                        if id == &resource_man.registry.tile_ids.inventory_linker {
+                            ui.add_space(MARGIN);
+
+                            if ui.button("Link Network!").clicked() {
+                                loop_store.linking_tile = Some(config_open);
+                            };
+                            ui.label("(Right click to link Destination)");
+
+                            ui.add_space(MARGIN);
+                        }
+
+                        if id == &resource_man.registry.tile_ids.inventory_provider {
+                            let result: Option<Data> = block_on(ask(
+                                sys,
+                                &game,
+                                GameMsg::SendMsgToTile(
+                                    config_open,
+                                    TileEntityMsg::GetDataValue("link".to_string()),
+                                ),
+                            ));
+
+                            if let Some(link) = result.as_ref().and_then(Data::as_coord) {
+                                let DPoint3 { x, y, .. } = hex_to_normalized(
+                                    camera.window_size.0,
+                                    camera.window_size.1,
+                                    camera.camera_state().pos,
+                                    config_open,
+                                );
+                                let a = point2(x, y);
+
+                                let DPoint3 { x, y, .. } = hex_to_normalized(
+                                    camera.window_size.0,
+                                    camera.window_size.1,
+                                    camera.camera_state().pos,
+                                    config_open + *link,
+                                );
+                                let b = point2(x, y);
+
+                                extra_vertices.append(&mut gui::line(a, b, colors::RED));
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+
+                if resource_man.registry.get_tile(id).unwrap().targeted {
+                    ui.add_space(MARGIN);
+
+                    ui.label(
+                        resource_man.translates.gui
+                            [&resource_man.registry.gui_ids.tile_config_target]
+                            .as_str(),
+                    );
+                    targets(ui, &mut new_target_coord);
+                }
+
+                ui.add_space(MARGIN);
+            });
+
+            if new_amount != current_amount {
+                tile.tell(
+                    TileEntityMsg::SetData("amount".to_string(), Data::Amount(new_amount)),
+                    None,
+                );
+            }
+
+            if new_script != current_script {
+                if let Some(script) = new_script {
+                    tile.tell(
+                        TileEntityMsg::SetData("script".to_string(), Data::Id(script)),
+                        None,
+                    );
+                    tile.tell(TileEntityMsg::RemoveData("buffer".to_string()), None);
+                }
+            }
+
+            if new_storage != current_storage {
+                if let Some(storage) = new_storage {
+                    tile.tell(
+                        TileEntityMsg::SetData("storage".to_string(), Data::Id(storage)),
+                        None,
+                    );
+                    tile.tell(TileEntityMsg::RemoveData("buffer".to_string()), None);
+                }
+            }
+
+            if new_target_coord != current_target_coord {
+                if let Some(target_coord) = new_target_coord {
+                    game.send_msg(
+                        GameMsg::SendMsgToTile(
+                            config_open,
+                            TileEntityMsg::SetData("target".to_string(), Data::Coord(target_coord)),
+                        ),
+                        None,
+                    );
+                } else {
+                    game.send_msg(
+                        GameMsg::SendMsgToTile(
+                            config_open,
+                            TileEntityMsg::RemoveData("target".to_string()),
+                        ),
+                        None,
+                    );
+                }
+            }
+        }
+    }
+}
+
+pub fn line(a: DPoint2, b: DPoint2, color: Rgba) -> Vec<Vertex> {
+    let v = b - a;
+    let l = a.distance(b) * 128.0;
+    let w = cgmath::vec2(-v.y / l, v.x / l);
+
+    let a0 = (a + w).cast::<Num>().unwrap();
+    let a1 = (b + w).cast::<Num>().unwrap();
+    let b0 = (b - w).cast::<Num>().unwrap();
+    let b1 = (a - w).cast::<Num>().unwrap();
+
+    let mut line = vec![];
+
+    Quad::new(
+        Vertex {
+            pos: [a0.x, a0.y, 0.0],
+            color: color.to_array(),
+            normal: [0.0, 0.0, 0.0],
+        },
+        Vertex {
+            pos: [a1.x, a1.y, 0.0],
+            color: color.to_array(),
+            normal: [0.0, 0.0, 0.0],
+        },
+        Vertex {
+            pos: [b0.x, b0.y, 0.0],
+            color: color.to_array(),
+            normal: [0.0, 0.0, 0.0],
+        },
+        Vertex {
+            pos: [b1.x, b1.y, 0.0],
+            color: color.to_array(),
+            normal: [0.0, 0.0, 0.0],
+        },
+    )
+    .emit_triangles(|v| line.append(&mut vec![v.x, v.y, v.z]));
+
+    line
 }

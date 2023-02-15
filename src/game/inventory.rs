@@ -18,6 +18,15 @@ impl Inventory {
     pub fn insert(&mut self, id: Id, amount: ItemAmount) {
         self.0.insert(id, amount);
     }
+    
+    pub fn take(&mut self, id: Id, amount: ItemAmount) -> Option<ItemAmount> {
+        let stored = *self.0.get(&id)?;
+        let taking = amount.min(stored);
+        
+        self.insert(id, stored - taking);
+        
+        Some(taking)
+    }
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -42,6 +51,7 @@ impl InventoryRaw {
             inventory
                 .0
                 .into_iter()
+                .filter(|(_, amount)| *amount > 0)
                 .map(|(id, amount)| {
                     let id = IdRaw::parse(interner.resolve(id).unwrap());
 

@@ -4,6 +4,5 @@
   "tile_type": {
     "type": "Transfer",
     "param": "inventory_linker"
-  },
-  "targeted": false
+  }
 }

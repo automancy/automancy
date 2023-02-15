@@ -71,7 +71,7 @@ pub fn handle_transaction(entity, registry, tick_count, item_stack, source_type,
             data.insert("buffer", Data::Inventory(buffer));
             entity.data = data;
 
-            Ok(())
+            Ok(input)
         }
     }
 }
