@@ -9,18 +9,18 @@ use serde::Deserialize;
 use crate::game::item::{ItemStack, ItemStackRaw};
 use crate::util::id::{Id, IdRaw};
 
-#[derive(Debug, Clone, Copy, Any)]
+#[derive(Debug, Clone, Any)]
 pub struct Script {
     #[rune(get, copy)]
     pub id: Id,
-    #[rune(get, copy)]
+    #[rune(get)]
     pub instructions: Instructions,
 }
 
-#[derive(Debug, Clone, Copy, Any)]
+#[derive(Debug, Clone, Any)]
 pub struct Instructions {
-    #[rune(get, copy)]
-    pub input: Option<ItemStack>,
+    #[rune(get)]
+    pub inputs: Option<Vec<ItemStack>>,
     #[rune(get, copy)]
     pub output: Option<ItemStack>,
 }
@@ -33,7 +33,7 @@ pub struct ScriptRaw {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct InstructionsRaw {
-    pub input: Option<ItemStackRaw>,
+    pub inputs: Option<Vec<ItemStackRaw>>,
     pub output: Option<ItemStackRaw>,
 }
 
@@ -49,10 +49,11 @@ impl ResourceManager {
         let id = script.id.to_id(&mut self.interner);
 
         let instructions = Instructions {
-            input: script
-                .instructions
-                .input
-                .map(|v| v.to_item(&mut self.interner)),
+            inputs: script.instructions.inputs.map(|v| {
+                v.into_iter()
+                    .map(|item_stack| item_stack.to_item(&mut self.interner))
+                    .collect()
+            }),
             output: script
                 .instructions
                 .output

@@ -1,12 +1,14 @@
 {
     "id": "copper_ingot",
     "instructions": {
-        "input": {
-            "item": {
-                "id": "copper_ore"
-            },
-            "amount": 10
-        },
+        "inputs": [
+            {
+                "item": {
+                    "id": "copper_ore"
+                },
+                "amount": 10
+            }
+        ],
         "output": {
             "item": {
                 "id": "copper_ingot"

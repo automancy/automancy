@@ -567,28 +567,29 @@ impl Actor for TileEntity {
 
                     match tile_type {
                         Machine(_) => {
-                            if let Some(input) = self
+                            if let Some(inputs) = self
                                 .data
                                 .get("script")
                                 .and_then(Data::as_id)
                                 .and_then(|script| resource_man.registry.get_script(*script))
-                                .and_then(|script| script.instructions.input)
+                                .and_then(|script| script.instructions.inputs)
                             {
-                                let stored = self
+                                let buffer = self
                                     .data
                                     .get_mut("buffer")
                                     .and_then(Data::as_inventory_mut)
-                                    .unwrap()
-                                    .0
-                                    .entry(input.item.id)
-                                    .or_insert(0);
+                                    .unwrap();
 
-                                if *stored < input.amount {
-                                    log::error!("in transaction result: tile does not have enough input for the supposed output!");
-                                    *stored = 0;
-                                } else {
-                                    *stored -= input.amount
-                                }
+                                inputs.iter().for_each(|item_stack| {
+                                    let stored = buffer.0.entry(item_stack.item.id).or_insert(0);
+
+                                    if *stored < item_stack.amount {
+                                        log::error!("in transaction result: tile does not have enough input for the supposed output!");
+                                        *stored = 0;
+                                    } else {
+                                        *stored -= item_stack.amount
+                                    }
+                                });
                             }
                         }
                         Storage(_) => {

@@ -9,17 +9,21 @@ pub fn handle_tick(entity, registry, tile_type, tick_count) {
 
             let output = instructions.output?;
 
-            if let Some(input) = instructions.input {
+            if let Some(inputs) = instructions.inputs {
                 if let Data::Inventory(buffer) = entity.data.get("buffer")? {
-                    let stored = buffer.get(input.item.id);
+                    for input in inputs {
+                        let stored = buffer.get(input.item.id);
 
-                    if stored >= input.amount {
-                        return (
-                            coord,
-                            direction,
-                            output,
-                        );
+                        if stored < input.amount {
+                            return;
+                        }
                     }
+
+                    return (
+                       coord,
+                       direction,
+                       output,
+                   );
                 }
             } else {
                 return (
@@ -49,20 +53,27 @@ pub fn handle_transaction(entity, registry, tick_count, item_stack, source_type,
         }
 
         if let Data::Inventory(buffer) = data.get("buffer")? {
-            let input = script.instructions.input?;
+            let inputs = script.instructions.inputs?;
 
-            if !id_eq_or_of_tag(registry, item_stack.item.id, input.item.id) {
+            let matched = None;
+            for input in inputs {
+                if id_eq_or_of_tag(registry, item_stack.item.id, input.item.id) {
+                    matched = Some(input);
+                }
+            }
+            if matched == None {
                 return Err(TransactionError::NotSuitable);
             }
+            let matched = matched.unwrap();
 
             let amount = buffer.get(item_stack.item.id);
-            if amount == input.amount {
+            if amount == matched.amount {
                 return Err(TransactionError::Full);
             }
 
             amount += item_stack.amount;
-            if amount > input.amount {
-                amount = input.amount;
+            if amount > matched.amount {
+                amount = matched.amount;
             }
 
             buffer.insert(item_stack.item.id, amount);
@@ -71,7 +82,7 @@ pub fn handle_transaction(entity, registry, tick_count, item_stack, source_type,
             data.insert("buffer", Data::Inventory(buffer));
             entity.data = data;
 
-            Ok(input)
+            Ok(matched)
         }
     }
 }

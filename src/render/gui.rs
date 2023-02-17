@@ -493,12 +493,18 @@ pub fn tile_config(
                         let script_text = if let Some(script) =
                             new_script.and_then(|id| resource_man.registry.get_script(id))
                         {
-                            let input = if let Some(input) = script.instructions.input {
-                                format!(
-                                    "{} ({})",
-                                    resource_man.item_name(&input.item.id),
-                                    input.amount
-                                )
+                            let input = if let Some(inputs) = script.instructions.inputs {
+                                inputs
+                                    .iter()
+                                    .map(|item_stack| {
+                                        format!(
+                                            "{} ({})",
+                                            resource_man.item_name(&item_stack.item.id),
+                                            item_stack.amount
+                                        )
+                                    })
+                                    .collect::<Vec<_>>()
+                                    .join("\n")
                             } else {
                                 String::new()
                             };
