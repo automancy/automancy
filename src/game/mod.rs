@@ -1,15 +1,18 @@
 use std::sync::{Arc, Mutex};
 
 use flexstr::SharedStr;
+use hexagon_tiles::traits::HexDirection;
 use riker::actor::{Actor, BasicActorRef};
 use riker::actors::{ActorFactoryArgs, ActorRef, ActorRefFactory, Context, Sender, Strategy, Tell};
 use uuid::Uuid;
 
 use crate::game::map::{Map, RenderContext};
 use crate::game::ticking::TickUnit;
-use crate::game::tile::coord::TileCoord;
+use crate::game::tile::coord::{TileCoord, TileHex};
 use crate::game::tile::entity::{Data, TileEntity, TileEntityMsg, TileState};
 use crate::game::GameMsg::*;
+use crate::resource::item::id_eq_or_of_tag;
+use crate::resource::script::Script;
 use crate::resource::ResourceManager;
 use crate::util::id::Id;
 
@@ -65,6 +68,11 @@ pub enum GameMsg {
     GetTile(TileCoord),
     /// send a message to a tile entity
     SendMsgToTile(TileCoord, TileEntityMsg),
+    /// checks for the adjacent tiles against the script
+    CheckAdjacent {
+        script: Script,
+        coord: TileCoord,
+    },
     /// get the map
     GetMap,
     /// load a map
@@ -125,12 +133,12 @@ impl Actor for Game {
 
                     map.tiles.remove_entry(&coord);
                     sender.inspect(|v| v.try_tell(PlaceTileResponse::Removed, myself).unwrap());
-                    return;
-                }
-                let tile = Self::new_tile(ctx, coord, id, tile_state);
+                } else {
+                    let tile = Self::new_tile(ctx, coord, id, tile_state);
 
-                map.tiles.insert(coord, (tile, id, tile_state));
-                sender.inspect(|v| v.try_tell(PlaceTileResponse::Placed, myself).unwrap());
+                    map.tiles.insert(coord, (tile, id, tile_state));
+                    sender.inspect(|v| v.try_tell(PlaceTileResponse::Placed, myself).unwrap());
+                }
             }
             GetTile(coord) => {
                 sender.inspect(|v| {
@@ -178,6 +186,28 @@ impl Actor for Game {
                 let mut map = self.map.lock().unwrap();
 
                 map.data.remove(&key);
+            }
+            CheckAdjacent { script, coord } => {
+                if let Some(adjacent) = script.adjacent {
+                    let map = self.map.lock().unwrap();
+
+                    let mut fulfilled = false;
+
+                    for neighbor in TileHex::NEIGHBORS.iter().map(|v| coord + (*v).into()) {
+                        if let Some((_, id, _)) = map.tiles.get(&neighbor) {
+                            if id_eq_or_of_tag(&self.resource_man.registry, *id, adjacent) {
+                                fulfilled = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    sender.map(|v| v.try_tell(TileEntityMsg::AdjacentState { fulfilled }, myself));
+                } else {
+                    sender.map(|v| {
+                        v.try_tell(TileEntityMsg::AdjacentState { fulfilled: true }, myself)
+                    });
+                }
             }
         }
     }

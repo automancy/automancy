@@ -16,6 +16,7 @@ pub enum TileTypeRaw {
     Machine(Vec<IdRaw>),
     Transfer(IdRaw),
     Storage(ItemRaw),
+    Deposit,
 }
 
 #[derive(Debug, Clone, PartialEq, Any)]
@@ -26,6 +27,7 @@ pub enum TileType {
     Machine(Vec<Id>),
     Transfer(Id),
     Storage(Item),
+    Deposit,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -34,15 +36,7 @@ pub struct TileRaw {
     pub id: IdRaw,
     pub function: Option<IdRaw>,
     pub models: Vec<IdRaw>,
-
-    #[serde(default = "TileRaw::targeted_default")]
-    pub targeted: bool,
-}
-
-impl TileRaw {
-    fn targeted_default() -> bool {
-        true
-    }
+    pub targeted: Option<bool>,
 }
 
 #[derive(Debug, Clone, Any)]
@@ -78,6 +72,7 @@ impl ResourceManager {
             ),
             TileTypeRaw::Transfer(id) => TileType::Transfer(id.to_id(&mut self.interner)),
             TileTypeRaw::Storage(storage) => TileType::Storage(storage.to_item(&mut self.interner)),
+            TileTypeRaw::Deposit => TileType::Deposit,
         };
 
         let function = tile.function.map(|v| v.to_id(&mut self.interner));
@@ -88,13 +83,21 @@ impl ResourceManager {
             .map(|v| v.to_id(&mut self.interner))
             .collect();
 
+        let targeted = tile.targeted.unwrap_or_else(|| {
+            if let TileType::Machine(_) = &tile_type {
+                true
+            } else {
+                false
+            }
+        });
+
         self.registry.tiles.insert(
             id,
             Tile {
                 tile_type,
                 function,
                 models,
-                targeted: tile.targeted,
+                targeted,
             },
         );
 

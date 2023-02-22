@@ -3,6 +3,5 @@
     "models": ["void"],
     "tile_type": {
         "type": "Void"
-    },
-    "targeted": false
+    }
 }

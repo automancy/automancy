@@ -13,6 +13,8 @@ use crate::util::id::{Id, IdRaw};
 pub struct Script {
     #[rune(get, copy)]
     pub id: Id,
+    #[rune(get, copy)]
+    pub adjacent: Option<Id>,
     #[rune(get)]
     pub instructions: Instructions,
 }
@@ -28,6 +30,7 @@ pub struct Instructions {
 #[derive(Debug, Clone, Deserialize)]
 pub struct ScriptRaw {
     pub id: IdRaw,
+    pub adjacent: Option<IdRaw>,
     pub instructions: InstructionsRaw,
 }
 
@@ -57,10 +60,16 @@ impl ResourceManager {
             output: script
                 .instructions
                 .output
-                .map(|v| v.to_item(&mut self.interner)),
+                .map(|item_stack| item_stack.to_item(&mut self.interner)),
         };
 
-        let script = Script { id, instructions };
+        let adjacent = script.adjacent.map(|id| id.to_id(&mut self.interner));
+
+        let script = Script {
+            id,
+            instructions,
+            adjacent,
+        };
 
         self.registry.scripts.insert(id, script);
 

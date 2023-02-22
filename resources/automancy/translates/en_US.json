@@ -16,7 +16,8 @@
         "refinery": "Refinery",
         "small_storage": "Small Storage",
         "inventory_linker": "Inventory Linker",
-        "inventory_provider": "Inventory Provider"
+        "inventory_provider": "Inventory Provider",
+        "copper_mine": "Copper Mine"
     },
     "gui": {
         "tile_info": "Tile Info",

@@ -27,13 +27,13 @@ pub struct Item {
     pub id: Id,
 }
 
-pub fn id_eq_or_of_tag(registry: &Registry, item: Id, other: Id) -> bool {
-    if item == other {
+pub fn id_eq_or_of_tag(registry: &Registry, id: Id, other: Id) -> bool {
+    if id == other {
         return true;
     }
 
     if let Some(tag) = registry.tags.get(&other) {
-        return tag.of(registry, item);
+        return tag.of(registry, id);
     }
 
     false

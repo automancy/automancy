@@ -187,6 +187,7 @@ pub struct TileEntity {
     game: BasicActorRef,
 
     tick_pause: bool,
+    adjacent_fulfilled: bool,
 }
 
 impl TileEntity {
@@ -199,6 +200,7 @@ impl TileEntity {
 
             game,
             tick_pause: false,
+            adjacent_fulfilled: false,
         }
     }
 
@@ -244,6 +246,9 @@ pub enum TileEntityMsg {
         coord: TileCoord,
         direction: TileCoord,
     },
+    AdjacentState {
+        fulfilled: bool,
+    },
     SetData(String, Data),
     RemoveData(String),
     GetData,
@@ -271,6 +276,26 @@ impl Actor for TileEntity {
 
                 match tile_type {
                     Machine(_) => {
+                        if tick_count % 10 == 0 {
+                            if let Some(script) = self.data.get("script").and_then(Data::as_id) {
+                                if let Some(script) = resource_man.registry.get_script(*script) {
+                                    self.game
+                                        .try_tell(
+                                            GameMsg::CheckAdjacent {
+                                                script,
+                                                coord: self.coord,
+                                            },
+                                            myself.clone(),
+                                        )
+                                        .unwrap();
+                                }
+                            }
+                        }
+
+                        if !self.adjacent_fulfilled {
+                            return;
+                        }
+
                         let function =
                             resource_man.functions[&resource_man.registry.tile_ids.machine].clone();
                         let mut vm = Vm::new(function.context, function.unit);
@@ -682,6 +707,9 @@ impl Actor for TileEntity {
                     }
                     _ => {}
                 }
+            }
+            AdjacentState { fulfilled } => {
+                self.adjacent_fulfilled = fulfilled;
             }
         }
     }
