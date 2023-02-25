@@ -270,7 +270,7 @@ fn paint_tile_selection(
         .flat_map(|id| {
             let resource = &resource_man.registry.get_tile(*id).unwrap();
 
-            if resource.tile_type == TileType::Model {
+            if resource.tile_type == TileType::Model || resource.tile_type == TileType::Deposit {
                 return None;
             }
 
