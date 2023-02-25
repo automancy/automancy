@@ -2,13 +2,16 @@ use std::sync::{Arc, Mutex};
 
 use flexstr::SharedStr;
 use hexagon_tiles::traits::HexDirection;
+use rand::distributions::Bernoulli;
+use rand::distributions::Distribution;
+use rand::Rng;
 use riker::actor::{Actor, BasicActorRef};
 use riker::actors::{ActorFactoryArgs, ActorRef, ActorRefFactory, Context, Sender, Strategy, Tell};
 use uuid::Uuid;
 
 use crate::game::map::{Map, RenderContext};
 use crate::game::ticking::TickUnit;
-use crate::game::tile::coord::{TileCoord, TileHex};
+use crate::game::tile::coord::{TileCoord, TileHex, TileUnit};
 use crate::game::tile::entity::{Data, TileEntity, TileEntityMsg, TileState};
 use crate::game::GameMsg::*;
 use crate::resource::item::id_eq_or_of_tag;
@@ -41,6 +44,9 @@ pub struct Game {
 
     /// the map
     map: Arc<Mutex<Map>>,
+
+    /// is the game stopped
+    stopped: bool,
 }
 
 impl ActorFactoryArgs<(Arc<ResourceManager>, SharedStr)> for Game {
@@ -49,11 +55,13 @@ impl ActorFactoryArgs<(Arc<ResourceManager>, SharedStr)> for Game {
     }
 }
 
-/// Represents a message the game can send from one actor to another.
+/// Represents a message the game receives
 #[derive(Debug, Clone)]
 pub enum GameMsg {
     /// tick the tile once
     Tick,
+    /// populate map
+    Populate(TileCoord),
     /// get rendering information
     RenderInfoRequest {
         context: RenderContext,
@@ -81,6 +89,7 @@ pub enum GameMsg {
     GetDataValue(String),
     SetData(String, Data),
     RemoveData(String),
+    Stop,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -89,6 +98,8 @@ pub enum PlaceTileResponse {
     Removed,
     Ignored,
 }
+
+pub const POPULATE_RANGE: TileUnit = 256;
 
 impl Actor for Game {
     type Msg = GameMsg;
@@ -100,7 +111,67 @@ impl Actor for Game {
     fn recv(&mut self, ctx: &Context<Self::Msg>, msg: Self::Msg, sender: Sender) {
         let myself = Some(ctx.myself().into());
 
+        match &msg {
+            GetMap => {
+                sender.inspect(|v| v.try_tell(self.map.clone(), myself).unwrap());
+                return;
+            }
+            LoadMap(resource_man) => {
+                let map = self.map.lock().unwrap();
+
+                map.tiles.iter().for_each(|(_, (tile, _, _))| {
+                    ctx.system.stop(tile);
+                });
+
+                let name = map.map_name.clone();
+
+                drop(map);
+
+                self.map = Arc::new(Mutex::new(Map::load(ctx, resource_man.clone(), name)));
+                return;
+            }
+            GetData => {
+                let map = self.map.lock().unwrap();
+
+                sender.inspect(|v| v.try_tell(map.data.clone(), myself).unwrap());
+                return;
+            }
+            GetDataValue(key) => {
+                let map = self.map.lock().unwrap();
+
+                sender.inspect(|v| {
+                    v.try_tell(map.data.get(key.as_str()).cloned(), myself)
+                        .unwrap()
+                });
+                return;
+            }
+            _ => {}
+        }
+
+        if self.stopped {
+            return;
+        }
+
         match msg {
+            Populate(coord) => {
+                let key = coord.to_formal_string();
+
+                if Some(&true)
+                    == self
+                        .map
+                        .lock()
+                        .unwrap()
+                        .data
+                        .get(&key)
+                        .and_then(Data::as_bool)
+                {
+                    return;
+                }
+
+                self.populate(coord, ctx);
+
+                self.map.lock().unwrap().data.insert(key, Data::Bool(true));
+            }
             Tick => {
                 self.tick();
             }
@@ -151,32 +222,6 @@ impl Actor for Game {
                     tile.tell(msg, sender);
                 }
             }
-            GetMap => {
-                sender.inspect(|v| v.try_tell(self.map.clone(), myself).unwrap());
-            }
-            LoadMap(resource_man) => {
-                let map = self.map.lock().unwrap();
-
-                map.tiles.iter().for_each(|(_, (tile, _, _))| {
-                    ctx.system.stop(tile);
-                });
-
-                let name = map.map_name.clone();
-
-                drop(map);
-
-                self.map = Arc::new(Mutex::new(Map::load(ctx, resource_man, name)));
-            }
-            GetData => {
-                let map = self.map.lock().unwrap();
-
-                sender.inspect(|v| v.try_tell(map.data.clone(), myself).unwrap());
-            }
-            GetDataValue(key) => {
-                let map = self.map.lock().unwrap();
-
-                sender.inspect(|v| v.try_tell(map.data.get(&key).cloned(), myself).unwrap());
-            }
             SetData(key, value) => {
                 let mut map = self.map.lock().unwrap();
 
@@ -209,6 +254,10 @@ impl Actor for Game {
                     });
                 }
             }
+            Stop => {
+                self.stopped = true;
+            }
+            _ => {}
         }
     }
 }
@@ -222,6 +271,8 @@ impl Game {
             resource_man,
 
             map: Arc::new(Mutex::new(Map::new_empty(map_name.to_string()))),
+
+            stopped: false,
         }
     }
 
@@ -238,5 +289,40 @@ impl Game {
                 (ctx.myself().into(), id, coord, tile_state),
             )
             .unwrap()
+    }
+
+    /// Populates the map.
+    fn populate(&self, coord: TileCoord, ctx: &Context<GameMsg>) {
+        let start = coord * POPULATE_RANGE;
+        let start = (
+            start.q() - POPULATE_RANGE / 2,
+            start.r() - POPULATE_RANGE / 2,
+        );
+
+        let end = (start.0 + POPULATE_RANGE, start.1 + POPULATE_RANGE);
+
+        let src = self.resource_man.registry.deposit_tiles();
+        let range = 0..src.len();
+
+        let mut rng = rand::thread_rng();
+        let d = Bernoulli::new(0.001).unwrap();
+
+        for q in start.0..end.0 {
+            for r in start.1..end.1 {
+                if d.sample(&mut rng) {
+                    let coord = TileCoord::new(q, r);
+                    let id = src[rng.gen_range(range.clone())];
+
+                    ctx.myself().send_msg(
+                        PlaceTile {
+                            coord,
+                            id,
+                            tile_state: 0,
+                        },
+                        None,
+                    );
+                }
+            }
+        }
     }
 }

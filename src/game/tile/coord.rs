@@ -73,6 +73,10 @@ impl TileCoord {
     pub fn new(q: TileUnit, r: TileUnit) -> Self {
         Self(Hex::new(q, r))
     }
+
+    pub fn to_formal_string(&self) -> String {
+        format!("{},{}", self.q(), self.r())
+    }
 }
 
 impl Display for TileCoord {

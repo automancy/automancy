@@ -27,7 +27,7 @@ use vulkano::sync::GpuFuture;
 use crate::game::map::MapRenderInfo;
 use crate::game::tile::coord::TileUnit;
 use crate::render::camera::{CameraState, FAR};
-use crate::render::data::{GameUBO, GuiUBO, InstanceData, Vertex, RENDER_LAYOUT};
+use crate::render::data::{GameUBO, GuiUBO, InstanceData, Vertex, HEX_LAYOUT};
 use crate::render::gpu;
 use crate::render::gpu::Gpu;
 use crate::resource::ResourceManager;
@@ -76,7 +76,7 @@ impl Renderer {
         let instances = {
             let pos = camera_state.pos;
             let pos = point(pos.x, pos.y);
-            let pos = pixel_to_hex(RENDER_LAYOUT, pos).round();
+            let pos = pixel_to_hex(HEX_LAYOUT, pos).round();
 
             // TODO move this constant
             const RANGE: TileUnit = 32;
@@ -102,7 +102,7 @@ impl Renderer {
             for q in min.q()..max.q() {
                 for r in min.r()..max.r() {
                     let pos = Hex::new(q, r);
-                    let p = hex_to_pixel(RENDER_LAYOUT, pos);
+                    let p = hex_to_pixel(HEX_LAYOUT, pos);
 
                     instances.entry(pos.into()).or_insert_with(|| {
                         none.position_offset([p.x as Num, p.y as Num, FAR as Num])

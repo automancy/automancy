@@ -17,7 +17,7 @@ use crate::game::map::{Map, MapRenderInfo, RenderContext};
 use crate::game::run::setup::GameSetup;
 use crate::game::tile::coord::TileCoord;
 use crate::game::tile::entity::{Data, TileEntityMsg, TileState};
-use crate::game::{input, GameMsg, PlaceTileResponse};
+use crate::game::{input, GameMsg, PlaceTileResponse, POPULATE_RANGE};
 use crate::render::camera::{hex_to_normalized, screen_to_normalized, screen_to_world};
 use crate::render::data::InstanceData;
 use crate::render::{gpu, gui};
@@ -52,6 +52,8 @@ pub struct EventLoopStorage {
     pub tag_cache: HashMap<Id, Arc<Vec<Item>>>,
     /// tile currently linking
     pub linking_tile: Option<TileCoord>,
+    /// the last camera position, in populate coord
+    pub last_populate_camera_coord: Option<TileCoord>,
 }
 
 impl Default for EventLoopStorage {
@@ -68,6 +70,7 @@ impl Default for EventLoopStorage {
             config_open: None,
             tag_cache: Default::default(),
             linking_tile: None,
+            last_populate_camera_coord: None,
         }
     }
 }
@@ -97,6 +100,8 @@ pub fn on_event(
             ..
         } => {
             // game shutdown
+            setup.game.send_msg(GameMsg::Stop, None);
+
             let map: Arc<Mutex<Map>> = block_on(ask(&setup.sys, &setup.game, GameMsg::GetMap));
             map.lock()
                 .unwrap()
@@ -153,6 +158,23 @@ pub fn on_event(
             .input_state(loop_store.input_state, ignore_move);
 
         loop_store.pointing_at = setup.camera.camera_state().pointing_at;
+
+        let camera_coord = setup.camera.get_tile_coord();
+        let camera_coord = (camera_coord
+            + TileCoord::new(
+                camera_coord.q().signum() * POPULATE_RANGE,
+                camera_coord.r().signum() * POPULATE_RANGE,
+            ) / 2);
+        let populate_camera_coord = camera_coord / POPULATE_RANGE;
+
+        if Some(populate_camera_coord) != loop_store.last_populate_camera_coord {
+            println!("{populate_camera_coord}");
+            loop_store.last_populate_camera_coord = Some(populate_camera_coord);
+
+            setup
+                .game
+                .send_msg(GameMsg::Populate(populate_camera_coord), None);
+        }
 
         if loop_store.input_state.exit_pressed {
             // cancel one by one

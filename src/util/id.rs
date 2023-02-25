@@ -5,7 +5,7 @@ use flexstr::SharedStr;
 use rune::Any;
 use serde::de::{Error, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use string_interner::backend::StringBackend;
+use string_interner::backend::BucketBackend;
 use string_interner::{StringInterner, Symbol};
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -40,7 +40,7 @@ impl Symbol for Id {
     }
 }
 
-pub type Interner = StringInterner<StringBackend<Id>>;
+pub type Interner = StringInterner<BucketBackend<Id>>;
 
 impl IdRaw {
     pub const NONE: IdRaw = id_static("automancy", "none");

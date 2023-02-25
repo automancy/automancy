@@ -91,6 +91,10 @@ impl ResourceManager {
             }
         });
 
+        if tile_type == TileType::Deposit {
+            self.registry.deposit_tiles.push(id);
+        }
+
         self.registry.tiles.insert(
             id,
             Tile {

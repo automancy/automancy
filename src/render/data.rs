@@ -14,7 +14,7 @@ use crate::resource::ResourceManager;
 use crate::util::cg::{Matrix4, Num, Point3};
 use crate::util::id::Id;
 
-pub const RENDER_LAYOUT: Layout = Layout {
+pub const HEX_LAYOUT: Layout = Layout {
     orientation: LAYOUT_ORIENTATION_POINTY,
     size: Point { x: 1.0, y: 1.0 },
     origin: Point { x: 0.0, y: 0.0 },
@@ -86,7 +86,7 @@ impl InstanceData {
             .get_tile(id)
             .and_then(|r| r.models.get(tile_state as usize).cloned())
             .map(|face| {
-                let p = hex_to_pixel(RENDER_LAYOUT, pos.into());
+                let p = hex_to_pixel(HEX_LAYOUT, pos.into());
 
                 (
                     pos,

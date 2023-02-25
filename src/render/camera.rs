@@ -10,7 +10,7 @@ use hexagon_tiles::traits::HexRound;
 
 use crate::game::input::InputState;
 use crate::game::tile::coord::TileCoord;
-use crate::render::data::RENDER_LAYOUT;
+use crate::render::data::HEX_LAYOUT;
 use crate::util::cg::{matrix, DPoint2, DPoint3, DVector2, Double};
 
 pub const FAR: Double = 0.0;
@@ -126,6 +126,13 @@ impl Camera {
 
         self.camera_state.pointing_at = p.round().into();
     }
+
+    pub fn get_tile_coord(&self) -> TileCoord {
+        let pos = self.camera_state.pos;
+        let point = point(pos.x, pos.y);
+
+        pixel_to_hex(HEX_LAYOUT, point).round().into()
+    }
 }
 
 pub fn main_pos_to_hex(
@@ -139,7 +146,7 @@ pub fn main_pos_to_hex(
 
     let p = point(p.x, p.y);
 
-    pixel_to_hex(RENDER_LAYOUT, p)
+    pixel_to_hex(HEX_LAYOUT, p)
 }
 
 pub fn screen_to_normalized(width: Double, height: Double, c: DPoint2) -> DPoint2 {
@@ -178,7 +185,7 @@ pub fn hex_to_normalized(
     camera_pos: DPoint3,
     hex: TileCoord,
 ) -> DPoint3 {
-    let Point { x, y } = hex_to_pixel(RENDER_LAYOUT, hex.into());
+    let Point { x, y } = hex_to_pixel(HEX_LAYOUT, hex.into());
 
     let aspect = width / height;
 

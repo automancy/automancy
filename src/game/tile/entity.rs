@@ -40,6 +40,9 @@ pub enum Data {
     VecCoord(#[rune(get)] Vec<TileCoord>),
 
     #[rune(constructor)]
+    Bool(#[rune(get)] bool),
+
+    #[rune(constructor)]
     Id(#[rune(get, copy)] Id),
 
     #[rune(constructor)]
@@ -64,6 +67,13 @@ impl Data {
     pub fn as_coord_mut(&mut self) -> Option<&mut TileCoord> {
         if let Self::Coord(coord) = self {
             return Some(coord);
+        }
+        None
+    }
+
+    pub fn as_bool_mut(&mut self) -> Option<&mut bool> {
+        if let Self::Bool(v) = self {
+            return Some(v);
         }
         None
     }
@@ -103,6 +113,13 @@ impl Data {
         None
     }
 
+    pub fn as_bool(&self) -> Option<&bool> {
+        if let Self::Bool(v) = self {
+            return Some(v);
+        }
+        None
+    }
+
     pub fn as_vec_coord(&self) -> Option<&Vec<TileCoord>> {
         if let Self::VecCoord(vec) = self {
             return Some(vec);
@@ -131,6 +148,7 @@ pub type DataMap = HashMap<String, Data>;
 pub enum DataRaw {
     Inventory(InventoryRaw),
     Coord(TileCoord),
+    Bool(bool),
     VecCoord(Vec<TileCoord>),
     Id(IdRaw),
     Amount(ItemAmount),
@@ -149,6 +167,7 @@ pub fn data_to_raw(data: DataMap, interner: &Interner) -> DataMapRaw {
                 Data::Id(id) => DataRaw::Id(IdRaw::parse(interner.resolve(id).unwrap())),
                 Data::Amount(amount) => DataRaw::Amount(amount),
                 Data::VecCoord(vec) => DataRaw::VecCoord(vec),
+                Data::Bool(v) => DataRaw::Bool(v),
             };
 
             (key, value)
@@ -165,6 +184,7 @@ pub fn data_from_raw(data: DataMapRaw, interner: &Interner) -> DataMap {
                 DataRaw::Id(id) => Data::Id(interner.get(id.to_string()).unwrap()),
                 DataRaw::Amount(amount) => Data::Amount(amount),
                 DataRaw::VecCoord(vec) => Data::VecCoord(vec),
+                DataRaw::Bool(v) => Data::Bool(v),
             };
 
             (key, value)
@@ -432,7 +452,7 @@ impl Actor for TileEntity {
                             }
                         }
                         Transfer(id) => {
-                            if let Transfer(_) = &source_type {
+                            if let Transfer(_) = source_type {
                                 return;
                             }
                             if let Some(function) = resource_man.functions.get(id).cloned() {

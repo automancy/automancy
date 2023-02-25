@@ -11,6 +11,7 @@ pub type TickUnit = u16;
 
 #[derive(Debug, Clone)]
 pub struct Ticked;
+
 impl Game {
     fn inner_tick(&mut self) {
         for (tile, _, _) in self.map.lock().unwrap().tiles.values() {

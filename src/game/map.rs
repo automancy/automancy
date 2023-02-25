@@ -22,7 +22,7 @@ use crate::util::id::{Id, IdRaw, Interner};
 
 pub const MAP_PATH: &str = "map";
 
-const MAP_BUFFER_SIZE: usize = 128 * 1024;
+const MAP_BUFFER_SIZE: usize = 1024 * 1024;
 
 #[derive(Clone, Debug)]
 pub struct RenderContext {
@@ -98,7 +98,7 @@ impl Map {
 
         let data = data_to_raw(self.data.clone(), interner);
 
-        serde_json::to_writer(&mut encoder, &(tiles, data)).unwrap();
+        serde_cbor_2::to_writer(&mut encoder, &(tiles, data)).unwrap();
 
         encoder.do_finish().unwrap();
     }
@@ -120,7 +120,7 @@ impl Map {
         let decoder = Decoder::new(reader).unwrap();
 
         let (tiles, data): (Vec<(TileCoord, TileData)>, DataMapRaw) =
-            serde_json::from_reader(decoder).unwrap();
+            serde_cbor_2::from_reader(decoder).unwrap();
 
         let tiles = tiles
             .into_iter()

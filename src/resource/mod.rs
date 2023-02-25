@@ -32,6 +32,8 @@ pub static RESOURCES_FOLDER: &str = "resources";
 
 #[derive(Clone, Any)]
 pub struct Registry {
+    deposit_tiles: Vec<Id>,
+
     tiles: HashMap<Id, Tile>,
     scripts: HashMap<Id, Script>,
     tags: HashMap<Id, Tag>,
@@ -48,6 +50,10 @@ pub struct Registry {
 }
 
 impl Registry {
+    pub fn deposit_tiles(&self) -> &Vec<Id> {
+        &self.deposit_tiles
+    }
+
     pub fn get_tile(&self, id: Id) -> Option<Tile> {
         self.tiles.get(&id).cloned()
     }
@@ -106,6 +112,8 @@ impl ResourceManager {
             ordered_items: vec![],
 
             registry: Registry {
+                deposit_tiles: Default::default(),
+
                 tiles: Default::default(),
                 scripts: Default::default(),
                 tags: Default::default(),
