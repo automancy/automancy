@@ -20,6 +20,7 @@ use crate::game::tile::entity::{Data, TileEntityMsg, TileState};
 use crate::game::{input, GameMsg, PlaceTileResponse, POPULATE_RANGE};
 use crate::render::camera::{hex_to_normalized, screen_to_normalized, screen_to_world};
 use crate::render::data::InstanceData;
+use crate::render::renderer::RENDER_RANGE;
 use crate::render::{gpu, gui};
 use crate::resource::item::Item;
 use crate::util::cg::{DPoint3, Num};
@@ -160,15 +161,14 @@ pub fn on_event(
         loop_store.pointing_at = setup.camera.camera_state().pointing_at;
 
         let camera_coord = setup.camera.get_tile_coord();
-        let camera_coord = (camera_coord
+        let camera_coord = camera_coord
             + TileCoord::new(
                 camera_coord.q().signum() * POPULATE_RANGE,
                 camera_coord.r().signum() * POPULATE_RANGE,
-            ) / 2);
+            ) / 2;
         let populate_camera_coord = camera_coord / POPULATE_RANGE;
 
         if Some(populate_camera_coord) != loop_store.last_populate_camera_coord {
-            println!("{populate_camera_coord}");
             loop_store.last_populate_camera_coord = Some(populate_camera_coord);
 
             setup
@@ -403,18 +403,20 @@ pub fn on_event(
             }
         }
 
-        let render_info: MapRenderInfo = block_on(ask(
+        let render_info: Arc<MapRenderInfo> = block_on(ask(
             &setup.sys,
             &setup.game,
             GameMsg::RenderInfoRequest {
                 context: RenderContext {
                     resource_man: resource_man.clone(),
+                    range: RENDER_RANGE,
+                    center: setup.camera.get_tile_coord(),
                 },
             },
         ));
 
         setup.renderer.render(
-            render_info,
+            &render_info,
             camera_state,
             gui_instances,
             extra_vertices,

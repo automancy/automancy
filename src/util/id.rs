@@ -5,14 +5,28 @@ use flexstr::SharedStr;
 use rune::Any;
 use serde::de::{Error, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use string_interner::backend::BucketBackend;
+use string_interner::backend::{BucketBackend, StringBackend};
 use string_interner::{StringInterner, Symbol};
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct IdRaw(SharedStr, SharedStr);
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Zeroable, Pod, Any)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Hash,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Zeroable,
+    Pod,
+    Any,
+    Serialize,
+    Deserialize,
+)]
 pub struct Id(#[rune(get, copy)] usize);
 
 unsafe impl ZeroableInOption for Id {}
@@ -40,7 +54,7 @@ impl Symbol for Id {
     }
 }
 
-pub type Interner = StringInterner<BucketBackend<Id>>;
+pub type Interner = StringInterner<StringBackend<Id>>;
 
 impl IdRaw {
     pub const NONE: IdRaw = id_static("automancy", "none");
@@ -59,7 +73,7 @@ impl IdRaw {
 }
 
 pub fn id(a: &str, b: &str) -> IdRaw {
-    IdRaw(SharedStr::from(a), SharedStr::from(b))
+    IdRaw(SharedStr::from_ref(a), SharedStr::from_ref(b))
 }
 
 pub const fn id_static(a: &'static str, b: &'static str) -> IdRaw {

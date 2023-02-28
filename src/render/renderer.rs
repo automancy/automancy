@@ -1,4 +1,5 @@
 use cgmath::SquareMatrix;
+use std::collections::HashMap;
 use std::f32::consts::PI;
 use std::sync::Arc;
 
@@ -35,6 +36,8 @@ use crate::util::cg::{actual_pos, eye, matrix, Matrix4, Num, Point3};
 use crate::util::colors;
 use crate::util::colors::WithAlpha;
 
+pub const RENDER_RANGE: TileUnit = 32;
+
 pub struct Renderer {
     resource_man: Arc<ResourceManager>,
 
@@ -64,7 +67,7 @@ impl Renderer {
 impl Renderer {
     pub fn render(
         &mut self,
-        map_render_info: MapRenderInfo,
+        map_render_info: &MapRenderInfo,
         camera_state: CameraState,
         gui_instances: Vec<InstanceData>,
         extra_vertices: Vec<Vertex>,
@@ -78,10 +81,7 @@ impl Renderer {
             let pos = point(pos.x, pos.y);
             let pos = pixel_to_hex(HEX_LAYOUT, pos).round();
 
-            // TODO move this constant
-            const RANGE: TileUnit = 32;
-
-            let o = Hex::new(RANGE, RANGE);
+            let o = Hex::new(RENDER_RANGE, RENDER_RANGE);
 
             let min = pos - o;
             let max = pos + o;
@@ -97,7 +97,7 @@ impl Renderer {
                     .unwrap(),
             );
 
-            let mut instances = map_render_info.instances;
+            let mut instances = map_render_info.instances.clone();
 
             for q in min.q()..max.q() {
                 for r in min.r()..max.r() {
@@ -116,11 +116,15 @@ impl Renderer {
                 }
             }
 
-            let mut instances = instances.into_values().collect::<Vec<_>>();
+            let mut map = HashMap::new();
 
-            instances.sort_by_key(|v| v.id);
+            instances.into_values().for_each(|v| {
+                if let Some(id) = v.id {
+                    map.entry(id).or_insert_with(Vec::new).push(v)
+                }
+            });
 
-            instances
+            map.into_values().flatten().collect::<Vec<_>>()
         };
 
         let camera_pos = camera_state.pos.cast::<Num>().unwrap();

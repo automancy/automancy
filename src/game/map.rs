@@ -11,22 +11,24 @@ use riker_patterns::ask::ask;
 use serde::{Deserialize, Serialize};
 use zstd::{Decoder, Encoder};
 
-use crate::game::tile::coord::TileCoord;
+use crate::game::tile::coord::{TileCoord, TileUnit};
 use crate::game::tile::entity::TileEntityMsg::{GetData, SetData};
 use crate::game::tile::entity::{
     data_from_raw, data_to_raw, DataMap, DataMapRaw, TileEntityMsg, TileState,
 };
 use crate::render::data::InstanceData;
 use crate::resource::ResourceManager;
-use crate::util::id::{Id, IdRaw, Interner};
+use crate::util::id::{Id, Interner};
 
 pub const MAP_PATH: &str = "map";
 
-const MAP_BUFFER_SIZE: usize = 1024 * 1024;
+const MAP_BUFFER_SIZE: usize = 256 * 1024;
 
 #[derive(Clone, Debug)]
 pub struct RenderContext {
     pub resource_man: Arc<ResourceManager>,
+    pub range: TileUnit,
+    pub center: TileCoord,
 }
 
 #[derive(Clone, Debug)]
@@ -36,34 +38,59 @@ pub struct MapRenderInfo {
 
 #[derive(Debug, Clone)]
 pub struct Map {
+    pub render_cache: HashMap<(TileUnit, TileCoord), Arc<MapRenderInfo>>,
+
     pub map_name: String,
 
     pub tiles: HashMap<TileCoord, (ActorRef<TileEntityMsg>, Id, TileState)>,
-
     pub data: DataMap,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct TileData(IdRaw, TileState, DataMapRaw);
+struct MapHeader(Vec<(Id, String)>);
+
+#[derive(Debug, Serialize, Deserialize)]
+struct TileData(Id, TileState, DataMapRaw);
 
 impl Map {
-    pub fn render_info(&self, RenderContext { resource_man }: &RenderContext) -> MapRenderInfo {
-        // TODO cache this
+    pub fn render_info(
+        &mut self,
+        RenderContext {
+            resource_man,
+            range,
+            center,
+        }: RenderContext,
+    ) -> Arc<MapRenderInfo> {
+        if let Some(info) = self.render_cache.get(&(range, center)) {
+            return info.clone();
+        }
+
         let instances = self
             .tiles
             .iter()
-            .map(|(a, b)| (*a, b))
+            .filter(|(pos, _)| center.distance(**pos) <= range)
             .flat_map(|(pos, (_, id, tile_state))| {
-                InstanceData::from_id(*id, pos, *tile_state, resource_man.clone())
+                InstanceData::from_id(*id, *pos, *tile_state, resource_man.clone())
             })
             .collect();
 
-        MapRenderInfo { instances }
+        let info = Arc::new(MapRenderInfo { instances });
+
+        if self.render_cache.len() > 16 {
+            self.render_cache.clear();
+        }
+
+        self.render_cache.insert((range, center), info.clone());
+
+        info
     }
 
     pub fn new_empty(map_name: String) -> Self {
         Self {
+            render_cache: Default::default(),
+
             map_name,
+
             tiles: Default::default(),
             data: Default::default(),
         }
@@ -83,22 +110,28 @@ impl Map {
         let writer = BufWriter::with_capacity(MAP_BUFFER_SIZE, file);
         let mut encoder = Encoder::new(writer, 0).unwrap();
 
+        let mut id_map = HashMap::new();
+
         let tiles = self
             .tiles
             .iter()
             .map(|(coord, (tile, id, tile_state))| {
-                let id = IdRaw::parse(interner.resolve(*id).unwrap());
+                if !id_map.contains_key(id) {
+                    id_map.insert(*id, interner.resolve(*id).unwrap().to_string());
+                }
 
                 let data: DataMap = block_on(ask(sys, tile, GetData));
                 let data = data_to_raw(data, interner);
 
-                (coord, TileData(id, *tile_state, data))
+                (coord, TileData(*id, *tile_state, data))
             })
             .collect::<Vec<_>>();
 
+        let header = MapHeader(id_map.into_iter().collect());
+
         let data = data_to_raw(self.data.clone(), interner);
 
-        serde_cbor_2::to_writer(&mut encoder, &(tiles, data)).unwrap();
+        serde_json::to_writer(&mut encoder, &(header, tiles, data)).unwrap();
 
         encoder.do_finish().unwrap();
     }
@@ -119,13 +152,18 @@ impl Map {
         let reader = BufReader::with_capacity(MAP_BUFFER_SIZE, file);
         let decoder = Decoder::new(reader).unwrap();
 
-        let (tiles, data): (Vec<(TileCoord, TileData)>, DataMapRaw) =
-            serde_cbor_2::from_reader(decoder).unwrap();
+        let (header, tiles, data): (MapHeader, Vec<(TileCoord, TileData)>, DataMapRaw) =
+            serde_json::from_reader(decoder).unwrap();
+
+        let id_reverse = header.0.into_iter().collect::<HashMap<_, _>>();
 
         let tiles = tiles
             .into_iter()
             .flat_map(|(coord, TileData(id, tile_state, data))| {
-                if let Some(id) = resource_man.interner.get(id.to_string()) {
+                if let Some(id) = id_reverse
+                    .get(&id)
+                    .and_then(|id| resource_man.interner.get(id.as_str()))
+                {
                     let tile = Game::new_tile(ctx, coord, id, tile_state);
                     let data = data_from_raw(data, &resource_man.interner);
 
@@ -143,7 +181,10 @@ impl Map {
         let data = data_from_raw(data, &resource_man.interner);
 
         Self {
+            render_cache: Default::default(),
+
             map_name,
+
             tiles,
             data,
         }

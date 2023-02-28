@@ -99,7 +99,7 @@ pub enum PlaceTileResponse {
     Ignored,
 }
 
-pub const POPULATE_RANGE: TileUnit = 256;
+pub const POPULATE_RANGE: TileUnit = 64;
 
 impl Actor for Game {
     type Msg = GameMsg;
@@ -154,29 +154,23 @@ impl Actor for Game {
 
         match msg {
             Populate(coord) => {
+                let mut map = self.map.lock().unwrap();
+
                 let key = coord.to_formal_string();
 
-                if Some(&true)
-                    == self
-                        .map
-                        .lock()
-                        .unwrap()
-                        .data
-                        .get(&key)
-                        .and_then(Data::as_bool)
-                {
+                if Some(&true) == map.data.get(&key).and_then(Data::as_bool) {
                     return;
                 }
 
-                self.populate(coord, ctx);
+                self.populate(coord, ctx, &mut map);
 
-                self.map.lock().unwrap().data.insert(key, Data::Bool(true));
+                map.data.insert(key, Data::Bool(true));
             }
             Tick => {
                 self.tick();
             }
             RenderInfoRequest { context } => {
-                let render_info = self.map.lock().unwrap().render_info(&context);
+                let render_info = self.map.lock().unwrap().render_info(context);
 
                 sender.inspect(|v| v.try_tell(render_info, myself).unwrap());
             }
@@ -210,6 +204,8 @@ impl Actor for Game {
                     map.tiles.insert(coord, (tile, id, tile_state));
                     sender.inspect(|v| v.try_tell(PlaceTileResponse::Placed, myself).unwrap());
                 }
+
+                map.render_cache.clear();
             }
             GetTile(coord) => {
                 sender.inspect(|v| {
@@ -292,7 +288,7 @@ impl Game {
     }
 
     /// Populates the map.
-    fn populate(&self, coord: TileCoord, ctx: &Context<GameMsg>) {
+    fn populate(&self, coord: TileCoord, ctx: &Context<GameMsg>, map: &mut Map) {
         let start = coord * POPULATE_RANGE;
         let start = (
             start.q() - POPULATE_RANGE / 2,
@@ -313,14 +309,8 @@ impl Game {
                     let coord = TileCoord::new(q, r);
                     let id = src[rng.gen_range(range.clone())];
 
-                    ctx.myself().send_msg(
-                        PlaceTile {
-                            coord,
-                            id,
-                            tile_state: 0,
-                        },
-                        None,
-                    );
+                    map.tiles
+                        .insert(coord, (Self::new_tile(ctx, coord, id, 0), id, 0));
                 }
             }
         }

@@ -1,5 +1,5 @@
 use hexagon_tiles::hex::{hex, Hex};
-use hexagon_tiles::traits::HexDirection;
+use hexagon_tiles::traits::{HexDirection, HexMath};
 use rune::Any;
 use rune::Module;
 use serde::de::{SeqAccess, Visitor};
@@ -14,18 +14,6 @@ pub type TileUnit = i32;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Any)]
 pub struct TileCoord(TileHex);
-
-impl From<TileHex> for TileCoord {
-    fn from(value: TileHex) -> Self {
-        Self(value)
-    }
-}
-
-impl From<TileCoord> for TileHex {
-    fn from(value: TileCoord) -> Self {
-        value.0
-    }
-}
 
 impl TileCoord {
     pub fn install(module: &mut Module) -> Result<(), rune::ContextError> {
@@ -126,6 +114,24 @@ where
         D: Deserializer<'de>,
     {
         deserializer.deserialize_tuple(2, TileCoordVisitor)
+    }
+}
+
+impl From<TileHex> for TileCoord {
+    fn from(value: TileHex) -> Self {
+        Self(value)
+    }
+}
+
+impl From<TileCoord> for TileHex {
+    fn from(value: TileCoord) -> Self {
+        value.0
+    }
+}
+
+impl TileCoord {
+    pub fn distance(self, other: TileCoord) -> TileUnit {
+        self.0.distance(other.0)
     }
 }
 
