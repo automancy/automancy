@@ -17,9 +17,9 @@ pub const FAR: Double = 0.0;
 
 #[derive(Debug, Clone, Copy)]
 pub struct CameraState {
-    pub pos: DPoint3,
-    pub move_vel: DVector2,
-    pub scroll_vel: Double,
+    pos: DPoint3,
+    move_vel: DVector2,
+    scroll_vel: Double,
     pub pointing_at: TileCoord,
 }
 
@@ -34,10 +34,8 @@ impl Default for CameraState {
     }
 }
 
-impl CameraState {
-    pub fn is_at_max_height(&self) -> bool {
-        self.pos.z > 0.9985
-    }
+pub fn is_at_max_height(pos: DPoint3) -> bool {
+    (1.0 - pos.z).abs() <= 0.001
 }
 
 pub struct Camera {
@@ -47,6 +45,16 @@ pub struct Camera {
 }
 
 impl Camera {
+    pub fn is_at_max_height(&self) -> bool {
+        is_at_max_height(self.get_pos())
+    }
+
+    pub fn get_pos(&self) -> DPoint3 {
+        let DPoint3 { x, y, z } = self.camera_state.pos;
+
+        point3(x, y, Self::real_z(z))
+    }
+
     pub fn new(window_size: (Double, Double)) -> Self {
         Self {
             camera_state: Default::default(),
@@ -69,14 +77,26 @@ impl Camera {
         }
     }
 
+    fn real_z(z: Double) -> Double {
+        if z <= 1.0 {
+            return z;
+        }
+
+        if z < 1.5 {
+            1.0
+        } else {
+            z - 0.5
+        }
+    }
+
     fn scroll(z: Double, vel: Double) -> Double {
         let z = z + vel * 0.4;
 
-        clamp(z, FAR + 0.2, 1.0)
+        clamp(z, FAR + 0.2, 2.5)
     }
 
-    pub fn camera_state(&self) -> CameraState {
-        self.camera_state
+    pub fn camera_state(&self) -> &CameraState {
+        &self.camera_state
     }
 
     pub fn update_pos(&mut self) {
@@ -122,7 +142,7 @@ impl Camera {
     pub fn update_pointing_at(&mut self, main_pos: DPoint2) {
         let (width, height) = self.window_size;
 
-        let p = main_pos_to_hex(width, height, self.camera_state.pos, main_pos);
+        let p = main_pos_to_hex(width, height, self.get_pos(), main_pos);
 
         self.camera_state.pointing_at = p.round().into();
     }

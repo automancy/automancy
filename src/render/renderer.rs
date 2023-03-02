@@ -26,13 +26,13 @@ use vulkano::sync;
 use vulkano::sync::GpuFuture;
 
 use crate::game::map::MapRenderInfo;
-use crate::game::tile::coord::TileUnit;
-use crate::render::camera::{CameraState, FAR};
+use crate::game::tile::coord::{TileCoord, TileUnit};
+use crate::render::camera::{is_at_max_height, FAR};
 use crate::render::data::{GameUBO, GuiUBO, InstanceData, Vertex, HEX_LAYOUT};
 use crate::render::gpu;
 use crate::render::gpu::Gpu;
 use crate::resource::ResourceManager;
-use crate::util::cg::{actual_pos, eye, matrix, Matrix4, Num, Point3};
+use crate::util::cg::{actual_pos, eye, matrix, DPoint3, Matrix4, Num, Point3};
 use crate::util::colors;
 use crate::util::colors::WithAlpha;
 
@@ -68,7 +68,8 @@ impl Renderer {
     pub fn render(
         &mut self,
         map_render_info: &MapRenderInfo,
-        camera_state: CameraState,
+        camera_pos: DPoint3,
+        pointing_at: TileCoord,
         gui_instances: Vec<InstanceData>,
         extra_vertices: Vec<Vertex>,
         gui: &mut Gui,
@@ -77,8 +78,7 @@ impl Renderer {
         let aspect = width / height;
 
         let instances = {
-            let pos = camera_state.pos;
-            let pos = point(pos.x, pos.y);
+            let pos = point(camera_pos.x, camera_pos.y);
             let pos = pixel_to_hex(HEX_LAYOUT, pos).round();
 
             let o = Hex::new(RENDER_RANGE, RENDER_RANGE);
@@ -110,8 +110,8 @@ impl Renderer {
                 }
             }
 
-            if camera_state.is_at_max_height() {
-                if let Some(instance) = instances.get_mut(&camera_state.pointing_at) {
+            if is_at_max_height(camera_pos) {
+                if let Some(instance) = instances.get_mut(&pointing_at) {
                     *instance = instance.color_offset(colors::ORANGE.with_alpha(0.5).to_array())
                 }
             }
@@ -127,18 +127,9 @@ impl Renderer {
             map.into_values().flatten().collect::<Vec<_>>()
         };
 
-        let camera_pos = camera_state.pos.cast::<Num>().unwrap();
+        let camera_pos = camera_pos.cast::<Num>().unwrap();
         let pos = actual_pos(camera_pos, eye(camera_pos.z, PI));
-
         let matrix = matrix(camera_pos, aspect as Num, PI);
-
-        /*
-        let camera_pos = matrix * vec4(0.0, 0.0, 6.0, 1.0);
-        println!("{:?}", camera_pos);
-        let camera_pos = camera_pos.truncate() / camera_pos.w;
-        let camera_pos = point3(-camera_pos.x, camera_pos.y, 1.0);
-        println!("{:?}", camera_pos);
-         */
 
         self.inner_render(matrix, pos, &instances, &gui_instances, extra_vertices, gui);
     }

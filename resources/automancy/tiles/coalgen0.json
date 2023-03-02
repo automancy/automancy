@@ -1,0 +1,10 @@
+{
+    "id": "coalgen0",
+    "models": ["coalgen0"],
+    "tile_type": {
+        "type": "Machine",
+        "param": [
+            "coalgen0"
+        ]
+    }
+}

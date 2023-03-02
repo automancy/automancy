@@ -77,7 +77,7 @@ pub fn eye<N: BaseFloat>(z: N, pi: N) -> cgmath::Vector3<N> {
     let two = one + one;
     let two_point_two_five = two + (one / (two * two));
 
-    let z = one - z;
+    let z = one - z.min(one);
     let r = z.mul(pi / two).sin();
     let o = r.mul(pi / two_point_two_five).cos();
 

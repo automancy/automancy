@@ -620,7 +620,7 @@ pub fn tile_config(
                                 let DPoint3 { x, y, .. } = hex_to_normalized(
                                     camera.window_size.0,
                                     camera.window_size.1,
-                                    camera.camera_state().pos,
+                                    camera.get_pos(),
                                     config_open,
                                 );
                                 let a = point2(x, y);
@@ -628,7 +628,7 @@ pub fn tile_config(
                                 let DPoint3 { x, y, .. } = hex_to_normalized(
                                     camera.window_size.0,
                                     camera.window_size.1,
-                                    camera.camera_state().pos,
+                                    camera.get_pos(),
                                     config_open + *link,
                                 );
                                 let b = point2(x, y);

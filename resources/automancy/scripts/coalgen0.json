@@ -1,0 +1,19 @@
+{
+    "id": "coalgen0",
+    "instructions": {
+        "inputs": [
+            {
+                "item": {
+                    "id": "coal"
+                },
+                "amount": 1
+            }
+        ],
+        "output": {
+            "item": {
+                "id": "electricity"
+            },
+            "amount": 128
+        }
+    }
+}

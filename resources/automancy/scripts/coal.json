@@ -1,0 +1,12 @@
+{
+    "id": "coal",
+    "adjacent": "coal_mine",
+    "instructions": {
+        "output": {
+            "item": {
+                "id": "coal"
+            },
+            "amount": 8
+        }
+    }
+}

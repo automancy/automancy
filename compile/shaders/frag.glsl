@@ -22,7 +22,7 @@ void main() {
     vec4 light_color = ubo.light_color * attenuation;
     vec4 diffuse = light_color * diff;
 
-    vec3 rainbow = normalize(direction * direction) * diff * 0.1;
+    vec3 rainbow = normalize(direction * direction) * diff * 0.15;
 
     vec4 color = diffuse + ubo.ambient_light_color + vec4(rainbow, 0.0);
 

@@ -21,14 +21,14 @@ pub fn handle_tick(entity, registry, tile_type, tick_count) {
 
                     return (
                        coord,
-                       direction,
+                       direction.neg(),
                        output,
                    );
                 }
             } else {
                 return (
                     coord,
-                    direction,
+                    direction.neg(),
                     output,
                 );
             }
@@ -36,7 +36,7 @@ pub fn handle_tick(entity, registry, tile_type, tick_count) {
     }
 }
 
-pub fn handle_transaction(entity, registry, tick_count, item_stack, source_type, direction) {
+pub fn handle_transaction(entity, registry, tick_count, item_stack, source_type, direction, random) {
     let data = entity.data;
 
     let script = data.get("script");

@@ -1,4 +1,5 @@
 use egui::NumExt;
+use rand::{thread_rng, RngCore};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -386,7 +387,7 @@ impl Actor for TileEntity {
                                         resource_man,
                                         tick_count,
                                         coord: self.coord + target,
-                                        direction: target,
+                                        direction: -target,
                                     },
                                 )
                             }
@@ -403,7 +404,7 @@ impl Actor for TileEntity {
                 direction,
             } => {
                 if let Some(sender) = sender {
-                    let tile_type = &resource_man.registry.get_tile(self.id).unwrap().tile_type;
+                    let tile_type = resource_man.registry.get_tile(self.id).unwrap().tile_type;
 
                     match &tile_type {
                         Machine(_) => {
@@ -422,6 +423,7 @@ impl Actor for TileEntity {
                                         item_stack,
                                         &source_type,
                                         direction,
+                                        random(),
                                     ),
                                 )
                                 .unwrap();
@@ -452,9 +454,6 @@ impl Actor for TileEntity {
                             }
                         }
                         Transfer(id) => {
-                            if let Transfer(_) = source_type {
-                                return;
-                            }
                             if let Some(function) = resource_man.functions.get(id).cloned() {
                                 let mut vm = Vm::new(function.context, function.unit);
 
@@ -468,6 +467,7 @@ impl Actor for TileEntity {
                                             item_stack,
                                             &source_type,
                                             direction,
+                                            random(),
                                         ),
                                     )
                                     .unwrap();
@@ -509,8 +509,8 @@ impl Actor for TileEntity {
                                             resource_man,
                                             tick_count,
                                             item_stack,
-                                            source_type,
-                                            direction: target,
+                                            source_type: tile_type,
+                                            direction: -target,
                                         },
                                     );
                                 }
@@ -752,10 +752,32 @@ impl TileEntity {
             }
         }
     }
+
+    fn send_tile_msg_next_tick(
+        &mut self,
+        myself: Option<BasicActorRef>,
+        sender: Option<BasicActorRef>,
+        coord: TileCoord,
+        msg: TileEntityMsg,
+    ) {
+        match self
+            .game
+            .try_tell(GameMsg::NextTickMsgToTile(coord, msg, sender), myself)
+        {
+            Ok(_) => {}
+            Err(_) => {
+                self.data.remove("target");
+            }
+        }
+    }
 }
 
 impl ActorFactoryArgs<(BasicActorRef, Id, TileCoord, TileState)> for TileEntity {
     fn create_args(args: (BasicActorRef, Id, TileCoord, TileState)) -> Self {
         Self::new(args.0, args.1, args.2, args.3)
     }
+}
+
+fn random() -> i32 {
+    thread_rng().next_u64() as i32
 }

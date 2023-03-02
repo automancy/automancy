@@ -39,8 +39,6 @@ pub struct EventLoopStorage {
     pub filter: String,
     /// the state of the input peripherals.
     pub input_state: InputState,
-    /// the tile the cursor is pointing at.
-    pub pointing_at: TileCoord,
     /// the tile states of the selected tiles.
     pub selected_tile_states: HashMap<Id, TileState>,
     /// the currently selected tile.
@@ -64,7 +62,6 @@ impl Default for EventLoopStorage {
             closed: false,
             filter: String::new(),
             input_state: Default::default(),
-            pointing_at: TileCoord::ZERO,
             selected_tile_states: Default::default(),
             selected_id: None,
             already_placed_at: None,
@@ -158,8 +155,6 @@ pub fn on_event(
             .camera
             .input_state(loop_store.input_state, ignore_move);
 
-        loop_store.pointing_at = setup.camera.camera_state().pointing_at;
-
         let camera_coord = setup.camera.get_tile_coord();
         let camera_coord = camera_coord
             + TileCoord::new(
@@ -187,12 +182,12 @@ pub fn on_event(
             || (loop_store.input_state.shift_held && loop_store.input_state.main_held)
         {
             if let Some(id) = loop_store.selected_id {
-                if loop_store.already_placed_at != Some(loop_store.pointing_at) {
+                if loop_store.already_placed_at != Some(setup.camera.camera_state().pointing_at) {
                     let response: PlaceTileResponse = block_on(ask(
                         &setup.sys,
                         &setup.game,
                         GameMsg::PlaceTile {
-                            coord: loop_store.pointing_at,
+                            coord: setup.camera.camera_state().pointing_at,
                             id,
                             tile_state: *loop_store.selected_tile_states.get(&id).unwrap_or(&0),
                         },
@@ -218,7 +213,7 @@ pub fn on_event(
                         _ => {}
                     }
 
-                    loop_store.already_placed_at = Some(loop_store.pointing_at)
+                    loop_store.already_placed_at = Some(setup.camera.camera_state().pointing_at)
                 }
             }
         }
@@ -228,7 +223,7 @@ pub fn on_event(
                 let result: Option<(ActorRef<TileEntityMsg>, Id, TileState)> = block_on(ask(
                     &setup.sys,
                     &setup.game,
-                    GameMsg::GetTile(loop_store.pointing_at),
+                    GameMsg::GetTile(setup.camera.camera_state().pointing_at),
                 ));
 
                 if let Some(id) = result.map(|v| v.1) {
@@ -237,7 +232,7 @@ pub fn on_event(
                             &setup.sys,
                             &setup.game,
                             GameMsg::SendMsgToTile(
-                                loop_store.pointing_at,
+                                setup.camera.camera_state().pointing_at,
                                 TileEntityMsg::GetDataValue("link".to_string()),
                             ),
                         ));
@@ -245,7 +240,7 @@ pub fn on_event(
                         if old.is_some() {
                             setup.game.send_msg(
                                 GameMsg::SendMsgToTile(
-                                    loop_store.pointing_at,
+                                    setup.camera.camera_state().pointing_at,
                                     TileEntityMsg::RemoveData("link".to_string()),
                                 ),
                                 None,
@@ -261,10 +256,12 @@ pub fn on_event(
                         } else {
                             setup.game.send_msg(
                                 GameMsg::SendMsgToTile(
-                                    loop_store.pointing_at,
+                                    setup.camera.camera_state().pointing_at,
                                     TileEntityMsg::SetData(
                                         "link".to_string(),
-                                        Data::Coord(linking_tile - loop_store.pointing_at),
+                                        Data::Coord(
+                                            linking_tile - setup.camera.camera_state().pointing_at,
+                                        ),
                                     ),
                                 ),
                                 None,
@@ -292,21 +289,19 @@ pub fn on_event(
                     .audio_man
                     .play(resource_man.audio["click"].clone())
                     .unwrap();
-            } else if loop_store.config_open == Some(loop_store.pointing_at) {
+            } else if loop_store.config_open == Some(setup.camera.camera_state().pointing_at) {
                 loop_store.config_open = None;
                 loop_store.filter.clear();
             } else {
-                loop_store.config_open = Some(loop_store.pointing_at);
+                loop_store.config_open = Some(setup.camera.camera_state().pointing_at);
             }
         }
     }
 
     if event == Event::RedrawRequested(setup.renderer.gpu.window.id()) {
-        let camera_state = setup.camera.camera_state();
-
         let (selection_send, mut selection_recv) = mpsc::channel(1);
 
-        if camera_state.is_at_max_height() {
+        if setup.camera.is_at_max_height() {
             setup.gui.immediate_ui(|gui| {
                 // tile_selections
                 gui::tile_selections(
@@ -323,7 +318,7 @@ pub fn on_event(
                     resource_man.clone(),
                     &setup.sys,
                     setup.game.clone(),
-                    loop_store.pointing_at,
+                    setup.camera.camera_state().pointing_at,
                 );
 
                 // tile_config
@@ -356,9 +351,9 @@ pub fn on_event(
             loop_store.input_state.main_pos,
         );
         let mouse_pos = point2(mouse_pos.x, mouse_pos.y);
-        let mouse_pos = mouse_pos + camera_state.pos.to_vec().truncate();
+        let mouse_pos = mouse_pos + setup.camera.get_pos().to_vec().truncate();
 
-        if camera_state.is_at_max_height() {
+        if setup.camera.is_at_max_height() {
             if let Some(id) = loop_store.selected_id {
                 if let Some(model) = resource_man.registry.get_tile(id).and_then(|v| {
                     v.models
@@ -388,7 +383,7 @@ pub fn on_event(
                 let DPoint3 { x, y, .. } = hex_to_normalized(
                     setup.camera.window_size.0,
                     setup.camera.window_size.1,
-                    camera_state.pos,
+                    setup.camera.get_pos(),
                     coord,
                 );
                 let a = point2(x, y);
@@ -417,7 +412,8 @@ pub fn on_event(
 
         setup.renderer.render(
             &render_info,
-            camera_state,
+            setup.camera.get_pos(),
+            setup.camera.camera_state().pointing_at,
             gui_instances,
             extra_vertices,
             &mut setup.gui,

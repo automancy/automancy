@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use flexstr::SharedStr;
@@ -47,6 +48,8 @@ pub struct Game {
 
     /// is the game stopped
     stopped: bool,
+    /// scheduled messages to be sent next tick
+    next_tick_messages: HashMap<TileCoord, Vec<(TileEntityMsg, Option<BasicActorRef>)>>,
 }
 
 impl ActorFactoryArgs<(Arc<ResourceManager>, SharedStr)> for Game {
@@ -76,6 +79,8 @@ pub enum GameMsg {
     GetTile(TileCoord),
     /// send a message to a tile entity
     SendMsgToTile(TileCoord, TileEntityMsg),
+    /// send a message to a tile entity next tick
+    NextTickMsgToTile(TileCoord, TileEntityMsg, Option<BasicActorRef>),
     /// checks for the adjacent tiles against the script
     CheckAdjacent {
         script: Script,
@@ -218,6 +223,9 @@ impl Actor for Game {
                     tile.tell(msg, sender);
                 }
             }
+            NextTickMsgToTile(coord, msg, sender) => {
+                self.next_tick_messages.entry(coord).or_insert_with(Default::default).push((msg, sender));
+            }
             SetData(key, value) => {
                 let mut map = self.map.lock().unwrap();
 
@@ -269,6 +277,7 @@ impl Game {
             map: Arc::new(Mutex::new(Map::new_empty(map_name.to_string()))),
 
             stopped: false,
+            next_tick_messages: Default::default(),
         }
     }
 
@@ -301,7 +310,7 @@ impl Game {
         let range = 0..src.len();
 
         let mut rng = rand::thread_rng();
-        let d = Bernoulli::new(0.001).unwrap();
+        let d = Bernoulli::new(0.005).unwrap();
 
         for q in start.0..end.0 {
             for r in start.1..end.1 {

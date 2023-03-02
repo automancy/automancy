@@ -5,7 +5,7 @@ use flexstr::SharedStr;
 use rune::Any;
 use serde::de::{Error, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use string_interner::backend::{BucketBackend, StringBackend};
+use string_interner::backend::StringBackend;
 use string_interner::{StringInterner, Symbol};
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]

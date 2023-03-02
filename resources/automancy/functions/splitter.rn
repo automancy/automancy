@@ -1,10 +1,8 @@
-pub fn handle_transaction(entity, registry, tick_count, item_stack, source_type, direction) {
+pub fn handle_transaction(entity, registry, tick_count, item_stack, source_type, direction, random) {
     if let (a, b, c) = match entity.tile_state {
         0 => (TOP_LEFT(), BOTTOM_LEFT(), RIGHT()),
         1 => (TOP_RIGHT(), BOTTOM_RIGHT(), LEFT()),
     } {
-        let direction = direction.neg();
-
         if let (first, second) = if direction.eq(a) {
             (b, c)
         } else if direction.eq(b) {
@@ -12,7 +10,7 @@ pub fn handle_transaction(entity, registry, tick_count, item_stack, source_type,
         } else if direction.eq(c) {
             (a, b)
         } {
-            let target = if tick_count % 2 == 0 { first } else { second };
+            let target = if random % 2 == 0 { first } else { second };
 
             let target_coord = entity.coord.add(target.clone());
 
