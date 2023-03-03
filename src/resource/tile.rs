@@ -83,13 +83,9 @@ impl ResourceManager {
             .map(|v| v.to_id(&mut self.interner))
             .collect();
 
-        let targeted = tile.targeted.unwrap_or_else(|| {
-            if let TileType::Machine(_) = &tile_type {
-                true
-            } else {
-                false
-            }
-        });
+        let targeted = tile
+            .targeted
+            .unwrap_or(matches!(&tile_type, TileType::Machine(_)));
 
         if tile_type == TileType::Deposit {
             self.registry.deposit_tiles.push(id);
@@ -126,7 +122,7 @@ impl ResourceManager {
     pub fn item_name(&self, id: &Id) -> &str {
         match self.translates.items.get(id) {
             Some(name) => name,
-            None => "<unnamed>",
+            None => &self.translates.unnamed,
         }
     }
 
@@ -134,14 +130,29 @@ impl ResourceManager {
         if let Some(id) = id {
             self.item_name(id)
         } else {
-            "<none>"
+            &self.translates.none
+        }
+    }
+
+    pub fn script_name(&self, id: &Id) -> &str {
+        match self.translates.scripts.get(id) {
+            Some(name) => name,
+            None => &self.translates.unnamed,
+        }
+    }
+
+    pub fn try_script_name(&self, id: &Option<Id>) -> &str {
+        if let Some(id) = id {
+            self.item_name(id)
+        } else {
+            &self.translates.none
         }
     }
 
     pub fn tile_name(&self, id: &Id) -> &str {
         match self.translates.tiles.get(id) {
             Some(name) => name,
-            None => "<unnamed>",
+            None => &self.translates.unnamed,
         }
     }
 
@@ -149,7 +160,7 @@ impl ResourceManager {
         if let Some(id) = id {
             self.tile_name(id)
         } else {
-            "<none>"
+            &self.translates.none
         }
     }
 }
@@ -159,17 +170,17 @@ pub struct TileIds {
     #[rune(get, copy)]
     pub machine: Id,
     #[rune(get, copy)]
-    pub inventory_linker: Id,
+    pub master_node: Id,
     #[rune(get, copy)]
-    pub inventory_provider: Id,
+    pub node: Id,
 }
 
 impl TileIds {
     pub fn new(interner: &mut Interner) -> Self {
         Self {
             machine: id_static("automancy", "machine").to_id(interner),
-            inventory_linker: id_static("automancy", "inventory_linker").to_id(interner),
-            inventory_provider: id_static("automancy", "inventory_provider").to_id(interner),
+            master_node: id_static("automancy", "master_node").to_id(interner),
+            node: id_static("automancy", "node").to_id(interner),
         }
     }
 }

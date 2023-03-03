@@ -1,3 +1,4 @@
+use flexstr::SharedStr;
 use std::fmt::{Debug, Formatter};
 use std::{collections::HashMap, fmt};
 
@@ -82,7 +83,7 @@ pub struct ResourceManager {
 
     pub translates: Translate,
     pub functions: HashMap<Id, Function>,
-    pub audio: HashMap<String, StaticSoundData>,
+    pub audio: HashMap<SharedStr, StaticSoundData>,
     pub faces: HashMap<Id, Face>,
 
     pub all_vertices: Vec<Vertex>,

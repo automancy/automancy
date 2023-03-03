@@ -1,15 +1,22 @@
 {
+    "none": "<none>",
+    "unnamed": "<unnamed>",
     "items": {
-        "electricity": "Electricity",
+        "fire": "Fire",
+
         "copper_ore": "Copper Ore",
         "copper_ingot": "Copper Ingot",
         "iron_ore": "Iron Ore",
         "iron_ingot": "Iron Ingot",
-        "gold_ingot": "Gold Ingot",
-        "tin_ingot": "Tin Ingot",
-        "stone": "Stone",
-        "coal": "Coal",
-        "coalgen0": "Coal Gen"
+        "coal": "Coal"
+    },
+    "scripts": {
+        "coal_fire": "Coal to Fire",
+        "copper_ore": "Copper Ore",
+        "copper_ingot": "Copper Ingot",
+        "iron_ore": "Iron Ore",
+        "iron_ingot": "Iron Ingot",
+        "coal": "Coal"
     },
     "tiles": {
         "none": "None",
@@ -18,11 +25,11 @@
         "extractor": "Extractor",
         "refinery": "Refinery",
         "small_storage": "Small Storage",
-        "inventory_linker": "Inventory Linker",
-        "inventory_provider": "Inventory Provider",
+        "node": "Node",
+        "master_node": "Master Node",
         "copper_mine": "Copper Mine",
         "coal_mine": "Coal Mine",
-        "coalgen0": "Coal Generator"
+        "still": "Alchemical Still"
     },
     "gui": {
         "tile_info": "Tile Info",

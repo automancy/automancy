@@ -1,9 +1,9 @@
 {
-  "id": "inventory_linker",
+  "id": "node",
   "models": ["void"],
   "tile_type": {
     "type": "Transfer",
-    "param": "inventory_linker"
+    "param": "node"
   },
   "targeted": true
 }

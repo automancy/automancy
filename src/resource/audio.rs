@@ -1,3 +1,4 @@
+use flexstr::ToSharedStr;
 use std::ffi::OsStr;
 use std::fs::read_dir;
 use std::path::Path;
@@ -24,7 +25,7 @@ impl ResourceManager {
                     StaticSoundSettings::default().track(&self.track),
                 ) {
                     self.audio.insert(
-                        file.file_stem().unwrap().to_str().unwrap().to_string(),
+                        file.file_stem().unwrap().to_str().unwrap().to_shared_str(),
                         audio,
                     );
                 }

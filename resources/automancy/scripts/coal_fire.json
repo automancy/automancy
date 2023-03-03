@@ -1,5 +1,5 @@
 {
-    "id": "coalgen0",
+    "id": "coal_fire",
     "instructions": {
         "inputs": [
             {
@@ -11,9 +11,9 @@
         ],
         "output": {
             "item": {
-                "id": "electricity"
+                "id": "fire"
             },
-            "amount": 128
+            "amount": 16
         }
     }
 }

@@ -227,7 +227,7 @@ pub fn on_event(
                 ));
 
                 if let Some(id) = result.map(|v| v.1) {
-                    if id == resource_man.registry.tile_ids.inventory_provider {
+                    if id == resource_man.registry.tile_ids.node {
                         let old: Option<Data> = block_on(ask(
                             &setup.sys,
                             &setup.game,

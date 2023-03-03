@@ -1,4 +1,4 @@
-use flexstr::SharedStr;
+use flexstr::{SharedStr, ToSharedStr};
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs::{read_dir, read_to_string};
@@ -10,15 +10,21 @@ use crate::util::id::{Id, IdRaw};
 
 #[derive(Debug, Default, Clone, Deserialize)]
 pub struct TranslateRaw {
-    pub items: HashMap<IdRaw, String>,
-    pub tiles: HashMap<IdRaw, String>,
-    pub gui: HashMap<IdRaw, String>,
+    none: String,
+    unnamed: String,
+    items: HashMap<IdRaw, String>,
+    tiles: HashMap<IdRaw, String>,
+    scripts: HashMap<IdRaw, String>,
+    gui: HashMap<IdRaw, String>,
 }
 
 #[derive(Debug, Default, Clone)]
 pub struct Translate {
+    pub none: SharedStr,
+    pub unnamed: SharedStr,
     pub items: HashMap<Id, SharedStr>,
     pub tiles: HashMap<Id, SharedStr>,
+    pub scripts: HashMap<Id, SharedStr>,
     pub gui: HashMap<Id, SharedStr>,
 }
 impl ResourceManager {
@@ -30,6 +36,9 @@ impl ResourceManager {
         )
         .unwrap_or_else(|e| panic!("error loading {file:?} {e:?}"));
 
+        let none = translate.none.to_shared_str();
+        let unnamed = translate.unnamed.to_shared_str();
+
         let items = translate
             .items
             .into_iter()
@@ -40,12 +49,25 @@ impl ResourceManager {
             .into_iter()
             .map(|(id, str)| (id.to_id(&mut self.interner), str.into()))
             .collect();
+        let scripts = translate
+            .scripts
+            .into_iter()
+            .map(|(id, str)| (id.to_id(&mut self.interner), str.into()))
+            .collect();
         let gui = translate
             .gui
             .into_iter()
             .map(|(id, str)| (id.to_id(&mut self.interner), str.into()))
             .collect();
-        self.translates = Translate { items, tiles, gui };
+
+        self.translates = Translate {
+            none,
+            unnamed,
+            items,
+            tiles,
+            scripts,
+            gui,
+        };
 
         Some(())
     }

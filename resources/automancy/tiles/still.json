@@ -1,10 +1,10 @@
 {
-    "id": "coalgen0",
-    "models": ["coalgen0"],
+    "id": "still",
+    "models": ["still"],
     "tile_type": {
         "type": "Machine",
         "param": [
-            "coalgen0"
+            "coal_fire"
         ]
     }
 }

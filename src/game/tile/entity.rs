@@ -372,7 +372,7 @@ impl Actor for TileEntity {
                         }
                     }
                     Transfer(id) => {
-                        if id == &resource_man.registry.tile_ids.inventory_provider {
+                        if id == &resource_man.registry.tile_ids.node {
                             if let Some((target, link)) = self
                                 .data
                                 .get("target")
@@ -708,7 +708,7 @@ impl Actor for TileEntity {
                         }
                     }
                     Transfer(id) => {
-                        if id == &resource_man.registry.tile_ids.inventory_linker {
+                        if id == &resource_man.registry.tile_ids.master_node {
                             if let Some(target) =
                                 self.data.get("target").and_then(Data::as_coord).cloned()
                             {

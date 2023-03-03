@@ -1,9 +1,9 @@
 {
-  "id": "inventory_provider",
+  "id": "master_node",
   "models": ["void"],
   "tile_type": {
     "type": "Transfer",
-    "param": "inventory_provider"
+    "param": "master_node"
   },
   "targeted": true
 }

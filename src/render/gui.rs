@@ -382,13 +382,14 @@ pub fn add_direction(ui: &mut Ui, target_coord: &mut Option<TileCoord>, n: usize
     );
 }
 
-pub fn searchable_id(
+pub fn searchable_id<'a>(
     ui: &mut Ui,
-    resource_man: Arc<ResourceManager>,
+    resource_man: &'a ResourceManager,
     fuse: &Fuse,
     ids: &[Id],
     new_id: &mut Option<Id>,
     filter: &mut String,
+    name: &'static impl Fn(&'a ResourceManager, &Id) -> &'a str,
 ) {
     ui.text_edit_singleline(filter);
 
@@ -399,7 +400,7 @@ pub fn searchable_id(
             let mut filtered = ids
                 .iter()
                 .flat_map(|id| {
-                    let result = fuse.search_text_in_string(filter, resource_man.item_name(id));
+                    let result = fuse.search_text_in_string(filter, name(resource_man, id));
                     let score = result.map(|v| v.score);
 
                     if score.unwrap_or(0.0) > 0.4 {
@@ -418,7 +419,7 @@ pub fn searchable_id(
         };
 
         ids.iter().for_each(|script| {
-            ui.radio_value(new_id, Some(*script), resource_man.item_name(script));
+            ui.radio_value(new_id, Some(*script), name(resource_man, script));
         })
     });
 }
@@ -544,11 +545,12 @@ pub fn tile_config(
 
                         searchable_id(
                             ui,
-                            resource_man.clone(),
+                            &resource_man,
                             &loop_store.fuse,
                             scripts.as_slice(),
                             &mut new_script,
                             &mut loop_store.filter,
+                            &ResourceManager::script_name,
                         );
                     }
                     TileType::Storage(storage) => {
@@ -587,15 +589,16 @@ pub fn tile_config(
 
                         searchable_id(
                             ui,
-                            resource_man.clone(),
+                            &resource_man,
                             &loop_store.fuse,
                             items.as_slice(),
                             &mut new_storage,
                             &mut loop_store.filter,
+                            &ResourceManager::item_name,
                         );
                     }
                     TileType::Transfer(id) => {
-                        if id == &resource_man.registry.tile_ids.inventory_linker {
+                        if id == &resource_man.registry.tile_ids.master_node {
                             ui.add_space(MARGIN);
 
                             if ui.button("Link Network!").clicked() {
@@ -606,7 +609,7 @@ pub fn tile_config(
                             ui.add_space(MARGIN);
                         }
 
-                        if id == &resource_man.registry.tile_ids.inventory_provider {
+                        if id == &resource_man.registry.tile_ids.node {
                             let result: Option<Data> = block_on(ask(
                                 sys,
                                 &game,
