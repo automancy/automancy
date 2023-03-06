@@ -90,9 +90,10 @@ pub fn actual_pos<N: BaseFloat>(
 ) -> cgmath::Point3<N> {
     let one = N::one();
     let two = one + one;
-    let six = two + two + two;
+    let four = two + two;
+    let m = four * two;
 
-    cgmath::point3(pos.x, pos.y, (pos.z * six) + (one / two) + eye.z)
+    cgmath::point3(pos.x, pos.y, (pos.z * m) + one + eye.z)
 }
 
 pub fn view<N: BaseFloat>(pos: cgmath::Point3<N>, pi: N) -> cgmath::Matrix4<N> {

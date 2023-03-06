@@ -36,7 +36,8 @@ use crate::util::cg::{actual_pos, eye, matrix, DPoint3, Matrix4, Num, Point3};
 use crate::util::colors;
 use crate::util::colors::WithAlpha;
 
-pub const RENDER_RANGE: TileUnit = 32;
+/// render distance, don't change this because POPULATE_RANGE also depends on it.
+pub const RENDER_RANGE: TileUnit = 64;
 
 pub struct Renderer {
     resource_man: Arc<ResourceManager>,

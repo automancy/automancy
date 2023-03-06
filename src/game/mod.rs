@@ -15,6 +15,7 @@ use crate::game::ticking::TickUnit;
 use crate::game::tile::coord::{TileCoord, TileHex, TileUnit};
 use crate::game::tile::entity::{Data, TileEntity, TileEntityMsg, TileState};
 use crate::game::GameMsg::*;
+use crate::render::renderer::RENDER_RANGE;
 use crate::resource::item::id_eq_or_of_tag;
 use crate::resource::script::Script;
 use crate::resource::ResourceManager;
@@ -104,7 +105,7 @@ pub enum PlaceTileResponse {
     Ignored,
 }
 
-pub const POPULATE_RANGE: TileUnit = 64;
+pub const POPULATE_RANGE: TileUnit = RENDER_RANGE * 4;
 
 impl Actor for Game {
     type Msg = GameMsg;
@@ -224,7 +225,10 @@ impl Actor for Game {
                 }
             }
             NextTickMsgToTile(coord, msg, sender) => {
-                self.next_tick_messages.entry(coord).or_insert_with(Default::default).push((msg, sender));
+                self.next_tick_messages
+                    .entry(coord)
+                    .or_insert_with(Default::default)
+                    .push((msg, sender));
             }
             SetData(key, value) => {
                 let mut map = self.map.lock().unwrap();

@@ -29,6 +29,7 @@ use crate::util::colors::WithAlpha;
 use crate::util::id::Id;
 
 /// Stores information that lives for the entire lifetime of the session, and is not dropped at the end of one event cycle or handled elsewhere.
+#[derive(Default)]
 pub struct EventLoopStorage {
     /// fuzzy search engine
     pub fuse: Fuse,
@@ -53,24 +54,6 @@ pub struct EventLoopStorage {
     pub linking_tile: Option<TileCoord>,
     /// the last camera position, in populate coord
     pub last_populate_camera_coord: Option<TileCoord>,
-}
-
-impl Default for EventLoopStorage {
-    fn default() -> Self {
-        Self {
-            fuse: Default::default(),
-            closed: false,
-            filter: String::new(),
-            input_state: Default::default(),
-            selected_tile_states: Default::default(),
-            selected_id: None,
-            already_placed_at: None,
-            config_open: None,
-            tag_cache: Default::default(),
-            linking_tile: None,
-            last_populate_camera_coord: None,
-        }
-    }
 }
 
 /// Triggers every time the event loop is run once.
@@ -155,20 +138,22 @@ pub fn on_event(
             .camera
             .input_state(loop_store.input_state, ignore_move);
 
-        let camera_coord = setup.camera.get_tile_coord();
-        let camera_coord = camera_coord
-            + TileCoord::new(
-                camera_coord.q().signum() * POPULATE_RANGE,
-                camera_coord.r().signum() * POPULATE_RANGE,
-            ) / 2;
-        let populate_camera_coord = camera_coord / POPULATE_RANGE;
+        {
+            let camera_coord = setup.camera.get_tile_coord();
+            let camera_coord = camera_coord
+                + TileCoord::new(
+                    camera_coord.q().signum() * POPULATE_RANGE,
+                    camera_coord.r().signum() * POPULATE_RANGE,
+                ) / 2;
+            let populate_camera_coord = camera_coord / POPULATE_RANGE;
 
-        if Some(populate_camera_coord) != loop_store.last_populate_camera_coord {
-            loop_store.last_populate_camera_coord = Some(populate_camera_coord);
+            if Some(populate_camera_coord) != loop_store.last_populate_camera_coord {
+                loop_store.last_populate_camera_coord = Some(populate_camera_coord);
 
-            setup
-                .game
-                .send_msg(GameMsg::Populate(populate_camera_coord), None);
+                setup
+                    .game
+                    .send_msg(GameMsg::Populate(populate_camera_coord), None);
+            }
         }
 
         if loop_store.input_state.exit_pressed {

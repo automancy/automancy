@@ -82,17 +82,17 @@ impl Camera {
             return z;
         }
 
-        if z < 1.5 {
+        if z < 1.8 {
             1.0
         } else {
-            z - 0.5
+            z - 0.8
         }
     }
 
     fn scroll(z: Double, vel: Double) -> Double {
         let z = z + vel * 0.4;
 
-        clamp(z, FAR + 0.2, 2.5)
+        clamp(z, FAR + 0.1, 3.0)
     }
 
     pub fn camera_state(&self) -> &CameraState {
