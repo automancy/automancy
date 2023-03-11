@@ -20,6 +20,7 @@
     },
     "tiles": {
         "none": "None",
+        "grass": "Grass",
         "splitter": "Splitter",
         "void": "Resource® Void™",
         "extractor": "Extractor",

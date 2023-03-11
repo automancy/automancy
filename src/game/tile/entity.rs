@@ -19,24 +19,30 @@ use crate::resource::tile::TileType::*;
 use crate::resource::ResourceManager;
 use crate::util::id::{Id, IdRaw, Interner};
 
+/// Represents the various types of errors a tile can run into.
 #[derive(Debug, Copy, Clone, Any)]
 pub enum TransactionError {
+    /// Tried to execute a script but could not find one.
     #[rune(constructor)]
     NoScript,
+    /// Transaction type could not be applied to the specified tile.
     #[rune(constructor)]
     NotSuitable,
+    /// Target inventory is full.
     #[rune(constructor)]
     Full,
 }
 
+/// Represents the data a tile entity holds. This data is given to Rune functions.
 #[derive(Debug, Clone, Any)]
 pub enum Data {
+    /// The tile entity's inventory.
     #[rune(constructor)]
     Inventory(#[rune(get)] Inventory),
-
+    /// The coordinates of the tile.
     #[rune(constructor)]
     Coord(#[rune(get, copy)] TileCoord),
-
+    /// The tile's ID.
     #[rune(constructor)]
     VecCoord(#[rune(get)] Vec<TileCoord>),
 
@@ -51,20 +57,21 @@ pub enum Data {
 }
 
 impl Data {
+    /// Gets the default Inventory.
     pub fn inventory() -> Self {
         Self::Inventory(Default::default())
     }
     pub fn vec_coord() -> Self {
         Self::VecCoord(Default::default())
     }
-
+    /// Gets a mutable reference to  the tile's Inventory, or None.
     pub fn as_inventory_mut(&mut self) -> Option<&mut Inventory> {
         if let Self::Inventory(inventory) = self {
             return Some(inventory);
         }
         None
     }
-
+    /// Gets a mutable reference to  the tile's coordinates, or None.
     pub fn as_coord_mut(&mut self) -> Option<&mut TileCoord> {
         if let Self::Coord(coord) = self {
             return Some(coord);
@@ -85,7 +92,7 @@ impl Data {
         }
         None
     }
-
+    /// Gets a mutable reference to the tile's ID, or None.
     pub fn as_id_mut(&mut self) -> Option<&mut Id> {
         if let Self::Id(id) = self {
             return Some(id);
@@ -99,21 +106,21 @@ impl Data {
         }
         None
     }
-
+    /// Gets an immutable reference to  the tile's Inventory, or None.
     pub fn as_inventory(&self) -> Option<&Inventory> {
         if let Self::Inventory(inventory) = self {
             return Some(inventory);
         }
         None
     }
-
+    /// Gets an immutable reference to  the tile's coordinates, or None.
     pub fn as_coord(&self) -> Option<&TileCoord> {
         if let Self::Coord(coord) = self {
             return Some(coord);
         }
         None
     }
-
+    /// Gets an immutable reference to the tile's ID, or None.
     pub fn as_bool(&self) -> Option<&bool> {
         if let Self::Bool(v) = self {
             return Some(v);
@@ -143,8 +150,11 @@ impl Data {
     }
 }
 
+// TODO i really don't know what the next 40 or so lines are doing lmao
+/// Represents a Map of interned Strings to Data objects.
 pub type DataMap = HashMap<String, Data>;
 
+/// Represents raw uninterned tile entity data.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum DataRaw {
     Inventory(InventoryRaw),
@@ -154,7 +164,7 @@ pub enum DataRaw {
     Id(IdRaw),
     Amount(ItemAmount),
 }
-
+/// A map of identifiers to uninterned data objects.
 pub type DataMapRaw = HashMap<String, DataRaw>;
 
 pub fn data_to_raw(data: DataMap, interner: &Interner) -> DataMapRaw {
@@ -193,18 +203,22 @@ pub fn data_from_raw(data: DataMapRaw, interner: &Interner) -> DataMap {
         .collect()
 }
 
+/// Represents a tile entity. A tile entity is the actor that allows the tile to take, process, and output resources.
 #[derive(Debug, Clone, Any)]
 pub struct TileEntity {
+    /// The ID of the tile entity.
     #[rune(get, copy)]
     id: Id,
+    /// The coordinates of the tile entity.
     #[rune(get, copy)]
     coord: TileCoord,
+    /// The tile state of the tile entity.
     #[rune(get, copy)]
     tile_state: TileState,
-
+    /// The data map stored by the tile.
     #[rune(get, set)]
     data: DataMap,
-
+    /// The actor system.
     game: BasicActorRef,
 
     tick_pause: bool,
@@ -212,6 +226,7 @@ pub struct TileEntity {
 }
 
 impl TileEntity {
+    /// Creates a new tile entity.
     fn new(game: BasicActorRef, id: Id, coord: TileCoord, tile_state: TileState) -> Self {
         Self {
             id,
@@ -224,7 +239,7 @@ impl TileEntity {
             adjacent_fulfilled: false,
         }
     }
-
+    /// Adds tile entities to the Rune API.
     pub fn install(module: &mut Module) -> Result<(), ContextError> {
         module.ty::<Data>()?;
         module.inst_fn("clone", Data::clone)?;

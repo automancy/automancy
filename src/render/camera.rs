@@ -15,6 +15,7 @@ use crate::util::cg::{matrix, DPoint2, DPoint3, DVector2, Double};
 
 pub const FAR: Double = 0.0;
 
+/// Stores the position and velocity of the camera.
 #[derive(Debug, Clone, Copy)]
 pub struct CameraState {
     pos: DPoint3,
@@ -33,11 +34,11 @@ impl Default for CameraState {
         }
     }
 }
-
+/// Returns if the camera is at its maximum height.
 pub fn is_at_max_height(pos: DPoint3) -> bool {
     (1.0 - pos.z).abs() <= 0.001
 }
-
+/// Wraps the camera's state and stores it with the window size.
 pub struct Camera {
     camera_state: CameraState,
 
@@ -45,16 +46,17 @@ pub struct Camera {
 }
 
 impl Camera {
+    /// Returns if the camera is at its maximum (most zoomed out) height.
     pub fn is_at_max_height(&self) -> bool {
         is_at_max_height(self.get_pos())
     }
-
+    /// Returns the position of the camera..
     pub fn get_pos(&self) -> DPoint3 {
         let DPoint3 { x, y, z } = self.camera_state.pos;
 
         point3(x, y, Self::real_z(z))
     }
-
+    /// Constructs a new camera with the given window size.
     pub fn new(window_size: (Double, Double)) -> Self {
         Self {
             camera_state: Default::default(),
@@ -65,6 +67,7 @@ impl Camera {
 }
 
 impl Camera {
+    /// Updates the movement state of the camera based on control input.
     pub fn input_state(&mut self, input: InputState, ignore_move: bool) {
         if !ignore_move && input.main_held {
             if let Some(delta) = input.main_move {
@@ -76,7 +79,7 @@ impl Camera {
             self.on_scroll(delta);
         }
     }
-
+    /// Gets the real normalized z-position of the camera.
     fn real_z(z: Double) -> Double {
         if z <= 1.0 {
             return z;
@@ -88,17 +91,17 @@ impl Camera {
             z - 0.8
         }
     }
-
+    /// Scroll the camera to a new position.
     fn scroll(z: Double, vel: Double) -> Double {
         let z = z + vel * 0.4;
 
         clamp(z, FAR + 0.1, 3.0)
     }
-
+    /// Gets the camera's state.
     pub fn camera_state(&self) -> &CameraState {
         &self.camera_state
     }
-
+    /// Updates the camera's position.
     pub fn update_pos(&mut self) {
         let pos = &mut self.camera_state.pos;
 
@@ -125,6 +128,7 @@ impl Camera {
 }
 
 impl Camera {
+    /// Called when the camera is scrolled.
     fn on_scroll(&mut self, delta: DVector2) {
         let y = delta.y;
 
@@ -134,11 +138,11 @@ impl Camera {
             self.camera_state.scroll_vel += change * 0.2;
         }
     }
-
+    /// Called when the camera is moving.
     fn on_moving_main(&mut self, delta: DVector2) {
         self.camera_state.move_vel += delta / 250.0;
     }
-
+    /// Sets the position the camera is centered on.
     pub fn update_pointing_at(&mut self, main_pos: DPoint2) {
         let (width, height) = self.window_size;
 
@@ -146,7 +150,7 @@ impl Camera {
 
         self.camera_state.pointing_at = p.round().into();
     }
-
+    /// Gets the TileCoord the camera is pointing at.
     pub fn get_tile_coord(&self) -> TileCoord {
         let pos = self.camera_state.pos;
         let point = point(pos.x, pos.y);
@@ -154,7 +158,7 @@ impl Camera {
         pixel_to_hex(HEX_LAYOUT, point).round().into()
     }
 }
-
+/// Gets the hex position being pointed at..
 pub fn main_pos_to_hex(
     width: Double,
     height: Double,
@@ -168,7 +172,7 @@ pub fn main_pos_to_hex(
 
     pixel_to_hex(HEX_LAYOUT, p)
 }
-
+/// Converts screen space coordinates into normalized coordinates.
 pub fn screen_to_normalized(width: Double, height: Double, c: DPoint2) -> DPoint2 {
     let size = vec2(width, height) / 2.0;
 
@@ -178,13 +182,13 @@ pub fn screen_to_normalized(width: Double, height: Double, c: DPoint2) -> DPoint
 
     point2(c.x, c.y)
 }
-
+/// Converts screen coordinates to world coordinates..
 pub fn screen_to_world(width: Double, height: Double, c: DPoint2) -> DPoint3 {
     let c = screen_to_normalized(width, height, c);
 
     normalized_to_world(width, height, c)
 }
-
+/// Converts normalized screen coordinates to world coordinates..
 pub fn normalized_to_world(width: Double, height: Double, p: DPoint2) -> DPoint3 {
     let aspect = width / height;
 
@@ -198,7 +202,7 @@ pub fn normalized_to_world(width: Double, height: Double, p: DPoint2) -> DPoint3
 
     point3(p.x * aspect_squared, p.y, p.z)
 }
-
+/// Converts hex coordinates to normalized screen coordinates.
 pub fn hex_to_normalized(
     width: Double,
     height: Double,

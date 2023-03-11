@@ -31,6 +31,7 @@ pub static JSON_EXT: &str = "json";
 pub static OGG_EXT: &str = "ogg";
 pub static RESOURCES_FOLDER: &str = "resources";
 
+/// Represents the resource registry.
 #[derive(Clone, Any)]
 pub struct Registry {
     deposit_tiles: Vec<Id>,
