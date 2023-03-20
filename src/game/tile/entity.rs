@@ -164,6 +164,7 @@ pub enum DataRaw {
     Id(IdRaw),
     Amount(ItemAmount),
 }
+
 /// A map of identifiers to uninterned data objects.
 pub type DataMapRaw = HashMap<String, DataRaw>;
 
@@ -793,6 +794,6 @@ impl ActorFactoryArgs<(BasicActorRef, Id, TileCoord, TileState)> for TileEntity 
     }
 }
 
-fn random() -> i32 {
-    thread_rng().next_u64() as i32
+fn random() -> u32 {
+    thread_rng().next_u32()
 }

@@ -12,10 +12,9 @@ use uuid::Uuid;
 
 use crate::game::map::{Map, RenderContext};
 use crate::game::ticking::TickUnit;
-use crate::game::tile::coord::{TileCoord, TileHex, TileUnit};
+use crate::game::tile::coord::{ChunkCoord, TileCoord, TileHex};
 use crate::game::tile::entity::{Data, TileEntity, TileEntityMsg, TileState};
 use crate::game::GameMsg::*;
-use crate::render::renderer::RENDER_RANGE;
 use crate::resource::item::id_eq_or_of_tag;
 use crate::resource::script::Script;
 use crate::resource::ResourceManager;
@@ -65,7 +64,7 @@ pub enum GameMsg {
     /// tick the tile once
     Tick,
     /// populate map
-    Populate(TileCoord),
+    Populate(ChunkCoord),
     /// get rendering information
     RenderInfoRequest {
         context: RenderContext,
@@ -104,8 +103,6 @@ pub enum PlaceTileResponse {
     Removed,
     Ignored,
 }
-
-pub const POPULATE_RANGE: TileUnit = RENDER_RANGE * 4;
 
 impl Actor for Game {
     type Msg = GameMsg;
@@ -301,31 +298,20 @@ impl Game {
     }
 
     /// Populates the map.
-    fn populate(&self, coord: TileCoord, ctx: &Context<GameMsg>, map: &mut Map) {
-        let start = coord * POPULATE_RANGE;
-        let start = (
-            start.q() - POPULATE_RANGE / 2,
-            start.r() - POPULATE_RANGE / 2,
-        );
-
-        let end = (start.0 + POPULATE_RANGE, start.1 + POPULATE_RANGE);
-
+    fn populate(&self, coord: ChunkCoord, ctx: &Context<GameMsg>, map: &mut Map) {
         let src = self.resource_man.registry.deposit_tiles();
         let range = 0..src.len();
 
         let mut rng = rand::thread_rng();
         let d = Bernoulli::new(0.005).unwrap();
 
-        for q in start.0..end.0 {
-            for r in start.1..end.1 {
-                if d.sample(&mut rng) {
-                    let coord = TileCoord::new(q, r);
-                    let id = src[rng.gen_range(range.clone())];
+        coord.iter().for_each(|coord| {
+            if d.sample(&mut rng) {
+                let id = src[rng.gen_range(range.clone())];
 
-                    map.tiles
-                        .insert(coord, (Self::new_tile(ctx, coord, id, 0), id, 0));
-                }
+                map.tiles
+                    .insert(coord, (Self::new_tile(ctx, coord, id, 0), id, 0));
             }
-        }
+        });
     }
 }

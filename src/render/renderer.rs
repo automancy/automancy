@@ -26,7 +26,7 @@ use vulkano::sync;
 use vulkano::sync::GpuFuture;
 
 use crate::game::map::MapRenderInfo;
-use crate::game::tile::coord::{TileCoord, TileUnit};
+use crate::game::tile::coord::{TileCoord, TileHex, TileUnit};
 use crate::render::camera::{is_at_max_height, FAR};
 use crate::render::data::{GameUBO, GuiUBO, InstanceData, Vertex, HEX_LAYOUT};
 use crate::render::gpu;
@@ -36,7 +36,7 @@ use crate::util::cg::{actual_pos, eye, matrix, DPoint3, Matrix4, Num, Point3};
 use crate::util::colors;
 use crate::util::colors::WithAlpha;
 
-/// render distance, don't change this because POPULATE_RANGE also depends on it.
+/// render distance
 pub const RENDER_RANGE: TileUnit = 64;
 
 pub struct Renderer {
@@ -80,12 +80,7 @@ impl Renderer {
 
         let instances = {
             let pos = point(camera_pos.x, camera_pos.y);
-            let pos = pixel_to_hex(HEX_LAYOUT, pos).round();
-
-            let o = Hex::new(RENDER_RANGE, RENDER_RANGE);
-
-            let min = pos - o;
-            let max = pos + o;
+            let pos: TileHex = pixel_to_hex(HEX_LAYOUT, pos).round();
 
             let none = InstanceData::new().model(
                 *self
@@ -100,12 +95,15 @@ impl Renderer {
 
             let mut instances = map_render_info.instances.clone();
 
-            for q in min.q()..max.q() {
-                for r in min.r()..max.r() {
-                    let pos = Hex::new(q, r);
-                    let p = hex_to_pixel(HEX_LAYOUT, pos);
+            // todo this will become obsolete
+            for q in -RENDER_RANGE..=RENDER_RANGE {
+                for r in -RENDER_RANGE.max(-q - RENDER_RANGE)..=RENDER_RANGE.min(-q + RENDER_RANGE)
+                {
+                    let pos = Hex::new(q + pos.q(), r + pos.r());
 
                     instances.entry(pos.into()).or_insert_with(|| {
+                        let p = hex_to_pixel(HEX_LAYOUT, pos);
+
                         none.position_offset([p.x as Num, p.y as Num, FAR as Num])
                     });
                 }

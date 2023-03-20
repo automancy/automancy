@@ -1,12 +1,12 @@
 use std::f64::consts::PI;
 use std::ops::{Div, Sub};
 
-use cgmath::num_traits::clamp;
 use cgmath::{point2, point3, vec2, EuclideanSpace, Zero};
 use hexagon_tiles::fractional::FractionalHex;
 use hexagon_tiles::layout::{hex_to_pixel, pixel_to_hex};
 use hexagon_tiles::point::{point, Point};
 use hexagon_tiles::traits::HexRound;
+use num::clamp;
 
 use crate::game::input::InputState;
 use crate::game::tile::coord::TileCoord;

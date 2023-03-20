@@ -15,9 +15,9 @@ use winit::event_loop::ControlFlow;
 use crate::game::input::InputState;
 use crate::game::map::{Map, MapRenderInfo, RenderContext};
 use crate::game::run::setup::GameSetup;
-use crate::game::tile::coord::TileCoord;
+use crate::game::tile::coord::{ChunkCoord, TileCoord};
 use crate::game::tile::entity::{Data, TileEntityMsg, TileState};
-use crate::game::{input, GameMsg, PlaceTileResponse, POPULATE_RANGE};
+use crate::game::{input, GameMsg, PlaceTileResponse};
 use crate::render::camera::{hex_to_normalized, screen_to_normalized, screen_to_world};
 use crate::render::data::InstanceData;
 use crate::render::renderer::RENDER_RANGE;
@@ -53,7 +53,7 @@ pub struct EventLoopStorage {
     /// tile currently linking
     pub linking_tile: Option<TileCoord>,
     /// the last camera position, in populate coord
-    pub last_populate_camera_coord: Option<TileCoord>,
+    pub last_camera_chunk_coord: Option<ChunkCoord>,
 }
 
 /// Triggers every time the event loop is run once.
@@ -139,20 +139,18 @@ pub fn on_event(
             .input_state(loop_store.input_state, ignore_move);
 
         {
-            let camera_coord = setup.camera.get_tile_coord();
-            let camera_coord = camera_coord
-                + TileCoord::new(
-                    camera_coord.q().signum() * POPULATE_RANGE,
-                    camera_coord.r().signum() * POPULATE_RANGE,
-                ) / 2;
-            let populate_camera_coord = camera_coord / POPULATE_RANGE;
+            let camera_chunk_coord = setup.camera.get_tile_coord().into();
 
-            if Some(populate_camera_coord) != loop_store.last_populate_camera_coord {
-                loop_store.last_populate_camera_coord = Some(populate_camera_coord);
+            if Some(camera_chunk_coord) != loop_store.last_camera_chunk_coord {
+                loop_store.last_camera_chunk_coord = Some(camera_chunk_coord);
 
                 setup
                     .game
-                    .send_msg(GameMsg::Populate(populate_camera_coord), None);
+                    .send_msg(GameMsg::Populate(camera_chunk_coord), None);
+
+                for coord in camera_chunk_coord.neighbors() {
+                    setup.game.send_msg(GameMsg::Populate(coord), None);
+                }
             }
         }
 
