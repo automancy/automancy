@@ -50,7 +50,7 @@ use winit::{dpi::LogicalSize, window::Window};
 use crate::render::data::{GuiUBO, Vertex};
 use crate::resource::ResourceManager;
 use crate::util::cg::Double;
-use crate::util::cg::Num;
+use crate::util::cg::Float;
 
 use super::data::{GameUBO, InstanceData};
 
@@ -265,10 +265,10 @@ pub fn window_size_u32(window: &Window) -> [u32; 2] {
 pub fn viewport(window: &Window) -> Viewport {
     let (width, height) = window_size(window);
 
-    viewport_with_dims([width as Num, height as Num])
+    viewport_with_dims([width as Float, height as Float])
 }
 
-pub fn viewport_with_dims(dimensions: [Num; 2]) -> Viewport {
+pub fn viewport_with_dims(dimensions: [Float; 2]) -> Viewport {
     Viewport {
         origin: [0.0, 0.0],
         dimensions,

@@ -11,7 +11,7 @@ use vulkano::impl_vertex;
 
 use crate::render::camera::FAR;
 use crate::resource::ResourceManager;
-use crate::util::cg::{Matrix4, Num, Point3};
+use crate::util::cg::{Float, Matrix4, Point3, Vector3};
 use crate::util::id::Id;
 
 pub const HEX_LAYOUT: Layout = Layout {
@@ -22,8 +22,8 @@ pub const HEX_LAYOUT: Layout = Layout {
 
 // vertex
 
-pub type VertexPos = [Num; 3];
-pub type VertexColor = [Num; 4];
+pub type VertexPos = [Float; 3];
+pub type VertexColor = [Float; 4];
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default, Zeroable, Pod)]
@@ -66,7 +66,7 @@ impl PropertyAccess for Vertex {
 #[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
 pub struct InstanceData {
     pub position_offset: VertexPos,
-    pub scale: Num,
+    pub scale: Float,
     pub color_offset: VertexColor,
 
     pub id: Option<Id>,
@@ -91,7 +91,7 @@ impl InstanceData {
                 (
                     pos,
                     Self::new()
-                        .position_offset([p.x as Num, p.y as Num, FAR as Num])
+                        .position_offset([p.x as Float, p.y as Float, FAR as Float])
                         .model(face),
                 )
             })
@@ -120,7 +120,7 @@ impl InstanceData {
         self
     }
 
-    pub fn scale(mut self, scale: Num) -> Self {
+    pub fn scale(mut self, scale: Float) -> Self {
         self.scale = scale;
 
         self
@@ -141,15 +141,15 @@ impl InstanceData {
 
 // UBO
 
-type RawMat4 = [[Num; 4]; 4];
+type RawMat4 = [[Float; 4]; 4];
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
 pub struct GameUBO {
     pub matrix: RawMat4,
-    pub ambient_light_color: [Num; 4],
+    pub ambient_light_color: [Float; 4],
     pub light_pos: VertexPos,
-    pub light_color: [Num; 4],
+    pub light_color: [Float; 4],
 }
 
 impl GameUBO {

@@ -26,6 +26,7 @@ use vulkano::pipeline::{Pipeline, PipelineBindPoint};
 use winit::event_loop::EventLoop;
 
 use crate::game::run::event::EventLoopStorage;
+use crate::game::run::setup::GameSetup;
 use crate::game::tile::coord::TileCoord;
 use crate::game::tile::coord::TileHex;
 use crate::game::tile::entity::{Data, DataMap, TileEntityMsg, TileState};
@@ -37,7 +38,7 @@ use crate::render::renderer::Renderer;
 use crate::render::{gpu, gui};
 use crate::resource::tile::TileType;
 use crate::resource::ResourceManager;
-use crate::util::cg::{perspective, DPoint2, DPoint3, Matrix4, Num, Vector3};
+use crate::util::cg::{perspective, DPoint2, DPoint3, Double, Float, Matrix4, Vector3};
 use crate::util::colors;
 use crate::util::id::{id_static, Id, Interner};
 use crate::IOSEVKA_FONT;
@@ -177,9 +178,8 @@ pub fn default_frame() -> Frame {
 }
 
 fn tile_paint(
+    setup: &GameSetup,
     ui: &mut Ui,
-    resource_man: Arc<ResourceManager>,
-    gpu: &Gpu,
     size: f32,
     id: Id,
     model: Id,
@@ -187,7 +187,9 @@ fn tile_paint(
 ) -> PaintCallback {
     let (rect, response) = ui.allocate_exact_size(vec2(size, size), Sense::click());
 
-    response.clone().on_hover_text(resource_man.tile_name(&id));
+    response
+        .clone()
+        .on_hover_text(setup.resource_man.tile_name(&id));
     response.clone().on_hover_cursor(CursorIcon::Grab);
 
     let hover = if response.hovered() {
@@ -207,10 +209,11 @@ fn tile_paint(
         * Matrix4::from_translation(vec3(0.0, 0.0, 2.0))
         * Matrix4::look_to_rh(eye, vec3(0.0, 1.0 - pos.z, 1.0), Vector3::unit_y());
 
-    let pipeline = gpu.gui_pipeline.clone();
-    let vertex_buffer = gpu.alloc.vertex_buffer.clone();
-    let index_buffer = gpu.alloc.index_buffer.clone();
+    let pipeline = setup.renderer.gpu.gui_pipeline.clone();
+    let vertex_buffer = setup.renderer.gpu.alloc.vertex_buffer.clone();
+    let index_buffer = setup.renderer.gpu.alloc.index_buffer.clone();
     let ubo_layout = pipeline.layout().set_layouts()[0].clone();
+    let resource_man = setup.resource_man.clone();
 
     PaintCallback {
         rect,
@@ -256,19 +259,19 @@ fn tile_paint(
 }
 
 fn paint_tile_selection(
+    setup: &GameSetup,
     ui: &mut Ui,
-    resource_man: Arc<ResourceManager>,
     selected_tile_states: &HashMap<Id, TileState>,
-    gpu: &Gpu,
     mut selection_send: mpsc::Sender<Id>,
 ) {
     let size = ui.available_height();
 
-    resource_man
+    setup
+        .resource_man
         .ordered_tiles
         .iter()
         .flat_map(|id| {
-            let resource = &resource_man.registry.get_tile(*id).unwrap();
+            let resource = &setup.resource_man.registry.get_tile(*id).unwrap();
 
             match resource.tile_type {
                 TileType::Deposit | TileType::Model => {
@@ -283,32 +286,22 @@ fn paint_tile_selection(
                 .map(|v| (*id, *v))
         })
         .for_each(|(id, faces_index)| {
-            let callback = tile_paint(
-                ui,
-                resource_man.clone(),
-                gpu,
-                size,
-                id,
-                faces_index,
-                &mut selection_send,
-            );
+            let callback = tile_paint(setup, ui, size, id, faces_index, &mut selection_send);
 
             ui.painter().add(callback);
         });
 }
 
 pub fn tile_selections(
-    gui: &mut Gui,
-    resource_man: Arc<ResourceManager>,
+    setup: &GameSetup,
     selected_tile_states: &HashMap<Id, TileState>,
-    renderer: &Renderer,
     selection_send: mpsc::Sender<Id>,
 ) {
     TopBottomPanel::bottom("tile_selections")
         .show_separator_line(false)
         .resizable(false)
         .frame(default_frame().outer_margin(Margin::same(10.0)))
-        .show(&gui.context(), |ui| {
+        .show(&setup.gui.context(), |ui| {
             let spacing = ui.spacing_mut();
 
             spacing.interact_size.y = 70.0;
@@ -319,48 +312,39 @@ pub fn tile_selections(
                 .always_show_scroll(true)
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        paint_tile_selection(
-                            ui,
-                            resource_man.clone(),
-                            selected_tile_states,
-                            &renderer.gpu,
-                            selection_send,
-                        );
+                        paint_tile_selection(setup, ui, selected_tile_states, selection_send);
                     });
                 });
         });
 }
 
-pub fn tile_info(
-    gui: &mut Gui,
-    resource_man: Arc<ResourceManager>,
-    sys: &ActorSystem,
-    game: ActorRef<GameMsg>,
-    pointing_at: TileCoord,
-) {
-    Window::new(resource_man.translates.gui[&resource_man.registry.gui_ids.tile_info].to_string())
-        .anchor(Align2([Align::RIGHT, Align::TOP]), vec2(-10.0, 10.0))
-        .resizable(false)
-        .default_width(300.0)
-        .frame(default_frame().inner_margin(Margin::same(10.0)))
-        .show(&gui.context(), |ui| {
-            ui.colored_label(colors::DARK_GRAY, pointing_at.to_string());
+pub fn tile_info(setup: &GameSetup, game: ActorRef<GameMsg>, pointing_at: TileCoord) {
+    Window::new(
+        setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.tile_info]
+            .to_string(),
+    )
+    .anchor(Align2([Align::RIGHT, Align::TOP]), vec2(-10.0, 10.0))
+    .resizable(false)
+    .default_width(300.0)
+    .frame(default_frame().inner_margin(Margin::same(10.0)))
+    .show(&setup.gui.context(), |ui| {
+        ui.colored_label(colors::DARK_GRAY, pointing_at.to_string());
 
-            let result: Option<(ActorRef<TileEntityMsg>, Id, TileState)> =
-                block_on(ask(sys, &game, GameMsg::GetTile(pointing_at)));
+        let result: Option<(ActorRef<TileEntityMsg>, Id, TileState)> =
+            block_on(ask(&setup.sys, &game, GameMsg::GetTile(pointing_at)));
 
-            if let Some((tile, id, _)) = result {
-                ui.label(resource_man.tile_name(&id));
-                let data: DataMap = block_on(ask(sys, &tile, TileEntityMsg::GetData));
+        if let Some((tile, id, _)) = result {
+            ui.label(setup.resource_man.tile_name(&id));
+            let data: DataMap = block_on(ask(&setup.sys, &tile, TileEntityMsg::GetData));
 
-                if let Some(inventory) = data.get("buffer").and_then(Data::as_inventory) {
-                    for (id, amount) in inventory.0.iter() {
-                        ui.label(format!("{} - {}", resource_man.item_name(id), amount));
-                    }
+            if let Some(inventory) = data.get("buffer").and_then(Data::as_inventory) {
+                for (id, amount) in inventory.0.iter() {
+                    ui.label(format!("{} - {}", setup.resource_man.item_name(id), amount));
                 }
-                //ui.label(format!("State: {}", ask(sys, &game, )))
             }
-        });
+            //ui.label(format!("State: {}", ask(sys, &game, )))
+        }
+    });
 }
 
 pub fn add_direction(ui: &mut Ui, target_coord: &mut Option<TileCoord>, n: usize) {
@@ -447,21 +431,19 @@ pub fn targets(ui: &mut Ui, new_target_coord: &mut Option<TileCoord>) {
 }
 
 pub fn tile_config(
-    gui: &mut Gui,
-    resource_man: Arc<ResourceManager>,
+    setup: &GameSetup,
     loop_store: &mut EventLoopStorage,
-    extra_vertices: &mut Vec<Vertex>,
-    camera: &Camera,
-    sys: &ActorSystem,
     game: ActorRef<GameMsg>,
-    frame: Frame,
+    extra_vertices: &mut Vec<Vertex>,
 ) {
+    let window_size = setup.window.inner_size();
+
     if let Some(config_open) = loop_store.config_open {
         let result: Option<(ActorRef<TileEntityMsg>, Id, TileState)> =
-            block_on(ask(sys, &game, GameMsg::GetTile(config_open)));
+            block_on(ask(&setup.sys, &game, GameMsg::GetTile(config_open)));
 
         if let Some((tile, id, _c)) = result {
-            let data: DataMap = block_on(ask(sys, &tile, TileEntityMsg::GetData));
+            let data: DataMap = block_on(ask(&setup.sys, &tile, TileEntityMsg::GetData));
 
             let current_amount = data
                 .get("amount")
@@ -481,21 +463,22 @@ pub fn tile_config(
 
             // tile_config
             Window::new(
-                resource_man.translates.gui[&resource_man.registry.gui_ids.tile_config].to_string(),
+                setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.tile_config]
+                    .to_string(),
             )
             .resizable(false)
             .auto_sized()
             .constrain(true)
-            .frame(frame.inner_margin(Margin::same(10.0)))
-            .show(&gui.context(), |ui| {
-                const MARGIN: Num = 8.0;
+            .frame(setup.frame.inner_margin(Margin::same(10.0)))
+            .show(&setup.gui.context(), |ui| {
+                const MARGIN: Float = 8.0;
 
                 ui.set_max_width(300.0);
 
-                match &resource_man.registry.get_tile(id).unwrap().tile_type {
+                match &setup.resource_man.registry.get_tile(id).unwrap().tile_type {
                     TileType::Machine(scripts) => {
                         let script_text = if let Some(script) =
-                            new_script.and_then(|id| resource_man.registry.get_script(id))
+                            new_script.and_then(|id| setup.resource_man.registry.get_script(id))
                         {
                             let input = if let Some(inputs) = script.instructions.inputs {
                                 inputs
@@ -503,7 +486,7 @@ pub fn tile_config(
                                     .map(|item_stack| {
                                         format!(
                                             "{} ({})",
-                                            resource_man.item_name(&item_stack.item.id),
+                                            setup.resource_man.item_name(&item_stack.item.id),
                                             item_stack.amount
                                         )
                                     })
@@ -516,7 +499,7 @@ pub fn tile_config(
                             let output = if let Some(output) = script.instructions.output {
                                 format!(
                                     "=> {} ({})",
-                                    resource_man.item_name(&output.item.id),
+                                    setup.resource_man.item_name(&output.item.id),
                                     output.amount
                                 )
                             } else {
@@ -535,8 +518,8 @@ pub fn tile_config(
                         ui.add_space(MARGIN);
 
                         ui.label(
-                            resource_man.translates.gui
-                                [&resource_man.registry.gui_ids.tile_config_script]
+                            setup.resource_man.translates.gui
+                                [&setup.resource_man.registry.gui_ids.tile_config_script]
                                 .as_str(),
                         );
                         ui.label(script_text);
@@ -545,7 +528,7 @@ pub fn tile_config(
 
                         searchable_id(
                             ui,
-                            &resource_man,
+                            &setup.resource_man,
                             &loop_store.fuse,
                             scripts.as_slice(),
                             &mut new_script,
@@ -555,14 +538,15 @@ pub fn tile_config(
                     }
                     TileType::Storage(storage) => {
                         let storage_text = if let Some(item) =
-                            new_storage.and_then(|id| resource_man.registry.get_item(id))
+                            new_storage.and_then(|id| setup.resource_man.registry.get_item(id))
                         {
-                            resource_man.item_name(&item.id).to_string()
+                            setup.resource_man.item_name(&item.id).to_string()
                         } else {
                             "<none>".to_string()
                         };
 
-                        let items = resource_man
+                        let items = setup
+                            .resource_man
                             .get_items(storage.id, &mut loop_store.tag_cache)
                             .iter()
                             .map(|item| item.id)
@@ -571,8 +555,8 @@ pub fn tile_config(
                         ui.add_space(MARGIN);
 
                         ui.label(
-                            resource_man.translates.gui
-                                [&resource_man.registry.gui_ids.tile_config_storage]
+                            setup.resource_man.translates.gui
+                                [&setup.resource_man.registry.gui_ids.tile_config_storage]
                                 .as_str(),
                         );
                         ui.horizontal(|ui| {
@@ -589,7 +573,7 @@ pub fn tile_config(
 
                         searchable_id(
                             ui,
-                            &resource_man,
+                            &setup.resource_man,
                             &loop_store.fuse,
                             items.as_slice(),
                             &mut new_storage,
@@ -598,7 +582,7 @@ pub fn tile_config(
                         );
                     }
                     TileType::Transfer(id) => {
-                        if id == &resource_man.registry.tile_ids.master_node {
+                        if id == &setup.resource_man.registry.tile_ids.master_node {
                             ui.add_space(MARGIN);
 
                             if ui.button("Link Network!").clicked() {
@@ -609,9 +593,9 @@ pub fn tile_config(
                             ui.add_space(MARGIN);
                         }
 
-                        if id == &resource_man.registry.tile_ids.node {
+                        if id == &setup.resource_man.registry.tile_ids.node {
                             let result: Option<Data> = block_on(ask(
-                                sys,
+                                &setup.sys,
                                 &game,
                                 GameMsg::SendMsgToTile(
                                     config_open,
@@ -621,17 +605,17 @@ pub fn tile_config(
 
                             if let Some(link) = result.as_ref().and_then(Data::as_coord) {
                                 let DPoint3 { x, y, .. } = hex_to_normalized(
-                                    camera.window_size.0,
-                                    camera.window_size.1,
-                                    camera.get_pos(),
+                                    window_size.width as Double,
+                                    window_size.height as Double,
+                                    setup.camera.get_pos(),
                                     config_open,
                                 );
                                 let a = point2(x, y);
 
                                 let DPoint3 { x, y, .. } = hex_to_normalized(
-                                    camera.window_size.0,
-                                    camera.window_size.1,
-                                    camera.get_pos(),
+                                    window_size.width as Double,
+                                    window_size.height as Double,
+                                    setup.camera.get_pos(),
                                     config_open + *link,
                                 );
                                 let b = point2(x, y);
@@ -643,12 +627,12 @@ pub fn tile_config(
                     _ => {}
                 }
 
-                if resource_man.registry.get_tile(id).unwrap().targeted {
+                if setup.resource_man.registry.get_tile(id).unwrap().targeted {
                     ui.add_space(MARGIN);
 
                     ui.label(
-                        resource_man.translates.gui
-                            [&resource_man.registry.gui_ids.tile_config_target]
+                        setup.resource_man.translates.gui
+                            [&setup.resource_man.registry.gui_ids.tile_config_target]
                             .as_str(),
                     );
                     targets(ui, &mut new_target_coord);
@@ -712,10 +696,10 @@ pub fn line(a: DPoint2, b: DPoint2, color: Rgba) -> Vec<Vertex> {
     let l = a.distance(b) * 128.0;
     let w = cgmath::vec2(-v.y / l, v.x / l);
 
-    let a0 = (a + w).cast::<Num>().unwrap();
-    let a1 = (b + w).cast::<Num>().unwrap();
-    let b0 = (b - w).cast::<Num>().unwrap();
-    let b1 = (a - w).cast::<Num>().unwrap();
+    let a0 = (a + w).cast::<Float>().unwrap();
+    let a1 = (b + w).cast::<Float>().unwrap();
+    let b0 = (b - w).cast::<Float>().unwrap();
+    let b1 = (a - w).cast::<Float>().unwrap();
 
     let mut line = vec![];
 

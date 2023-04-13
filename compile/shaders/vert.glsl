@@ -3,7 +3,7 @@
 layout(set = 0, binding = 0) uniform UniformBufferObject {
     mat4 matrix;
     vec4 ambient_light_color;
-    vec3 light_position;
+    vec3 light_pos;
     vec4 light_color;
 } ubo;
 

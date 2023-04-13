@@ -3,32 +3,32 @@
 
 use cgmath::BaseFloat;
 
-pub type Num = f32;
+pub type Float = f32;
 
-pub type Rad = cgmath::Rad<Num>;
-pub fn rad(n: Num) -> Rad {
+pub type Rad = cgmath::Rad<Float>;
+pub fn rad(n: Float) -> Rad {
     cgmath::Rad(n)
 }
 
-pub type Deg = cgmath::Deg<Num>;
-pub fn deg(n: Num) -> Deg {
+pub type Deg = cgmath::Deg<Float>;
+pub fn deg(n: Float) -> Deg {
     cgmath::Deg(n)
 }
 
-pub type Point1 = cgmath::Point1<Num>;
-pub type Point2 = cgmath::Point2<Num>;
-pub type Point3 = cgmath::Point3<Num>;
+pub type Point1 = cgmath::Point1<Float>;
+pub type Point2 = cgmath::Point2<Float>;
+pub type Point3 = cgmath::Point3<Float>;
 
-pub type Vector1 = cgmath::Vector1<Num>;
-pub type Vector2 = cgmath::Vector2<Num>;
-pub type Vector3 = cgmath::Vector3<Num>;
-pub type Vector4 = cgmath::Vector4<Num>;
+pub type Vector1 = cgmath::Vector1<Float>;
+pub type Vector2 = cgmath::Vector2<Float>;
+pub type Vector3 = cgmath::Vector3<Float>;
+pub type Vector4 = cgmath::Vector4<Float>;
 
-pub type Matrix2 = cgmath::Matrix2<Num>;
-pub type Matrix3 = cgmath::Matrix3<Num>;
-pub type Matrix4 = cgmath::Matrix4<Num>;
+pub type Matrix2 = cgmath::Matrix2<Float>;
+pub type Matrix3 = cgmath::Matrix3<Float>;
+pub type Matrix4 = cgmath::Matrix4<Float>;
 
-pub type Quaternion = cgmath::Quaternion<Num>;
+pub type Quaternion = cgmath::Quaternion<Float>;
 
 pub type Double = f64;
 

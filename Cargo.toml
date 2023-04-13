@@ -19,8 +19,8 @@ egui_winit_vulkano = "0.23.0"
 egui = "0.20.1"
 
 string-interner = "0.14.0"
-hexagon_tiles = { git = "https://github.com/Mg138/hexagon-tiles" }
-predicates = "2.1.5"
+hexagon-tiles = { git = "https://github.com/Mg138/hexagon-tiles" }
+predicates = "3.0.2"
 fuse-rust = "0.3.1"
 bytemuck = "1.8.0"
 genmesh = "0.6.2"

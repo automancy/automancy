@@ -11,7 +11,7 @@ use riker::actor::{ActorRef, ActorRefFactory};
 use riker::actors::{ActorSystem, SystemBuilder, Timer};
 use vulkano::device::DeviceExtensions;
 use winit::event_loop::EventLoop;
-use winit::window::Icon;
+use winit::window::{Icon, Window};
 
 use crate::game::ticking::TICK_INTERVAL;
 use crate::game::{Game, GameMsg};
@@ -34,12 +34,14 @@ pub struct GameSetup {
     pub(crate) sys: ActorSystem,
     /// the game messaging system
     pub(crate) game: ActorRef<GameMsg>,
-    /// the current frame
+    /// the egui frame
     pub(crate) frame: Frame,
     /// the renderer
     pub(crate) renderer: Renderer,
     /// the camera
     pub(crate) camera: Camera,
+    /// the window
+    pub(crate) window: Arc<Window>,
 }
 
 impl GameSetup {
@@ -98,7 +100,7 @@ impl GameSetup {
             window.clone(),
             physical_device,
         );
-        let gpu = Gpu::new(device, queue, surface, window, alloc);
+        let gpu = Gpu::new(device, queue, surface, window.clone(), alloc);
 
         let gui = gui::init_gui(&event_loop, &gpu);
         log::info!("Renderer setup complete");
@@ -130,7 +132,7 @@ impl GameSetup {
         let frame = gui::default_frame();
 
         let renderer = Renderer::new(resource_man.clone(), gpu);
-        let camera = Camera::new(gpu::window_size(&renderer.gpu.window));
+        let camera = Camera::default();
 
         // --- event-loop ---
         (
@@ -144,6 +146,7 @@ impl GameSetup {
                 frame,
                 renderer,
                 camera,
+                window,
             },
         )
     }

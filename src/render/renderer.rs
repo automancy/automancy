@@ -32,7 +32,7 @@ use crate::render::data::{GameUBO, GuiUBO, InstanceData, Vertex, HEX_LAYOUT};
 use crate::render::gpu;
 use crate::render::gpu::Gpu;
 use crate::resource::ResourceManager;
-use crate::util::cg::{actual_pos, eye, matrix, DPoint3, Matrix4, Num, Point3};
+use crate::util::cg::{actual_pos, eye, matrix, DPoint3, Float, Matrix4, Point3, Vector3};
 use crate::util::colors;
 use crate::util::colors::WithAlpha;
 
@@ -104,7 +104,7 @@ impl Renderer {
                     instances.entry(pos.into()).or_insert_with(|| {
                         let p = hex_to_pixel(HEX_LAYOUT, pos);
 
-                        none.position_offset([p.x as Num, p.y as Num, FAR as Num])
+                        none.position_offset([p.x as Float, p.y as Float, FAR as Float])
                     });
                 }
             }
@@ -126,9 +126,9 @@ impl Renderer {
             map.into_values().flatten().collect::<Vec<_>>()
         };
 
-        let camera_pos = camera_pos.cast::<Num>().unwrap();
+        let camera_pos = camera_pos.cast::<Float>().unwrap();
         let pos = actual_pos(camera_pos, eye(camera_pos.z, PI));
-        let matrix = matrix(camera_pos, aspect as Num, PI);
+        let matrix = matrix(camera_pos, aspect as Float, PI);
 
         self.inner_render(matrix, pos, &instances, &gui_instances, extra_vertices, gui);
     }

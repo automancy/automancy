@@ -1,15 +1,16 @@
-use crate::util::cg::Num;
+use crate::util::cg::Float;
 use egui::Rgba;
 
 pub trait WithAlpha {
-    fn with_alpha(&self, a: Num) -> Self;
+    fn with_alpha(&self, a: Float) -> Self;
 }
 
 impl WithAlpha for Rgba {
-    fn with_alpha(&self, a: Num) -> Self {
+    fn with_alpha(&self, a: Float) -> Self {
         Rgba::from_rgba_premultiplied(self.r(), self.g(), self.b(), a)
     }
 }
+
 pub const RED: Rgba = Rgba::from_rgba_premultiplied(1.0, 0.1, 0.1, 1.0);
 pub const ORANGE: Rgba = Rgba::from_rgba_premultiplied(1.0, 0.745, 0.447, 1.0);
 pub const WHITE: Rgba = Rgba::from_rgba_premultiplied(1.0, 1.0, 1.0, 1.0);

@@ -15,34 +15,30 @@ use crate::util::cg::{matrix, DPoint2, DPoint3, DVector2, Double};
 
 pub const FAR: Double = 0.0;
 
-/// Stores the position and velocity of the camera.
-#[derive(Debug, Clone, Copy)]
-pub struct CameraState {
+/// Returns if the camera is at its maximum height.
+pub fn is_at_max_height(pos: DPoint3) -> bool {
+    (1.0 - pos.z).abs() <= 0.001
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Camera {
     pos: DPoint3,
     move_vel: DVector2,
     scroll_vel: Double,
+
     pub pointing_at: TileCoord,
 }
 
-impl Default for CameraState {
+impl Default for Camera {
     fn default() -> Self {
         Self {
             pos: point3(0.0, 0.0, 1.0),
             move_vel: vec2(0.0, 0.0),
             scroll_vel: 0.0,
+
             pointing_at: TileCoord::new(0, 0),
         }
     }
-}
-/// Returns if the camera is at its maximum height.
-pub fn is_at_max_height(pos: DPoint3) -> bool {
-    (1.0 - pos.z).abs() <= 0.001
-}
-/// Wraps the camera's state and stores it with the window size.
-pub struct Camera {
-    camera_state: CameraState,
-
-    pub window_size: (Double, Double),
 }
 
 impl Camera {
@@ -50,19 +46,12 @@ impl Camera {
     pub fn is_at_max_height(&self) -> bool {
         is_at_max_height(self.get_pos())
     }
-    /// Returns the position of the camera..
+
+    /// Returns the position of the camera.
     pub fn get_pos(&self) -> DPoint3 {
-        let DPoint3 { x, y, z } = self.camera_state.pos;
+        let DPoint3 { x, y, z } = self.pos;
 
-        point3(x, y, Self::real_z(z))
-    }
-    /// Constructs a new camera with the given window size.
-    pub fn new(window_size: (Double, Double)) -> Self {
-        Self {
-            camera_state: Default::default(),
-
-            window_size,
-        }
+        point3(x, y, Self::adjusted_z(z))
     }
 }
 
@@ -79,8 +68,9 @@ impl Camera {
             self.on_scroll(delta);
         }
     }
-    /// Gets the real normalized z-position of the camera.
-    fn real_z(z: Double) -> Double {
+
+    /// Gets the adjusted z-position of the camera.
+    fn adjusted_z(z: Double) -> Double {
         if z <= 1.0 {
             return z;
         }
@@ -91,22 +81,20 @@ impl Camera {
             z - 0.8
         }
     }
+
     /// Scroll the camera to a new position.
     fn scroll(z: Double, vel: Double) -> Double {
         let z = z + vel * 0.4;
 
         clamp(z, FAR + 0.1, 3.0)
     }
-    /// Gets the camera's state.
-    pub fn camera_state(&self) -> &CameraState {
-        &self.camera_state
-    }
+
     /// Updates the camera's position.
     pub fn update_pos(&mut self) {
-        let pos = &mut self.camera_state.pos;
+        let pos = &mut self.pos;
 
         {
-            let vel = &mut self.camera_state.move_vel;
+            let vel = &mut self.move_vel;
 
             if !vel.is_zero() {
                 pos.x += vel.x;
@@ -117,7 +105,7 @@ impl Camera {
         }
 
         {
-            let vel = &mut self.camera_state.scroll_vel;
+            let vel = &mut self.scroll_vel;
             if !vel.is_zero() {
                 pos.z = Self::scroll(pos.z, *vel);
 
@@ -135,29 +123,31 @@ impl Camera {
         if y.abs() > 0.0 {
             let change = -y;
 
-            self.camera_state.scroll_vel += change * 0.2;
+            self.scroll_vel += change * 0.2;
         }
     }
+
     /// Called when the camera is moving.
     fn on_moving_main(&mut self, delta: DVector2) {
-        self.camera_state.move_vel += delta / 250.0;
+        self.move_vel += delta / 250.0;
     }
-    /// Sets the position the camera is centered on.
-    pub fn update_pointing_at(&mut self, main_pos: DPoint2) {
-        let (width, height) = self.window_size;
 
+    /// Sets the position the camera is centered on.
+    pub fn update_pointing_at(&mut self, main_pos: DPoint2, width: Double, height: Double) {
         let p = main_pos_to_hex(width, height, self.get_pos(), main_pos);
 
-        self.camera_state.pointing_at = p.round().into();
+        self.pointing_at = p.round().into();
     }
+
     /// Gets the TileCoord the camera is pointing at.
     pub fn get_tile_coord(&self) -> TileCoord {
-        let pos = self.camera_state.pos;
+        let pos = self.pos;
         let point = point(pos.x, pos.y);
 
         pixel_to_hex(HEX_LAYOUT, point).round().into()
     }
 }
+
 /// Gets the hex position being pointed at..
 pub fn main_pos_to_hex(
     width: Double,
@@ -172,6 +162,7 @@ pub fn main_pos_to_hex(
 
     pixel_to_hex(HEX_LAYOUT, p)
 }
+
 /// Converts screen space coordinates into normalized coordinates.
 pub fn screen_to_normalized(width: Double, height: Double, c: DPoint2) -> DPoint2 {
     let size = vec2(width, height) / 2.0;
@@ -182,12 +173,14 @@ pub fn screen_to_normalized(width: Double, height: Double, c: DPoint2) -> DPoint
 
     point2(c.x, c.y)
 }
+
 /// Converts screen coordinates to world coordinates..
 pub fn screen_to_world(width: Double, height: Double, c: DPoint2) -> DPoint3 {
     let c = screen_to_normalized(width, height, c);
 
     normalized_to_world(width, height, c)
 }
+
 /// Converts normalized screen coordinates to world coordinates..
 pub fn normalized_to_world(width: Double, height: Double, p: DPoint2) -> DPoint3 {
     let aspect = width / height;
@@ -202,6 +195,7 @@ pub fn normalized_to_world(width: Double, height: Double, p: DPoint2) -> DPoint3
 
     point3(p.x * aspect_squared, p.y, p.z)
 }
+
 /// Converts hex coordinates to normalized screen coordinates.
 pub fn hex_to_normalized(
     width: Double,
