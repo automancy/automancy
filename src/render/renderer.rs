@@ -8,7 +8,7 @@ use hexagon_tiles::hex::Hex;
 use hexagon_tiles::layout::{hex_to_pixel, pixel_to_hex};
 use hexagon_tiles::point::point;
 use hexagon_tiles::traits::HexRound;
-use vulkano::buffer::BufferUsage;
+use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
 
 use vulkano::command_buffer::{
     AutoCommandBufferBuilder, CommandBufferInheritanceInfo, CommandBufferUsage,
@@ -17,8 +17,8 @@ use vulkano::command_buffer::{
 
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::format::ClearValue;
+use vulkano::memory::allocator::{AllocationCreateInfo, MemoryUsage, StandardMemoryAllocator};
 
-use vulkano::memory::allocator::FastMemoryAllocator;
 use vulkano::pipeline::graphics::viewport::Scissor;
 use vulkano::pipeline::{Pipeline, PipelineBindPoint};
 use vulkano::swapchain::{acquire_next_image, AcquireError};
@@ -28,13 +28,14 @@ use vulkano::sync::GpuFuture;
 use crate::game::map::MapRenderInfo;
 use crate::game::tile::coord::{TileCoord, TileHex, TileUnit};
 use crate::render::camera::{is_at_max_height, FAR};
-use crate::render::data::{GameUBO, GuiUBO, InstanceData, Vertex, HEX_LAYOUT};
+use crate::render::data::{GameUBO, GameVertex, GuiUBO, InstanceData, HEX_LAYOUT};
 use crate::render::gpu;
 use crate::render::gpu::Gpu;
 use crate::resource::ResourceManager;
-use crate::util::cg::{actual_pos, eye, matrix, DPoint3, Float, Matrix4, Point3, Vector3};
+use crate::util::cg::{matrix, DPoint3, Float, Matrix4, Point3};
 use crate::util::colors;
 use crate::util::colors::WithAlpha;
+use crate::util::id::Id;
 
 /// render distance
 pub const RENDER_RANGE: TileUnit = 64;
@@ -71,27 +72,20 @@ impl Renderer {
         map_render_info: &MapRenderInfo,
         camera_pos: DPoint3,
         pointing_at: TileCoord,
-        gui_instances: Vec<InstanceData>,
-        extra_vertices: Vec<Vertex>,
+        gui_instances: Vec<(InstanceData, Id)>,
+        extra_vertices: Vec<GameVertex>,
         gui: &mut Gui,
     ) {
-        let (width, height) = gpu::window_size(&self.gpu.window);
-        let aspect = width / height;
-
         let instances = {
             let pos = point(camera_pos.x, camera_pos.y);
             let pos: TileHex = pixel_to_hex(HEX_LAYOUT, pos).round();
 
-            let none = InstanceData::new().model(
-                *self
-                    .resource_man
-                    .registry
-                    .get_tile(self.resource_man.registry.none)
-                    .unwrap()
-                    .models
-                    .get(0)
-                    .unwrap(),
-            );
+            let none = self
+                .resource_man
+                .registry
+                .get_tile(self.resource_man.registry.none)
+                .unwrap()
+                .models[0];
 
             let mut instances = map_render_info.instances.clone();
 
@@ -104,42 +98,55 @@ impl Renderer {
                     instances.entry(pos.into()).or_insert_with(|| {
                         let p = hex_to_pixel(HEX_LAYOUT, pos);
 
-                        none.position_offset([p.x as Float, p.y as Float, FAR as Float])
+                        (
+                            InstanceData::new().position_offset([
+                                p.x as Float,
+                                p.y as Float,
+                                FAR as Float,
+                            ]),
+                            none,
+                        )
                     });
                 }
             }
 
             if is_at_max_height(camera_pos) {
-                if let Some(instance) = instances.get_mut(&pointing_at) {
+                if let Some((instance, _)) = instances.get_mut(&pointing_at) {
                     *instance = instance.color_offset(colors::ORANGE.with_alpha(0.5).to_array())
                 }
             }
 
             let mut map = HashMap::new();
 
-            instances.into_values().for_each(|v| {
-                if let Some(id) = v.id {
-                    map.entry(id).or_insert_with(Vec::new).push(v)
-                }
-            });
+            instances
+                .into_values()
+                .for_each(|v| map.entry(v.1).or_insert_with(Vec::new).push(v));
 
             map.into_values().flatten().collect::<Vec<_>>()
         };
 
+        let (width, height) = gpu::window_size(&self.gpu.window);
+        let aspect = width / height;
         let camera_pos = camera_pos.cast::<Float>().unwrap();
-        let pos = actual_pos(camera_pos, eye(camera_pos.z, PI));
         let matrix = matrix(camera_pos, aspect as Float, PI);
 
-        self.inner_render(matrix, pos, &instances, &gui_instances, extra_vertices, gui);
+        self.inner_render(
+            matrix,
+            camera_pos,
+            &instances,
+            &gui_instances,
+            extra_vertices,
+            gui,
+        );
     }
 
     fn inner_render(
         &mut self,
         matrix: Matrix4,
         camera_pos: Point3,
-        instances: &[InstanceData],
-        gui_instances: &[InstanceData],
-        extra_vertices: Vec<Vertex>,
+        instances: &[(InstanceData, Id)],
+        gui_instances: &[(InstanceData, Id)],
+        extra_vertices: Vec<GameVertex>,
         gui: &mut Gui,
     ) {
         let dimensions = gpu::window_size_u32(&self.gpu.window);
@@ -150,7 +157,7 @@ impl Renderer {
 
         self.previous_frame_end.as_mut().unwrap().cleanup_finished();
 
-        let allocator = FastMemoryAllocator::new_default(self.gpu.device.clone());
+        let allocator = StandardMemoryAllocator::new_default(self.gpu.device.clone());
 
         self.gpu
             .resize_images(&allocator, dimensions, &mut self.recreate_swapchain);
@@ -327,14 +334,19 @@ impl Renderer {
 
                 let vertex_count = extra_vertices.len();
 
-                let extra_vertex_buffer = gpu::cpu_accessible_buffer(
+                let extra_vertex_buffer = Buffer::from_iter(
                     &allocator,
-                    extra_vertices.into_iter(),
-                    BufferUsage {
-                        vertex_buffer: true,
+                    BufferCreateInfo {
+                        usage: BufferUsage::VERTEX_BUFFER,
                         ..Default::default()
                     },
-                );
+                    AllocationCreateInfo {
+                        usage: MemoryUsage::Upload,
+                        ..Default::default()
+                    },
+                    extra_vertices.into_iter(),
+                )
+                .unwrap();
 
                 gui_builder
                     .bind_pipeline_graphics(self.gpu.overlay_pipeline.clone())

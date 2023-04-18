@@ -17,11 +17,13 @@ use futures::channel::mpsc;
 use futures_executor::block_on;
 use genmesh::{EmitTriangles, Quad};
 use hexagon_tiles::traits::HexDirection;
-use riker::actors::{ActorRef, ActorSystem, Tell};
+use riker::actors::{ActorRef, Tell};
 use riker_patterns::ask::ask;
 use rune::Any;
+use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::image::SampleCount::Sample4;
+use vulkano::memory::allocator::{AllocationCreateInfo, MemoryUsage};
 use vulkano::pipeline::{Pipeline, PipelineBindPoint};
 use winit::event_loop::EventLoop;
 
@@ -31,10 +33,10 @@ use crate::game::tile::coord::TileCoord;
 use crate::game::tile::coord::TileHex;
 use crate::game::tile::entity::{Data, DataMap, TileEntityMsg, TileState};
 use crate::game::GameMsg;
-use crate::render::camera::{hex_to_normalized, Camera};
-use crate::render::data::{GuiUBO, InstanceData, Vertex};
+use crate::render::camera::hex_to_normalized;
+use crate::render::data::{GameVertex, GuiUBO, InstanceData};
 use crate::render::gpu::Gpu;
-use crate::render::renderer::Renderer;
+
 use crate::render::{gpu, gui};
 use crate::resource::tile::TileType;
 use crate::resource::ResourceManager;
@@ -71,22 +73,22 @@ impl GuiIds {
 
 fn init_fonts(gui: &Gui) {
     let mut fonts = FontDefinitions::default();
-    let iosevka = "iosevka".to_owned();
+    let iosevka = "iosevka";
 
     fonts
         .font_data
-        .insert(iosevka.clone(), FontData::from_static(IOSEVKA_FONT));
+        .insert(iosevka.to_owned(), FontData::from_static(IOSEVKA_FONT));
 
     fonts
         .families
         .get_mut(&Proportional)
         .unwrap()
-        .insert(0, iosevka.clone());
+        .insert(0, iosevka.to_owned());
     fonts
         .families
         .get_mut(&Monospace)
         .unwrap()
-        .insert(0, iosevka);
+        .insert(0, iosevka.to_owned());
 
     gui.context().set_fonts(fonts);
 }
@@ -107,6 +109,7 @@ fn init_styles(gui: &Gui) {
         visuals: Visuals {
             widgets: Widgets {
                 noninteractive: WidgetVisuals {
+                    weak_bg_fill: Color32::from_gray(248),
                     bg_fill: Color32::from_gray(170),
                     bg_stroke: Stroke::new(1.0, Color32::from_gray(160)), // separators, indentation lines
                     fg_stroke: Stroke::new(1.0, Color32::from_gray(80)),  // normal text color
@@ -114,13 +117,15 @@ fn init_styles(gui: &Gui) {
                     expansion: 0.0,
                 },
                 inactive: WidgetVisuals {
-                    bg_fill: Color32::from_gray(200), // checkbox background
+                    weak_bg_fill: Color32::from_gray(230), // button background
+                    bg_fill: Color32::from_gray(200),      // checkbox background
                     bg_stroke: Default::default(),
                     fg_stroke: Stroke::new(1.0, Color32::from_gray(60)), // button text
                     rounding: Rounding::same(2.0),
                     expansion: 0.0,
                 },
                 hovered: WidgetVisuals {
+                    weak_bg_fill: Color32::from_gray(220),
                     bg_fill: Color32::from_gray(190),
                     bg_stroke: Stroke::new(1.0, Color32::from_gray(105)), // e.g. hover over window edge or button
                     fg_stroke: Stroke::new(1.5, Color32::BLACK),
@@ -128,6 +133,7 @@ fn init_styles(gui: &Gui) {
                     expansion: 1.0,
                 },
                 active: WidgetVisuals {
+                    weak_bg_fill: Color32::from_gray(165),
                     bg_fill: Color32::from_gray(180),
                     bg_stroke: Stroke::new(1.0, Color32::BLACK),
                     fg_stroke: Stroke::new(2.0, Color32::BLACK),
@@ -135,6 +141,7 @@ fn init_styles(gui: &Gui) {
                     expansion: 1.0,
                 },
                 open: WidgetVisuals {
+                    weak_bg_fill: Color32::from_gray(220),
                     bg_fill: Color32::from_gray(210),
                     bg_stroke: Stroke::new(1.0, Color32::from_gray(160)),
                     fg_stroke: Stroke::new(1.0, Color32::BLACK),
@@ -218,13 +225,23 @@ fn tile_paint(
     PaintCallback {
         rect,
         callback: Arc::new(CallbackFn::new(move |_info, context| {
-            let uniform_buffer = gpu::uniform_buffer(&context.resources.memory_allocator);
-
             let ubo = GuiUBO {
                 matrix: matrix.into(),
             };
 
-            *uniform_buffer.write().unwrap() = ubo;
+            let uniform_buffer = Buffer::from_data(
+                &context.resources.memory_allocator,
+                BufferCreateInfo {
+                    usage: BufferUsage::UNIFORM_BUFFER,
+                    ..Default::default()
+                },
+                AllocationCreateInfo {
+                    usage: MemoryUsage::Upload,
+                    ..Default::default()
+                },
+                ubo,
+            )
+            .unwrap();
 
             let ubo_set = PersistentDescriptorSet::new(
                 context.resources.descriptor_set_allocator,
@@ -233,7 +250,7 @@ fn tile_paint(
             )
             .unwrap();
 
-            let instance = InstanceData::new().model(model);
+            let instance = (InstanceData::new(), model);
 
             if let Some((indirect_commands, instance_buffer)) = gpu::indirect_instance(
                 &context.resources.memory_allocator,
@@ -434,7 +451,7 @@ pub fn tile_config(
     setup: &GameSetup,
     loop_store: &mut EventLoopStorage,
     game: ActorRef<GameMsg>,
-    extra_vertices: &mut Vec<Vertex>,
+    extra_vertices: &mut Vec<GameVertex>,
 ) {
     let window_size = setup.window.inner_size();
 
@@ -691,7 +708,7 @@ pub fn tile_config(
     }
 }
 
-pub fn line(a: DPoint2, b: DPoint2, color: Rgba) -> Vec<Vertex> {
+pub fn line(a: DPoint2, b: DPoint2, color: Rgba) -> Vec<GameVertex> {
     let v = b - a;
     let l = a.distance(b) * 128.0;
     let w = cgmath::vec2(-v.y / l, v.x / l);
@@ -704,22 +721,22 @@ pub fn line(a: DPoint2, b: DPoint2, color: Rgba) -> Vec<Vertex> {
     let mut line = vec![];
 
     Quad::new(
-        Vertex {
+        GameVertex {
             pos: [a0.x, a0.y, 0.0],
             color: color.to_array(),
             normal: [0.0, 0.0, 0.0],
         },
-        Vertex {
+        GameVertex {
             pos: [a1.x, a1.y, 0.0],
             color: color.to_array(),
             normal: [0.0, 0.0, 0.0],
         },
-        Vertex {
+        GameVertex {
             pos: [b0.x, b0.y, 0.0],
             color: color.to_array(),
             normal: [0.0, 0.0, 0.0],
         },
-        Vertex {
+        GameVertex {
             pos: [b1.x, b1.y, 0.0],
             color: color.to_array(),
             normal: [0.0, 0.0, 0.0],

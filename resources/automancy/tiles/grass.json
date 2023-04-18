@@ -1,7 +1,0 @@
-{
-    "id": "grass",
-    "models": ["grass"],
-    "tile_type": {
-        "type": "Empty"
-    }
-}

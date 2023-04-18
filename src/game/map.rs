@@ -33,7 +33,7 @@ pub struct RenderContext {
 
 #[derive(Clone, Debug)]
 pub struct MapRenderInfo {
-    pub instances: HashMap<TileCoord, InstanceData>,
+    pub instances: HashMap<TileCoord, (InstanceData, Id)>,
 }
 
 #[derive(Debug, Clone)]

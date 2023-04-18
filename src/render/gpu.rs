@@ -1,28 +1,26 @@
 use std::sync::Arc;
 
-use bytemuck::Pod;
-use futures_executor::block_on;
-use vulkano::buffer::DeviceLocalBuffer;
+use vulkano::buffer::{Buffer, BufferCreateInfo, Subbuffer};
 use vulkano::command_buffer::allocator::{
     StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo,
 };
-use vulkano::command_buffer::{
-    AutoCommandBufferBuilder, CommandBufferUsage, PrimaryAutoCommandBuffer,
-    PrimaryCommandBufferAbstract,
-};
+use vulkano::command_buffer::PrimaryAutoCommandBuffer;
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType};
-use vulkano::device::{DeviceCreateInfo, DeviceExtensions, Features, QueueCreateInfo};
+use vulkano::device::{DeviceCreateInfo, DeviceExtensions, Features, QueueCreateInfo, QueueFlags};
 use vulkano::format::{Format, NumericType};
 use vulkano::image::SampleCount::Sample4;
 use vulkano::image::{ImageAccess, ImageUsage, SampleCount};
 use vulkano::instance::{Instance, InstanceCreateInfo};
-use vulkano::memory::allocator::{MemoryAllocator, StandardMemoryAllocator};
+use vulkano::memory::allocator::{
+    AllocationCreateInfo, MemoryAllocator, MemoryUsage, StandardMemoryAllocator,
+};
 use vulkano::pipeline::graphics::depth_stencil::DepthStencilState;
 use vulkano::pipeline::graphics::input_assembly::{InputAssemblyState, PrimitiveTopology};
 use vulkano::pipeline::graphics::multisample::MultisampleState;
 use vulkano::pipeline::graphics::rasterization::RasterizationState;
-use vulkano::pipeline::graphics::vertex_input::BuffersDefinition;
+
+use vulkano::pipeline::graphics::vertex_input::Vertex;
 use vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
 use vulkano::pipeline::GraphicsPipeline;
 use vulkano::render_pass::Subpass;
@@ -32,7 +30,7 @@ use vulkano::swapchain::{
 };
 use vulkano::sync::FlushError;
 use vulkano::{
-    buffer::{BufferContents, BufferUsage, CpuAccessibleBuffer},
+    buffer::BufferUsage,
     command_buffer::DrawIndexedIndirectCommand,
     device::{Device, Queue},
     image::{view::ImageView, AttachmentImage, SwapchainImage},
@@ -47,10 +45,11 @@ use winit::event_loop::EventLoop;
 use winit::window::{Icon, WindowBuilder};
 use winit::{dpi::LogicalSize, window::Window};
 
-use crate::render::data::{GuiUBO, Vertex};
+use crate::render::data::{GameVertex, GuiUBO};
 use crate::resource::ResourceManager;
 use crate::util::cg::Double;
 use crate::util::cg::Float;
+use crate::util::id::Id;
 
 use super::data::{GameUBO, InstanceData};
 
@@ -102,11 +101,7 @@ pub fn create_game_pipeline(device: Arc<Device>, subpass: &Subpass) -> Arc<Graph
 
     let pipeline = GraphicsPipeline::start()
         .vertex_shader(vs.entry_point("main").unwrap(), ())
-        .vertex_input_state(
-            BuffersDefinition::new()
-                .vertex::<Vertex>()
-                .instance::<InstanceData>(),
-        )
+        .vertex_input_state([GameVertex::per_vertex(), InstanceData::per_instance()])
         .input_assembly_state(InputAssemblyState::new().topology(PrimitiveTopology::TriangleList))
         .fragment_shader(fs.entry_point("main").unwrap(), ())
         .viewport_state(ViewportState::viewport_dynamic_scissor_irrelevant())
@@ -127,11 +122,7 @@ pub fn create_gui_pipeline(device: Arc<Device>, subpass: &Subpass) -> Arc<Graphi
 
     let pipeline = GraphicsPipeline::start()
         .vertex_shader(vs_gui.entry_point("main").unwrap(), ())
-        .vertex_input_state(
-            BuffersDefinition::new()
-                .vertex::<Vertex>()
-                .instance::<InstanceData>(),
-        )
+        .vertex_input_state([GameVertex::per_vertex(), InstanceData::per_instance()])
         .input_assembly_state(InputAssemblyState::new().topology(PrimitiveTopology::TriangleList))
         .fragment_shader(fs_gui.entry_point("main").unwrap(), ())
         .viewport_state(ViewportState::viewport_dynamic_scissor_dynamic(1))
@@ -152,7 +143,7 @@ pub fn create_overlay_pipeline(device: Arc<Device>, subpass: &Subpass) -> Arc<Gr
 
     let pipeline = GraphicsPipeline::start()
         .vertex_shader(vs_gui.entry_point("main").unwrap(), ())
-        .vertex_input_state(BuffersDefinition::new().vertex::<Vertex>())
+        .vertex_input_state(GameVertex::per_vertex())
         .input_assembly_state(InputAssemblyState::new().topology(PrimitiveTopology::TriangleList))
         .fragment_shader(fs_gui.entry_point("main").unwrap(), ())
         .viewport_state(ViewportState::viewport_dynamic_scissor_irrelevant())
@@ -210,7 +201,8 @@ pub fn get_physical_device(
                 .iter()
                 .enumerate()
                 .position(|(i, q)| {
-                    q.queue_flags.graphics && p.surface_support(i as u32, &surface).unwrap_or(false)
+                    q.queue_flags.contains(QueueFlags::GRAPHICS)
+                        && p.surface_support(i as u32, &surface).unwrap_or(false)
                 })
                 .map(|q| (p, q as u32))
         })
@@ -276,50 +268,6 @@ pub fn viewport_with_dims(dimensions: [Float; 2]) -> Viewport {
     }
 }
 
-pub fn immutable_buffer<T, D, W>(
-    allocator: &(impl MemoryAllocator + ?Sized),
-    data: D,
-    buffer_usage: BufferUsage,
-    builder: &mut AutoCommandBufferBuilder<W>,
-) -> Arc<DeviceLocalBuffer<[T]>>
-where
-    D: IntoIterator<Item = T>,
-    D::IntoIter: ExactSizeIterator,
-    [T]: BufferContents,
-{
-    DeviceLocalBuffer::from_iter(allocator, data, buffer_usage, builder)
-        .expect("failed to create vertex buffer")
-}
-
-pub fn cpu_accessible_buffer<T, D>(
-    allocator: &(impl MemoryAllocator + ?Sized),
-    data: D,
-    buffer_usage: BufferUsage,
-) -> Arc<CpuAccessibleBuffer<[T]>>
-where
-    D: IntoIterator<Item = T>,
-    D::IntoIter: ExactSizeIterator,
-    [T]: BufferContents,
-{
-    CpuAccessibleBuffer::from_iter(allocator, buffer_usage, false, data)
-        .expect("failed to create vertex buffer")
-}
-
-pub fn uniform_buffer<UBO: Default + Pod + Send + Sync>(
-    allocator: &(impl MemoryAllocator + ?Sized),
-) -> Arc<CpuAccessibleBuffer<UBO>> {
-    CpuAccessibleBuffer::from_data(
-        allocator,
-        BufferUsage {
-            uniform_buffer: true,
-            ..Default::default()
-        },
-        false,
-        UBO::default(),
-    )
-    .unwrap()
-}
-
 pub fn framebuffers(
     images: &[Arc<SwapchainImage>],
     render_pass: Arc<RenderPass>,
@@ -356,19 +304,16 @@ pub fn framebuffers(
 pub fn indirect_buffer(
     allocator: &(impl MemoryAllocator + ?Sized),
     resource_man: &ResourceManager,
-    instances: &[InstanceData],
-) -> (
-    Arc<CpuAccessibleBuffer<[InstanceData]>>,
-    Vec<DrawIndexedIndirectCommand>,
-) {
+    instances: &[(InstanceData, Id)],
+) -> (Subbuffer<[InstanceData]>, Vec<DrawIndexedIndirectCommand>) {
     let indirect_commands = instances
-        .group_by(|a, b| a.id == b.id)
+        .group_by(|a, b| a.1 == b.1)
         .scan(0, |init, instances| {
             let instance_count = instances.len() as u32;
 
             let first_instance = *init;
 
-            let face = &resource_man.faces[&instances[0].id.unwrap()];
+            let face = &resource_man.faces[&instances[0].1];
 
             let command = DrawIndexedIndirectCommand {
                 index_count: face.size,
@@ -384,26 +329,31 @@ pub fn indirect_buffer(
         })
         .collect::<Vec<_>>();
 
-    let instance_buffer = cpu_accessible_buffer(
+    let instance_buffer = Buffer::from_iter(
         allocator,
-        instances.to_vec(),
-        BufferUsage {
-            vertex_buffer: true,
+        BufferCreateInfo {
+            usage: BufferUsage::VERTEX_BUFFER,
             ..Default::default()
         },
-    );
+        AllocationCreateInfo {
+            usage: MemoryUsage::Upload,
+            ..Default::default()
+        },
+        instances.iter().map(|v| v.0),
+    )
+    .unwrap();
 
     (instance_buffer, indirect_commands)
 }
 
 type IndirectInstance = (
-    Arc<CpuAccessibleBuffer<[DrawIndexedIndirectCommand]>>,
-    Arc<CpuAccessibleBuffer<[InstanceData]>>,
+    Subbuffer<[DrawIndexedIndirectCommand]>,
+    Subbuffer<[InstanceData]>,
 );
 pub fn indirect_instance(
     allocator: &(impl MemoryAllocator + ?Sized),
     resource_man: &ResourceManager,
-    instances: &[InstanceData],
+    instances: &[(InstanceData, Id)],
 ) -> Option<IndirectInstance> {
     if instances.is_empty() {
         None
@@ -413,14 +363,19 @@ pub fn indirect_instance(
         if commands.is_empty() {
             None
         } else {
-            let indirect_buffer = cpu_accessible_buffer(
+            let indirect_buffer = Buffer::from_iter(
                 allocator,
-                commands.into_iter(),
-                BufferUsage {
-                    indirect_buffer: true,
+                BufferCreateInfo {
+                    usage: BufferUsage::INDIRECT_BUFFER,
                     ..Default::default()
                 },
-            );
+                AllocationCreateInfo {
+                    usage: MemoryUsage::Upload,
+                    ..Default::default()
+                },
+                commands.into_iter(),
+            )
+            .unwrap();
             Some((indirect_buffer, instance_buffer))
         }
     }
@@ -430,11 +385,11 @@ pub struct RenderAlloc {
     pub swapchain: Arc<Swapchain>,
     pub images: Vec<Arc<SwapchainImage>>,
 
-    pub vertex_buffer: Arc<DeviceLocalBuffer<[Vertex]>>,
-    pub index_buffer: Arc<DeviceLocalBuffer<[u32]>>,
-    pub game_uniform_buffer: Arc<CpuAccessibleBuffer<GameUBO>>,
-    pub gui_uniform_buffer: Arc<CpuAccessibleBuffer<GuiUBO>>,
-    pub overlay_uniform_buffer: Arc<CpuAccessibleBuffer<GuiUBO>>,
+    pub vertex_buffer: Subbuffer<[GameVertex]>,
+    pub index_buffer: Subbuffer<[u32]>,
+    pub game_uniform_buffer: Subbuffer<GameUBO>,
+    pub gui_uniform_buffer: Subbuffer<GuiUBO>,
+    pub overlay_uniform_buffer: Subbuffer<GuiUBO>,
 
     pub color_image: Arc<AttachmentImage>,
     pub game_depth_buffer: Arc<AttachmentImage>,
@@ -476,16 +431,7 @@ impl RenderAlloc {
                 image_format,
                 image_extent: window_size_u32(window.as_ref()),
 
-                image_usage: ImageUsage {
-                    color_attachment: true,
-                    transfer_dst: true,
-                    ..Default::default()
-                },
-                composite_alpha: surface_capabilities
-                    .supported_composite_alpha
-                    .iter()
-                    .next()
-                    .unwrap(),
+                image_usage: ImageUsage::COLOR_ATTACHMENT.union(ImageUsage::TRANSFER_DST),
                 ..Default::default()
             },
         )
@@ -495,7 +441,6 @@ impl RenderAlloc {
     pub fn new(
         resource_man: Arc<ResourceManager>,
         device: Arc<Device>,
-        queue: Arc<Queue>,
         surface: Arc<Surface>,
         window: Arc<Window>,
         physical_device: Arc<PhysicalDevice>,
@@ -512,50 +457,84 @@ impl RenderAlloc {
             },
         );
 
-        let mut command_buffer_builder = AutoCommandBufferBuilder::primary(
-            &command_allocator,
-            queue.queue_family_index(),
-            CommandBufferUsage::OneTimeSubmit,
+        let vertex_buffer = Buffer::from_iter(
+            &allocator,
+            BufferCreateInfo {
+                usage: BufferUsage::VERTEX_BUFFER,
+                ..Default::default()
+            },
+            AllocationCreateInfo {
+                usage: MemoryUsage::Upload,
+                ..Default::default()
+            },
+            resource_man.all_vertices.iter().cloned(),
         )
         .unwrap();
 
-        let vertex_buffer = immutable_buffer(
+        let index_buffer = Buffer::from_iter(
             &allocator,
-            resource_man.all_vertices.clone(),
-            BufferUsage {
-                vertex_buffer: true,
+            BufferCreateInfo {
+                usage: BufferUsage::INDEX_BUFFER,
                 ..Default::default()
             },
-            &mut command_buffer_builder,
-        );
-
-        let index_buffer = immutable_buffer(
-            &allocator,
+            AllocationCreateInfo {
+                usage: MemoryUsage::Upload,
+                ..Default::default()
+            },
             resource_man
                 .raw_faces
                 .iter()
                 .flat_map(|v| v.indices.clone())
                 .collect::<Vec<_>>(),
-            BufferUsage {
-                index_buffer: true,
+        )
+        .unwrap();
+
+        let game_uniform_buffer = Buffer::from_data(
+            &allocator,
+            BufferCreateInfo {
+                usage: BufferUsage::UNIFORM_BUFFER,
                 ..Default::default()
             },
-            &mut command_buffer_builder,
-        );
-
-        let game_uniform_buffer = uniform_buffer(&allocator);
-        let gui_uniform_buffer = uniform_buffer(&allocator);
-        let overlay_uniform_buffer = uniform_buffer(&allocator);
+            AllocationCreateInfo {
+                usage: MemoryUsage::Upload,
+                ..Default::default()
+            },
+            GameUBO::default(),
+        )
+        .unwrap();
+        let gui_uniform_buffer = Buffer::from_data(
+            &allocator,
+            BufferCreateInfo {
+                usage: BufferUsage::UNIFORM_BUFFER,
+                ..Default::default()
+            },
+            AllocationCreateInfo {
+                usage: MemoryUsage::Upload,
+                ..Default::default()
+            },
+            GuiUBO::default(),
+        )
+        .unwrap();
+        let overlay_uniform_buffer = Buffer::from_data(
+            &allocator,
+            BufferCreateInfo {
+                usage: BufferUsage::UNIFORM_BUFFER,
+                ..Default::default()
+            },
+            AllocationCreateInfo {
+                usage: MemoryUsage::Upload,
+                ..Default::default()
+            },
+            GuiUBO::default(),
+        )
+        .unwrap();
 
         let color_image = AttachmentImage::multisampled_with_usage(
             &allocator,
             window_size_u32(window.as_ref()),
             Sample4,
             swapchain.image_format(),
-            ImageUsage {
-                color_attachment: true,
-                ..Default::default()
-            },
+            ImageUsage::COLOR_ATTACHMENT,
         )
         .unwrap();
 
@@ -564,10 +543,7 @@ impl RenderAlloc {
             window_size_u32(window.as_ref()),
             Sample4,
             Format::D32_SFLOAT,
-            ImageUsage {
-                depth_stencil_attachment: true,
-                ..Default::default()
-            },
+            ImageUsage::DEPTH_STENCIL_ATTACHMENT,
         )
         .unwrap();
 
@@ -576,21 +552,7 @@ impl RenderAlloc {
             window_size_u32(&window),
             Sample4,
             Format::D32_SFLOAT,
-            ImageUsage {
-                depth_stencil_attachment: true,
-                ..Default::default()
-            },
-        )
-        .unwrap();
-
-        let command_buffer = command_buffer_builder.build().unwrap();
-
-        block_on(
-            command_buffer
-                .execute(queue)
-                .unwrap()
-                .then_signal_fence_and_flush()
-                .unwrap(),
+            ImageUsage::DEPTH_STENCIL_ATTACHMENT,
         )
         .unwrap();
 
@@ -679,7 +641,7 @@ impl Gpu {
                 size,
                 sample_count,
                 image.format(),
-                *image.usage(),
+                image.usage(),
             )
             .unwrap();
         }
@@ -694,7 +656,7 @@ impl Gpu {
         if size != image.dimensions().width_height() {
             *recreate_swapchain = true;
 
-            *image = AttachmentImage::with_usage(allocator, size, image.format(), *image.usage())
+            *image = AttachmentImage::with_usage(allocator, size, image.format(), image.usage())
                 .unwrap();
         }
     }

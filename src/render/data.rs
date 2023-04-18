@@ -7,11 +7,11 @@ use egui::ecolor::{linear_f32_from_gamma_u8, linear_f32_from_linear_u8};
 use hexagon_tiles::layout::{hex_to_pixel, Layout, LAYOUT_ORIENTATION_POINTY};
 use hexagon_tiles::point::Point;
 use ply_rs::ply::{Property, PropertyAccess};
-use vulkano::impl_vertex;
+use vulkano::pipeline::graphics::vertex_input::Vertex;
 
 use crate::render::camera::FAR;
 use crate::resource::ResourceManager;
-use crate::util::cg::{Float, Matrix4, Point3, Vector3};
+use crate::util::cg::{Float, Matrix4, Point3};
 use crate::util::id::Id;
 
 pub const HEX_LAYOUT: Layout = Layout {
@@ -26,15 +26,17 @@ pub type VertexPos = [Float; 3];
 pub type VertexColor = [Float; 4];
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, Default, Zeroable, Pod)]
-pub struct Vertex {
+#[derive(Debug, Clone, Copy, Default, Zeroable, Pod, Vertex)]
+pub struct GameVertex {
+    #[format(R32G32B32_SFLOAT)]
     pub pos: VertexPos,
+    #[format(R32G32B32A32_SFLOAT)]
     pub color: VertexColor,
+    #[format(R32G32B32_SFLOAT)]
     pub normal: VertexPos,
 }
-impl_vertex!(Vertex, pos, color, normal);
 
-impl PropertyAccess for Vertex {
+impl PropertyAccess for GameVertex {
     fn new() -> Self {
         Self {
             pos: [0.0, 0.0, 0.0],
@@ -63,16 +65,15 @@ impl PropertyAccess for Vertex {
 // instance
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
+#[derive(Clone, Copy, Debug, Default, Zeroable, Pod, Vertex)]
 pub struct InstanceData {
+    #[format(R32G32B32_SFLOAT)]
     pub position_offset: VertexPos,
+    #[format(R32_SFLOAT)]
     pub scale: Float,
+    #[format(R32G32B32A32_SFLOAT)]
     pub color_offset: VertexColor,
-
-    pub id: Option<Id>,
 }
-
-impl_vertex!(InstanceData, position_offset, scale, color_offset);
 
 impl InstanceData {
     pub fn from_id(
@@ -80,19 +81,20 @@ impl InstanceData {
         pos: TileCoord,
         tile_state: TileState,
         resource_man: Arc<ResourceManager>,
-    ) -> Option<(TileCoord, Self)> {
+    ) -> Option<(TileCoord, (Self, Id))> {
         resource_man
             .registry
             .get_tile(id)
             .and_then(|r| r.models.get(tile_state as usize).cloned())
-            .map(|face| {
+            .map(|model| {
                 let p = hex_to_pixel(HEX_LAYOUT, pos.into());
 
                 (
                     pos,
-                    Self::new()
-                        .position_offset([p.x as Float, p.y as Float, FAR as Float])
-                        .model(face),
+                    (
+                        Self::new().position_offset([p.x as Float, p.y as Float, FAR as Float]),
+                        model,
+                    ),
                 )
             })
     }
@@ -101,7 +103,6 @@ impl InstanceData {
         InstanceData {
             position_offset: [0.0, 0.0, 0.0],
             scale: 1.0,
-            id: None,
             color_offset: [0.0, 0.0, 0.0, 0.0],
         }
     }
@@ -122,12 +123,6 @@ impl InstanceData {
 
     pub fn scale(mut self, scale: Float) -> Self {
         self.scale = scale;
-
-        self
-    }
-
-    pub fn model(mut self, id: Id) -> Self {
-        self.id = Some(id);
 
         self
     }
@@ -201,12 +196,12 @@ impl PropertyAccess for RawFace {
 
 #[derive(Debug, Clone)]
 pub struct Model {
-    pub vertices: Vec<Vertex>,
+    pub vertices: Vec<GameVertex>,
     pub faces: Vec<RawFace>,
 }
 
 impl Model {
-    pub fn new(vertices: Vec<Vertex>, faces: Vec<RawFace>) -> Self {
+    pub fn new(vertices: Vec<GameVertex>, faces: Vec<RawFace>) -> Self {
         Self { vertices, faces }
     }
 }

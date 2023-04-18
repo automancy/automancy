@@ -1,4 +1,4 @@
-use crate::render::data::{Model, RawFace, Vertex};
+use crate::render::data::{GameVertex, Model, RawFace};
 use crate::resource::ResourceManager;
 use crate::resource::JSON_EXT;
 use crate::util::id::IdRaw;
@@ -42,7 +42,7 @@ impl ResourceManager {
         let file = File::open(file).ok().unwrap();
         let mut read = BufReader::new(file);
 
-        let vertex_parser = Parser::<Vertex>::new();
+        let vertex_parser = Parser::<GameVertex>::new();
         let face_parser = Parser::<RawFace>::new();
 
         let header = vertex_parser.read_header(&mut read).unwrap();

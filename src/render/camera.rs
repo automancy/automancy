@@ -13,11 +13,11 @@ use crate::game::tile::coord::TileCoord;
 use crate::render::data::HEX_LAYOUT;
 use crate::util::cg::{matrix, DPoint2, DPoint3, DVector2, Double};
 
-pub const FAR: Double = 0.0;
+pub const FAR: Double = 1.0;
 
 /// Returns if the camera is at its maximum height.
 pub fn is_at_max_height(pos: DPoint3) -> bool {
-    (1.0 - pos.z).abs() <= 0.001
+    (1.0 - pos.z) <= 0.001
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -51,7 +51,7 @@ impl Camera {
     pub fn get_pos(&self) -> DPoint3 {
         let DPoint3 { x, y, z } = self.pos;
 
-        point3(x, y, Self::adjusted_z(z))
+        point3(x, y, (z + 3.0) * 3.0)
     }
 }
 
@@ -69,24 +69,11 @@ impl Camera {
         }
     }
 
-    /// Gets the adjusted z-position of the camera.
-    fn adjusted_z(z: Double) -> Double {
-        if z <= 1.0 {
-            return z;
-        }
-
-        if z < 1.8 {
-            1.0
-        } else {
-            z - 0.8
-        }
-    }
-
     /// Scroll the camera to a new position.
     fn scroll(z: Double, vel: Double) -> Double {
         let z = z + vel * 0.4;
 
-        clamp(z, FAR + 0.1, 3.0)
+        clamp(z, FAR, 5.0)
     }
 
     /// Updates the camera's position.
@@ -148,14 +135,14 @@ impl Camera {
     }
 }
 
-/// Gets the hex position being pointed at..
+/// Gets the hex position being pointed at.
 pub fn main_pos_to_hex(
     width: Double,
     height: Double,
     camera_pos: DPoint3,
     main_pos: DPoint2,
 ) -> FractionalHex<Double> {
-    let p = screen_to_world(width, height, main_pos);
+    let p = screen_to_world(width, height, main_pos, camera_pos.z);
     let p = p + camera_pos.to_vec();
 
     let p = point(p.x, p.y);
@@ -174,18 +161,18 @@ pub fn screen_to_normalized(width: Double, height: Double, c: DPoint2) -> DPoint
     point2(c.x, c.y)
 }
 
-/// Converts screen coordinates to world coordinates..
-pub fn screen_to_world(width: Double, height: Double, c: DPoint2) -> DPoint3 {
+/// Converts screen coordinates to world coordinates.
+pub fn screen_to_world(width: Double, height: Double, c: DPoint2, camera_z: Double) -> DPoint3 {
     let c = screen_to_normalized(width, height, c);
 
-    normalized_to_world(width, height, c)
+    normalized_to_world(width, height, c, camera_z)
 }
 
-/// Converts normalized screen coordinates to world coordinates..
-pub fn normalized_to_world(width: Double, height: Double, p: DPoint2) -> DPoint3 {
+/// Converts normalized screen coordinates to world coordinates.
+pub fn normalized_to_world(width: Double, height: Double, p: DPoint2, z: Double) -> DPoint3 {
     let aspect = width / height;
 
-    let matrix = matrix(point3(0.0, 0.0, 1.0), aspect, PI);
+    let matrix = matrix(point3(0.0, 0.0, z), aspect, PI);
 
     let p = p.to_vec();
     let p = matrix * p.extend(FAR).extend(1.0);

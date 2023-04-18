@@ -7,7 +7,7 @@ use kira::track::TrackHandle;
 use rune::Any;
 use serde::Deserialize;
 
-use crate::render::data::{Model, RawFace, Vertex};
+use crate::render::data::{GameVertex, Model, RawFace};
 use crate::render::gui::GuiIds;
 use crate::resource::function::Function;
 use crate::resource::item::Item;
@@ -87,7 +87,7 @@ pub struct ResourceManager {
     pub audio: HashMap<SharedStr, StaticSoundData>,
     pub faces: HashMap<Id, Face>,
 
-    pub all_vertices: Vec<Vertex>,
+    pub all_vertices: Vec<GameVertex>,
     pub raw_models: HashMap<Id, Model>,
     pub raw_faces: Vec<RawFace>,
 }

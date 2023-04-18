@@ -289,13 +289,13 @@ pub fn on_event(
             setup.gui.begin_frame();
 
             // tile_selections
-            gui::tile_selections(&setup, &loop_store.selected_tile_states, selection_send);
+            gui::tile_selections(setup, &loop_store.selected_tile_states, selection_send);
 
             // tile_info
-            gui::tile_info(&setup, setup.game.clone(), setup.camera.pointing_at);
+            gui::tile_info(setup, setup.game.clone(), setup.camera.pointing_at);
 
             // tile_config
-            gui::tile_config(&setup, loop_store, setup.game.clone(), &mut extra_vertices);
+            gui::tile_config(setup, loop_store, setup.game.clone(), &mut extra_vertices);
         }
 
         if let Ok(Some(id)) = selection_recv.try_next() {
@@ -312,6 +312,7 @@ pub fn on_event(
             window_size.width as Double,
             window_size.height as Double,
             loop_store.input_state.main_pos,
+            setup.camera.get_pos().z,
         );
         let mouse_pos = point2(mouse_pos.x, mouse_pos.y);
         let mouse_pos = mouse_pos + setup.camera.get_pos().to_vec().truncate();
@@ -334,11 +335,10 @@ pub fn on_event(
                     let glow = (time.as_secs_f64() * 3.0).sin() / 10.0;
 
                     let instance = InstanceData::new()
-                        .model(model)
                         .position_offset([mouse_pos.x as Float, mouse_pos.y as Float, 0.1])
                         .color_offset(colors::TRANSPARENT.with_alpha(glow as Float).to_array());
 
-                    gui_instances.push(instance);
+                    gui_instances.push((instance, model));
                 }
             }
 
@@ -366,7 +366,7 @@ pub fn on_event(
             &setup.game,
             GameMsg::RenderInfoRequest {
                 context: RenderContext {
-                    resource_man: resource_man.clone(),
+                    resource_man,
                     range: RENDER_RANGE,
                     center: setup.camera.get_tile_coord(),
                 },

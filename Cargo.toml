@@ -10,13 +10,13 @@ edition = "2021"
 env_logger = "0.10.0"
 log = "0.4"
 
-vulkano-shaders = "0.32.0"
-vulkano-win = "0.32.0"
-vulkano = "0.32.3"
-winit = "0.27.5"
+vulkano-shaders = "0.33.0"
+vulkano-win = "0.33.0"
+vulkano = "0.33.0"
+winit = "0.28.3"
 
-egui_winit_vulkano = "0.23.0"
-egui = "0.20.1"
+egui_winit_vulkano = "0.24.0"
+egui = "0.21.0"
 
 string-interner = "0.14.0"
 hexagon-tiles = { git = "https://github.com/Mg138/hexagon-tiles" }

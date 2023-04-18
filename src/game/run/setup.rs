@@ -95,7 +95,6 @@ impl GameSetup {
         let alloc = RenderAlloc::new(
             resource_man.clone(),
             device.clone(),
-            queue.clone(),
             surface.clone(),
             window.clone(),
             physical_device,

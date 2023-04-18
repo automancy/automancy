@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 #![allow(unused_qualifications)]
 
-use cgmath::BaseFloat;
+use cgmath::{point3, BaseFloat};
 
 pub type Float = f32;
 
@@ -66,41 +66,18 @@ pub fn perspective<N: BaseFloat>(fov_y: N, a: N, n: N, f: N) -> cgmath::Matrix4<
 }
 
 pub fn matrix<N: BaseFloat>(pos: cgmath::Point3<N>, aspect: N, pi: N) -> cgmath::Matrix4<N> {
-    let view = view(pos, pi);
+    let view = view(pos);
     let projection = projection(aspect, pi);
 
     projection * view
 }
 
-pub fn eye<N: BaseFloat>(z: N, pi: N) -> cgmath::Vector3<N> {
-    let one = N::one();
-    let two = one + one;
-    let two_point_two_five = two + (one / (two * two));
-
-    let z = one - z.min(one);
-    let r = z.mul(pi / two).sin();
-    let o = r.mul(pi / two_point_two_five).cos();
-
-    cgmath::vec3(N::zero(), r, o)
-}
-
-pub fn actual_pos<N: BaseFloat>(
-    pos: cgmath::Point3<N>,
-    eye: cgmath::Vector3<N>,
-) -> cgmath::Point3<N> {
-    let one = N::one();
-    let two = one + one;
-    let four = two + two;
-    let m = four * two;
-
-    cgmath::point3(pos.x, pos.y, (pos.z * m) + one + eye.z)
-}
-
-pub fn view<N: BaseFloat>(pos: cgmath::Point3<N>, pi: N) -> cgmath::Matrix4<N> {
-    let eye = eye(pos.z, pi);
-    let actual_pos = actual_pos(pos, eye);
-
-    cgmath::Matrix4::<N>::look_to_rh(actual_pos, eye, cgmath::Vector3::<N>::unit_y())
+pub fn view<N: BaseFloat>(pos: cgmath::Point3<N>) -> cgmath::Matrix4<N> {
+    cgmath::Matrix4::<N>::look_to_rh(
+        pos,
+        cgmath::Vector3::<N>::unit_z(),
+        cgmath::Vector3::<N>::unit_y(),
+    )
 }
 
 pub fn projection<N: BaseFloat>(aspect: N, pi: N) -> cgmath::Matrix4<N> {
