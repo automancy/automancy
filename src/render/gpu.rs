@@ -45,7 +45,7 @@ use winit::event_loop::EventLoop;
 use winit::window::{Icon, WindowBuilder};
 use winit::{dpi::LogicalSize, window::Window};
 
-use crate::render::data::{GameVertex, GuiUBO};
+use crate::render::data::{GameVertex, GuiUBO, RawInstanceData};
 use crate::resource::ResourceManager;
 use crate::util::cg::Double;
 use crate::util::cg::Float;
@@ -101,7 +101,7 @@ pub fn create_game_pipeline(device: Arc<Device>, subpass: &Subpass) -> Arc<Graph
 
     let pipeline = GraphicsPipeline::start()
         .vertex_shader(vs.entry_point("main").unwrap(), ())
-        .vertex_input_state([GameVertex::per_vertex(), InstanceData::per_instance()])
+        .vertex_input_state([GameVertex::per_vertex(), RawInstanceData::per_instance()])
         .input_assembly_state(InputAssemblyState::new().topology(PrimitiveTopology::TriangleList))
         .fragment_shader(fs.entry_point("main").unwrap(), ())
         .viewport_state(ViewportState::viewport_dynamic_scissor_irrelevant())
@@ -122,7 +122,7 @@ pub fn create_gui_pipeline(device: Arc<Device>, subpass: &Subpass) -> Arc<Graphi
 
     let pipeline = GraphicsPipeline::start()
         .vertex_shader(vs_gui.entry_point("main").unwrap(), ())
-        .vertex_input_state([GameVertex::per_vertex(), InstanceData::per_instance()])
+        .vertex_input_state([GameVertex::per_vertex(), RawInstanceData::per_instance()])
         .input_assembly_state(InputAssemblyState::new().topology(PrimitiveTopology::TriangleList))
         .fragment_shader(fs_gui.entry_point("main").unwrap(), ())
         .viewport_state(ViewportState::viewport_dynamic_scissor_dynamic(1))
@@ -304,8 +304,11 @@ pub fn framebuffers(
 pub fn indirect_buffer(
     allocator: &(impl MemoryAllocator + ?Sized),
     resource_man: &ResourceManager,
-    instances: &[(InstanceData, Id)],
-) -> (Subbuffer<[InstanceData]>, Vec<DrawIndexedIndirectCommand>) {
+    instances: &[(RawInstanceData, Id)],
+) -> (
+    Subbuffer<[RawInstanceData]>,
+    Vec<DrawIndexedIndirectCommand>,
+) {
     let indirect_commands = instances
         .group_by(|a, b| a.1 == b.1)
         .scan(0, |init, instances| {
@@ -346,15 +349,14 @@ pub fn indirect_buffer(
     (instance_buffer, indirect_commands)
 }
 
-type IndirectInstance = (
-    Subbuffer<[DrawIndexedIndirectCommand]>,
-    Subbuffer<[InstanceData]>,
-);
 pub fn indirect_instance(
     allocator: &(impl MemoryAllocator + ?Sized),
     resource_man: &ResourceManager,
-    instances: &[(InstanceData, Id)],
-) -> Option<IndirectInstance> {
+    instances: &[(RawInstanceData, Id)],
+) -> Option<(
+    Subbuffer<[DrawIndexedIndirectCommand]>,
+    Subbuffer<[RawInstanceData]>,
+)> {
     if instances.is_empty() {
         None
     } else {

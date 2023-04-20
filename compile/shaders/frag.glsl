@@ -2,7 +2,6 @@
 
 layout(set = 0, binding = 0) uniform UniformBufferObject {
     mat4 matrix;
-    vec4 ambient_light_color;
     vec3 light_pos;
     vec4 light_color;
 } ubo;
@@ -14,15 +13,22 @@ layout(location = 2)  in vec3 frag_normal;
 layout(location = 0) out vec4 out_color;
 
 void main() {
-    vec3 direction = ubo.light_pos - frag_pos;
-    float attenuation = 1.0 / dot(direction, direction);
+    vec3  light_dir      = ubo.light_pos - frag_pos;
+    float light_distance = length(light_dir);
 
-    float diff = max(dot(normalize(frag_normal), normalize(direction)), 0.0);
+    vec3 norm           = normalize(frag_normal);
+    vec3 unit_light_dir = normalize(light_dir);
+    vec3 reflected_dir  = normalize(-reflect(unit_light_dir, norm));
 
+    float attenuation = 1.0 / light_distance;
     vec4 light_color = ubo.light_color * attenuation;
-    vec4 diffuse = light_color * diff;
 
-    vec4 color = diffuse + ubo.ambient_light_color;
+    float diffuse_intensity = max(dot(norm, reflected_dir), 0.0);
+          diffuse_intensity = pow(diffuse_intensity, 2);
+          diffuse_intensity = step(0.25, diffuse_intensity);
 
-    out_color = vec4(color.xyz, 1.0) * color.w * frag_color;
+    vec4 color = vec4(0.8, 0.8, 0.8, 0.0) +
+                 light_color * diffuse_intensity;
+
+    out_color = color * frag_color;
 }

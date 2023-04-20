@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::game::tile::coord::TileCoord;
 use crate::game::tile::entity::TileState;
 use bytemuck::{Pod, Zeroable};
+use cgmath::{vec3, SquareMatrix};
 use egui::ecolor::{linear_f32_from_gamma_u8, linear_f32_from_linear_u8};
 use hexagon_tiles::layout::{hex_to_pixel, Layout, LAYOUT_ORIENTATION_POINTY};
 use hexagon_tiles::point::Point;
@@ -11,10 +12,10 @@ use vulkano::pipeline::graphics::vertex_input::Vertex;
 
 use crate::render::camera::FAR;
 use crate::resource::ResourceManager;
-use crate::util::cg::{Float, Matrix4, Point3};
+use crate::util::cg::{Float, Matrix4, Point3, Vector3};
 use crate::util::id::Id;
 
-pub const HEX_LAYOUT: Layout = Layout {
+pub const HEX_GRID_LAYOUT: Layout = Layout {
     orientation: LAYOUT_ORIENTATION_POINTY,
     size: Point { x: 1.0, y: 1.0 },
     origin: Point { x: 0.0, y: 0.0 },
@@ -24,6 +25,7 @@ pub const HEX_LAYOUT: Layout = Layout {
 
 pub type VertexPos = [Float; 3];
 pub type VertexColor = [Float; 4];
+pub type RawMat4 = [[Float; 4]; 4];
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default, Zeroable, Pod, Vertex)]
@@ -66,68 +68,78 @@ impl PropertyAccess for GameVertex {
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Zeroable, Pod, Vertex)]
-pub struct InstanceData {
-    #[format(R32G32B32_SFLOAT)]
-    pub position_offset: VertexPos,
-    #[format(R32_SFLOAT)]
-    pub scale: Float,
+pub struct RawInstanceData {
     #[format(R32G32B32A32_SFLOAT)]
     pub color_offset: VertexColor,
+    #[format(R32G32B32A32_SFLOAT)]
+    pub model_matrix: RawMat4,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct InstanceData {
+    pub color_offset: VertexColor,
+    pub model_matrix: Matrix4,
+}
+
+impl From<InstanceData> for RawInstanceData {
+    fn from(value: InstanceData) -> Self {
+        Self {
+            color_offset: value.color_offset,
+            model_matrix: value.model_matrix.into(),
+        }
+    }
+}
+
+impl Default for InstanceData {
+    fn default() -> Self {
+        Self {
+            color_offset: [0.0, 0.0, 0.0, 0.0],
+            model_matrix: Matrix4::identity(),
+        }
+    }
 }
 
 impl InstanceData {
-    pub fn from_id(
+    pub fn from_tile(
+        resource_man: Arc<ResourceManager>,
         id: Id,
         pos: TileCoord,
         tile_state: TileState,
-        resource_man: Arc<ResourceManager>,
     ) -> Option<(TileCoord, (Self, Id))> {
         resource_man
             .registry
             .get_tile(id)
             .and_then(|r| r.models.get(tile_state as usize).cloned())
             .map(|model| {
-                let p = hex_to_pixel(HEX_LAYOUT, pos.into());
+                let p = hex_to_pixel(HEX_GRID_LAYOUT, pos.into());
 
                 (
                     pos,
                     (
-                        Self::new().position_offset([p.x as Float, p.y as Float, FAR as Float]),
+                        Self::default().add_translation(vec3(
+                            p.x as Float,
+                            p.y as Float,
+                            FAR as Float,
+                        )),
                         model,
                     ),
                 )
             })
     }
 
-    pub fn new() -> Self {
-        InstanceData {
-            position_offset: [0.0, 0.0, 0.0],
-            scale: 1.0,
-            color_offset: [0.0, 0.0, 0.0, 0.0],
-        }
-    }
-
-    pub fn position_offset(mut self, position_offset: VertexPos) -> Self {
-        self.position_offset = position_offset;
+    pub fn add_translation(mut self, translation: Vector3) -> Self {
+        self.model_matrix = self.model_matrix * Matrix4::from_translation(translation);
 
         self
     }
 
-    pub fn add_position_offset(mut self, position_offset: VertexPos) -> Self {
-        self.position_offset[0] += position_offset[0];
-        self.position_offset[1] += position_offset[1];
-        self.position_offset[2] += position_offset[2];
+    pub fn add_scale(mut self, scale: Float) -> Self {
+        self.model_matrix = self.model_matrix * Matrix4::from_scale(scale);
 
         self
     }
 
-    pub fn scale(mut self, scale: Float) -> Self {
-        self.scale = scale;
-
-        self
-    }
-
-    pub fn color_offset(mut self, color_offset: VertexColor) -> Self {
+    pub fn with_color_offset(mut self, color_offset: VertexColor) -> Self {
         self.color_offset = color_offset;
 
         self
@@ -136,13 +148,10 @@ impl InstanceData {
 
 // UBO
 
-type RawMat4 = [[Float; 4]; 4];
-
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
 pub struct GameUBO {
     pub matrix: RawMat4,
-    pub ambient_light_color: [Float; 4],
     pub light_pos: VertexPos,
     pub light_color: [Float; 4],
 }
@@ -151,9 +160,8 @@ impl GameUBO {
     pub fn new(matrix: Matrix4, camera_pos: Point3) -> Self {
         Self {
             matrix: matrix.into(),
-            ambient_light_color: [1.0, 1.0, 1.0, 0.8],
             light_pos: camera_pos.into(),
-            light_color: [1.0, 1.0, 1.0, 0.7],
+            light_color: [1.0, 1.0, 1.0, 0.9],
         }
     }
 }

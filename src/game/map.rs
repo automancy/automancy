@@ -70,7 +70,7 @@ impl Map {
             .iter()
             .filter(|(pos, _)| center.distance(**pos) <= range)
             .flat_map(|(pos, (_, id, tile_state))| {
-                InstanceData::from_id(*id, *pos, *tile_state, resource_man.clone())
+                InstanceData::from_tile(resource_man.clone(), *id, *pos, *tile_state)
             })
             .collect();
 

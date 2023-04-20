@@ -3,7 +3,7 @@ use std::error::Error;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use cgmath::{point2, EuclideanSpace};
+use cgmath::{point2, vec3, EuclideanSpace};
 use fuse_rust::Fuse;
 use futures::channel::mpsc;
 use futures_executor::block_on;
@@ -334,11 +334,13 @@ pub fn on_event(
 
                     let glow = (time.as_secs_f64() * 3.0).sin() / 10.0;
 
-                    let instance = InstanceData::new()
-                        .position_offset([mouse_pos.x as Float, mouse_pos.y as Float, 0.1])
-                        .color_offset(colors::TRANSPARENT.with_alpha(glow as Float).to_array());
+                    let instance = InstanceData::default()
+                        .add_translation(vec3(mouse_pos.x as Float, mouse_pos.y as Float, 0.1))
+                        .with_color_offset(
+                            colors::TRANSPARENT.with_alpha(glow as Float).to_array(),
+                        );
 
-                    gui_instances.push((instance, model));
+                    gui_instances.push((instance.into(), model));
                 }
             }
 

@@ -1,4 +1,4 @@
-use cgmath::SquareMatrix;
+use cgmath::{vec3, SquareMatrix};
 use std::collections::HashMap;
 use std::f32::consts::PI;
 use std::sync::Arc;
@@ -28,7 +28,9 @@ use vulkano::sync::GpuFuture;
 use crate::game::map::MapRenderInfo;
 use crate::game::tile::coord::{TileCoord, TileHex, TileUnit};
 use crate::render::camera::{is_at_max_height, FAR};
-use crate::render::data::{GameUBO, GameVertex, GuiUBO, InstanceData, HEX_LAYOUT};
+use crate::render::data::{
+    GameUBO, GameVertex, GuiUBO, InstanceData, RawInstanceData, HEX_GRID_LAYOUT,
+};
 use crate::render::gpu;
 use crate::render::gpu::Gpu;
 use crate::resource::ResourceManager;
@@ -72,13 +74,13 @@ impl Renderer {
         map_render_info: &MapRenderInfo,
         camera_pos: DPoint3,
         pointing_at: TileCoord,
-        gui_instances: Vec<(InstanceData, Id)>,
+        gui_instances: Vec<(RawInstanceData, Id)>,
         extra_vertices: Vec<GameVertex>,
         gui: &mut Gui,
     ) {
         let instances = {
             let pos = point(camera_pos.x, camera_pos.y);
-            let pos: TileHex = pixel_to_hex(HEX_LAYOUT, pos).round();
+            let pos: TileHex = pixel_to_hex(HEX_GRID_LAYOUT, pos).round();
 
             let none = self
                 .resource_man
@@ -96,14 +98,14 @@ impl Renderer {
                     let pos = Hex::new(q + pos.q(), r + pos.r());
 
                     instances.entry(pos.into()).or_insert_with(|| {
-                        let p = hex_to_pixel(HEX_LAYOUT, pos);
+                        let p = hex_to_pixel(HEX_GRID_LAYOUT, pos);
 
                         (
-                            InstanceData::new().position_offset([
+                            InstanceData::default().add_translation(vec3(
                                 p.x as Float,
                                 p.y as Float,
                                 FAR as Float,
-                            ]),
+                            )),
                             none,
                         )
                     });
@@ -112,15 +114,18 @@ impl Renderer {
 
             if is_at_max_height(camera_pos) {
                 if let Some((instance, _)) = instances.get_mut(&pointing_at) {
-                    *instance = instance.color_offset(colors::ORANGE.with_alpha(0.5).to_array())
+                    *instance =
+                        instance.with_color_offset(colors::ORANGE.with_alpha(0.5).to_array())
                 }
             }
 
             let mut map = HashMap::new();
 
-            instances
-                .into_values()
-                .for_each(|v| map.entry(v.1).or_insert_with(Vec::new).push(v));
+            instances.into_values().for_each(|(instance, id)| {
+                map.entry(id)
+                    .or_insert_with(Vec::new)
+                    .push((instance.into(), id))
+            });
 
             map.into_values().flatten().collect::<Vec<_>>()
         };
@@ -144,8 +149,8 @@ impl Renderer {
         &mut self,
         matrix: Matrix4,
         camera_pos: Point3,
-        instances: &[(InstanceData, Id)],
-        gui_instances: &[(InstanceData, Id)],
+        instances: &[(RawInstanceData, Id)],
+        gui_instances: &[(RawInstanceData, Id)],
         extra_vertices: Vec<GameVertex>,
         gui: &mut Gui,
     ) {

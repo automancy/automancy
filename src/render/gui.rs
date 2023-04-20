@@ -250,7 +250,7 @@ fn tile_paint(
             )
             .unwrap();
 
-            let instance = (InstanceData::new(), model);
+            let instance = (InstanceData::default().into(), model);
 
             if let Some((indirect_commands, instance_buffer)) = gpu::indirect_instance(
                 &context.resources.memory_allocator,

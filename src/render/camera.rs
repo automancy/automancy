@@ -10,7 +10,7 @@ use num::clamp;
 
 use crate::game::input::InputState;
 use crate::game::tile::coord::TileCoord;
-use crate::render::data::HEX_LAYOUT;
+use crate::render::data::HEX_GRID_LAYOUT;
 use crate::util::cg::{matrix, DPoint2, DPoint3, DVector2, Double};
 
 pub const FAR: Double = 1.0;
@@ -131,7 +131,7 @@ impl Camera {
         let pos = self.pos;
         let point = point(pos.x, pos.y);
 
-        pixel_to_hex(HEX_LAYOUT, point).round().into()
+        pixel_to_hex(HEX_GRID_LAYOUT, point).round().into()
     }
 }
 
@@ -147,7 +147,7 @@ pub fn main_pos_to_hex(
 
     let p = point(p.x, p.y);
 
-    pixel_to_hex(HEX_LAYOUT, p)
+    pixel_to_hex(HEX_GRID_LAYOUT, p)
 }
 
 /// Converts screen space coordinates into normalized coordinates.
@@ -190,7 +190,7 @@ pub fn hex_to_normalized(
     camera_pos: DPoint3,
     hex: TileCoord,
 ) -> DPoint3 {
-    let Point { x, y } = hex_to_pixel(HEX_LAYOUT, hex.into());
+    let Point { x, y } = hex_to_pixel(HEX_GRID_LAYOUT, hex.into());
 
     let aspect = width / height;
 
