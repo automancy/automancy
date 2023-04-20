@@ -161,7 +161,7 @@ impl GameUBO {
         Self {
             matrix: matrix.into(),
             light_pos: camera_pos.into(),
-            light_color: [1.0, 1.0, 1.0, 0.9],
+            light_color: [1.0, 1.0, 1.0, 0.8],
         }
     }
 }

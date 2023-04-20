@@ -18,7 +18,7 @@ use crate::game::run::setup::GameSetup;
 use crate::game::tile::coord::{ChunkCoord, TileCoord};
 use crate::game::tile::entity::{Data, TileEntityMsg, TileState};
 use crate::game::{input, GameMsg, PlaceTileResponse};
-use crate::render::camera::{hex_to_normalized, screen_to_normalized, screen_to_world};
+use crate::render::camera::{hex_to_normalized, screen_to_normalized, screen_to_world, FAR};
 use crate::render::data::InstanceData;
 use crate::render::gui;
 use crate::render::renderer::RENDER_RANGE;
@@ -335,7 +335,11 @@ pub fn on_event(
                     let glow = (time.as_secs_f64() * 3.0).sin() / 10.0;
 
                     let instance = InstanceData::default()
-                        .add_translation(vec3(mouse_pos.x as Float, mouse_pos.y as Float, 0.1))
+                        .add_translation(vec3(
+                            mouse_pos.x as Float,
+                            mouse_pos.y as Float,
+                            FAR as Float,
+                        ))
                         .with_color_offset(
                             colors::TRANSPARENT.with_alpha(glow as Float).to_array(),
                         );

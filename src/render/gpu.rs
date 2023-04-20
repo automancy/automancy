@@ -9,8 +9,7 @@ use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType};
 use vulkano::device::{DeviceCreateInfo, DeviceExtensions, Features, QueueCreateInfo, QueueFlags};
 use vulkano::format::{Format, NumericType};
-use vulkano::image::SampleCount::Sample4;
-use vulkano::image::{ImageAccess, ImageUsage, SampleCount};
+use vulkano::image::{ImageAccess, ImageUsage, SampleCount, SampleCount::Sample4};
 use vulkano::instance::{Instance, InstanceCreateInfo};
 use vulkano::memory::allocator::{
     AllocationCreateInfo, MemoryAllocator, MemoryUsage, StandardMemoryAllocator,
@@ -19,7 +18,6 @@ use vulkano::pipeline::graphics::depth_stencil::DepthStencilState;
 use vulkano::pipeline::graphics::input_assembly::{InputAssemblyState, PrimitiveTopology};
 use vulkano::pipeline::graphics::multisample::MultisampleState;
 use vulkano::pipeline::graphics::rasterization::RasterizationState;
-
 use vulkano::pipeline::graphics::vertex_input::Vertex;
 use vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
 use vulkano::pipeline::GraphicsPipeline;
@@ -51,53 +49,90 @@ use crate::util::cg::Double;
 use crate::util::cg::Float;
 use crate::util::id::Id;
 
-use super::data::{GameUBO, InstanceData};
+use super::data::GameUBO;
 
-pub mod vert_shader {
+pub mod game_vert_shader {
     vulkano_shaders::shader! {
         ty: "vertex",
-        path: "compile/shaders/vert.glsl"
+        path: "compile/shaders/game_vert.glsl"
     }
 }
 
-pub mod frag_shader {
+pub mod game_frag_shader {
     vulkano_shaders::shader! {
         ty: "fragment",
-        path: "compile/shaders/frag.glsl"
+        path: "compile/shaders/game_frag.glsl"
     }
 }
 
 pub mod gui_vert_shader {
     vulkano_shaders::shader! {
         ty: "vertex",
-        path: "compile/shaders/vert_gui.glsl"
+        path: "compile/shaders/gui_vert.glsl"
     }
 }
 
 pub mod gui_frag_shader {
     vulkano_shaders::shader! {
         ty: "fragment",
-        path: "compile/shaders/frag_gui.glsl"
+        path: "compile/shaders/gui_frag.glsl"
     }
 }
 
 pub mod overlay_vert_shader {
     vulkano_shaders::shader! {
         ty: "vertex",
-        path: "compile/shaders/vert_overlay.glsl"
+        path: "compile/shaders/overlay_vert.glsl"
     }
 }
 
 pub mod overlay_frag_shader {
     vulkano_shaders::shader! {
         ty: "fragment",
-        path: "compile/shaders/frag_overlay.glsl"
+        path: "compile/shaders/overlay_frag.glsl"
     }
 }
 
+fn create_render_pass(swapchain: Arc<Swapchain>, device: Arc<Device>) -> Arc<RenderPass> {
+    vulkano::ordered_passes_renderpass!(
+        device,
+        attachments: {
+            color_resolve: {
+                load: DontCare,
+                store: Store,
+                format: swapchain.image_format(),
+                samples: 1,
+            },
+            color: {
+                load: Clear,
+                store: Store,
+                format: swapchain.image_format(),
+                samples: 4,
+            },
+            depth_game: {
+                load: Clear,
+                store: DontCare,
+                format: Format::D32_SFLOAT,
+                samples: 4,
+            },
+            depth_gui: {
+                load: Clear,
+                store: DontCare,
+                format: Format::D32_SFLOAT,
+                samples: 4,
+            }
+        },
+        passes: [
+            { color: [color], depth_stencil: { depth_game }, input: [], resolve: [color_resolve] },
+            { color: [color], depth_stencil: { depth_gui }, input: [], resolve: [color_resolve] }
+        ]
+    )
+    .unwrap()
+}
+
 pub fn create_game_pipeline(device: Arc<Device>, subpass: &Subpass) -> Arc<GraphicsPipeline> {
-    let vs = vert_shader::load(device.clone()).unwrap();
-    let fs = frag_shader::load(device.clone()).unwrap();
+    let vs = game_vert_shader::load(device.clone()).unwrap();
+    let fs = game_frag_shader::load(device.clone()).unwrap();
 
     let pipeline = GraphicsPipeline::start()
         .vertex_shader(vs.entry_point("main").unwrap(), ())
@@ -117,14 +152,14 @@ pub fn create_game_pipeline(device: Arc<Device>, subpass: &Subpass) -> Arc<Graph
 }
 
 pub fn create_gui_pipeline(device: Arc<Device>, subpass: &Subpass) -> Arc<GraphicsPipeline> {
-    let vs_gui = gui_vert_shader::load(device.clone()).unwrap();
-    let fs_gui = gui_frag_shader::load(device.clone()).unwrap();
+    let vs = gui_vert_shader::load(device.clone()).unwrap();
+    let fs = gui_frag_shader::load(device.clone()).unwrap();
 
     let pipeline = GraphicsPipeline::start()
-        .vertex_shader(vs_gui.entry_point("main").unwrap(), ())
+        .vertex_shader(vs.entry_point("main").unwrap(), ())
         .vertex_input_state([GameVertex::per_vertex(), RawInstanceData::per_instance()])
         .input_assembly_state(InputAssemblyState::new().topology(PrimitiveTopology::TriangleList))
-        .fragment_shader(fs_gui.entry_point("main").unwrap(), ())
+        .fragment_shader(fs.entry_point("main").unwrap(), ())
         .viewport_state(ViewportState::viewport_dynamic_scissor_dynamic(1))
         .rasterization_state(RasterizationState::new())
         .depth_stencil_state(DepthStencilState::simple_depth_test())
@@ -138,14 +173,14 @@ pub fn create_gui_pipeline(device: Arc<Device>, subpass: &Subpass) -> Arc<Graphi
 }
 
 pub fn create_overlay_pipeline(device: Arc<Device>, subpass: &Subpass) -> Arc<GraphicsPipeline> {
-    let vs_gui = overlay_vert_shader::load(device.clone()).unwrap();
-    let fs_gui = overlay_frag_shader::load(device.clone()).unwrap();
+    let vs = overlay_vert_shader::load(device.clone()).unwrap();
+    let fs = overlay_frag_shader::load(device.clone()).unwrap();
 
     let pipeline = GraphicsPipeline::start()
-        .vertex_shader(vs_gui.entry_point("main").unwrap(), ())
+        .vertex_shader(vs.entry_point("main").unwrap(), ())
         .vertex_input_state(GameVertex::per_vertex())
         .input_assembly_state(InputAssemblyState::new().topology(PrimitiveTopology::TriangleList))
-        .fragment_shader(fs_gui.entry_point("main").unwrap(), ())
+        .fragment_shader(fs.entry_point("main").unwrap(), ())
         .viewport_state(ViewportState::viewport_dynamic_scissor_irrelevant())
         .rasterization_state(RasterizationState::new())
         .depth_stencil_state(DepthStencilState::simple_depth_test())
@@ -301,86 +336,75 @@ pub fn framebuffers(
         .collect()
 }
 
-pub fn indirect_buffer(
+type IndirectInstanceBuffers = (
+    Subbuffer<[DrawIndexedIndirectCommand]>,
+    Subbuffer<[RawInstanceData]>,
+);
+
+pub fn indirect_instance(
     allocator: &(impl MemoryAllocator + ?Sized),
     resource_man: &ResourceManager,
     instances: &[(RawInstanceData, Id)],
-) -> (
-    Subbuffer<[RawInstanceData]>,
-    Vec<DrawIndexedIndirectCommand>,
-) {
-    let indirect_commands = instances
-        .group_by(|a, b| a.1 == b.1)
-        .scan(0, |init, instances| {
-            let instance_count = instances.len() as u32;
+) -> Option<IndirectInstanceBuffers> {
+    if instances.is_empty() {
+        return None;
+    }
+    let (indirect_commands, instance_buffer) = {
+        let indirect_commands = instances
+            .group_by(|a, b| a.1 == b.1)
+            .scan(0, |init, instances| {
+                let instance_count = instances.len() as u32;
 
-            let first_instance = *init;
+                let face = &resource_man.faces[&instances[0].1];
 
-            let face = &resource_man.faces[&instances[0].1];
+                let command = DrawIndexedIndirectCommand {
+                    index_count: face.size,
+                    instance_count,
+                    first_index: face.offset,
+                    vertex_offset: 0,
+                    first_instance: *init,
+                };
 
-            let command = DrawIndexedIndirectCommand {
-                index_count: face.size,
-                instance_count,
-                first_index: face.offset,
-                vertex_offset: 0,
-                first_instance,
-            };
+                *init += instance_count;
 
-            *init += instance_count;
+                Some(command)
+            })
+            .collect::<Vec<_>>();
 
-            Some(command)
-        })
-        .collect::<Vec<_>>();
+        let instance_buffer = Buffer::from_iter(
+            allocator,
+            BufferCreateInfo {
+                usage: BufferUsage::VERTEX_BUFFER,
+                ..Default::default()
+            },
+            AllocationCreateInfo {
+                usage: MemoryUsage::Upload,
+                ..Default::default()
+            },
+            instances.iter().map(|v| v.0),
+        )
+        .unwrap();
 
-    let instance_buffer = Buffer::from_iter(
+        (indirect_commands, instance_buffer)
+    };
+
+    if indirect_commands.is_empty() {
+        return None;
+    }
+    let indirect_buffer = Buffer::from_iter(
         allocator,
         BufferCreateInfo {
-            usage: BufferUsage::VERTEX_BUFFER,
+            usage: BufferUsage::INDIRECT_BUFFER,
             ..Default::default()
         },
         AllocationCreateInfo {
             usage: MemoryUsage::Upload,
             ..Default::default()
         },
-        instances.iter().map(|v| v.0),
+        indirect_commands.into_iter(),
     )
     .unwrap();
-
-    (instance_buffer, indirect_commands)
-}
-
-pub fn indirect_instance(
-    allocator: &(impl MemoryAllocator + ?Sized),
-    resource_man: &ResourceManager,
-    instances: &[(RawInstanceData, Id)],
-) -> Option<(
-    Subbuffer<[DrawIndexedIndirectCommand]>,
-    Subbuffer<[RawInstanceData]>,
-)> {
-    if instances.is_empty() {
-        None
-    } else {
-        let (instance_buffer, commands) = indirect_buffer(allocator, resource_man, instances);
-
-        if commands.is_empty() {
-            None
-        } else {
-            let indirect_buffer = Buffer::from_iter(
-                allocator,
-                BufferCreateInfo {
-                    usage: BufferUsage::INDIRECT_BUFFER,
-                    ..Default::default()
-                },
-                AllocationCreateInfo {
-                    usage: MemoryUsage::Upload,
-                    ..Default::default()
-                },
-                commands.into_iter(),
-            )
-            .unwrap();
-            Some((indirect_buffer, instance_buffer))
-        }
-    }
+    Some((indirect_buffer, instance_buffer))
 }
 
 pub struct RenderAlloc {
@@ -504,6 +528,7 @@ impl RenderAlloc {
             GameUBO::default(),
         )
         .unwrap();
+
         let gui_uniform_buffer = Buffer::from_data(
             &allocator,
             BufferCreateInfo {
@@ -517,6 +542,7 @@ impl RenderAlloc {
             GuiUBO::default(),
         )
         .unwrap();
+
         let overlay_uniform_buffer = Buffer::from_data(
             &allocator,
             BufferCreateInfo {
@@ -725,42 +751,6 @@ impl Gpu {
         }
     }
 
-    fn create_render_pass(swapchain: Arc<Swapchain>, device: Arc<Device>) -> Arc<RenderPass> {
-        vulkano::ordered_passes_renderpass!(
-            device,
-            attachments: {
-                color_resolve: {
-                    load: DontCare,
-                    store: Store,
-                    format: swapchain.image_format(),
-                    samples: 1,
-                },
-                color: {
-                    load: Clear,
-                    store: Store,
-                    format: swapchain.image_format(),
-                    samples: 4,
-                },
-                depth: {
-                    load: Clear,
-                    store: DontCare,
-                    format: Format::D32_SFLOAT,
-                    samples: 4,
-                },
-                depth_gui: {
-                    load: Clear,
-                    store: DontCare,
-                    format: Format::D32_SFLOAT,
-                    samples: 4,
-                }
-            },
-            passes: [
-                { color: [color], depth_stencil: { depth     }, input: [], resolve: [color_resolve] },
-                { color: [color], depth_stencil: { depth_gui }, input: [], resolve: [color_resolve] }
-            ]
-        ).unwrap()
-    }
-
     pub fn new(
         device: Arc<Device>,
         queue: Arc<Queue>,
@@ -768,7 +758,7 @@ impl Gpu {
         window: Arc<Window>,
         alloc: RenderAlloc,
     ) -> Self {
-        let render_pass = Self::create_render_pass(alloc.swapchain.clone(), device.clone());
+        let render_pass = create_render_pass(alloc.swapchain.clone(), device.clone());
         let game_subpass = Subpass::from(render_pass.clone(), 0).unwrap();
         let gui_subpass = Subpass::from(render_pass.clone(), 1).unwrap();
 

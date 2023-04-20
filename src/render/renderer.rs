@@ -91,7 +91,6 @@ impl Renderer {
 
             let mut instances = map_render_info.instances.clone();
 
-            // todo this will become obsolete
             for q in -RENDER_RANGE..=RENDER_RANGE {
                 for r in -RENDER_RANGE.max(-q - RENDER_RANGE)..=RENDER_RANGE.min(-q + RENDER_RANGE)
                 {
@@ -209,6 +208,9 @@ impl Renderer {
             )
             .unwrap();
 
+        let indirect_instance = gpu::indirect_instance(&allocator, &self.resource_man, instances);
+
+        // game
         let mut game_builder = AutoCommandBufferBuilder::secondary(
             &self.gpu.alloc.command_allocator,
             self.gpu.queue.queue_family_index(),
@@ -220,9 +222,7 @@ impl Renderer {
         )
         .unwrap();
 
-        {
-            let indirect_instance =
-                gpu::indirect_instance(&allocator, &self.resource_man, instances);
+        if let Some((indirect_commands, instance_buffer)) = indirect_instance {
             let ubo = GameUBO::new(matrix, camera_pos);
 
             *self.gpu.alloc.game_uniform_buffer.write().unwrap() = ubo;
@@ -239,24 +239,21 @@ impl Renderer {
             )
             .unwrap();
 
-            if let Some((indirect_commands, instance_buffer)) = indirect_instance {
-                game_builder
-                    .set_viewport(0, [gpu::viewport(&self.gpu.window)])
-                    .bind_pipeline_graphics(self.gpu.game_pipeline.clone())
-                    .bind_vertex_buffers(0, (self.gpu.alloc.vertex_buffer.clone(), instance_buffer))
-                    .bind_index_buffer(self.gpu.alloc.index_buffer.clone())
-                    .bind_descriptor_sets(
-                        PipelineBindPoint::Graphics,
-                        self.gpu.game_pipeline.layout().clone(),
-                        0,
-                        ubo_set,
-                    )
-                    .draw_indexed_indirect(indirect_commands)
-                    .unwrap();
-            }
+            game_builder
+                .set_viewport(0, [gpu::viewport(&self.gpu.window)])
+                .bind_pipeline_graphics(self.gpu.game_pipeline.clone())
+                .bind_vertex_buffers(0, (self.gpu.alloc.vertex_buffer.clone(), instance_buffer))
+                .bind_index_buffer(self.gpu.alloc.index_buffer.clone())
+                .bind_descriptor_sets(
+                    PipelineBindPoint::Graphics,
+                    self.gpu.game_pipeline.layout().clone(),
+                    0,
+                    ubo_set,
+                )
+                .draw_indexed_indirect(indirect_commands)
+                .unwrap();
         }
 
-        // game
         builder
             .execute_commands(game_builder.build().unwrap())
             .unwrap();

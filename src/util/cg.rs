@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 #![allow(unused_qualifications)]
 
-use cgmath::{point3, BaseFloat};
+use cgmath::BaseFloat;
 
 pub type Float = f32;
 
