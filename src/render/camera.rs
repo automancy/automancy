@@ -8,17 +8,12 @@ use hexagon_tiles::point::{point, Point};
 use hexagon_tiles::traits::HexRound;
 use num::clamp;
 
-use crate::game::input::InputState;
+use crate::game::input::InputHandler;
 use crate::game::tile::coord::TileCoord;
 use crate::render::data::HEX_GRID_LAYOUT;
 use crate::util::cg::{matrix, DPoint2, DPoint3, DVector2, Double};
 
 pub const FAR: Double = 1.0;
-
-/// Returns if the camera is at its maximum height.
-pub fn is_at_max_height(pos: DPoint3) -> bool {
-    (1.0 - pos.z) <= 0.001
-}
 
 #[derive(Clone, Copy, Debug)]
 pub struct Camera {
@@ -42,11 +37,6 @@ impl Default for Camera {
 }
 
 impl Camera {
-    /// Returns if the camera is at its maximum (most zoomed out) height.
-    pub fn is_at_max_height(&self) -> bool {
-        is_at_max_height(self.get_pos())
-    }
-
     /// Returns the position of the camera.
     pub fn get_pos(&self) -> DPoint3 {
         let DPoint3 { x, y, z } = self.pos;
@@ -57,7 +47,7 @@ impl Camera {
 
 impl Camera {
     /// Updates the movement state of the camera based on control input.
-    pub fn input_state(&mut self, input: InputState, ignore_move: bool) {
+    pub fn input_handler(&mut self, input: InputHandler, ignore_move: bool) {
         if !ignore_move && input.main_held {
             if let Some(delta) = input.main_move {
                 self.on_moving_main(delta);

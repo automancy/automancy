@@ -17,7 +17,7 @@ use futures::channel::mpsc;
 use futures_executor::block_on;
 use genmesh::{EmitTriangles, Quad};
 use hexagon_tiles::traits::HexDirection;
-use riker::actors::{ActorRef, Tell};
+use riker::actors::ActorRef;
 use riker_patterns::ask::ask;
 use rune::Any;
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
@@ -659,7 +659,7 @@ pub fn tile_config(
             });
 
             if new_amount != current_amount {
-                tile.tell(
+                tile.send_msg(
                     TileEntityMsg::SetData("amount".to_string(), Data::Amount(new_amount)),
                     None,
                 );
@@ -667,21 +667,21 @@ pub fn tile_config(
 
             if new_script != current_script {
                 if let Some(script) = new_script {
-                    tile.tell(
+                    tile.send_msg(
                         TileEntityMsg::SetData("script".to_string(), Data::Id(script)),
                         None,
                     );
-                    tile.tell(TileEntityMsg::RemoveData("buffer".to_string()), None);
+                    tile.send_msg(TileEntityMsg::RemoveData("buffer".to_string()), None);
                 }
             }
 
             if new_storage != current_storage {
                 if let Some(storage) = new_storage {
-                    tile.tell(
+                    tile.send_msg(
                         TileEntityMsg::SetData("storage".to_string(), Data::Id(storage)),
                         None,
                     );
-                    tile.tell(TileEntityMsg::RemoveData("buffer".to_string()), None);
+                    tile.send_msg(TileEntityMsg::RemoveData("buffer".to_string()), None);
                 }
             }
 

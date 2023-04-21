@@ -12,7 +12,7 @@ use riker_patterns::ask::ask;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::ControlFlow;
 
-use crate::game::input::InputState;
+use crate::game::input::InputHandler;
 use crate::game::map::{Map, MapRenderInfo, RenderContext};
 use crate::game::run::setup::GameSetup;
 use crate::game::tile::coord::{ChunkCoord, TileCoord};
@@ -39,7 +39,7 @@ pub struct EventLoopStorage {
     /// the filter for the scripts.
     pub filter: String,
     /// the state of the input peripherals.
-    pub input_state: InputState,
+    pub input_handler: InputHandler,
     /// the tile states of the selected tiles.
     pub selected_tile_states: HashMap<Id, TileState>,
     /// the currently selected tile.
@@ -119,7 +119,7 @@ pub fn on_event(
         Event::MainEventsCleared => {
             setup.camera.update_pos();
             setup.camera.update_pointing_at(
-                loop_store.input_state.main_pos,
+                loop_store.input_handler.main_pos,
                 window_size.width as Double,
                 window_size.height as Double,
             );
@@ -130,16 +130,16 @@ pub fn on_event(
     };
 
     if window_event.is_some() || device_event.is_some() {
-        loop_store.input_state.reset();
+        loop_store.input_handler.reset();
         loop_store
-            .input_state
+            .input_handler
             .update(input::convert_input(window_event, device_event));
 
         let ignore_move = loop_store.selected_id.is_some();
 
         setup
             .camera
-            .input_state(loop_store.input_state, ignore_move);
+            .input_handler(loop_store.input_handler, ignore_move);
 
         {
             let camera_chunk_coord = setup.camera.get_tile_coord().into();
@@ -157,15 +157,15 @@ pub fn on_event(
             }
         }
 
-        if loop_store.input_state.exit_pressed {
+        if loop_store.input_handler.exit_pressed {
             // cancel one by one
             if loop_store.selected_id.take().is_none() {
                 loop_store.linking_tile.take();
             }
         }
 
-        if loop_store.input_state.main_pressed
-            || (loop_store.input_state.shift_held && loop_store.input_state.main_held)
+        if loop_store.input_handler.main_pressed
+            || (loop_store.input_handler.shift_held && loop_store.input_handler.main_held)
         {
             if let Some(id) = loop_store.selected_id {
                 if loop_store.already_placed_at != Some(setup.camera.pointing_at) {
@@ -176,6 +176,7 @@ pub fn on_event(
                             coord: setup.camera.pointing_at,
                             id,
                             tile_state: *loop_store.selected_tile_states.get(&id).unwrap_or(&0),
+                            record: true,
                         },
                     ));
 
@@ -204,7 +205,7 @@ pub fn on_event(
             }
         }
 
-        if loop_store.input_state.alternate_pressed {
+        if loop_store.input_handler.alternate_pressed {
             if let Some(linking_tile) = loop_store.linking_tile {
                 let result: Option<(ActorRef<TileEntityMsg>, Id, TileState)> = block_on(ask(
                     &setup.sys,
@@ -282,21 +283,23 @@ pub fn on_event(
         }
     }
 
+    if loop_store.input_handler.control_held && loop_store.input_handler.undo_pressed {
+        setup.game.send_msg(GameMsg::Undo, None);
+    }
+
     if event == Event::RedrawRequested(setup.renderer.gpu.window.id()) {
         let (selection_send, mut selection_recv) = mpsc::channel(1);
 
-        if setup.camera.is_at_max_height() {
-            setup.gui.begin_frame();
+        setup.gui.begin_frame();
 
-            // tile_selections
-            gui::tile_selections(setup, &loop_store.selected_tile_states, selection_send);
+        // tile_selections
+        gui::tile_selections(setup, &loop_store.selected_tile_states, selection_send);
 
-            // tile_info
-            gui::tile_info(setup, setup.game.clone(), setup.camera.pointing_at);
+        // tile_info
+        gui::tile_info(setup, setup.game.clone(), setup.camera.pointing_at);
 
-            // tile_config
-            gui::tile_config(setup, loop_store, setup.game.clone(), &mut extra_vertices);
-        }
+        // tile_config
+        gui::tile_config(setup, loop_store, setup.game.clone(), &mut extra_vertices);
 
         if let Ok(Some(id)) = selection_recv.try_next() {
             loop_store.already_placed_at = None;
@@ -311,60 +314,56 @@ pub fn on_event(
         let mouse_pos = screen_to_world(
             window_size.width as Double,
             window_size.height as Double,
-            loop_store.input_state.main_pos,
+            loop_store.input_handler.main_pos,
             setup.camera.get_pos().z,
         );
         let mouse_pos = point2(mouse_pos.x, mouse_pos.y);
         let mouse_pos = mouse_pos + setup.camera.get_pos().to_vec().truncate();
 
-        if setup.camera.is_at_max_height() {
-            if let Some(id) = loop_store.selected_id {
-                if let Some(model) = resource_man.registry.get_tile(id).and_then(|v| {
-                    v.models
-                        .get(
-                            loop_store
-                                .selected_tile_states
-                                .get(&id)
-                                .cloned()
-                                .unwrap_or(0) as usize,
-                        )
-                        .cloned()
-                }) {
-                    let time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+        if let Some(id) = loop_store.selected_id {
+            if let Some(model) = resource_man.registry.get_tile(id).and_then(|v| {
+                v.models
+                    .get(
+                        loop_store
+                            .selected_tile_states
+                            .get(&id)
+                            .cloned()
+                            .unwrap_or(0) as usize,
+                    )
+                    .cloned()
+            }) {
+                let time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
 
-                    let glow = (time.as_secs_f64() * 3.0).sin() / 10.0;
+                let glow = (time.as_secs_f64() * 3.0).sin() / 10.0;
 
-                    let instance = InstanceData::default()
-                        .add_translation(vec3(
-                            mouse_pos.x as Float,
-                            mouse_pos.y as Float,
-                            FAR as Float,
-                        ))
-                        .with_color_offset(
-                            colors::TRANSPARENT.with_alpha(glow as Float).to_array(),
-                        );
+                let instance = InstanceData::default()
+                    .add_translation(vec3(
+                        mouse_pos.x as Float,
+                        mouse_pos.y as Float,
+                        FAR as Float,
+                    ))
+                    .with_color_offset(colors::TRANSPARENT.with_alpha(glow as Float).to_array());
 
-                    gui_instances.push((instance.into(), model));
-                }
+                gui_instances.push((instance.into(), model));
             }
+        }
 
-            if let Some(coord) = loop_store.linking_tile {
-                let DPoint3 { x, y, .. } = hex_to_normalized(
-                    window_size.width as Double,
-                    window_size.height as Double,
-                    setup.camera.get_pos(),
-                    coord,
-                );
-                let a = point2(x, y);
+        if let Some(coord) = loop_store.linking_tile {
+            let DPoint3 { x, y, .. } = hex_to_normalized(
+                window_size.width as Double,
+                window_size.height as Double,
+                setup.camera.get_pos(),
+                coord,
+            );
+            let a = point2(x, y);
 
-                let b = screen_to_normalized(
-                    window_size.width as Double,
-                    window_size.height as Double,
-                    loop_store.input_state.main_pos,
-                );
+            let b = screen_to_normalized(
+                window_size.width as Double,
+                window_size.height as Double,
+                loop_store.input_handler.main_pos,
+            );
 
-                extra_vertices.append(&mut gui::line(a, b, colors::RED));
-            }
+            extra_vertices.append(&mut gui::line(a, b, colors::RED));
         }
 
         let render_info: Arc<MapRenderInfo> = block_on(ask(

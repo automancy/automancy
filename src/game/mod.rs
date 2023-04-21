@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::mem;
 use std::sync::{Arc, Mutex};
 
 use flexstr::SharedStr;
@@ -7,7 +8,7 @@ use rand::distributions::Bernoulli;
 use rand::distributions::Distribution;
 use rand::Rng;
 use riker::actor::{Actor, BasicActorRef};
-use riker::actors::{ActorFactoryArgs, ActorRef, ActorRefFactory, Context, Sender, Strategy, Tell};
+use riker::actors::{ActorFactoryArgs, ActorRef, ActorRefFactory, Context, Sender, Strategy};
 use uuid::Uuid;
 
 use crate::game::map::{Map, RenderContext};
@@ -35,6 +36,8 @@ pub mod ticking;
 /// Defines tiles and tile entities.
 pub mod tile;
 
+const UNDO_CACHE_SIZE: usize = 16;
+
 #[derive(Debug, Clone)]
 pub struct Game {
     /// a count of all the ticks that have happened
@@ -50,6 +53,10 @@ pub struct Game {
     stopped: bool,
     /// scheduled messages to be sent next tick
     next_tick_messages: HashMap<TileCoord, Vec<(TileEntityMsg, Option<BasicActorRef>)>>,
+    /// what to do to undo the last 16 user events
+    undo_steps: [Option<Vec<GameMsg>>; UNDO_CACHE_SIZE],
+    /// the current index of the undo steps
+    undo_steps_index: usize,
 }
 
 impl ActorFactoryArgs<(Arc<ResourceManager>, SharedStr)> for Game {
@@ -74,7 +81,9 @@ pub enum GameMsg {
         coord: TileCoord,
         id: Id,
         tile_state: TileState,
+        record: bool,
     },
+    Undo,
     /// get the tile at the given position
     GetTile(TileCoord),
     /// send a message to a tile entity
@@ -181,10 +190,11 @@ impl Actor for Game {
                 coord,
                 id,
                 tile_state,
+                record,
             } => {
-                let mut map = self.map.lock().unwrap();
-
-                if let Some((tile, old_id, old_tile_state)) = map.tiles.get(&coord) {
+                if let Some((tile, old_id, old_tile_state)) =
+                    self.map.lock().unwrap().tiles.get(&coord)
+                {
                     if *old_tile_state == tile_state && *old_id == id {
                         sender.inspect(|v| v.try_tell(PlaceTileResponse::Ignored, myself).unwrap());
                         return;
@@ -193,22 +203,46 @@ impl Actor for Game {
                     ctx.system.stop(tile);
                 }
 
-                if id == self.resource_man.registry.none {
-                    if !map.tiles.contains_key(&coord) {
+                let old = if id == self.resource_man.registry.none {
+                    if !self.map.lock().unwrap().tiles.contains_key(&coord) {
                         sender.inspect(|v| v.try_tell(PlaceTileResponse::Ignored, myself).unwrap());
                         return;
                     }
 
-                    map.tiles.remove_entry(&coord);
                     sender.inspect(|v| v.try_tell(PlaceTileResponse::Removed, myself).unwrap());
+
+                    self.map
+                        .lock()
+                        .unwrap()
+                        .tiles
+                        .remove_entry(&coord)
+                        .map(|v| v.1)
                 } else {
                     let tile = Self::new_tile(ctx, coord, id, tile_state);
 
-                    map.tiles.insert(coord, (tile, id, tile_state));
                     sender.inspect(|v| v.try_tell(PlaceTileResponse::Placed, myself).unwrap());
+
+                    self.map
+                        .lock()
+                        .unwrap()
+                        .tiles
+                        .insert(coord, (tile, id, tile_state))
+                };
+
+                if record {
+                    let (id, tile_state) = old
+                        .map(|v| (v.1, v.2))
+                        .unwrap_or((self.resource_man.registry.none, 0));
+
+                    self.add_undo_step(vec![PlaceTile {
+                        coord,
+                        id,
+                        tile_state,
+                        record: false,
+                    }])
                 }
 
-                map.render_cache.clear();
+                self.map.lock().unwrap().render_cache.clear();
             }
             GetTile(coord) => {
                 sender.inspect(|v| {
@@ -218,7 +252,7 @@ impl Actor for Game {
             }
             SendMsgToTile(coord, msg) => {
                 if let Some((tile, _, _)) = self.map.lock().unwrap().tiles.get(&coord) {
-                    tile.tell(msg, sender);
+                    tile.send_msg(msg, sender);
                 }
             }
             NextTickMsgToTile(coord, msg, sender) => {
@@ -262,6 +296,10 @@ impl Actor for Game {
             Stop => {
                 self.stopped = true;
             }
+            Undo => {
+                println!("{:?}", &self.undo_steps);
+                self.undo_once(ctx.myself());
+            }
             _ => {}
         }
     }
@@ -279,6 +317,40 @@ impl Game {
 
             stopped: false,
             next_tick_messages: Default::default(),
+            undo_steps: Default::default(),
+            undo_steps_index: 0,
+        }
+    }
+
+    /// Undoes the last undo-able action with step stored in the undo steps array
+    pub fn undo_once(&mut self, myself: ActorRef<GameMsg>) {
+        if self.undo_steps.iter().all(Option::is_none) {
+            return;
+        }
+
+        if self.undo_steps_index == 0 {
+            self.undo_steps_index = UNDO_CACHE_SIZE - 1;
+        } else {
+            self.undo_steps_index -= 1;
+        }
+
+        if let Some(step) = mem::take(self.undo_steps.get_mut(self.undo_steps_index).unwrap()) {
+            for msg in step {
+                myself.send_msg(msg, None);
+            }
+        }
+
+        println!("{:?}", self.undo_steps);
+    }
+
+    /// Adds one vector of undo steps to the undo steps array
+    pub fn add_undo_step(&mut self, step: Vec<GameMsg>) {
+        self.undo_steps[self.undo_steps_index] = Some(step);
+
+        if self.undo_steps_index == UNDO_CACHE_SIZE - 1 {
+            self.undo_steps_index = 0;
+        } else {
+            self.undo_steps_index += 1;
         }
     }
 

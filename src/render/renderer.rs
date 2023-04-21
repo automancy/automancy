@@ -27,7 +27,7 @@ use vulkano::sync::GpuFuture;
 
 use crate::game::map::MapRenderInfo;
 use crate::game::tile::coord::{TileCoord, TileHex, TileUnit};
-use crate::render::camera::{is_at_max_height, FAR};
+use crate::render::camera::FAR;
 use crate::render::data::{
     GameUBO, GameVertex, GuiUBO, InstanceData, RawInstanceData, HEX_GRID_LAYOUT,
 };
@@ -111,11 +111,8 @@ impl Renderer {
                 }
             }
 
-            if is_at_max_height(camera_pos) {
-                if let Some((instance, _)) = instances.get_mut(&pointing_at) {
-                    *instance =
-                        instance.with_color_offset(colors::ORANGE.with_alpha(0.5).to_array())
-                }
+            if let Some((instance, _)) = instances.get_mut(&pointing_at) {
+                *instance = instance.with_color_offset(colors::ORANGE.with_alpha(0.5).to_array())
             }
 
             let mut map = HashMap::new();

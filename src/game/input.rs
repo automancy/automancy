@@ -1,7 +1,8 @@
 use cgmath::{point2, vec2};
 use winit::event::ElementState::Pressed;
 use winit::event::{
-    DeviceEvent, ModifiersState, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent,
+    DeviceEvent, KeyboardInput, ModifiersState, MouseButton, MouseScrollDelta, VirtualKeyCode,
+    WindowEvent,
 };
 
 use crate::util::cg::{DPoint2, DVector2, Double};
@@ -25,6 +26,8 @@ pub enum GameWindowEvent {
     MouseWheel { delta: DVector2 },
     /// modifier key pressed
     ModifierChanged { modifier: ModifiersState },
+    /// keyboard event
+    KeyboardEvent { input: KeyboardInput },
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -95,6 +98,7 @@ pub fn convert_input(
                     pos: point2(position.x, position.y),
                 };
             }
+            WindowEvent::KeyboardInput { input, .. } => window = KeyboardEvent { input: *input },
             _ => (),
         }
     }
@@ -127,10 +131,11 @@ pub fn convert_input(
 }
 
 #[derive(Debug, Copy, Clone)]
-pub struct InputState {
+pub struct InputHandler {
     pub main_pos: DPoint2,
 
     pub main_held: bool,
+    pub control_held: bool,
     pub alternate_held: bool,
     pub exit_held: bool,
     pub shift_held: bool,
@@ -139,17 +144,20 @@ pub struct InputState {
     pub alternate_pressed: bool,
     pub exit_pressed: bool,
 
+    pub undo_pressed: bool,
+
     pub scroll: Option<DVector2>,
 
     pub main_move: Option<DVector2>,
 }
 
-impl Default for InputState {
+impl Default for InputHandler {
     fn default() -> Self {
         Self {
             main_pos: point2(0.0, 0.0),
 
             main_held: false,
+            control_held: false,
             alternate_held: false,
             exit_held: false,
             shift_held: false,
@@ -158,17 +166,21 @@ impl Default for InputState {
             alternate_pressed: false,
             exit_pressed: false,
 
+            undo_pressed: false,
+
             scroll: None,
             main_move: None,
         }
     }
 }
 
-impl InputState {
+impl InputHandler {
     pub fn reset(&mut self) {
         self.main_pressed = false;
         self.alternate_pressed = false;
         self.exit_pressed = false;
+
+        self.undo_pressed = false;
 
         self.main_move = None;
         self.scroll = None;
@@ -196,14 +208,25 @@ impl InputState {
             GameWindowEvent::MouseWheel { delta } => {
                 self.scroll = Some(delta);
             }
-            GameWindowEvent::ModifierChanged { modifier } => match modifier {
-                ModifiersState::SHIFT => {
+            GameWindowEvent::ModifierChanged { modifier } => {
+                self.shift_held = false;
+                self.control_held = false;
+
+                if modifier.contains(ModifiersState::SHIFT) {
                     self.shift_held = true;
                 }
-                _ => {
-                    self.shift_held = false;
+                if modifier.contains(ModifiersState::CTRL) {
+                    self.control_held = true;
                 }
-            },
+            }
+            GameWindowEvent::KeyboardEvent { input } => {
+                if input.state == Pressed {
+                    match input.virtual_keycode {
+                        Some(VirtualKeyCode::Z) => self.undo_pressed = true,
+                        _ => {}
+                    }
+                }
+            }
             GameWindowEvent::None => {}
         }
 

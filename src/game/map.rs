@@ -42,6 +42,7 @@ pub struct Map {
 
     pub map_name: String,
 
+    // TODO can we separate tile refs from map?
     pub tiles: HashMap<TileCoord, (ActorRef<TileEntityMsg>, Id, TileState)>,
     pub data: DataMap,
 }
