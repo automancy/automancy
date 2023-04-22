@@ -1,6 +1,5 @@
 use crate::game::tile::entity::TileEntityMsg;
 use crate::game::Game;
-use std::mem;
 use std::time::{Duration, Instant};
 
 pub const TPS: u64 = 30;
@@ -15,21 +14,8 @@ pub struct Ticked;
 
 impl Game {
     fn inner_tick(&mut self) {
-        let map = self.map.lock().unwrap();
-
-        mem::take(&mut self.next_tick_messages)
-            .into_iter()
-            .for_each(|(coord, messages)| {
-                if let Some((tile, _, _)) = map.tiles.get(&coord) {
-                    println!("{coord}");
-                    messages
-                        .into_iter()
-                        .for_each(|(msg, sender)| tile.send_msg(msg, sender));
-                }
-            });
-
-        for (tile, _, _) in map.tiles.values() {
-            tile.send_msg(
+        for tile_entity in self.tile_entities.values() {
+            tile_entity.send_msg(
                 TileEntityMsg::Tick {
                     resource_man: self.resource_man.clone(),
                     tick_count: self.tick_count,

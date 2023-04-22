@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::error::Error;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use cgmath::{point2, vec3, EuclideanSpace};
@@ -13,7 +13,7 @@ use winit::event::{Event, WindowEvent};
 use winit::event_loop::ControlFlow;
 
 use crate::game::input::InputHandler;
-use crate::game::map::{Map, MapRenderInfo, RenderContext};
+use crate::game::map::{Map, MapRenderInfo, RenderContext, TileEntities};
 use crate::game::run::setup::GameSetup;
 use crate::game::tile::coord::{ChunkCoord, TileCoord};
 use crate::game::tile::entity::{Data, TileEntityMsg, TileState};
@@ -85,10 +85,12 @@ pub fn on_event(
             // game shutdown
             setup.game.send_msg(GameMsg::Stop, None);
 
-            let map: Arc<Mutex<Map>> = block_on(ask(&setup.sys, &setup.game, GameMsg::GetMap));
-            map.lock()
-                .unwrap()
-                .save(&setup.sys, &setup.resource_man.interner);
+            let map: Map = block_on(ask(&setup.sys, &setup.game, GameMsg::TakeMap));
+
+            let tile_entities: TileEntities =
+                block_on(ask(&setup.sys, &setup.game, GameMsg::TakeTileEntities));
+
+            map.save(&setup.sys, &setup.resource_man.interner, tile_entities);
 
             block_on(setup.sys.shutdown())?;
 
@@ -218,7 +220,7 @@ pub fn on_event(
                         let old: Option<Data> = block_on(ask(
                             &setup.sys,
                             &setup.game,
-                            GameMsg::SendMsgToTile(
+                            GameMsg::ForwardMsgToTile(
                                 setup.camera.pointing_at,
                                 TileEntityMsg::GetDataValue("link".to_string()),
                             ),
@@ -226,7 +228,7 @@ pub fn on_event(
 
                         if old.is_some() {
                             setup.game.send_msg(
-                                GameMsg::SendMsgToTile(
+                                GameMsg::ForwardMsgToTile(
                                     setup.camera.pointing_at,
                                     TileEntityMsg::RemoveData("link".to_string()),
                                 ),
@@ -242,7 +244,7 @@ pub fn on_event(
                                 .unwrap();
                         } else {
                             setup.game.send_msg(
-                                GameMsg::SendMsgToTile(
+                                GameMsg::ForwardMsgToTile(
                                     setup.camera.pointing_at,
                                     TileEntityMsg::SetData(
                                         "link".to_string(),

@@ -1,6 +1,5 @@
-use std::collections::HashMap;
 use std::mem;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use flexstr::SharedStr;
 use hexagon_tiles::traits::HexDirection;
@@ -11,7 +10,7 @@ use riker::actor::{Actor, BasicActorRef};
 use riker::actors::{ActorFactoryArgs, ActorRef, ActorRefFactory, Context, Sender, Strategy};
 use uuid::Uuid;
 
-use crate::game::map::{Map, RenderContext};
+use crate::game::map::{Map, RenderContext, TileEntities};
 use crate::game::ticking::TickUnit;
 use crate::game::tile::coord::{ChunkCoord, TileCoord, TileHex};
 use crate::game::tile::entity::{Data, TileEntity, TileEntityMsg, TileState};
@@ -46,13 +45,14 @@ pub struct Game {
     /// the resource manager
     resource_man: Arc<ResourceManager>,
 
+    /// the tile entities
+    tile_entities: TileEntities,
+
     /// the map
-    map: Arc<Mutex<Map>>,
+    map: Map,
 
     /// is the game stopped
     stopped: bool,
-    /// scheduled messages to be sent next tick
-    next_tick_messages: HashMap<TileCoord, Vec<(TileEntityMsg, Option<BasicActorRef>)>>,
     /// what to do to undo the last 16 user events
     undo_steps: [Option<Vec<GameMsg>>; UNDO_CACHE_SIZE],
     /// the current index of the undo steps
@@ -86,17 +86,18 @@ pub enum GameMsg {
     Undo,
     /// get the tile at the given position
     GetTile(TileCoord),
+    /// get the tile entity at the given position
+    GetTileEntity(TileCoord),
     /// send a message to a tile entity
-    SendMsgToTile(TileCoord, TileEntityMsg),
-    /// send a message to a tile entity next tick
-    NextTickMsgToTile(TileCoord, TileEntityMsg, Option<BasicActorRef>),
+    ForwardMsgToTile(TileCoord, TileEntityMsg),
     /// checks for the adjacent tiles against the script
     CheckAdjacent {
         script: Script,
         coord: TileCoord,
     },
+    TakeTileEntities,
     /// get the map
-    GetMap,
+    TakeMap,
     /// load a map
     LoadMap(Arc<ResourceManager>),
     GetData,
@@ -124,35 +125,46 @@ impl Actor for Game {
         let myself = Some(ctx.myself().into());
 
         match &msg {
-            GetMap => {
-                sender.inspect(|v| v.try_tell(self.map.clone(), myself).unwrap());
+            TakeTileEntities => {
+                sender.inspect(|v| {
+                    v.try_tell(mem::take(&mut self.tile_entities), myself)
+                        .unwrap()
+                });
+                return;
+            }
+            TakeMap => {
+                let map_name = self.map.map_name.clone();
+
+                sender.inspect(|v| {
+                    v.try_tell(
+                        mem::replace(&mut self.map, Map::new_empty(map_name)),
+                        myself,
+                    )
+                    .unwrap()
+                });
                 return;
             }
             LoadMap(resource_man) => {
-                let map = self.map.lock().unwrap();
-
-                map.tiles.iter().for_each(|(_, (tile, _, _))| {
-                    ctx.system.stop(tile);
+                self.tile_entities.values().for_each(|tile_entity| {
+                    ctx.system.stop(tile_entity);
                 });
 
-                let name = map.map_name.clone();
+                let name = self.map.map_name.clone();
 
-                drop(map);
+                let (map, tile_entities) = Map::load(ctx, resource_man.clone(), name);
 
-                self.map = Arc::new(Mutex::new(Map::load(ctx, resource_man.clone(), name)));
+                self.map = map;
+                self.tile_entities = tile_entities;
+
                 return;
             }
             GetData => {
-                let map = self.map.lock().unwrap();
-
-                sender.inspect(|v| v.try_tell(map.data.clone(), myself).unwrap());
+                sender.inspect(|v| v.try_tell(self.map.data.clone(), myself).unwrap());
                 return;
             }
             GetDataValue(key) => {
-                let map = self.map.lock().unwrap();
-
                 sender.inspect(|v| {
-                    v.try_tell(map.data.get(key.as_str()).cloned(), myself)
+                    v.try_tell(self.map.data.get(key.as_str()).cloned(), myself)
                         .unwrap()
                 });
                 return;
@@ -166,23 +178,21 @@ impl Actor for Game {
 
         match msg {
             Populate(coord) => {
-                let mut map = self.map.lock().unwrap();
+                let key = coord.to_minimal_string();
 
-                let key = coord.to_formal_string();
-
-                if Some(&true) == map.data.get(&key).and_then(Data::as_bool) {
+                if Some(&true) == self.map.data.get(&key).and_then(Data::as_bool) {
                     return;
                 }
 
-                self.populate(coord, ctx, &mut map);
+                self.populate(coord, ctx);
 
-                map.data.insert(key, Data::Bool(true));
+                self.map.data.insert(key, Data::Bool(true));
             }
             Tick => {
                 self.tick();
             }
             RenderInfoRequest { context } => {
-                let render_info = self.map.lock().unwrap().render_info(context);
+                let render_info = self.map.render_info(context);
 
                 sender.inspect(|v| v.try_tell(render_info, myself).unwrap());
             }
@@ -192,47 +202,37 @@ impl Actor for Game {
                 tile_state,
                 record,
             } => {
-                if let Some((tile, old_id, old_tile_state)) =
-                    self.map.lock().unwrap().tiles.get(&coord)
+                if let Some(((old_id, old_tile_state), old_tile_entity)) = self
+                    .map
+                    .tiles
+                    .get(&coord)
+                    .zip(self.tile_entities.get(&coord))
                 {
                     if *old_tile_state == tile_state && *old_id == id {
                         sender.inspect(|v| v.try_tell(PlaceTileResponse::Ignored, myself).unwrap());
                         return;
                     }
 
-                    ctx.system.stop(tile);
+                    ctx.system.stop(old_tile_entity);
                 }
 
-                let old = if id == self.resource_man.registry.none {
-                    if !self.map.lock().unwrap().tiles.contains_key(&coord) {
+                let old_tile = if id == self.resource_man.registry.none {
+                    if !self.map.tiles.contains_key(&coord) {
                         sender.inspect(|v| v.try_tell(PlaceTileResponse::Ignored, myself).unwrap());
                         return;
                     }
 
                     sender.inspect(|v| v.try_tell(PlaceTileResponse::Removed, myself).unwrap());
 
-                    self.map
-                        .lock()
-                        .unwrap()
-                        .tiles
-                        .remove_entry(&coord)
-                        .map(|v| v.1)
+                    self.remove_tile(ctx, coord)
                 } else {
-                    let tile = Self::new_tile(ctx, coord, id, tile_state);
-
                     sender.inspect(|v| v.try_tell(PlaceTileResponse::Placed, myself).unwrap());
 
-                    self.map
-                        .lock()
-                        .unwrap()
-                        .tiles
-                        .insert(coord, (tile, id, tile_state))
+                    self.insert_new_tile(ctx, coord, id, tile_state)
                 };
 
                 if record {
-                    let (id, tile_state) = old
-                        .map(|v| (v.1, v.2))
-                        .unwrap_or((self.resource_man.registry.none, 0));
+                    let (id, tile_state) = old_tile.unwrap_or((self.resource_man.registry.none, 0));
 
                     self.add_undo_step(vec![PlaceTile {
                         coord,
@@ -242,43 +242,37 @@ impl Actor for Game {
                     }])
                 }
 
-                self.map.lock().unwrap().render_cache.clear();
+                self.map.render_cache.clear();
             }
             GetTile(coord) => {
                 sender.inspect(|v| {
-                    v.try_tell(self.map.lock().unwrap().tiles.get(&coord).cloned(), myself)
+                    v.try_tell(self.map.tiles.get(&coord).cloned(), myself)
                         .unwrap();
                 });
             }
-            SendMsgToTile(coord, msg) => {
-                if let Some((tile, _, _)) = self.map.lock().unwrap().tiles.get(&coord) {
-                    tile.send_msg(msg, sender);
+            GetTileEntity(coord) => {
+                sender.inspect(|v| {
+                    v.try_tell(self.tile_entities.get(&coord).cloned(), myself)
+                        .unwrap();
+                });
+            }
+            ForwardMsgToTile(coord, msg) => {
+                if let Some(tile_entity) = self.tile_entities.get(&coord) {
+                    tile_entity.send_msg(msg, sender);
                 }
             }
-            NextTickMsgToTile(coord, msg, sender) => {
-                self.next_tick_messages
-                    .entry(coord)
-                    .or_insert_with(Default::default)
-                    .push((msg, sender));
-            }
             SetData(key, value) => {
-                let mut map = self.map.lock().unwrap();
-
-                map.data.insert(key, value);
+                self.map.data.insert(key, value);
             }
             RemoveData(key) => {
-                let mut map = self.map.lock().unwrap();
-
-                map.data.remove(&key);
+                self.map.data.remove(&key);
             }
             CheckAdjacent { script, coord } => {
                 if let Some(adjacent) = script.adjacent {
-                    let map = self.map.lock().unwrap();
-
                     let mut fulfilled = false;
 
                     for neighbor in TileHex::NEIGHBORS.iter().map(|v| coord + (*v).into()) {
-                        if let Some((_, id, _)) = map.tiles.get(&neighbor) {
+                        if let Some((id, _)) = self.map.tiles.get(&neighbor) {
                             if id_eq_or_of_tag(&self.resource_man.registry, *id, adjacent) {
                                 fulfilled = true;
                                 break;
@@ -313,13 +307,43 @@ impl Game {
 
             resource_man,
 
-            map: Arc::new(Mutex::new(Map::new_empty(map_name.to_string()))),
+            tile_entities: Default::default(),
+            map: Map::new_empty(map_name.to_string()),
 
             stopped: false,
-            next_tick_messages: Default::default(),
             undo_steps: Default::default(),
             undo_steps_index: 0,
         }
+    }
+
+    /// Removes a tile from both the map and the game
+    pub fn remove_tile(
+        &mut self,
+        ctx: &Context<GameMsg>,
+        coord: TileCoord,
+    ) -> Option<(Id, TileState)> {
+        if let Some(tile_entity) = self.tile_entities.get(&coord) {
+            ctx.system.stop(tile_entity);
+        }
+
+        self.tile_entities.remove(&coord);
+
+        self.map.tiles.remove(&coord)
+    }
+
+    /// Makes a new tile and add it into both the map and the game
+    pub fn insert_new_tile(
+        &mut self,
+        ctx: &Context<GameMsg>,
+        coord: TileCoord,
+        id: Id,
+        tile_state: TileState,
+    ) -> Option<(Id, TileState)> {
+        let tile_entity = Self::new_tile(ctx, coord, id, tile_state);
+
+        self.tile_entities.insert(coord, tile_entity);
+
+        self.map.tiles.insert(coord, (id, tile_state))
     }
 
     /// Undoes the last undo-able action with step stored in the undo steps array
@@ -355,7 +379,7 @@ impl Game {
     }
 
     /// Creates a new tile of given type at the given position, and with an initial state.
-    fn new_tile(
+    pub fn new_tile(
         ctx: &Context<GameMsg>,
         coord: TileCoord,
         id: Id,
@@ -363,14 +387,14 @@ impl Game {
     ) -> ActorRef<TileEntityMsg> {
         ctx.system
             .actor_of_args::<TileEntity, (BasicActorRef, Id, TileCoord, TileState)>(
-                &Uuid::new_v4().to_string(),
+                Uuid::new_v4().to_string().as_str(),
                 (ctx.myself().into(), id, coord, tile_state),
             )
             .unwrap()
     }
 
     /// Populates the map.
-    fn populate(&self, coord: ChunkCoord, ctx: &Context<GameMsg>, map: &mut Map) {
+    fn populate(&mut self, coord: ChunkCoord, ctx: &Context<GameMsg>) {
         let src = self.resource_man.registry.deposit_tiles();
         let range = 0..src.len();
 
@@ -381,8 +405,9 @@ impl Game {
             if d.sample(&mut rng) {
                 let id = src[rng.gen_range(range.clone())];
 
-                map.tiles
-                    .insert(coord, (Self::new_tile(ctx, coord, id, 0), id, 0));
+                self.map.tiles.insert(coord, (id, 0));
+                self.tile_entities
+                    .insert(coord, Self::new_tile(ctx, coord, id, 0));
             }
         });
     }

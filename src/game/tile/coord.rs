@@ -101,7 +101,7 @@ impl TileCoord {
     }
 
     /// Creates a minimal string of the coordinate.
-    pub fn to_formal_string(self) -> String {
+    pub fn to_minimal_string(self) -> String {
         format!("{},{}", self.q(), self.r())
     }
 
@@ -146,7 +146,7 @@ impl ChunkCoord {
     }
 
     /// Creates a minimal string of the coordinate.
-    pub fn to_formal_string(self) -> String {
+    pub fn to_minimal_string(self) -> String {
         format!("{},{}", self.q(), self.r())
     }
 

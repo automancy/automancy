@@ -24,6 +24,9 @@ pub const MAP_PATH: &str = "map";
 
 const MAP_BUFFER_SIZE: usize = 256 * 1024;
 
+pub type Tiles = HashMap<TileCoord, (Id, TileState)>;
+pub type TileEntities = HashMap<TileCoord, ActorRef<TileEntityMsg>>;
+
 #[derive(Clone, Debug)]
 pub struct RenderContext {
     pub resource_man: Arc<ResourceManager>,
@@ -42,8 +45,7 @@ pub struct Map {
 
     pub map_name: String,
 
-    // TODO can we separate tile refs from map?
-    pub tiles: HashMap<TileCoord, (ActorRef<TileEntityMsg>, Id, TileState)>,
+    pub tiles: Tiles,
     pub data: DataMap,
 }
 
@@ -70,7 +72,7 @@ impl Map {
             .tiles
             .iter()
             .filter(|(pos, _)| center.distance(**pos) <= range)
-            .flat_map(|(pos, (_, id, tile_state))| {
+            .flat_map(|(pos, (id, tile_state))| {
                 InstanceData::from_tile(resource_man.clone(), *id, *pos, *tile_state)
             })
             .collect();
@@ -101,7 +103,7 @@ impl Map {
         PathBuf::from(format!("{MAP_PATH}/{map_name}.bin"))
     }
 
-    pub fn save(&self, sys: &ActorSystem, interner: &Interner) {
+    pub fn save(&self, sys: &ActorSystem, interner: &Interner, tile_entities: TileEntities) {
         drop(std::fs::create_dir(MAP_PATH));
 
         let path = Self::path(&self.map_name);
@@ -116,15 +118,19 @@ impl Map {
         let tiles = self
             .tiles
             .iter()
-            .map(|(coord, (tile, id, tile_state))| {
-                if !id_map.contains_key(id) {
-                    id_map.insert(*id, interner.resolve(*id).unwrap().to_string());
+            .flat_map(|(coord, (id, tile_state))| {
+                if let Some(tile_entity) = tile_entities.get(coord) {
+                    if !id_map.contains_key(id) {
+                        id_map.insert(*id, interner.resolve(*id).unwrap().to_string());
+                    }
+
+                    let data: DataMap = block_on(ask(sys, tile_entity, GetData));
+                    let data = data_to_raw(data, interner);
+
+                    Some((coord, TileData(*id, *tile_state, data)))
+                } else {
+                    None
                 }
-
-                let data: DataMap = block_on(ask(sys, tile, GetData));
-                let data = data_to_raw(data, interner);
-
-                (coord, TileData(*id, *tile_state, data))
             })
             .collect::<Vec<_>>();
 
@@ -141,13 +147,13 @@ impl Map {
         ctx: &Context<GameMsg>,
         resource_man: Arc<ResourceManager>,
         map_name: String,
-    ) -> Self {
+    ) -> (Self, TileEntities) {
         let path = Self::path(&map_name);
 
         let file = if let Ok(file) = File::open(path) {
             file
         } else {
-            return Map::new_empty(map_name);
+            return (Map::new_empty(map_name), Default::default());
         };
 
         let reader = BufReader::with_capacity(MAP_BUFFER_SIZE, file);
@@ -158,36 +164,39 @@ impl Map {
 
         let id_reverse = header.0.into_iter().collect::<HashMap<_, _>>();
 
-        let tiles = tiles
+        let (tiles, tile_entities): (Tiles, TileEntities) = tiles
             .into_iter()
             .flat_map(|(coord, TileData(id, tile_state, data))| {
                 if let Some(id) = id_reverse
                     .get(&id)
                     .and_then(|id| resource_man.interner.get(id.as_str()))
                 {
-                    let tile = Game::new_tile(ctx, coord, id, tile_state);
+                    let tile_entity = Game::new_tile(ctx, coord, id, tile_state);
                     let data = data_from_raw(data, &resource_man.interner);
 
                     data.into_iter().for_each(|(key, value)| {
-                        tile.send_msg(SetData(key, value), None);
+                        tile_entity.send_msg(SetData(key, value), None);
                     });
 
-                    Some((coord, (tile, id, tile_state)))
+                    Some(((coord, (id, tile_state)), (coord, tile_entity)))
                 } else {
                     None
                 }
             })
-            .collect::<HashMap<_, _>>();
+            .unzip();
 
         let data = data_from_raw(data, &resource_man.interner);
 
-        Self {
-            render_cache: Default::default(),
+        (
+            Self {
+                render_cache: Default::default(),
 
-            map_name,
+                map_name,
 
-            tiles,
-            data,
-        }
+                tiles,
+                data,
+            },
+            tile_entities,
+        )
     }
 }

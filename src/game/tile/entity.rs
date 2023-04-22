@@ -760,25 +760,7 @@ impl TileEntity {
     ) {
         match self
             .game
-            .try_tell(GameMsg::SendMsgToTile(coord, msg), sender)
-        {
-            Ok(_) => {}
-            Err(_) => {
-                self.data.remove("target");
-            }
-        }
-    }
-
-    fn send_tile_msg_next_tick(
-        &mut self,
-        myself: Option<BasicActorRef>,
-        sender: Option<BasicActorRef>,
-        coord: TileCoord,
-        msg: TileEntityMsg,
-    ) {
-        match self
-            .game
-            .try_tell(GameMsg::NextTickMsgToTile(coord, msg, sender), myself)
+            .try_tell(GameMsg::ForwardMsgToTile(coord, msg), sender)
         {
             Ok(_) => {}
             Err(_) => {

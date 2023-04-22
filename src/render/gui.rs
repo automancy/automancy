@@ -347,12 +347,16 @@ pub fn tile_info(setup: &GameSetup, game: ActorRef<GameMsg>, pointing_at: TileCo
     .show(&setup.gui.context(), |ui| {
         ui.colored_label(colors::DARK_GRAY, pointing_at.to_string());
 
-        let result: Option<(ActorRef<TileEntityMsg>, Id, TileState)> =
+        let tile_entity: Option<ActorRef<TileEntityMsg>> =
+            block_on(ask(&setup.sys, &game, GameMsg::GetTileEntity(pointing_at)));
+
+        let tile: Option<(Id, TileState)> =
             block_on(ask(&setup.sys, &game, GameMsg::GetTile(pointing_at)));
 
-        if let Some((tile, id, _)) = result {
+        if let Some((tile_entity, (id, _))) = tile_entity.zip(tile) {
             ui.label(setup.resource_man.tile_name(&id));
-            let data: DataMap = block_on(ask(&setup.sys, &tile, TileEntityMsg::GetData));
+
+            let data: DataMap = block_on(ask(&setup.sys, &tile_entity, TileEntityMsg::GetData));
 
             if let Some(inventory) = data.get("buffer").and_then(Data::as_inventory) {
                 for (id, amount) in inventory.0.iter() {
@@ -456,10 +460,13 @@ pub fn tile_config(
     let window_size = setup.window.inner_size();
 
     if let Some(config_open) = loop_store.config_open {
-        let result: Option<(ActorRef<TileEntityMsg>, Id, TileState)> =
+        let tile_entity: Option<ActorRef<TileEntityMsg>> =
+            block_on(ask(&setup.sys, &game, GameMsg::GetTileEntity(config_open)));
+
+        let tile: Option<(Id, TileState)> =
             block_on(ask(&setup.sys, &game, GameMsg::GetTile(config_open)));
 
-        if let Some((tile, id, _c)) = result {
+        if let Some((tile, (id, _))) = tile_entity.zip(tile) {
             let data: DataMap = block_on(ask(&setup.sys, &tile, TileEntityMsg::GetData));
 
             let current_amount = data
@@ -614,7 +621,7 @@ pub fn tile_config(
                             let result: Option<Data> = block_on(ask(
                                 &setup.sys,
                                 &game,
-                                GameMsg::SendMsgToTile(
+                                GameMsg::ForwardMsgToTile(
                                     config_open,
                                     TileEntityMsg::GetDataValue("link".to_string()),
                                 ),
@@ -688,7 +695,7 @@ pub fn tile_config(
             if new_target_coord != current_target_coord {
                 if let Some(target_coord) = new_target_coord {
                     game.send_msg(
-                        GameMsg::SendMsgToTile(
+                        GameMsg::ForwardMsgToTile(
                             config_open,
                             TileEntityMsg::SetData("target".to_string(), Data::Coord(target_coord)),
                         ),
@@ -696,7 +703,7 @@ pub fn tile_config(
                     );
                 } else {
                     game.send_msg(
-                        GameMsg::SendMsgToTile(
+                        GameMsg::ForwardMsgToTile(
                             config_open,
                             TileEntityMsg::RemoveData("target".to_string()),
                         ),
