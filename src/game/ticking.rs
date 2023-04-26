@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 pub const TPS: u64 = 30;
 
 pub const TICK_INTERVAL: Duration = Duration::from_nanos(1_000_000_000 / TPS);
-pub const MAX_ALLOWED_TICK_INTERVAL: Duration = TICK_INTERVAL.mul_f64(5.0);
+pub const MAX_ALLOWED_TICK_INTERVAL: Duration = TICK_INTERVAL.saturating_mul(5);
 
 pub type TickUnit = u16;
 

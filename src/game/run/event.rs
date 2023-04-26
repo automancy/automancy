@@ -306,7 +306,7 @@ pub fn on_event(
         if let Ok(Some(id)) = selection_recv.try_next() {
             loop_store.already_placed_at = None;
 
-            if loop_store.selected_id.is_some_and(|v| v == id) {
+            if loop_store.selected_id == Some(id) {
                 loop_store.selected_id = None;
             } else {
                 loop_store.selected_id = Some(id);

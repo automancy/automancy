@@ -1,3 +1,4 @@
+use slice_group_by::GroupBy;
 use std::sync::Arc;
 
 use vulkano::buffer::{Buffer, BufferCreateInfo, Subbuffer};
@@ -351,7 +352,7 @@ pub fn indirect_instance(
     }
     let (indirect_commands, instance_buffer) = {
         let indirect_commands = instances
-            .group_by(|a, b| a.1 == b.1)
+            .exponential_group_by(|a, b| a.1 == b.1)
             .scan(0, |init, instances| {
                 let instance_count = instances.len() as u32;
 

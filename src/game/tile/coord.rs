@@ -2,14 +2,13 @@ use crate::util::cg::Double;
 use hexagon_tiles::fractional::FractionalHex;
 use hexagon_tiles::hex::{hex, Hex};
 use hexagon_tiles::traits::{HexDirection, HexMath, HexRound};
-use num::PrimInt;
+
 use rune::Any;
 use rune::Module;
 use serde::de::{SeqAccess, Visitor};
 use serde::ser::SerializeTuple;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::{Display, Formatter};
-use std::iter::Step;
 use std::ops::{Add, Div, Mul, Neg, RangeInclusive, Sub};
 
 /// The type of number that will be stored in a tile's coordinates. Should probably be a signed integer.
@@ -185,26 +184,26 @@ impl ChunkCoord {
     }
 }
 
-pub struct HexRangeIterator<U: Step> {
-    q: RangeInclusive<U>,
-    r: RangeInclusive<U>,
-    current_q: U,
-    size: U,
+pub struct HexRangeIterator {
+    q: RangeInclusive<TileUnit>,
+    r: RangeInclusive<TileUnit>,
+    current_q: TileUnit,
+    size: TileUnit,
 }
 
-impl<U: PrimInt + Neg<Output = U> + Step> HexRangeIterator<U> {
-    pub fn new(range: U) -> Self {
+impl HexRangeIterator {
+    pub fn new(range: TileUnit) -> Self {
         Self {
-            q: -range + U::one()..=range,
-            r: U::zero()..=range,
+            q: -range + 1..=range,
+            r: 0..=range,
             current_q: -range,
             size: range,
         }
     }
 }
 
-impl<U: PrimInt + Neg<Output = U> + Step> Iterator for HexRangeIterator<U> {
-    type Item = Hex<U>;
+impl Iterator for HexRangeIterator {
+    type Item = Hex<TileUnit>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.r.next() {

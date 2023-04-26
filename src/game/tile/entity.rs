@@ -668,13 +668,16 @@ impl Actor for TileEntity {
                 self.data.insert(key, value);
             }
             GetData => {
-                sender.inspect(|v| v.try_tell(self.data.clone(), myself).unwrap());
+                if let Some(sender) = sender {
+                    sender.try_tell(self.data.clone(), myself).unwrap()
+                }
             }
             GetDataValue(key) => {
-                sender.inspect(|v| {
-                    v.try_tell(self.data.get(key.as_str()).cloned(), myself)
+                if let Some(sender) = sender {
+                    sender
+                        .try_tell(self.data.get(key.as_str()).cloned(), myself)
                         .unwrap()
-                });
+                }
             }
             RemoveData(key) => {
                 self.data.remove(&key);

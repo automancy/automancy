@@ -126,22 +126,24 @@ impl Actor for Game {
 
         match &msg {
             TakeTileEntities => {
-                sender.inspect(|v| {
-                    v.try_tell(mem::take(&mut self.tile_entities), myself)
-                        .unwrap()
-                });
+                if let Some(sender) = sender {
+                    sender
+                        .try_tell(mem::take(&mut self.tile_entities), myself)
+                        .unwrap();
+                }
                 return;
             }
             TakeMap => {
                 let map_name = self.map.map_name.clone();
 
-                sender.inspect(|v| {
-                    v.try_tell(
-                        mem::replace(&mut self.map, Map::new_empty(map_name)),
-                        myself,
-                    )
-                    .unwrap()
-                });
+                if let Some(sender) = sender {
+                    sender
+                        .try_tell(
+                            mem::replace(&mut self.map, Map::new_empty(map_name)),
+                            myself,
+                        )
+                        .unwrap();
+                }
                 return;
             }
             LoadMap(resource_man) => {
@@ -159,14 +161,17 @@ impl Actor for Game {
                 return;
             }
             GetData => {
-                sender.inspect(|v| v.try_tell(self.map.data.clone(), myself).unwrap());
+                if let Some(sender) = sender {
+                    sender.try_tell(self.map.data.clone(), myself).unwrap();
+                }
                 return;
             }
             GetDataValue(key) => {
-                sender.inspect(|v| {
-                    v.try_tell(self.map.data.get(key.as_str()).cloned(), myself)
-                        .unwrap()
-                });
+                if let Some(sender) = sender {
+                    sender
+                        .try_tell(self.map.data.get(key.as_str()).cloned(), myself)
+                        .unwrap();
+                }
                 return;
             }
             _ => {}
@@ -194,7 +199,9 @@ impl Actor for Game {
             RenderInfoRequest { context } => {
                 let render_info = self.map.render_info(context);
 
-                sender.inspect(|v| v.try_tell(render_info, myself).unwrap());
+                if let Some(sender) = sender {
+                    sender.try_tell(render_info, myself).unwrap();
+                }
             }
             PlaceTile {
                 coord,
@@ -209,7 +216,9 @@ impl Actor for Game {
                     .zip(self.tile_entities.get(&coord))
                 {
                     if *old_tile_state == tile_state && *old_id == id {
-                        sender.inspect(|v| v.try_tell(PlaceTileResponse::Ignored, myself).unwrap());
+                        if let Some(sender) = sender {
+                            sender.try_tell(PlaceTileResponse::Ignored, myself).unwrap();
+                        }
                         return;
                     }
 
@@ -218,15 +227,21 @@ impl Actor for Game {
 
                 let old_tile = if id == self.resource_man.registry.none {
                     if !self.map.tiles.contains_key(&coord) {
-                        sender.inspect(|v| v.try_tell(PlaceTileResponse::Ignored, myself).unwrap());
+                        if let Some(sender) = sender {
+                            sender.try_tell(PlaceTileResponse::Ignored, myself).unwrap();
+                        }
                         return;
                     }
 
-                    sender.inspect(|v| v.try_tell(PlaceTileResponse::Removed, myself).unwrap());
+                    if let Some(sender) = sender {
+                        sender.try_tell(PlaceTileResponse::Removed, myself).unwrap();
+                    }
 
                     self.remove_tile(ctx, coord)
                 } else {
-                    sender.inspect(|v| v.try_tell(PlaceTileResponse::Placed, myself).unwrap());
+                    if let Some(sender) = sender {
+                        sender.try_tell(PlaceTileResponse::Placed, myself).unwrap();
+                    }
 
                     self.insert_new_tile(ctx, coord, id, tile_state)
                 };
@@ -245,16 +260,18 @@ impl Actor for Game {
                 self.map.render_cache.clear();
             }
             GetTile(coord) => {
-                sender.inspect(|v| {
-                    v.try_tell(self.map.tiles.get(&coord).cloned(), myself)
+                if let Some(sender) = sender {
+                    sender
+                        .try_tell(self.map.tiles.get(&coord).cloned(), myself)
                         .unwrap();
-                });
+                }
             }
             GetTileEntity(coord) => {
-                sender.inspect(|v| {
-                    v.try_tell(self.tile_entities.get(&coord).cloned(), myself)
+                if let Some(sender) = sender {
+                    sender
+                        .try_tell(self.tile_entities.get(&coord).cloned(), myself)
                         .unwrap();
-                });
+                };
             }
             ForwardMsgToTile(coord, msg) => {
                 if let Some(tile_entity) = self.tile_entities.get(&coord) {

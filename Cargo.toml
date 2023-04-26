@@ -19,6 +19,7 @@ egui_winit_vulkano = "0.24.0"
 egui = "0.21.0"
 
 string-interner = "0.14.0"
+slice-group-by = "0.3.0"
 hexagon-tiles = { git = "https://github.com/Mg138/hexagon-tiles" }
 predicates = "3.0.2"
 fuse-rust = "0.3.1"
