@@ -1,6 +1,3 @@
-use std::mem;
-use std::sync::Arc;
-
 use flexstr::SharedStr;
 use hexagon_tiles::traits::HexDirection;
 use rand::distributions::Bernoulli;
@@ -8,6 +5,8 @@ use rand::distributions::Distribution;
 use rand::Rng;
 use riker::actor::{Actor, BasicActorRef};
 use riker::actors::{ActorFactoryArgs, ActorRef, ActorRefFactory, Context, Sender, Strategy};
+use std::mem;
+use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::game::map::{Map, RenderContext, TileEntities};

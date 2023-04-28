@@ -1,19 +1,16 @@
+use rune::runtime::RuntimeContext;
+use rune::termcolor::StandardStream;
+use rune::{Context, Diagnostics, Module, Source, Sources, Unit};
+use serde::Deserialize;
 use std::ffi::OsStr;
 use std::fs::{read_dir, read_to_string};
 use std::path::Path;
 use std::sync::Arc;
 
+use crate::game::item::ItemStack;
 use crate::game::tile::coord::TileCoord;
 use crate::game::tile::entity::TileEntity;
-
-use crate::game::item::ItemStack;
-use rune::runtime::RuntimeContext;
-use rune::termcolor::StandardStream;
-use rune::{Context, Diagnostics, Module, Source, Sources, Unit};
-use serde::Deserialize;
-
 use crate::resource::item::{id_eq_or_of_tag, Item};
-
 use crate::resource::script::{Instructions, Script};
 use crate::resource::tag::Tag;
 use crate::resource::tile::{Tile, TileType};

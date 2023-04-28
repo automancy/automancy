@@ -1,6 +1,8 @@
 {
     "id": "refinery",
-    "models": ["refinery"],
+    "models": [
+        "refinery"
+    ],
     "tile_type": {
         "type": "Machine",
         "param": [

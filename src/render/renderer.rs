@@ -1,24 +1,20 @@
 use cgmath::{vec3, SquareMatrix};
-use std::collections::HashMap;
-use std::f32::consts::PI;
-use std::sync::Arc;
-
 use egui_winit_vulkano::Gui;
 use hexagon_tiles::hex::Hex;
 use hexagon_tiles::layout::{hex_to_pixel, pixel_to_hex};
 use hexagon_tiles::point::point;
 use hexagon_tiles::traits::HexRound;
+use std::collections::HashMap;
+use std::f32::consts::PI;
+use std::sync::Arc;
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
-
 use vulkano::command_buffer::{
     AutoCommandBufferBuilder, CommandBufferInheritanceInfo, CommandBufferUsage,
     RenderPassBeginInfo, SubpassContents,
 };
-
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::format::ClearValue;
 use vulkano::memory::allocator::{AllocationCreateInfo, MemoryUsage, StandardMemoryAllocator};
-
 use vulkano::pipeline::graphics::viewport::Scissor;
 use vulkano::pipeline::{Pipeline, PipelineBindPoint};
 use vulkano::swapchain::{acquire_next_image, AcquireError};

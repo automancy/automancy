@@ -1,12 +1,11 @@
 use egui::NumExt;
 use rand::{thread_rng, RngCore};
-use std::collections::HashMap;
-use std::sync::Arc;
-
 use riker::actor::{Context, Sender};
 use riker::actors::{Actor, ActorFactoryArgs, BasicActorRef};
 use rune::{Any, ContextError, Module, Vm};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::game::inventory::{Inventory, InventoryRaw};
 use crate::game::item::{ItemAmount, ItemStack};

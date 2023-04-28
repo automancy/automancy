@@ -1,7 +1,7 @@
-use crate::resource::item::{Item, ItemRaw};
 use rune::Any;
 use serde::{Deserialize, Serialize};
 
+use crate::resource::item::{Item, ItemRaw};
 use crate::util::id::Interner;
 
 pub type ItemAmount = u64;

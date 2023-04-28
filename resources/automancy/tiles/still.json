@@ -1,6 +1,8 @@
 {
     "id": "still",
-    "models": ["still"],
+    "models": [
+        "still"
+    ],
     "tile_type": {
         "type": "Machine",
         "param": [

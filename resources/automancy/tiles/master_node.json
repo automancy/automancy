@@ -1,9 +1,11 @@
 {
-  "id": "master_node",
-  "models": ["void"],
-  "tile_type": {
-    "type": "Transfer",
-    "param": "master_node"
-  },
-  "targeted": true
+    "id": "master_node",
+    "models": [
+        "void"
+    ],
+    "tile_type": {
+        "type": "Transfer",
+        "param": "master_node"
+    },
+    "targeted": true
 }

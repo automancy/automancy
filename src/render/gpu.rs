@@ -1,6 +1,5 @@
 use slice_group_by::GroupBy;
 use std::sync::Arc;
-
 use vulkano::buffer::{Buffer, BufferCreateInfo, Subbuffer};
 use vulkano::command_buffer::allocator::{
     StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo,

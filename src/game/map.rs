@@ -1,14 +1,12 @@
 use futures_executor::block_on;
-use std::fmt::Debug;
-use std::fs::File;
-use std::io::{BufReader, BufWriter};
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
-
-use crate::game::{Game, GameMsg};
 use riker::actor::ActorRef;
 use riker::actors::{ActorSystem, Context};
 use riker_patterns::ask::ask;
 use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
+use std::fs::File;
+use std::io::{BufReader, BufWriter};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use zstd::{Decoder, Encoder};
 
 use crate::game::tile::coord::{TileCoord, TileUnit};
@@ -16,6 +14,7 @@ use crate::game::tile::entity::TileEntityMsg::{GetData, SetData};
 use crate::game::tile::entity::{
     data_from_raw, data_to_raw, DataMap, DataMapRaw, TileEntityMsg, TileState,
 };
+use crate::game::{Game, GameMsg};
 use crate::render::data::InstanceData;
 use crate::resource::ResourceManager;
 use crate::util::id::{Id, Interner};

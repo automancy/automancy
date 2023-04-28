@@ -1,6 +1,7 @@
+use std::time::{Duration, Instant};
+
 use crate::game::tile::entity::TileEntityMsg;
 use crate::game::Game;
-use std::time::{Duration, Instant};
 
 pub const TPS: u64 = 30;
 

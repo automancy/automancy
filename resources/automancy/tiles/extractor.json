@@ -1,6 +1,8 @@
 {
     "id": "extractor",
-    "models": ["extractor"],
+    "models": [
+        "extractor"
+    ],
     "tile_type": {
         "type": "Machine",
         "param": [

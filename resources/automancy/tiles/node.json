@@ -1,9 +1,11 @@
 {
-  "id": "node",
-  "models": ["void"],
-  "tile_type": {
-    "type": "Transfer",
-    "param": "node"
-  },
-  "targeted": true
+    "id": "node",
+    "models": [
+        "void"
+    ],
+    "tile_type": {
+        "type": "Transfer",
+        "param": "node"
+    },
+    "targeted": true
 }

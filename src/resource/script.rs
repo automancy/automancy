@@ -1,12 +1,11 @@
-use crate::resource::{ResourceManager, JSON_EXT};
 use rune::Any;
+use serde::Deserialize;
 use std::ffi::OsStr;
 use std::fs::{read_dir, read_to_string};
 use std::path::Path;
 
-use serde::Deserialize;
-
 use crate::game::item::{ItemStack, ItemStackRaw};
+use crate::resource::{ResourceManager, JSON_EXT};
 use crate::util::id::{Id, IdRaw};
 
 #[derive(Debug, Clone, Any)]

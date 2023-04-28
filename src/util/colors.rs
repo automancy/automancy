@@ -1,5 +1,6 @@
-use crate::util::cg::Float;
 use egui::Rgba;
+
+use crate::util::cg::Float;
 
 pub trait WithAlpha {
     fn with_alpha(&self, a: Float) -> Self;

@@ -1,11 +1,10 @@
 use flexstr::SharedStr;
-use std::fmt::{Debug, Formatter};
-use std::{collections::HashMap, fmt};
-
 use kira::sound::static_sound::StaticSoundData;
 use kira::track::TrackHandle;
 use rune::Any;
 use serde::Deserialize;
+use std::fmt::{Debug, Formatter};
+use std::{collections::HashMap, fmt};
 
 use crate::render::data::{GameVertex, Model, RawFace};
 use crate::render::gui::GuiIds;

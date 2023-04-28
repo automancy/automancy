@@ -2,8 +2,6 @@
 
 A game about Automation, themed around Magic, based on Hexagons, and -- there's no Conveyor Belts.
 
-
-
 Game's WIP.
 
 ---

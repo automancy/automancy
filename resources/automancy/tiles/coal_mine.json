@@ -1,6 +1,8 @@
 {
     "id": "coal_mine",
-    "models": ["coal_mine"],
+    "models": [
+        "coal_mine"
+    ],
     "tile_type": {
         "type": "Deposit"
     }

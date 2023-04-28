@@ -1,15 +1,14 @@
-use std::sync::Arc;
-
-use crate::game::tile::coord::TileCoord;
-use crate::game::tile::entity::TileState;
 use bytemuck::{Pod, Zeroable};
 use cgmath::{vec3, SquareMatrix};
 use egui::ecolor::{linear_f32_from_gamma_u8, linear_f32_from_linear_u8};
 use hexagon_tiles::layout::{hex_to_pixel, Layout, LAYOUT_ORIENTATION_POINTY};
 use hexagon_tiles::point::Point;
 use ply_rs::ply::{Property, PropertyAccess};
+use std::sync::Arc;
 use vulkano::pipeline::graphics::vertex_input::Vertex;
 
+use crate::game::tile::coord::TileCoord;
+use crate::game::tile::entity::TileState;
 use crate::render::camera::FAR;
 use crate::resource::ResourceManager;
 use crate::util::cg::{Float, Matrix4, Point3, Vector3};

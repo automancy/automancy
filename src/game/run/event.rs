@@ -1,14 +1,13 @@
-use std::collections::HashMap;
-use std::error::Error;
-use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use cgmath::{point2, vec3, EuclideanSpace};
 use fuse_rust::Fuse;
 use futures::channel::mpsc;
 use futures_executor::block_on;
 use riker::actors::ActorRef;
 use riker_patterns::ask::ask;
+use std::collections::HashMap;
+use std::error::Error;
+use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::ControlFlow;
 

@@ -6,11 +6,13 @@ use cgmath::BaseFloat;
 pub type Float = f32;
 
 pub type Rad = cgmath::Rad<Float>;
+
 pub fn rad(n: Float) -> Rad {
     cgmath::Rad(n)
 }
 
 pub type Deg = cgmath::Deg<Float>;
+
 pub fn deg(n: Float) -> Deg {
     cgmath::Deg(n)
 }
@@ -52,16 +54,16 @@ pub fn perspective<N: BaseFloat>(fov_y: N, a: N, n: N, f: N) -> cgmath::Matrix4<
     let zero = N::zero();
     let one = N::one();
     let two = one + one;
-    
+
     let t = fov_y.div(two).tan();
     let d = f - n;
     let m = -(f * n);
 
     cgmath::Matrix4::<N>::new(
-        one / (t * a), zero   , zero , zero,
-        zero         , one / t, zero , zero,
-        zero         , zero   , f / d, one ,
-        zero         , zero   , m / d, zero,
+        one / (t * a), zero, zero, zero,
+        zero, one / t, zero, zero,
+        zero, zero, f / d, one,
+        zero, zero, m / d, zero,
     )
 }
 

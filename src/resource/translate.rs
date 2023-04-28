@@ -27,6 +27,7 @@ pub struct Translate {
     pub scripts: HashMap<Id, SharedStr>,
     pub gui: HashMap<Id, SharedStr>,
 }
+
 impl ResourceManager {
     fn load_translate(&mut self, file: &Path) -> Option<()> {
         log::info!("loading translate at: {file:?}");

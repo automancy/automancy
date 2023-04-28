@@ -1,11 +1,12 @@
-use crate::resource::item::{Item, ItemRaw};
-use crate::resource::{ResourceManager, JSON_EXT};
-use crate::util::id::{id_static, Id, IdRaw, Interner};
 use rune::Any;
 use serde::Deserialize;
 use std::ffi::OsStr;
 use std::fs::{read_dir, read_to_string};
 use std::path::Path;
+
+use crate::resource::item::{Item, ItemRaw};
+use crate::resource::{ResourceManager, JSON_EXT};
+use crate::util::id::{id_static, Id, IdRaw, Interner};
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(tag = "type", content = "param")]

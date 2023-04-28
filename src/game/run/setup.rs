@@ -1,6 +1,3 @@
-use std::fs;
-use std::sync::Arc;
-
 use egui::Frame;
 use egui_winit_vulkano::Gui;
 use flexstr::SharedStr;
@@ -9,6 +6,8 @@ use kira::manager::{AudioManager, AudioManagerSettings};
 use kira::track::{TrackBuilder, TrackHandle};
 use riker::actor::{ActorRef, ActorRefFactory};
 use riker::actors::{ActorSystem, SystemBuilder, Timer};
+use std::fs;
+use std::sync::Arc;
 use vulkano::device::DeviceExtensions;
 use winit::event_loop::EventLoop;
 use winit::window::{Icon, Window};

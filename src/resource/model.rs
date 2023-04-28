@@ -1,7 +1,3 @@
-use crate::render::data::{GameVertex, Model, RawFace};
-use crate::resource::ResourceManager;
-use crate::resource::JSON_EXT;
-use crate::util::id::IdRaw;
 use ply_rs::parser::Parser;
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -9,6 +5,11 @@ use std::ffi::OsStr;
 use std::fs::{read_dir, read_to_string, File};
 use std::io::BufReader;
 use std::path::Path;
+
+use crate::render::data::{GameVertex, Model, RawFace};
+use crate::resource::ResourceManager;
+use crate::resource::JSON_EXT;
+use crate::util::id::IdRaw;
 
 #[derive(Debug, Default, Clone)]
 pub struct Face {

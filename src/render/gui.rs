@@ -1,7 +1,3 @@
-use std::collections::HashMap;
-use std::f32::consts::FRAC_PI_4;
-use std::sync::Arc;
-
 use cgmath::{point2, point3, vec3, MetricSpace};
 use egui::epaint::Shadow;
 use egui::style::{Margin, WidgetVisuals, Widgets};
@@ -20,6 +16,9 @@ use hexagon_tiles::traits::HexDirection;
 use riker::actors::ActorRef;
 use riker_patterns::ask::ask;
 use rune::Any;
+use std::collections::HashMap;
+use std::f32::consts::FRAC_PI_4;
+use std::sync::Arc;
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::image::SampleCount::Sample4;
@@ -36,7 +35,6 @@ use crate::game::GameMsg;
 use crate::render::camera::hex_to_normalized;
 use crate::render::data::{GameVertex, GuiUBO, InstanceData};
 use crate::render::gpu::Gpu;
-
 use crate::render::{gpu, gui};
 use crate::resource::tile::TileType;
 use crate::resource::ResourceManager;
