@@ -1,9 +1,10 @@
-use egui::epaint::ahash::HashSet;
-use rune::Any;
-use serde::{Deserialize, Serialize};
 use std::ffi::OsStr;
 use std::fs::{read_dir, read_to_string};
 use std::path::Path;
+
+use egui::epaint::ahash::HashSet;
+use rune::Any;
+use serde::{Deserialize, Serialize};
 
 use crate::resource::{Registry, ResourceManager, JSON_EXT};
 use crate::util::id::{Id, IdRaw};

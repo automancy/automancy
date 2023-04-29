@@ -1,11 +1,12 @@
-use rune::runtime::RuntimeContext;
-use rune::termcolor::StandardStream;
-use rune::{Context, Diagnostics, Module, Source, Sources, Unit};
-use serde::Deserialize;
 use std::ffi::OsStr;
 use std::fs::{read_dir, read_to_string};
 use std::path::Path;
 use std::sync::Arc;
+
+use rune::runtime::RuntimeContext;
+use rune::termcolor::StandardStream;
+use rune::{Context, Diagnostics, Module, Source, Sources, Unit};
+use serde::Deserialize;
 
 use crate::game::item::ItemStack;
 use crate::game::tile::coord::TileCoord;

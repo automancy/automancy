@@ -26,11 +26,11 @@ void main() {
 
     float diffuse_intensity = max(dot(norm, reflected), 0.0);
     diffuse_intensity = pow(diffuse_intensity, 2.0);
-    diffuse_intensity = step(0.25, diffuse_intensity);
+    diffuse_intensity = smoothstep(0.0, 0.25, diffuse_intensity);
     vec4 diffuse = light_color * diffuse_intensity;
 
     float specular_intensity = dot(norm, halfway);
-    specular_intensity = step(0.6, specular_intensity);
+    specular_intensity = smoothstep(0.3, 0.6, specular_intensity);
     vec4 specular = light_color * specular_intensity;
 
     float rim_intensity = dot(eye, norm);

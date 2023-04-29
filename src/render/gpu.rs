@@ -1,5 +1,6 @@
-use slice_group_by::GroupBy;
 use std::sync::Arc;
+
+use slice_group_by::GroupBy;
 use vulkano::buffer::{Buffer, BufferCreateInfo, Subbuffer};
 use vulkano::command_buffer::allocator::{
     StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo,
@@ -465,7 +466,7 @@ impl RenderAlloc {
     }
 
     pub fn new(
-        resource_man: Arc<ResourceManager>,
+        resource_man: &ResourceManager,
         device: Arc<Device>,
         surface: Arc<Surface>,
         window: Arc<Window>,

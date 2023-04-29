@@ -1,8 +1,9 @@
 use flexstr::ToSharedStr;
-use kira::sound::static_sound::{StaticSoundData, StaticSoundSettings};
 use std::ffi::OsStr;
 use std::fs::read_dir;
 use std::path::Path;
+
+use kira::sound::static_sound::{StaticSoundData, StaticSoundSettings};
 
 use crate::resource::{ResourceManager, OGG_EXT};
 

@@ -29,6 +29,7 @@
         "master_node": "Master Node",
         "copper_mine": "Copper Mine",
         "coal_mine": "Coal Mine",
+        "merger": "Merger",
         "still": "Alchemical Still"
     },
     "gui": {

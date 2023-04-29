@@ -1,13 +1,13 @@
+use std::fs;
+use std::sync::Arc;
+
 use egui::Frame;
-use egui_winit_vulkano::Gui;
 use flexstr::SharedStr;
 use kira::manager::backend::cpal::CpalBackend;
 use kira::manager::{AudioManager, AudioManagerSettings};
 use kira::track::{TrackBuilder, TrackHandle};
 use riker::actor::{ActorRef, ActorRefFactory};
 use riker::actors::{ActorSystem, SystemBuilder, Timer};
-use std::fs;
-use std::sync::Arc;
 use vulkano::device::DeviceExtensions;
 use winit::event_loop::EventLoop;
 use winit::window::{Icon, Window};
@@ -16,7 +16,6 @@ use crate::game::ticking::TICK_INTERVAL;
 use crate::game::{Game, GameMsg};
 use crate::render::camera::Camera;
 use crate::render::gpu::{Gpu, RenderAlloc};
-use crate::render::renderer::Renderer;
 use crate::render::{gpu, gui};
 use crate::resource::{ResourceManager, RESOURCES_FOLDER};
 use crate::LOGO;
@@ -24,28 +23,24 @@ use crate::LOGO;
 /// Stores what the game initializes on startup.
 pub struct GameSetup {
     /// the audio manager
-    pub(crate) audio_man: AudioManager,
+    pub audio_man: AudioManager,
     /// the resource manager
-    pub(crate) resource_man: Arc<ResourceManager>,
-    /// the GUI system
-    pub(crate) gui: Gui,
+    pub resource_man: Arc<ResourceManager>,
     /// the Riker actor system
-    pub(crate) sys: ActorSystem,
+    pub sys: ActorSystem,
     /// the game messaging system
-    pub(crate) game: ActorRef<GameMsg>,
+    pub game: ActorRef<GameMsg>,
     /// the egui frame
-    pub(crate) frame: Frame,
-    /// the renderer
-    pub(crate) renderer: Renderer,
+    pub frame: Frame,
     /// the camera
-    pub(crate) camera: Camera,
+    pub camera: Camera,
     /// the window
-    pub(crate) window: Arc<Window>,
+    pub window: Arc<Window>,
 }
 
 impl GameSetup {
     /// Initializes the game, filling all the necessary fields as well as creating an event loop.
-    pub fn setup() -> (EventLoop<()>, Self) {
+    pub fn setup() -> (EventLoop<()>, Gpu, Self) {
         // --- resources & data ---
         let mut audio_man =
             AudioManager::<CpalBackend>::new(AudioManagerSettings::default()).unwrap();
@@ -92,7 +87,7 @@ impl GameSetup {
         let queue = queues.next().unwrap();
 
         let alloc = RenderAlloc::new(
-            resource_man.clone(),
+            &resource_man,
             device.clone(),
             surface.clone(),
             window.clone(),
@@ -100,7 +95,6 @@ impl GameSetup {
         );
         let gpu = Gpu::new(device, queue, surface, window.clone(), alloc);
 
-        let gui = gui::init_gui(&event_loop, &gpu);
         log::info!("Renderer setup complete");
         // --- setup game ---
         let sys = SystemBuilder::new().name("automancy").create().unwrap();
@@ -129,20 +123,18 @@ impl GameSetup {
         // last setup
         let frame = gui::default_frame();
 
-        let renderer = Renderer::new(resource_man.clone(), gpu);
         let camera = Camera::default();
 
         // --- event-loop ---
         (
             event_loop,
+            gpu,
             GameSetup {
                 audio_man,
                 resource_man,
-                gui,
                 sys,
                 game,
                 frame,
-                renderer,
                 camera,
                 window,
             },

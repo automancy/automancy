@@ -1,9 +1,10 @@
+use std::fmt::{self, Display, Formatter};
+
 use bytemuck::{Pod, PodInOption, Zeroable, ZeroableInOption};
 use flexstr::SharedStr;
 use rune::Any;
 use serde::de::{Error, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::fmt::{self, Display, Formatter};
 use string_interner::backend::StringBackend;
 use string_interner::{StringInterner, Symbol};
 

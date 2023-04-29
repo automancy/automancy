@@ -1,12 +1,16 @@
+use std::collections::HashMap;
+use std::f32::consts::PI;
+use std::sync::Arc;
+
 use cgmath::{vec3, SquareMatrix};
 use egui_winit_vulkano::Gui;
+
+use futures_executor::block_on;
 use hexagon_tiles::hex::Hex;
 use hexagon_tiles::layout::{hex_to_pixel, pixel_to_hex};
 use hexagon_tiles::point::point;
 use hexagon_tiles::traits::HexRound;
-use std::collections::HashMap;
-use std::f32::consts::PI;
-use std::sync::Arc;
+
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
 use vulkano::command_buffer::{
     AutoCommandBufferBuilder, CommandBufferInheritanceInfo, CommandBufferUsage,
@@ -21,8 +25,10 @@ use vulkano::swapchain::{acquire_next_image, AcquireError};
 use vulkano::sync;
 use vulkano::sync::GpuFuture;
 
-use crate::game::map::MapRenderInfo;
+use crate::game::run::setup::GameSetup;
 use crate::game::tile::coord::{TileCoord, TileHex, TileUnit};
+use crate::game::tile::entity::{Data, TileEntityMsg};
+use crate::game::{GameMsg, RenderInfo, RenderUnit};
 use crate::render::camera::FAR;
 use crate::render::data::{
     GameUBO, GameVertex, GuiUBO, InstanceData, RawInstanceData, HEX_GRID_LAYOUT,
@@ -30,7 +36,8 @@ use crate::render::data::{
 use crate::render::gpu;
 use crate::render::gpu::Gpu;
 use crate::resource::ResourceManager;
-use crate::util::cg::{matrix, DPoint3, Float, Matrix4, Point3};
+use crate::util::actor::ask_multi;
+use crate::util::cg::{deg, matrix, Float, Matrix4, Point3};
 use crate::util::colors;
 use crate::util::colors::WithAlpha;
 use crate::util::id::Id;
@@ -67,25 +74,81 @@ impl Renderer {
 impl Renderer {
     pub fn render(
         &mut self,
-        map_render_info: &MapRenderInfo,
-        camera_pos: DPoint3,
-        pointing_at: TileCoord,
+        setup: &GameSetup,
+        map_render_info: &RenderInfo,
         gui_instances: Vec<(RawInstanceData, Id)>,
         extra_vertices: Vec<GameVertex>,
         gui: &mut Gui,
     ) {
         let instances = {
-            let pos = point(camera_pos.x, camera_pos.y);
+            let pos = setup.camera.get_pos();
+            let pos = point(pos.x, pos.y);
             let pos: TileHex = pixel_to_hex(HEX_GRID_LAYOUT, pos).round();
 
             let none = self
                 .resource_man
                 .registry
-                .get_tile(self.resource_man.registry.none)
+                .get_tile(&self.resource_man.registry.none)
                 .unwrap()
                 .models[0];
 
-            let mut instances = map_render_info.instances.clone();
+            let mut instances = map_render_info.clone();
+
+            {
+                let messages = instances
+                    .iter()
+                    .flat_map(|(coord, RenderUnit { tile, .. })| {
+                        if self
+                            .resource_man
+                            .registry
+                            .get_tile(tile)
+                            .unwrap()
+                            .model_attributes
+                            .auto_rotate
+                        {
+                            Some(GameMsg::ForwardMsgToTile(
+                                *coord,
+                                TileEntityMsg::GetDataValueWithSelfData("target"),
+                            ))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>();
+
+                let size = messages.len();
+                if size > 0 {
+                    let targets: Vec<(TileCoord, Option<Data>)> = block_on(ask_multi(
+                        &setup.sys,
+                        &setup.game,
+                        messages.into_iter(),
+                        size,
+                    ));
+
+                    for (coord, target) in targets {
+                        let theta: Float =
+                            if let Some(target) = target.as_ref().and_then(Data::as_coord) {
+                                match *target {
+                                    TileCoord::RIGHT => -60.0,
+                                    TileCoord::BOTTOM_RIGHT => -120.0,
+                                    TileCoord::BOTTOM_LEFT => -180.0,
+                                    TileCoord::LEFT => -240.0,
+                                    TileCoord::TOP_LEFT => -300.0,
+                                    _ => 0.0,
+                                }
+                            } else {
+                                0.0
+                            };
+
+                        let m = instances
+                            .get_mut(&coord)
+                            .map(|v| &mut v.instance.model_matrix)
+                            .unwrap();
+
+                        *m = *m * Matrix4::from_angle_z(deg(theta));
+                    }
+                }
+            }
 
             for q in -RENDER_RANGE..=RENDER_RANGE {
                 for r in -RENDER_RANGE.max(-q - RENDER_RANGE)..=RENDER_RANGE.min(-q + RENDER_RANGE)
@@ -95,36 +158,42 @@ impl Renderer {
                     instances.entry(pos.into()).or_insert_with(|| {
                         let p = hex_to_pixel(HEX_GRID_LAYOUT, pos);
 
-                        (
-                            InstanceData::default().add_translation(vec3(
+                        RenderUnit {
+                            instance: InstanceData::default().add_translation(vec3(
                                 p.x as Float,
                                 p.y as Float,
                                 FAR as Float,
                             )),
-                            none,
-                        )
+                            tile: none,
+                            model: none,
+                        }
                     });
                 }
             }
 
-            if let Some((instance, _)) = instances.get_mut(&pointing_at) {
+            if let Some(RenderUnit { instance, .. }) = instances.get_mut(&setup.camera.pointing_at)
+            {
                 *instance = instance.with_color_offset(colors::ORANGE.with_alpha(0.5).to_array())
             }
 
             let mut map = HashMap::new();
 
-            instances.into_values().for_each(|(instance, id)| {
-                map.entry(id)
-                    .or_insert_with(Vec::new)
-                    .push((instance.into(), id))
-            });
+            instances.into_values().for_each(
+                |RenderUnit {
+                     instance, model, ..
+                 }| {
+                    map.entry(model)
+                        .or_insert_with(Vec::new)
+                        .push((instance.into(), model))
+                },
+            );
 
             map.into_values().flatten().collect::<Vec<_>>()
         };
 
         let (width, height) = gpu::window_size(&self.gpu.window);
         let aspect = width / height;
-        let camera_pos = camera_pos.cast::<Float>().unwrap();
+        let camera_pos = setup.camera.get_pos().cast::<Float>().unwrap();
         let matrix = matrix(camera_pos, aspect as Float, PI);
 
         self.inner_render(

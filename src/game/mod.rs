@@ -1,22 +1,29 @@
+use std::collections::HashMap;
+use std::mem;
+use std::sync::Arc;
+
+use cgmath::vec3;
 use flexstr::SharedStr;
+use hexagon_tiles::layout::hex_to_pixel;
 use hexagon_tiles::traits::HexDirection;
 use rand::distributions::Bernoulli;
 use rand::distributions::Distribution;
 use rand::Rng;
 use riker::actor::{Actor, BasicActorRef};
 use riker::actors::{ActorFactoryArgs, ActorRef, ActorRefFactory, Context, Sender, Strategy};
-use std::mem;
-use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::game::map::{Map, RenderContext, TileEntities};
+use crate::game::map::{Map, TileEntities};
 use crate::game::ticking::TickUnit;
-use crate::game::tile::coord::{ChunkCoord, TileCoord, TileHex};
+use crate::game::tile::coord::{ChunkCoord, TileCoord, TileHex, TileUnit};
 use crate::game::tile::entity::{Data, TileEntity, TileEntityMsg, TileState};
 use crate::game::GameMsg::*;
+use crate::render::camera::FAR;
+use crate::render::data::{InstanceData, HEX_GRID_LAYOUT};
 use crate::resource::item::id_eq_or_of_tag;
 use crate::resource::script::Script;
 use crate::resource::ResourceManager;
+use crate::util::cg::Float;
 use crate::util::id::Id;
 
 /// Handles input.
@@ -37,6 +44,15 @@ pub mod tile;
 const UNDO_CACHE_SIZE: usize = 16;
 
 #[derive(Debug, Clone)]
+pub struct RenderUnit {
+    pub instance: InstanceData,
+    pub tile: Id,
+    pub model: Id,
+}
+
+pub type RenderInfo = HashMap<TileCoord, RenderUnit>;
+
+#[derive(Debug, Clone)]
 pub struct Game {
     /// a count of all the ticks that have happened
     tick_count: TickUnit,
@@ -50,6 +66,8 @@ pub struct Game {
     /// the map
     map: Map,
 
+    /// render cache
+    pub render_cache: HashMap<(TileUnit, TileCoord), Arc<RenderInfo>>,
     /// is the game stopped
     stopped: bool,
     /// what to do to undo the last 16 user events
@@ -73,7 +91,8 @@ pub enum GameMsg {
     Populate(ChunkCoord),
     /// get rendering information
     RenderInfoRequest {
-        context: RenderContext,
+        center: TileCoord,
+        range: TileUnit,
     },
     /// place a tile at the given position
     PlaceTile {
@@ -152,7 +171,7 @@ impl Actor for Game {
 
                 let name = self.map.map_name.clone();
 
-                let (map, tile_entities) = Map::load(ctx, resource_man.clone(), name);
+                let (map, tile_entities) = Map::load(ctx, resource_man, name);
 
                 self.map = map;
                 self.tile_entities = tile_entities;
@@ -195,8 +214,8 @@ impl Actor for Game {
             Tick => {
                 self.tick();
             }
-            RenderInfoRequest { context } => {
-                let render_info = self.map.render_info(context);
+            RenderInfoRequest { center, range } => {
+                let render_info = self.render_info(center, range);
 
                 if let Some(sender) = sender {
                     sender.try_tell(render_info, myself).unwrap();
@@ -256,7 +275,7 @@ impl Actor for Game {
                     }])
                 }
 
-                self.map.render_cache.clear();
+                self.render_cache.clear();
             }
             GetTile(coord) => {
                 if let Some(sender) = sender {
@@ -326,6 +345,7 @@ impl Game {
             tile_entities: Default::default(),
             map: Map::new_empty(map_name.to_string()),
 
+            render_cache: Default::default(),
             stopped: false,
             undo_steps: Default::default(),
             undo_steps_index: 0,
@@ -426,5 +446,50 @@ impl Game {
                     .insert(coord, Self::new_tile(ctx, coord, id, 0));
             }
         });
+    }
+
+    pub fn render_info(&mut self, center: TileCoord, range: TileUnit) -> Arc<RenderInfo> {
+        if let Some(info) = self.render_cache.get(&(range, center)) {
+            return info.clone();
+        }
+
+        let instances: RenderInfo = self
+            .map
+            .tiles
+            .iter()
+            .filter(|(coord, _)| center.distance(**coord) <= range)
+            .flat_map(|(coord, (id, tile_state))| {
+                self.resource_man
+                    .registry
+                    .get_tile(id)
+                    .and_then(|r| r.models.get(*tile_state as usize).cloned())
+                    .map(|model| {
+                        let p = hex_to_pixel(HEX_GRID_LAYOUT, (*coord).into());
+
+                        (
+                            *coord,
+                            RenderUnit {
+                                instance: InstanceData::default().add_translation(vec3(
+                                    p.x as Float,
+                                    p.y as Float,
+                                    FAR as Float,
+                                )),
+                                tile: *id,
+                                model,
+                            },
+                        )
+                    })
+            })
+            .collect();
+
+        let info = Arc::new(instances);
+
+        if self.render_cache.len() > 16 {
+            self.render_cache.clear();
+        }
+
+        self.render_cache.insert((range, center), info.clone());
+
+        info
     }
 }

@@ -1,11 +1,13 @@
+use std::collections::HashMap;
+use std::sync::Arc;
+
 use egui::NumExt;
+
 use rand::{thread_rng, RngCore};
 use riker::actor::{Context, Sender};
 use riker::actors::{Actor, ActorFactoryArgs, BasicActorRef};
 use rune::{Any, ContextError, Module, Vm};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::Arc;
 
 use crate::game::inventory::{Inventory, InventoryRaw};
 use crate::game::item::{ItemAmount, ItemStack};
@@ -60,9 +62,11 @@ impl Data {
     pub fn inventory() -> Self {
         Self::Inventory(Default::default())
     }
+
     pub fn vec_coord() -> Self {
         Self::VecCoord(Default::default())
     }
+
     /// Gets a mutable reference to  the tile's Inventory, or None.
     pub fn as_inventory_mut(&mut self) -> Option<&mut Inventory> {
         if let Self::Inventory(inventory) = self {
@@ -70,6 +74,7 @@ impl Data {
         }
         None
     }
+
     /// Gets a mutable reference to  the tile's coordinates, or None.
     pub fn as_coord_mut(&mut self) -> Option<&mut TileCoord> {
         if let Self::Coord(coord) = self {
@@ -91,6 +96,7 @@ impl Data {
         }
         None
     }
+
     /// Gets a mutable reference to the tile's ID, or None.
     pub fn as_id_mut(&mut self) -> Option<&mut Id> {
         if let Self::Id(id) = self {
@@ -105,6 +111,7 @@ impl Data {
         }
         None
     }
+
     /// Gets an immutable reference to  the tile's Inventory, or None.
     pub fn as_inventory(&self) -> Option<&Inventory> {
         if let Self::Inventory(inventory) = self {
@@ -112,6 +119,7 @@ impl Data {
         }
         None
     }
+
     /// Gets an immutable reference to  the tile's coordinates, or None.
     pub fn as_coord(&self) -> Option<&TileCoord> {
         if let Self::Coord(coord) = self {
@@ -119,6 +127,7 @@ impl Data {
         }
         None
     }
+
     /// Gets an immutable reference to the tile's ID, or None.
     pub fn as_bool(&self) -> Option<&bool> {
         if let Self::Bool(v) = self {
@@ -149,11 +158,8 @@ impl Data {
     }
 }
 
-// TODO i really don't know what the next 40 or so lines are doing lmao
-/// Represents a Map of interned Strings to Data objects.
 pub type DataMap = HashMap<String, Data>;
 
-/// Represents raw uninterned tile entity data.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum DataRaw {
     Inventory(InventoryRaw),
@@ -164,7 +170,6 @@ pub enum DataRaw {
     Amount(ItemAmount),
 }
 
-/// A map of identifiers to uninterned data objects.
 pub type DataMapRaw = HashMap<String, DataRaw>;
 
 pub fn data_to_raw(data: DataMap, interner: &Interner) -> DataMapRaw {
@@ -216,7 +221,7 @@ pub struct TileEntity {
     #[rune(get, copy)]
     tile_state: TileState,
     /// The data map stored by the tile.
-    #[rune(get, set)]
+    #[rune(get, set)] // TODO use methods
     data: DataMap,
     /// The actor system.
     game: BasicActorRef,
@@ -286,9 +291,10 @@ pub enum TileEntityMsg {
         fulfilled: bool,
     },
     SetData(String, Data),
-    RemoveData(String),
+    RemoveData(&'static str),
     GetData,
-    GetDataValue(String),
+    GetDataValue(&'static str),
+    GetDataValueWithSelfData(&'static str),
 }
 
 impl Actor for TileEntity {
@@ -308,13 +314,13 @@ impl Actor for TileEntity {
             } => {
                 self.tick_pause = false;
 
-                let tile_type = &resource_man.registry.get_tile(self.id).unwrap().tile_type;
+                let tile_type = &resource_man.registry.get_tile(&self.id).unwrap().tile_type;
 
                 match tile_type {
                     Machine(_) => {
                         if tick_count % 10 == 0 {
                             if let Some(script) = self.data.get("script").and_then(Data::as_id) {
-                                if let Some(script) = resource_man.registry.get_script(*script) {
+                                if let Some(script) = resource_man.registry.get_script(script) {
                                     self.game
                                         .try_tell(
                                             GameMsg::CheckAdjacent {
@@ -419,7 +425,7 @@ impl Actor for TileEntity {
                 direction,
             } => {
                 if let Some(sender) = sender {
-                    let tile_type = resource_man.registry.get_tile(self.id).unwrap().tile_type;
+                    let tile_type = resource_man.registry.get_tile(&self.id).unwrap().tile_type;
 
                     match &tile_type {
                         Machine(_) => {
@@ -547,13 +553,13 @@ impl Actor for TileEntity {
                                 .data
                                 .get("storage")
                                 .and_then(Data::as_id)
-                                .and_then(|id| resource_man.registry.get_item(*id))
+                                .and_then(|id| resource_man.registry.get_item(id))
                                 .zip(self.data.get("amount").and_then(Data::as_amount).cloned())
                             {
                                 if item_stack.item == item {
                                     let buffer = self
                                         .data
-                                        .entry("buffer".to_string())
+                                        .entry("buffer".to_owned())
                                         .or_insert_with(Data::inventory)
                                         .as_inventory_mut()
                                         .unwrap();
@@ -623,7 +629,7 @@ impl Actor for TileEntity {
                 result,
             } => {
                 if let Ok(transferred) = result {
-                    let tile_type = &resource_man.registry.get_tile(self.id).unwrap().tile_type;
+                    let tile_type = &resource_man.registry.get_tile(&self.id).unwrap().tile_type;
 
                     match tile_type {
                         Machine(_) => {
@@ -631,7 +637,7 @@ impl Actor for TileEntity {
                                 .data
                                 .get("script")
                                 .and_then(Data::as_id)
-                                .and_then(|script| resource_man.registry.get_script(*script))
+                                .and_then(|script| resource_man.registry.get_script(script))
                                 .and_then(|script| script.instructions.inputs)
                             {
                                 let buffer = self
@@ -674,12 +680,19 @@ impl Actor for TileEntity {
             GetDataValue(key) => {
                 if let Some(sender) = sender {
                     sender
-                        .try_tell(self.data.get(key.as_str()).cloned(), myself)
+                        .try_tell(self.data.get(key).cloned(), myself)
+                        .unwrap()
+                }
+            }
+            GetDataValueWithSelfData(key) => {
+                if let Some(sender) = sender {
+                    sender
+                        .try_tell((self.coord, self.data.get(key).cloned()), myself)
                         .unwrap()
                 }
             }
             RemoveData(key) => {
-                self.data.remove(&key);
+                self.data.remove(key);
             }
             ExtractRequest {
                 resource_man,
@@ -691,7 +704,7 @@ impl Actor for TileEntity {
                     return;
                 }
 
-                let tile_type = &resource_man.registry.get_tile(self.id).unwrap().tile_type;
+                let tile_type = &resource_man.registry.get_tile(&self.id).unwrap().tile_type;
 
                 match tile_type {
                     Storage(_) => {
@@ -699,7 +712,7 @@ impl Actor for TileEntity {
                             .data
                             .get("storage")
                             .and_then(Data::as_id)
-                            .and_then(|id| resource_man.registry.get_item(*id))
+                            .and_then(|id| resource_man.registry.get_item(id))
                             .zip(self.data.get("amount").and_then(Data::as_amount).cloned())
                             .zip(self.data.get_mut("buffer").and_then(Data::as_inventory_mut))
                         {

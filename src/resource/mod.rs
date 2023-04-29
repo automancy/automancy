@@ -1,10 +1,11 @@
+use std::fmt::{Debug, Formatter};
+use std::{collections::HashMap, fmt};
+
 use flexstr::SharedStr;
 use kira::sound::static_sound::StaticSoundData;
 use kira::track::TrackHandle;
 use rune::Any;
 use serde::Deserialize;
-use std::fmt::{Debug, Formatter};
-use std::{collections::HashMap, fmt};
 
 use crate::render::data::{GameVertex, Model, RawFace};
 use crate::render::gui::GuiIds;
@@ -55,20 +56,20 @@ impl Registry {
         &self.deposit_tiles
     }
 
-    pub fn get_tile(&self, id: Id) -> Option<Tile> {
-        self.tiles.get(&id).cloned()
+    pub fn get_tile(&self, id: &Id) -> Option<Tile> {
+        self.tiles.get(id).cloned()
     }
 
-    pub fn get_script(&self, id: Id) -> Option<Script> {
-        self.scripts.get(&id).cloned()
+    pub fn get_script(&self, id: &Id) -> Option<Script> {
+        self.scripts.get(id).cloned()
     }
 
-    pub fn get_tag(&self, id: Id) -> Option<Tag> {
-        self.tags.get(&id).cloned()
+    pub fn get_tag(&self, id: &Id) -> Option<Tag> {
+        self.tags.get(id).cloned()
     }
 
-    pub fn get_item(&self, id: Id) -> Option<Item> {
-        self.items.get(&id).cloned()
+    pub fn get_item(&self, id: &Id) -> Option<Item> {
+        self.items.get(id).cloned()
     }
 }
 

@@ -1,8 +1,9 @@
-use rune::Any;
-use serde::Deserialize;
 use std::ffi::OsStr;
 use std::fs::{read_dir, read_to_string};
 use std::path::Path;
+
+use rune::Any;
+use serde::Deserialize;
 
 use crate::resource::item::{Item, ItemRaw};
 use crate::resource::{ResourceManager, JSON_EXT};
@@ -31,22 +32,27 @@ pub enum TileType {
     Deposit,
 }
 
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct ModelAttributes {
+    pub auto_rotate: bool,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct TileRaw {
-    pub tile_type: TileTypeRaw,
     pub id: IdRaw,
-    pub function: Option<IdRaw>,
     pub models: Vec<IdRaw>,
+    #[serde(default)]
+    pub model_attributes: ModelAttributes,
+    pub tile_type: TileTypeRaw,
     pub targeted: Option<bool>,
 }
 
 #[derive(Debug, Clone, Any)]
 pub struct Tile {
+    pub models: Vec<Id>,
+    pub model_attributes: ModelAttributes,
     #[rune(get)]
     pub tile_type: TileType,
-
-    pub function: Option<Id>,
-    pub models: Vec<Id>,
     pub targeted: bool,
 }
 
@@ -76,8 +82,6 @@ impl ResourceManager {
             TileTypeRaw::Deposit => TileType::Deposit,
         };
 
-        let function = tile.function.map(|v| v.to_id(&mut self.interner));
-
         let models = tile
             .models
             .into_iter()
@@ -96,7 +100,7 @@ impl ResourceManager {
             id,
             Tile {
                 tile_type,
-                function,
+                model_attributes: tile.model_attributes,
                 models,
                 targeted,
             },

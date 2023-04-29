@@ -1,8 +1,9 @@
-use flexstr::{SharedStr, ToSharedStr};
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs::{read_dir, read_to_string};
 use std::path::Path;
+
+use flexstr::{SharedStr, ToSharedStr};
 
 use crate::resource::ResourceManager;
 use crate::resource::{Deserialize, JSON_EXT};

@@ -1,10 +1,11 @@
-use ply_rs::parser::Parser;
-use serde::Deserialize;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs::{read_dir, read_to_string, File};
 use std::io::BufReader;
 use std::path::Path;
+
+use ply_rs::parser::Parser;
+use serde::Deserialize;
 
 use crate::render::data::{GameVertex, Model, RawFace};
 use crate::resource::ResourceManager;

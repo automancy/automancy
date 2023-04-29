@@ -1,18 +1,12 @@
 use bytemuck::{Pod, Zeroable};
-use cgmath::{vec3, SquareMatrix};
+use cgmath::SquareMatrix;
 use egui::ecolor::{linear_f32_from_gamma_u8, linear_f32_from_linear_u8};
-use hexagon_tiles::layout::{hex_to_pixel, Layout, LAYOUT_ORIENTATION_POINTY};
+use hexagon_tiles::layout::{Layout, LAYOUT_ORIENTATION_POINTY};
 use hexagon_tiles::point::Point;
 use ply_rs::ply::{Property, PropertyAccess};
-use std::sync::Arc;
 use vulkano::pipeline::graphics::vertex_input::Vertex;
 
-use crate::game::tile::coord::TileCoord;
-use crate::game::tile::entity::TileState;
-use crate::render::camera::FAR;
-use crate::resource::ResourceManager;
 use crate::util::cg::{Float, Matrix4, Point3, Vector3};
-use crate::util::id::Id;
 
 pub const HEX_GRID_LAYOUT: Layout = Layout {
     orientation: LAYOUT_ORIENTATION_POINTY,
@@ -99,33 +93,6 @@ impl Default for InstanceData {
 }
 
 impl InstanceData {
-    pub fn from_tile(
-        resource_man: Arc<ResourceManager>,
-        id: Id,
-        pos: TileCoord,
-        tile_state: TileState,
-    ) -> Option<(TileCoord, (Self, Id))> {
-        resource_man
-            .registry
-            .get_tile(id)
-            .and_then(|r| r.models.get(tile_state as usize).cloned())
-            .map(|model| {
-                let p = hex_to_pixel(HEX_GRID_LAYOUT, pos.into());
-
-                (
-                    pos,
-                    (
-                        Self::default().add_translation(vec3(
-                            p.x as Float,
-                            p.y as Float,
-                            FAR as Float,
-                        )),
-                        model,
-                    ),
-                )
-            })
-    }
-
     pub fn add_translation(mut self, translation: Vector3) -> Self {
         self.model_matrix = self.model_matrix * Matrix4::from_translation(translation);
 

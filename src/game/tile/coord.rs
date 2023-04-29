@@ -1,3 +1,6 @@
+use std::fmt::{Display, Formatter};
+use std::ops::{Add, Div, Mul, Neg, RangeInclusive, Sub};
+
 use hexagon_tiles::fractional::FractionalHex;
 use hexagon_tiles::hex::{hex, Hex};
 use hexagon_tiles::traits::{HexDirection, HexMath, HexRound};
@@ -6,8 +9,6 @@ use rune::Module;
 use serde::de::{SeqAccess, Visitor};
 use serde::ser::SerializeTuple;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::fmt::{Display, Formatter};
-use std::ops::{Add, Div, Mul, Neg, RangeInclusive, Sub};
 
 use crate::util::cg::Double;
 

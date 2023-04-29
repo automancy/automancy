@@ -1,26 +1,29 @@
+use std::collections::HashMap;
+use std::error::Error;
+use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use cgmath::{point2, vec3, EuclideanSpace};
+use egui_winit_vulkano::Gui;
+
 use fuse_rust::Fuse;
 use futures::channel::mpsc;
 use futures_executor::block_on;
 use riker::actors::ActorRef;
 use riker_patterns::ask::ask;
-use std::collections::HashMap;
-use std::error::Error;
-use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::ControlFlow;
 
 use crate::game::input::InputHandler;
-use crate::game::map::{Map, MapRenderInfo, RenderContext, TileEntities};
+use crate::game::map::{Map, TileEntities};
 use crate::game::run::setup::GameSetup;
 use crate::game::tile::coord::{ChunkCoord, TileCoord};
 use crate::game::tile::entity::{Data, TileEntityMsg, TileState};
-use crate::game::{input, GameMsg, PlaceTileResponse};
+use crate::game::{input, GameMsg, PlaceTileResponse, RenderInfo};
 use crate::render::camera::{hex_to_normalized, screen_to_normalized, screen_to_world, FAR};
 use crate::render::data::InstanceData;
 use crate::render::gui;
-use crate::render::renderer::RENDER_RANGE;
+use crate::render::renderer::{Renderer, RENDER_RANGE};
 use crate::resource::item::Item;
 use crate::util::cg::{DPoint3, Double, Float};
 use crate::util::colors;
@@ -59,6 +62,8 @@ pub struct EventLoopStorage {
 pub fn on_event(
     setup: &mut GameSetup,
     loop_store: &mut EventLoopStorage,
+    renderer: &mut Renderer,
+    gui: &mut Gui,
     event: Event<()>,
     control_flow: &mut ControlFlow,
 ) -> Result<(), Box<dyn Error>> {
@@ -101,13 +106,13 @@ pub fn on_event(
         }
 
         Event::WindowEvent { event, .. } => {
-            if !setup.gui.update(event) {
+            if !gui.update(event) {
                 window_event = Some(event);
             }
 
             match event {
                 WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => {
-                    setup.renderer.recreate_swapchain = true;
+                    renderer.recreate_swapchain = true;
                 }
                 _ => {}
             }
@@ -124,7 +129,7 @@ pub fn on_event(
                 window_size.width as Double,
                 window_size.height as Double,
             );
-            setup.renderer.gpu.window.request_redraw();
+            renderer.gpu.window.request_redraw();
         }
 
         _ => {}
@@ -221,7 +226,7 @@ pub fn on_event(
                             &setup.game,
                             GameMsg::ForwardMsgToTile(
                                 setup.camera.pointing_at,
-                                TileEntityMsg::GetDataValue("link".to_string()),
+                                TileEntityMsg::GetDataValue("link"),
                             ),
                         ));
 
@@ -229,7 +234,7 @@ pub fn on_event(
                             setup.game.send_msg(
                                 GameMsg::ForwardMsgToTile(
                                     setup.camera.pointing_at,
-                                    TileEntityMsg::RemoveData("link".to_string()),
+                                    TileEntityMsg::RemoveData("link"),
                                 ),
                                 None,
                             );
@@ -246,7 +251,7 @@ pub fn on_event(
                                 GameMsg::ForwardMsgToTile(
                                     setup.camera.pointing_at,
                                     TileEntityMsg::SetData(
-                                        "link".to_string(),
+                                        "link".to_owned(),
                                         Data::Coord(linking_tile - setup.camera.pointing_at),
                                     ),
                                 ),
@@ -266,7 +271,7 @@ pub fn on_event(
                 }
             } else if let Some(id) = loop_store.selected_id {
                 let new = loop_store.selected_tile_states.get(&id).unwrap_or(&0) + 1;
-                let max = resource_man.registry.get_tile(id).unwrap().models.len() as i32;
+                let max = resource_man.registry.get_tile(&id).unwrap().models.len() as i32;
 
                 loop_store.selected_tile_states.insert(id, new % max);
                 loop_store.already_placed_at = None;
@@ -288,19 +293,31 @@ pub fn on_event(
         setup.game.send_msg(GameMsg::Undo, None);
     }
 
-    if event == Event::RedrawRequested(setup.renderer.gpu.window.id()) {
+    if event == Event::RedrawRequested(renderer.gpu.window.id()) {
         let (selection_send, mut selection_recv) = mpsc::channel(1);
 
-        setup.gui.begin_frame();
+        gui.begin_frame();
 
         // tile_selections
-        gui::tile_selections(setup, &loop_store.selected_tile_states, selection_send);
+        gui::tile_selections(
+            setup,
+            renderer,
+            gui,
+            &loop_store.selected_tile_states,
+            selection_send,
+        );
 
         // tile_info
-        gui::tile_info(setup, setup.game.clone(), setup.camera.pointing_at);
+        gui::tile_info(setup, gui, setup.game.clone(), setup.camera.pointing_at);
 
         // tile_config
-        gui::tile_config(setup, loop_store, setup.game.clone(), &mut extra_vertices);
+        gui::tile_config(
+            setup,
+            loop_store,
+            gui,
+            setup.game.clone(),
+            &mut extra_vertices,
+        );
 
         if let Ok(Some(id)) = selection_recv.try_next() {
             loop_store.already_placed_at = None;
@@ -322,7 +339,7 @@ pub fn on_event(
         let mouse_pos = mouse_pos + setup.camera.get_pos().to_vec().truncate();
 
         if let Some(id) = loop_store.selected_id {
-            if let Some(model) = resource_man.registry.get_tile(id).and_then(|v| {
+            if let Some(model) = resource_man.registry.get_tile(&id).and_then(|v| {
                 v.models
                     .get(
                         loop_store
@@ -367,26 +384,16 @@ pub fn on_event(
             extra_vertices.append(&mut gui::line(a, b, colors::RED));
         }
 
-        let render_info: Arc<MapRenderInfo> = block_on(ask(
+        let render_info: Arc<RenderInfo> = block_on(ask(
             &setup.sys,
             &setup.game,
             GameMsg::RenderInfoRequest {
-                context: RenderContext {
-                    resource_man,
-                    range: RENDER_RANGE,
-                    center: setup.camera.get_tile_coord(),
-                },
+                range: RENDER_RANGE,
+                center: setup.camera.get_tile_coord(),
             },
         ));
 
-        setup.renderer.render(
-            &render_info,
-            setup.camera.get_pos(),
-            setup.camera.pointing_at,
-            gui_instances,
-            extra_vertices,
-            &mut setup.gui,
-        );
+        renderer.render(setup, &render_info, gui_instances, extra_vertices, gui);
     }
     Ok(())
 }

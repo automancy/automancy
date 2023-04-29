@@ -1,6 +1,5 @@
 {
     "id": "copper_ore",
-    "adjacent": "copper_mine",
     "instructions": {
         "output": {
             "item": {

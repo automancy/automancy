@@ -1,6 +1,7 @@
+use std::collections::HashMap;
+
 use rune::Any;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 use crate::game::item::{ItemAmount, ItemStackRaw};
 use crate::resource::item::ItemRaw;

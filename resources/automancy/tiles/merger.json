@@ -1,0 +1,14 @@
+{
+    "id": "merger",
+    "models": [
+        "merger"
+    ],
+    "model_attributes": {
+        "auto_rotate": true
+    },
+    "tile_type": {
+        "type": "Transfer",
+        "param": "merger"
+    },
+    "targeted": true
+}
