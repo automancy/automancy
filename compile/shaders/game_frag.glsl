@@ -25,7 +25,7 @@ void main() {
     vec4 light_color = ubo.light_color * 0.15;
 
     float diffuse_intensity = max(dot(norm, reflected), 0.0);
-    diffuse_intensity = pow(diffuse_intensity, 8.0);
+    diffuse_intensity = pow(diffuse_intensity, 4.0);
     vec4 diffuse = light_color * diffuse_intensity;
 
     float specular_intensity = dot(norm, halfway);
