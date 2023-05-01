@@ -9,7 +9,6 @@ use egui_winit_vulkano::Gui;
 use fuse_rust::Fuse;
 use futures::channel::mpsc;
 use futures_executor::block_on;
-use riker::actors::ActorRef;
 use riker_patterns::ask::ask;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::ControlFlow;
@@ -213,13 +212,13 @@ pub fn on_event(
 
         if loop_store.input_handler.alternate_pressed {
             if let Some(linking_tile) = loop_store.linking_tile {
-                let result: Option<(ActorRef<TileEntityMsg>, Id, TileState)> = block_on(ask(
+                let tile: Option<(Id, TileState)> = block_on(ask(
                     &setup.sys,
                     &setup.game,
                     GameMsg::GetTile(setup.camera.pointing_at),
                 ));
 
-                if let Some(id) = result.map(|v| v.1) {
+                if let Some((id, _)) = tile {
                     if id == resource_man.registry.tile_ids.node {
                         let old: Option<Data> = block_on(ask(
                             &setup.sys,

@@ -3,6 +3,9 @@
     "models": [
         "still"
     ],
+    "model_attributes": {
+        "auto_rotate": true
+    },
     "tile_type": {
         "type": "Machine",
         "param": [

@@ -289,11 +289,9 @@ impl Renderer {
 
             *self.gpu.alloc.game_uniform_buffer.write().unwrap() = ubo;
 
-            let ubo_layout = self.gpu.game_pipeline.layout().set_layouts()[0].clone();
-
             let ubo_set = PersistentDescriptorSet::new(
                 &self.gpu.alloc.descriptor_allocator,
-                ubo_layout,
+                self.gpu.game_pipeline.layout().set_layouts()[0].clone(),
                 [WriteDescriptorSet::buffer(
                     0,
                     self.gpu.alloc.game_uniform_buffer.clone(),
@@ -342,13 +340,11 @@ impl Renderer {
                 .set_scissor(0, [Scissor::irrelevant()]);
 
             if !gui_instances.is_empty() {
-                let ubo = GuiUBO {
-                    matrix: matrix.into(),
-                };
+                let ubo = GameUBO::new(matrix, camera_pos);
 
                 *self.gpu.alloc.gui_uniform_buffer.write().unwrap() = ubo;
 
-                let gui_ubo_set = PersistentDescriptorSet::new(
+                let ubo_set = PersistentDescriptorSet::new(
                     &self.gpu.alloc.descriptor_allocator,
                     self.gpu.gui_pipeline.layout().set_layouts()[0].clone(),
                     [WriteDescriptorSet::buffer(
@@ -372,7 +368,7 @@ impl Renderer {
                             PipelineBindPoint::Graphics,
                             self.gpu.gui_pipeline.layout().clone(),
                             0,
-                            gui_ubo_set,
+                            ubo_set,
                         )
                         .draw_indexed_indirect(indirect_commands)
                         .unwrap();
@@ -386,7 +382,7 @@ impl Renderer {
 
                 *self.gpu.alloc.overlay_uniform_buffer.write().unwrap() = ubo;
 
-                let overlay_ubo_set = PersistentDescriptorSet::new(
+                let ubo_set = PersistentDescriptorSet::new(
                     &self.gpu.alloc.descriptor_allocator,
                     self.gpu.overlay_pipeline.layout().set_layouts()[0].clone(),
                     [WriteDescriptorSet::buffer(
@@ -419,7 +415,7 @@ impl Renderer {
                         PipelineBindPoint::Graphics,
                         self.gpu.overlay_pipeline.layout().clone(),
                         0,
-                        overlay_ubo_set,
+                        ubo_set,
                     )
                     .draw(vertex_count as u32, 1, 0, 0)
                     .unwrap();

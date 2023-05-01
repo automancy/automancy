@@ -35,7 +35,7 @@ use crate::game::tile::coord::TileHex;
 use crate::game::tile::entity::{Data, DataMap, TileEntityMsg, TileState};
 use crate::game::GameMsg;
 use crate::render::camera::hex_to_normalized;
-use crate::render::data::{GameVertex, GuiUBO, InstanceData};
+use crate::render::data::{GameUBO, GameVertex, InstanceData};
 use crate::render::gpu::Gpu;
 use crate::render::renderer::Renderer;
 use crate::render::{gpu, gui};
@@ -227,9 +227,7 @@ fn tile_paint(
     PaintCallback {
         rect,
         callback: Arc::new(CallbackFn::new(move |_info, context| {
-            let ubo = GuiUBO {
-                matrix: matrix.into(),
-            };
+            let ubo = GameUBO::new(matrix, point3(0.0, 0.0, 12.0 - (2.0 * hover)));
 
             let uniform_buffer = Buffer::from_data(
                 &context.resources.memory_allocator,
