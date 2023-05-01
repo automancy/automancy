@@ -227,7 +227,7 @@ fn tile_paint(
     PaintCallback {
         rect,
         callback: Arc::new(CallbackFn::new(move |_info, context| {
-            let ubo = GameUBO::new(matrix, point3(0.0, 0.0, 12.0 - (2.0 * hover)));
+            let ubo = GameUBO::new(matrix, point3(0.0, 0.0, 4.0 - (1.0 * hover)));
 
             let uniform_buffer = Buffer::from_data(
                 &context.resources.memory_allocator,
