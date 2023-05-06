@@ -183,7 +183,7 @@ impl Renderer {
                      instance, model, ..
                  }| {
                     map.entry(model)
-                        .or_insert_with(Vec::new)
+                        .or_insert_with(|| Vec::with_capacity(32))
                         .push((instance.into(), model))
                 },
             );

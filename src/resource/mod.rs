@@ -1,3 +1,4 @@
+use egui::TextureHandle;
 use std::fmt::{Debug, Formatter};
 use std::{collections::HashMap, fmt};
 
@@ -20,6 +21,7 @@ use crate::util::id::{id_static, Id, IdRaw, Interner};
 
 pub mod audio;
 pub mod function;
+pub mod icon;
 pub mod item;
 pub mod model;
 pub mod script;
@@ -29,6 +31,7 @@ pub mod translate;
 
 pub static JSON_EXT: &str = "json";
 pub static OGG_EXT: &str = "ogg";
+pub static PNG_EXT: &str = "png";
 pub static RESOURCES_FOLDER: &str = "resources";
 
 /// Represents the resource registry.
@@ -85,6 +88,7 @@ pub struct ResourceManager {
     pub translates: Translate,
     pub functions: HashMap<Id, Function>,
     pub audio: HashMap<SharedStr, StaticSoundData>,
+    pub icons: HashMap<SharedStr, TextureHandle>,
     pub faces: HashMap<Id, Face>,
 
     pub all_vertices: Vec<GameVertex>,
@@ -130,6 +134,7 @@ impl ResourceManager {
             translates: Default::default(),
             functions: Default::default(),
             audio: Default::default(),
+            icons: Default::default(),
             faces: Default::default(),
 
             all_vertices: Default::default(),

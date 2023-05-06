@@ -172,16 +172,9 @@ fn load_resources(track: TrackHandle) -> Arc<ResourceManager> {
 
 /// Gets the game icon.
 fn get_icon() -> Icon {
-    let (bytes, width, height) = {
-        let decoder = png::Decoder::new(LOGO);
+    let image = image::load_from_memory(LOGO).unwrap().to_rgba8();
+    let width = image.width();
+    let height = image.height();
 
-        let mut reader = decoder.read_info().unwrap();
-
-        let mut buf = vec![0; reader.output_buffer_size()];
-        let info = reader.next_frame(&mut buf).unwrap();
-
-        (buf[..info.buffer_size()].to_vec(), info.width, info.height)
-    };
-
-    Icon::from_rgba(bytes, width, height).unwrap()
+    Icon::from_rgba(image.into_flat_samples().samples, width, height).unwrap()
 }
