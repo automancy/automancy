@@ -1,3 +1,4 @@
+use rayon::prelude::*;
 use std::time::{Duration, Instant};
 
 use crate::game::tile::entity::TileEntityMsg;
@@ -15,7 +16,7 @@ pub struct Ticked;
 
 impl Game {
     fn inner_tick(&mut self) {
-        for tile_entity in self.tile_entities.values() {
+        self.tile_entities.par_iter().for_each(|(_, tile_entity)| {
             tile_entity.send_msg(
                 TileEntityMsg::Tick {
                     resource_man: self.resource_man.clone(),
@@ -23,7 +24,7 @@ impl Game {
                 },
                 None,
             );
-        }
+        });
 
         self.tick_count = self.tick_count.overflowing_add(1).0;
     }

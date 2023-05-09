@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use egui::NumExt;
@@ -158,7 +157,7 @@ impl Data {
     }
 }
 
-pub type DataMap = HashMap<String, Data>;
+pub type DataMap = std::collections::HashMap<String, Data>;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum DataRaw {
@@ -170,7 +169,7 @@ pub enum DataRaw {
     Amount(ItemAmount),
 }
 
-pub type DataMapRaw = HashMap<String, DataRaw>;
+pub type DataMapRaw = std::collections::HashMap<String, DataRaw>;
 
 pub fn data_to_raw(data: DataMap, interner: &Interner) -> DataMapRaw {
     data.into_iter()
@@ -294,7 +293,7 @@ pub enum TileEntityMsg {
     RemoveData(&'static str),
     GetData,
     GetDataValue(&'static str),
-    GetDataValueWithSelfData(&'static str),
+    GetDataValueAndCoord(&'static str),
 }
 
 impl Actor for TileEntity {
@@ -684,7 +683,7 @@ impl Actor for TileEntity {
                         .unwrap()
                 }
             }
-            GetDataValueWithSelfData(key) => {
+            GetDataValueAndCoord(key) => {
                 if let Some(sender) = sender {
                     sender
                         .try_tell((self.coord, self.data.get(key).cloned()), myself)

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use hashbrown::HashMap;
 use std::f32::consts::FRAC_PI_4;
 use std::sync::Arc;
 

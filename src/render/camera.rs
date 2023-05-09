@@ -1,5 +1,6 @@
 use std::f64::consts::PI;
 use std::ops::{Div, Sub};
+use std::time::Duration;
 
 use cgmath::{point2, point3, vec2, EuclideanSpace, Zero};
 use hexagon_tiles::fractional::FractionalHex;
@@ -60,22 +61,23 @@ impl Camera {
     }
 
     /// Scroll the camera to a new position.
-    fn scroll(z: Double, vel: Double) -> Double {
-        let z = z + vel * 0.4;
+    fn scroll(z: Double, vel: Double, ratio: Double) -> Double {
+        let z = z + vel * ratio * 0.6;
 
         clamp(z, FAR, 5.0)
     }
 
     /// Updates the camera's position.
-    pub fn update_pos(&mut self) {
+    pub fn update_pos(&mut self, elapsed: Duration) {
+        let ratio = elapsed.as_secs_f64() * 80.0;
         let pos = &mut self.pos;
 
         {
             let vel = &mut self.move_vel;
 
             if !vel.is_zero() {
-                pos.x += vel.x;
-                pos.y += vel.y;
+                pos.x += vel.x * ratio;
+                pos.y += vel.y * ratio;
 
                 *vel *= 0.9;
             }
@@ -84,7 +86,7 @@ impl Camera {
         {
             let vel = &mut self.scroll_vel;
             if !vel.is_zero() {
-                pos.z = Self::scroll(pos.z, *vel);
+                pos.z = Self::scroll(pos.z, *vel, ratio);
 
                 *vel *= 0.6;
             }

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use hashbrown::HashMap;
 use std::mem;
 use std::sync::Arc;
 
@@ -23,7 +23,7 @@ use crate::render::data::{InstanceData, HEX_GRID_LAYOUT};
 use crate::resource::item::id_eq_or_of_tag;
 use crate::resource::script::Script;
 use crate::resource::ResourceManager;
-use crate::util::cg::Float;
+use crate::util::cg::{Float, Matrix4};
 use crate::util::id::Id;
 
 /// Handles input.
@@ -469,11 +469,13 @@ impl Game {
                         (
                             *coord,
                             RenderUnit {
-                                instance: InstanceData::default().add_translation(vec3(
-                                    p.x as Float,
-                                    p.y as Float,
-                                    FAR as Float,
-                                )),
+                                instance: InstanceData::default().with_model_matrix(
+                                    Matrix4::from_translation(vec3(
+                                        p.x as Float,
+                                        p.y as Float,
+                                        FAR as Float,
+                                    )),
+                                ),
                                 tile: *id,
                                 model,
                             },

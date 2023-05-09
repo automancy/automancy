@@ -1,8 +1,9 @@
 use egui::TextureHandle;
+use std::fmt;
 use std::fmt::{Debug, Formatter};
-use std::{collections::HashMap, fmt};
 
 use flexstr::SharedStr;
+use hashbrown::HashMap;
 use kira::sound::static_sound::StaticSoundData;
 use kira::track::TrackHandle;
 use rune::Any;

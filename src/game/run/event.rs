@@ -1,9 +1,9 @@
-use std::collections::HashMap;
+use hashbrown::HashMap;
 use std::error::Error;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use cgmath::{point2, vec3, EuclideanSpace};
+use cgmath::{point2, vec3, EuclideanSpace, Matrix4};
 use egui_winit_vulkano::Gui;
 
 use fuse_rust::Fuse;
@@ -30,7 +30,6 @@ use crate::util::colors::WithAlpha;
 use crate::util::id::Id;
 
 /// Stores information that lives for the entire lifetime of the session, and is not dropped at the end of one event cycle or handled elsewhere.
-#[derive(Default)]
 pub struct EventLoopStorage {
     /// fuzzy search engine
     pub fuse: Fuse,
@@ -55,6 +54,30 @@ pub struct EventLoopStorage {
     pub linking_tile: Option<TileCoord>,
     /// the last camera position, in populate coord
     pub last_camera_chunk_coord: Option<ChunkCoord>,
+    /// the instant the last frame started rendering
+    pub last_frame_start: Instant,
+    /// the elapsed time between each frame
+    pub elapsed: Duration,
+}
+
+impl Default for EventLoopStorage {
+    fn default() -> Self {
+        Self {
+            fuse: Default::default(),
+            closed: false,
+            filter: "".to_string(),
+            input_handler: Default::default(),
+            selected_tile_states: Default::default(),
+            selected_id: None,
+            already_placed_at: None,
+            config_open: None,
+            tag_cache: Default::default(),
+            linking_tile: None,
+            last_camera_chunk_coord: None,
+            last_frame_start: Instant::now(),
+            elapsed: Default::default(),
+        }
+    }
 }
 
 /// Triggers every time the event loop is run once.
@@ -97,7 +120,7 @@ pub fn on_event(
 
             block_on(setup.sys.shutdown())?;
 
-            *control_flow = ControlFlow::Exit;
+            control_flow.set_exit();
 
             loop_store.closed = true;
 
@@ -122,12 +145,6 @@ pub fn on_event(
         }
 
         Event::MainEventsCleared => {
-            setup.camera.update_pos();
-            setup.camera.update_pointing_at(
-                loop_store.input_handler.main_pos,
-                window_size.width as Double,
-                window_size.height as Double,
-            );
             renderer.gpu.window.request_redraw();
         }
 
@@ -293,6 +310,15 @@ pub fn on_event(
     }
 
     if event == Event::RedrawRequested(renderer.gpu.window.id()) {
+        loop_store.last_frame_start = Instant::now();
+
+        setup.camera.update_pos(loop_store.elapsed);
+        setup.camera.update_pointing_at(
+            loop_store.input_handler.main_pos,
+            window_size.width as Double,
+            window_size.height as Double,
+        );
+
         let (selection_send, mut selection_recv) = mpsc::channel(1);
 
         gui.begin_frame();
@@ -353,13 +379,14 @@ pub fn on_event(
 
                 let glow = (time.as_secs_f64() * 3.0).sin() / 10.0;
 
-                let instance = InstanceData::default()
-                    .add_translation(vec3(
+                let instance = InstanceData {
+                    model_matrix: Matrix4::from_translation(vec3(
                         mouse_pos.x as Float,
                         mouse_pos.y as Float,
                         FAR as Float,
-                    ))
-                    .with_color_offset(colors::TRANSPARENT.with_alpha(glow as Float).to_array());
+                    )),
+                    color_offset: colors::TRANSPARENT.with_alpha(glow as Float).to_array(),
+                };
 
                 gui_instances.push((instance.into(), model));
             }
@@ -393,6 +420,7 @@ pub fn on_event(
         ));
 
         renderer.render(setup, &render_info, gui_instances, extra_vertices, gui);
+        loop_store.elapsed = Instant::now().duration_since(loop_store.last_frame_start);
     }
     Ok(())
 }

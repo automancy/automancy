@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use hashbrown::HashMap;
 use std::ffi::OsStr;
 use std::fs::{read_dir, read_to_string, File};
 use std::io::BufReader;

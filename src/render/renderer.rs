@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use hashbrown::HashMap;
 use std::f32::consts::PI;
 use std::sync::Arc;
 
@@ -43,7 +43,7 @@ use crate::util::colors::WithAlpha;
 use crate::util::id::Id;
 
 /// render distance
-pub const RENDER_RANGE: TileUnit = 64;
+pub const RENDER_RANGE: TileUnit = 48;
 
 pub struct Renderer {
     resource_man: Arc<ResourceManager>,
@@ -108,7 +108,7 @@ impl Renderer {
                         {
                             Some(GameMsg::ForwardMsgToTile(
                                 *coord,
-                                TileEntityMsg::GetDataValueWithSelfData("target"),
+                                TileEntityMsg::GetDataValueAndCoord("target"),
                             ))
                         } else {
                             None
@@ -153,21 +153,26 @@ impl Renderer {
             for q in -RENDER_RANGE..=RENDER_RANGE {
                 for r in -RENDER_RANGE.max(-q - RENDER_RANGE)..=RENDER_RANGE.min(-q + RENDER_RANGE)
                 {
-                    let pos = Hex::new(q + pos.q(), r + pos.r());
+                    let pos: TileCoord = Hex::new(q + pos.q(), r + pos.r()).into();
 
-                    instances.entry(pos.into()).or_insert_with(|| {
-                        let p = hex_to_pixel(HEX_GRID_LAYOUT, pos);
+                    if !instances.contains_key(&pos) {
+                        let p = hex_to_pixel(HEX_GRID_LAYOUT, pos.into());
 
-                        RenderUnit {
-                            instance: InstanceData::default().add_translation(vec3(
-                                p.x as Float,
-                                p.y as Float,
-                                FAR as Float,
-                            )),
-                            tile: none,
-                            model: none,
-                        }
-                    });
+                        instances.insert(
+                            pos,
+                            RenderUnit {
+                                instance: InstanceData::default().with_model_matrix(
+                                    Matrix4::from_translation(vec3(
+                                        p.x as Float,
+                                        p.y as Float,
+                                        FAR as Float,
+                                    )),
+                                ),
+                                tile: none,
+                                model: none,
+                            },
+                        );
+                    }
                 }
             }
 
@@ -178,15 +183,14 @@ impl Renderer {
 
             let mut map = HashMap::new();
 
-            instances.into_values().for_each(
-                |RenderUnit {
-                     instance, model, ..
-                 }| {
-                    map.entry(model)
-                        .or_insert_with(|| Vec::with_capacity(32))
-                        .push((instance.into(), model))
-                },
-            );
+            for RenderUnit {
+                instance, model, ..
+            } in instances.into_values()
+            {
+                map.entry(model)
+                    .or_insert_with(|| Vec::with_capacity(32))
+                    .push((instance.into(), model))
+            }
 
             map.into_values().flatten().collect::<Vec<_>>()
         };

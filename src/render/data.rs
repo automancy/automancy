@@ -93,18 +93,28 @@ impl Default for InstanceData {
 }
 
 impl InstanceData {
+    #[inline]
     pub fn add_translation(mut self, translation: Vector3) -> Self {
         self.model_matrix = self.model_matrix * Matrix4::from_translation(translation);
 
         self
     }
 
+    #[inline]
     pub fn add_scale(mut self, scale: Float) -> Self {
         self.model_matrix = self.model_matrix * Matrix4::from_scale(scale);
 
         self
     }
 
+    #[inline]
+    pub fn with_model_matrix(mut self, model_matrix: Matrix4) -> Self {
+        self.model_matrix = model_matrix;
+
+        self
+    }
+
+    #[inline]
     pub fn with_color_offset(mut self, color_offset: VertexColor) -> Self {
         self.color_offset = color_offset;
 
