@@ -9,7 +9,7 @@ use hexagon_tiles::hex::Hex;
 use hexagon_tiles::layout::{hex_to_pixel, pixel_to_hex};
 use hexagon_tiles::point::point;
 use hexagon_tiles::traits::HexRound;
-use ractor::rpc::CallResult;
+use ractor::rpc::{multi_call, CallResult};
 use tokio::runtime::Runtime;
 
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
@@ -38,7 +38,7 @@ use crate::render::data::{
 use crate::render::gpu;
 use crate::render::gpu::Gpu;
 use crate::resource::ResourceManager;
-use crate::util::actor::{call_multi, multi_call};
+use crate::util::actor::call_multi;
 use crate::util::cg::{deg, matrix, Float, Matrix4, Point3};
 use crate::util::colors;
 use crate::util::colors::WithAlpha;
@@ -154,11 +154,7 @@ impl Renderer {
                         ))
                         .unwrap();
 
-                    let tile_entities = tile_entities
-                        .into_iter()
-                        .flatten()
-                        .map(|entity| entity.get_cell())
-                        .collect::<Vec<_>>();
+                    let tile_entities = tile_entities.into_iter().flatten().collect::<Vec<_>>();
 
                     self.tile_targets = runtime
                         .block_on(multi_call(
