@@ -1,5 +1,5 @@
 pub fn handle_transaction(entity, registry, tick_count, item_stack, source_type, direction, random) {
-    if let (a, b, c) = match entity.tile_state {
+    if let (a, b, c) = match entity.tile_modifier {
         0 => (TOP_LEFT(), BOTTOM_LEFT(), RIGHT()),
         1 => (TOP_RIGHT(), BOTTOM_RIGHT(), LEFT()),
     } {

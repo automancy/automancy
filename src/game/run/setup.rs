@@ -6,8 +6,8 @@ use flexstr::SharedStr;
 use kira::manager::backend::cpal::CpalBackend;
 use kira::manager::{AudioManager, AudioManagerSettings};
 use kira::track::{TrackBuilder, TrackHandle};
-use riker::actor::{ActorRef, ActorRefFactory};
-use riker::actors::{ActorSystem, SystemBuilder, Timer};
+use ractor::concurrency::JoinHandle;
+use ractor::{Actor, ActorRef};
 use vulkano::device::DeviceExtensions;
 use winit::event_loop::EventLoop;
 use winit::window::{Icon, Window};
@@ -26,10 +26,10 @@ pub struct GameSetup {
     pub audio_man: AudioManager,
     /// the resource manager
     pub resource_man: Arc<ResourceManager>,
-    /// the Riker actor system
-    pub sys: ActorSystem,
     /// the game messaging system
     pub game: ActorRef<GameMsg>,
+    /// the game's async handle, for graceful shutdown
+    pub game_handle: Option<JoinHandle<()>>,
     /// the egui frame
     pub frame: Frame,
     /// the camera
@@ -40,7 +40,7 @@ pub struct GameSetup {
 
 impl GameSetup {
     /// Initializes the game, filling all the necessary fields as well as creating an event loop.
-    pub fn setup() -> (EventLoop<()>, Gpu, Self) {
+    pub async fn setup() -> (EventLoop<()>, Gpu, Self) {
         // --- resources & data ---
         let mut audio_man =
             AudioManager::<CpalBackend>::new(AudioManagerSettings::default()).unwrap();
@@ -97,26 +97,21 @@ impl GameSetup {
 
         log::info!("Renderer setup complete");
         // --- setup game ---
-        let sys = SystemBuilder::new().name("automancy").create().unwrap();
-
         // TODO map selection
         let map_name = SharedStr::from_static("test");
 
-        let game = sys
-            .actor_of_args::<Game, (Arc<ResourceManager>, SharedStr)>(
-                "game",
-                (resource_man.clone(), map_name),
-            )
-            .unwrap();
-        game.send_msg(GameMsg::LoadMap(resource_man.clone()), None);
+        let (game, game_handle) = Actor::spawn(
+            Some("game".to_string()),
+            Game,
+            (resource_man.clone(), map_name),
+        )
+        .await
+        .unwrap();
 
-        sys.schedule(
-            TICK_INTERVAL,
-            TICK_INTERVAL,
-            game.clone(),
-            None,
-            GameMsg::Tick,
-        );
+        game.send_message(GameMsg::LoadMap(resource_man.clone()))
+            .unwrap();
+
+        game.send_interval(TICK_INTERVAL, || GameMsg::Tick);
 
         log::info!("loading completed!");
 
@@ -132,8 +127,8 @@ impl GameSetup {
             GameSetup {
                 audio_man,
                 resource_man,
-                sys,
                 game,
+                game_handle: Some(game_handle),
                 frame,
                 camera,
                 window,

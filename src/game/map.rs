@@ -3,19 +3,18 @@ use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::{collections::HashMap, path::PathBuf};
 
-use futures_executor::block_on;
-use riker::actor::ActorRef;
-use riker::actors::{ActorSystem, Context};
-use riker_patterns::ask::ask;
+use crate::game;
+use ractor::ActorRef;
 use serde::{Deserialize, Serialize};
+use tokio::runtime::Runtime;
 use zstd::{Decoder, Encoder};
 
 use crate::game::tile::coord::TileCoord;
 use crate::game::tile::entity::TileEntityMsg::{GetData, SetData};
 use crate::game::tile::entity::{
-    data_from_raw, data_to_raw, DataMap, DataMapRaw, TileEntityMsg, TileState,
+    data_from_raw, data_to_raw, DataMap, DataMapRaw, TileEntityMsg, TileModifier,
 };
-use crate::game::{Game, GameMsg};
+use crate::game::GameMsg;
 use crate::resource::ResourceManager;
 use crate::util::id::{Id, Interner};
 
@@ -23,7 +22,7 @@ pub const MAP_PATH: &str = "map";
 
 const MAP_BUFFER_SIZE: usize = 256 * 1024;
 
-pub type Tiles = HashMap<TileCoord, (Id, TileState)>;
+pub type Tiles = HashMap<TileCoord, (Id, TileModifier)>;
 pub type TileEntities = HashMap<TileCoord, ActorRef<TileEntityMsg>>;
 
 #[derive(Debug, Clone)]
@@ -38,7 +37,7 @@ pub struct Map {
 struct MapHeader(Vec<(Id, String)>);
 
 #[derive(Debug, Serialize, Deserialize)]
-struct TileData(Id, TileState, DataMapRaw);
+struct TileData(Id, TileModifier, DataMapRaw);
 
 impl Map {
     pub fn new_empty(map_name: String) -> Self {
@@ -54,7 +53,7 @@ impl Map {
         PathBuf::from(format!("{MAP_PATH}/{map_name}.bin"))
     }
 
-    pub fn save(&self, sys: &ActorSystem, interner: &Interner, tile_entities: TileEntities) {
+    pub fn save(&self, runtime: &Runtime, interner: &Interner, tile_entities: TileEntities) {
         drop(std::fs::create_dir_all(MAP_PATH));
 
         let path = Self::path(&self.map_name);
@@ -66,19 +65,24 @@ impl Map {
 
         let mut id_map = HashMap::new();
 
-        let tiles = self
+        let tile_data = self
             .tiles
             .iter()
-            .flat_map(|(coord, (id, tile_state))| {
+            .flat_map(|(coord, (id, tile_modifier))| {
                 if let Some(tile_entity) = tile_entities.get(coord) {
                     if !id_map.contains_key(id) {
                         id_map.insert(*id, interner.resolve(*id).unwrap().to_string());
                     }
 
-                    let data: DataMap = block_on(ask(sys, tile_entity, GetData));
+                    let data = runtime
+                        .block_on(tile_entity.call(GetData, None))
+                        .unwrap()
+                        .unwrap(); // TODO call multi
                     let data = data_to_raw(data, interner);
 
-                    Some((coord, TileData(*id, *tile_state, data)))
+                    tile_entity.stop(Some("Saving game".to_string()));
+
+                    Some((coord, TileData(*id, *tile_modifier, data)))
                 } else {
                     None
                 }
@@ -89,13 +93,13 @@ impl Map {
 
         let data = data_to_raw(self.data.clone(), interner);
 
-        serde_json::to_writer(&mut encoder, &(header, tiles, data)).unwrap();
+        serde_json::to_writer(&mut encoder, &(header, tile_data, data)).unwrap();
 
         encoder.do_finish().unwrap();
     }
 
-    pub fn load(
-        ctx: &Context<GameMsg>,
+    pub async fn load(
+        game: &ActorRef<GameMsg>,
         resource_man: &ResourceManager,
         map_name: String,
     ) -> (Self, TileEntities) {
@@ -110,31 +114,30 @@ impl Map {
         let reader = BufReader::with_capacity(MAP_BUFFER_SIZE, file);
         let decoder = Decoder::new(reader).unwrap();
 
-        let (header, tiles, data): (MapHeader, Vec<(TileCoord, TileData)>, DataMapRaw) =
+        let (header, tile_data, data): (MapHeader, Vec<(TileCoord, TileData)>, DataMapRaw) =
             serde_json::from_reader(decoder).unwrap();
 
         let id_reverse = header.0.into_iter().collect::<HashMap<_, _>>();
 
-        let (tiles, tile_entities): (Tiles, TileEntities) = tiles
-            .into_iter()
-            .flat_map(|(coord, TileData(id, tile_state, data))| {
-                if let Some(id) = id_reverse
-                    .get(&id)
-                    .and_then(|id| resource_man.interner.get(id.as_str()))
-                {
-                    let tile_entity = Game::new_tile(ctx, coord, id, tile_state);
-                    let data = data_from_raw(data, &resource_man.interner);
+        let mut tiles = HashMap::new();
+        let mut tile_entities = HashMap::new();
 
-                    data.into_iter().for_each(|(key, value)| {
-                        tile_entity.send_msg(SetData(key, value), None);
-                    });
+        for (coord, TileData(id, tile_modifier, data)) in tile_data.into_iter() {
+            if let Some(id) = id_reverse
+                .get(&id)
+                .and_then(|id| resource_man.interner.get(id.as_str()))
+            {
+                let tile_entity = game::new_tile(game, coord, id, tile_modifier).await;
+                let data = data_from_raw(data, &resource_man.interner);
 
-                    Some(((coord, (id, tile_state)), (coord, tile_entity)))
-                } else {
-                    None
-                }
-            })
-            .unzip();
+                data.into_iter().for_each(|(key, value)| {
+                    tile_entity.send_message(SetData(key, value)).unwrap();
+                });
+
+                tiles.insert(coord, (id, tile_modifier));
+                tile_entities.insert(coord, tile_entity);
+            }
+        }
 
         let data = data_from_raw(data, &resource_man.interner);
 

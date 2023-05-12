@@ -5,11 +5,12 @@ use std::sync::Arc;
 use cgmath::{vec3, SquareMatrix};
 use egui_winit_vulkano::Gui;
 
-use futures_executor::block_on;
 use hexagon_tiles::hex::Hex;
 use hexagon_tiles::layout::{hex_to_pixel, pixel_to_hex};
 use hexagon_tiles::point::point;
 use hexagon_tiles::traits::HexRound;
+use ractor::rpc::CallResult;
+use tokio::runtime::Runtime;
 
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
 use vulkano::command_buffer::{
@@ -26,6 +27,7 @@ use vulkano::sync;
 use vulkano::sync::GpuFuture;
 
 use crate::game::run::setup::GameSetup;
+use crate::game::ticking::TickUnit;
 use crate::game::tile::coord::{TileCoord, TileHex, TileUnit};
 use crate::game::tile::entity::{Data, TileEntityMsg};
 use crate::game::{GameMsg, RenderInfo, RenderUnit};
@@ -36,7 +38,7 @@ use crate::render::data::{
 use crate::render::gpu;
 use crate::render::gpu::Gpu;
 use crate::resource::ResourceManager;
-use crate::util::actor::ask_multi;
+use crate::util::actor::{call_multi, multi_call};
 use crate::util::cg::{deg, matrix, Float, Matrix4, Point3};
 use crate::util::colors;
 use crate::util::colors::WithAlpha;
@@ -52,6 +54,8 @@ pub struct Renderer {
 
     pub gpu: Gpu,
 
+    tile_targets: Vec<(TileCoord, Option<Data>)>,
+    last_tiles_update: Option<TickUnit>,
     previous_frame_end: Option<Box<dyn GpuFuture + Send + Sync>>,
 }
 
@@ -66,6 +70,8 @@ impl Renderer {
 
             gpu,
 
+            tile_targets: Default::default(),
+            last_tiles_update: None,
             previous_frame_end: Some(sync::now(device).boxed_send_sync()),
         }
     }
@@ -74,12 +80,32 @@ impl Renderer {
 impl Renderer {
     pub fn render(
         &mut self,
+        runtime: &Runtime,
         setup: &GameSetup,
         map_render_info: &RenderInfo,
         gui_instances: Vec<(RawInstanceData, Id)>,
         extra_vertices: Vec<GameVertex>,
         gui: &mut Gui,
     ) {
+        let update = {
+            let new_last_tiles_update = runtime
+                .block_on(setup.game.call(GameMsg::LastTilesUpdate, None))
+                .unwrap()
+                .unwrap();
+
+            if self.last_tiles_update.is_some() {
+                if self.last_tiles_update.unwrap() < new_last_tiles_update {
+                    self.last_tiles_update = Some(new_last_tiles_update);
+                    true
+                } else {
+                    false
+                }
+            } else {
+                self.last_tiles_update = Some(new_last_tiles_update);
+                true
+            }
+        };
+
         let instances = {
             let pos = setup.camera.get_pos();
             let pos = point(pos.x, pos.y);
@@ -94,8 +120,8 @@ impl Renderer {
 
             let mut instances = map_render_info.clone();
 
-            {
-                let messages = instances
+            if update {
+                let coords = instances
                     .iter()
                     .flat_map(|(coord, RenderUnit { tile, .. })| {
                         if self
@@ -106,47 +132,66 @@ impl Renderer {
                             .model_attributes
                             .auto_rotate
                         {
-                            Some(GameMsg::ForwardMsgToTile(
-                                *coord,
-                                TileEntityMsg::GetDataValueAndCoord("target"),
-                            ))
+                            Some(*coord)
                         } else {
                             None
                         }
                     })
                     .collect::<Vec<_>>();
 
-                let size = messages.len();
+                let size = coords.len();
                 if size > 0 {
-                    let targets: Vec<(TileCoord, Option<Data>)> = block_on(ask_multi(
-                        &setup.sys,
-                        &setup.game,
-                        messages.into_iter(),
-                        size,
-                    ));
+                    let tile_entities = runtime
+                        .block_on(call_multi(
+                            &setup.game,
+                            |reply| {
+                                coords
+                                    .into_iter()
+                                    .map(|coord| GameMsg::GetTileEntityMulti(coord, reply.clone()))
+                                    .collect::<Vec<_>>()
+                            },
+                            size,
+                        ))
+                        .unwrap();
 
-                    for (coord, target) in targets {
-                        let theta: Float =
-                            if let Some(target) = target.as_ref().and_then(Data::as_coord) {
-                                match *target {
-                                    TileCoord::RIGHT => -60.0,
-                                    TileCoord::BOTTOM_RIGHT => -120.0,
-                                    TileCoord::BOTTOM_LEFT => -180.0,
-                                    TileCoord::LEFT => -240.0,
-                                    TileCoord::TOP_LEFT => -300.0,
-                                    _ => 0.0,
-                                }
-                            } else {
-                                0.0
-                            };
+                    let tile_entities = tile_entities
+                        .into_iter()
+                        .flatten()
+                        .map(|entity| entity.get_cell())
+                        .collect::<Vec<_>>();
 
-                        let m = instances
-                            .get_mut(&coord)
-                            .map(|v| &mut v.instance.model_matrix)
-                            .unwrap();
+                    self.tile_targets = runtime
+                        .block_on(multi_call(
+                            tile_entities.as_slice(),
+                            |reply| TileEntityMsg::GetDataValueAndCoord("target", reply),
+                            None,
+                        ))
+                        .unwrap()
+                        .into_iter()
+                        .map(CallResult::unwrap)
+                        .collect();
+                }
+            }
 
-                        *m = *m * Matrix4::from_angle_z(deg(theta));
+            for (coord, target) in &self.tile_targets {
+                let theta: Float = if let Some(target) = target.as_ref().and_then(Data::as_coord) {
+                    match *target {
+                        TileCoord::RIGHT => -60.0,
+                        TileCoord::BOTTOM_RIGHT => -120.0,
+                        TileCoord::BOTTOM_LEFT => -180.0,
+                        TileCoord::LEFT => -240.0,
+                        TileCoord::TOP_LEFT => -300.0,
+                        _ => 0.0,
                     }
+                } else {
+                    0.0
+                };
+
+                if let Some(m) = instances
+                    .get_mut(coord)
+                    .map(|v| &mut v.instance.model_matrix)
+                {
+                    *m = *m * Matrix4::from_angle_z(deg(theta))
                 }
             }
 

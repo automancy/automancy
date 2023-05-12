@@ -1,10 +1,9 @@
 use std::sync::Arc;
 
 use egui::NumExt;
+use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort};
 
 use rand::{thread_rng, RngCore};
-use riker::actor::{Context, Sender};
-use riker::actors::{Actor, ActorFactoryArgs, BasicActorRef};
 use rune::{Any, ContextError, Module, Vm};
 use serde::{Deserialize, Serialize};
 
@@ -209,36 +208,33 @@ pub fn data_from_raw(data: DataMapRaw, interner: &Interner) -> DataMap {
 
 /// Represents a tile entity. A tile entity is the actor that allows the tile to take, process, and output resources.
 #[derive(Debug, Clone, Any)]
-pub struct TileEntity {
+pub struct TileEntityState {
     /// The ID of the tile entity.
     #[rune(get, copy)]
-    id: Id,
+    pub id: Id,
     /// The coordinates of the tile entity.
     #[rune(get, copy)]
-    coord: TileCoord,
+    pub coord: TileCoord,
     /// The tile state of the tile entity.
     #[rune(get, copy)]
-    tile_state: TileState,
+    pub tile_modifier: TileModifier,
     /// The data map stored by the tile.
     #[rune(get, set)] // TODO use methods
-    data: DataMap,
-    /// The actor system.
-    game: BasicActorRef,
+    pub data: DataMap,
 
     tick_pause: bool,
     adjacent_fulfilled: bool,
 }
 
-impl TileEntity {
+impl TileEntityState {
     /// Creates a new tile entity.
-    fn new(game: BasicActorRef, id: Id, coord: TileCoord, tile_state: TileState) -> Self {
+    fn new(id: Id, coord: TileCoord, tile_modifier: TileModifier) -> Self {
         Self {
             id,
             coord,
-            tile_state,
+            tile_modifier,
             data: DataMap::default(),
 
-            game,
             tick_pause: false,
             adjacent_fulfilled: false,
         }
@@ -261,9 +257,9 @@ impl TileEntity {
     }
 }
 
-pub type TileState = i32;
+pub type TileModifier = i32;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum TileEntityMsg {
     Tick {
         resource_man: Arc<ResourceManager>,
@@ -275,6 +271,7 @@ pub enum TileEntityMsg {
         item_stack: ItemStack,
         source_type: TileType,
         direction: TileCoord,
+        source: ActorRef<TileEntityMsg>,
     },
     TransactionResult {
         resource_man: Arc<ResourceManager>,
@@ -291,50 +288,62 @@ pub enum TileEntityMsg {
     },
     SetData(String, Data),
     RemoveData(&'static str),
-    GetData,
-    GetDataValue(&'static str),
-    GetDataValueAndCoord(&'static str),
+    GetData(RpcReplyPort<DataMap>),
+    GetDataValue(&'static str, RpcReplyPort<Option<Data>>),
+    GetDataValueAndCoord(&'static str, RpcReplyPort<(TileCoord, Option<Data>)>),
 }
 
+pub struct TileEntity {
+    pub(crate) game: ActorRef<GameMsg>,
+}
+
+#[async_trait::async_trait]
 impl Actor for TileEntity {
     type Msg = TileEntityMsg;
+    type State = TileEntityState;
+    type Arguments = (Id, TileCoord, TileModifier);
 
-    fn post_stop(&mut self) {
-        self.data.clear();
+    async fn pre_start(
+        &self,
+        _myself: ActorRef<Self::Msg>,
+        args: Self::Arguments,
+    ) -> Result<Self::State, ActorProcessingErr> {
+        Ok(TileEntityState::new(args.0, args.1, args.2))
     }
 
-    fn recv(&mut self, ctx: &Context<Self::Msg>, msg: Self::Msg, sender: Sender) {
-        let myself = Some(ctx.myself().into());
-
-        match msg {
+    async fn handle(
+        &self,
+        myself: ActorRef<Self::Msg>,
+        message: Self::Msg,
+        state: &mut Self::State,
+    ) -> Result<(), ActorProcessingErr> {
+        match message {
             Tick {
                 resource_man,
                 tick_count,
             } => {
-                self.tick_pause = false;
+                state.tick_pause = false;
 
-                let tile_type = &resource_man.registry.get_tile(&self.id).unwrap().tile_type;
+                let tile_type = &resource_man.registry.get_tile(&state.id).unwrap().tile_type;
 
                 match tile_type {
                     Machine(_) => {
                         if tick_count % 10 == 0 {
-                            if let Some(script) = self.data.get("script").and_then(Data::as_id) {
+                            if let Some(script) = state.data.get("script").and_then(Data::as_id) {
                                 if let Some(script) = resource_man.registry.get_script(script) {
                                     self.game
-                                        .try_tell(
-                                            GameMsg::CheckAdjacent {
-                                                script,
-                                                coord: self.coord,
-                                            },
-                                            myself.clone(),
-                                        )
+                                        .send_message(GameMsg::CheckAdjacent {
+                                            script,
+                                            coord: state.coord,
+                                            self_coord: state.coord,
+                                        })
                                         .unwrap();
                                 }
                             }
                         }
 
-                        if !self.adjacent_fulfilled {
-                            return;
+                        if !state.adjacent_fulfilled {
+                            return Ok(());
                         }
 
                         let function =
@@ -344,7 +353,7 @@ impl Actor for TileEntity {
                         let output = vm
                             .call(
                                 ["handle_tick"],
-                                (&mut *self, &resource_man.registry, tile_type, tick_count),
+                                (state.clone(), &resource_man.registry, tile_type, tick_count),
                             )
                             .unwrap();
 
@@ -378,8 +387,9 @@ impl Actor for TileEntity {
                                 .take_downcast()
                                 .unwrap();
 
-                            self.send_tile_msg(
-                                myself,
+                            send_to_tile_coord(
+                                self,
+                                state,
                                 target_coord,
                                 Transaction {
                                     resource_man: resource_man.clone(),
@@ -387,29 +397,31 @@ impl Actor for TileEntity {
                                     item_stack,
                                     source_type: tile_type.clone(),
                                     direction,
+                                    source: myself,
                                 },
                             );
                         }
                     }
                     Transfer(id) => {
                         if id == &resource_man.registry.tile_ids.node {
-                            if let Some((target, link)) = self
+                            if let Some((target, link)) = state
                                 .data
                                 .get("target")
                                 .and_then(Data::as_coord)
                                 .cloned()
-                                .zip(self.data.get("link").and_then(Data::as_coord).cloned())
+                                .zip(state.data.get("link").and_then(Data::as_coord).cloned())
                             {
-                                self.send_tile_msg(
-                                    myself,
-                                    self.coord + link,
+                                send_to_tile_coord(
+                                    self,
+                                    state,
+                                    state.coord + link,
                                     ExtractRequest {
                                         resource_man,
                                         tick_count,
-                                        coord: self.coord + target,
+                                        coord: state.coord + target,
                                         direction: -target,
                                     },
-                                )
+                                );
                             }
                         }
                     }
@@ -422,22 +434,62 @@ impl Actor for TileEntity {
                 item_stack,
                 source_type,
                 direction,
+                source,
             } => {
-                if let Some(sender) = sender {
-                    let tile_type = resource_man.registry.get_tile(&self.id).unwrap().tile_type;
+                let tile_type = resource_man.registry.get_tile(&state.id).unwrap().tile_type;
 
-                    match &tile_type {
-                        Machine(_) => {
-                            let function = resource_man.functions
-                                [&resource_man.registry.tile_ids.machine]
-                                .clone();
+                match &tile_type {
+                    Machine(_) => {
+                        let function =
+                            resource_man.functions[&resource_man.registry.tile_ids.machine].clone();
+                        let mut vm = Vm::new(function.context, function.unit);
+
+                        let output = vm
+                            .call(
+                                ["handle_transaction"],
+                                (
+                                    state,
+                                    &resource_man.registry,
+                                    tick_count,
+                                    item_stack,
+                                    &source_type,
+                                    direction,
+                                    random(),
+                                ),
+                            )
+                            .unwrap();
+
+                        if let Ok(output) = output.into_result() {
+                            let result: Result<ItemStack, TransactionError> = output
+                                .take()
+                                .unwrap()
+                                .map(|v| {
+                                    v.into_any().unwrap().take_downcast::<ItemStack>().unwrap()
+                                })
+                                .map_err(|v| {
+                                    v.into_any()
+                                        .unwrap()
+                                        .take_downcast::<TransactionError>()
+                                        .unwrap()
+                                });
+
+                            source
+                                .send_message(TransactionResult {
+                                    result,
+                                    resource_man,
+                                })
+                                .unwrap();
+                        }
+                    }
+                    Transfer(id) => {
+                        if let Some(function) = resource_man.functions.get(id).cloned() {
                             let mut vm = Vm::new(function.context, function.unit);
 
                             let output = vm
                                 .call(
                                     ["handle_transaction"],
                                     (
-                                        &mut *self,
+                                        state.clone(),
                                         &resource_man.registry,
                                         tick_count,
                                         item_stack,
@@ -448,178 +500,123 @@ impl Actor for TileEntity {
                                 )
                                 .unwrap();
 
-                            if let Ok(output) = output.into_result() {
-                                let result: Result<ItemStack, TransactionError> = output
-                                    .take()
+                            if let Ok(output) = output.into_tuple() {
+                                let output = output.take().unwrap();
+
+                                let target_coord: TileCoord = output
+                                    .get(0)
                                     .unwrap()
-                                    .map(|v| {
-                                        v.into_any().unwrap().take_downcast::<ItemStack>().unwrap()
+                                    .clone()
+                                    .into_any()
+                                    .unwrap()
+                                    .take_downcast()
+                                    .unwrap();
+
+                                let item_stack: ItemStack = output
+                                    .get(1)
+                                    .unwrap()
+                                    .clone()
+                                    .into_any()
+                                    .unwrap()
+                                    .take_downcast()
+                                    .unwrap();
+
+                                let target: TileCoord = output
+                                    .get(2)
+                                    .unwrap()
+                                    .clone()
+                                    .into_any()
+                                    .unwrap()
+                                    .take_downcast()
+                                    .unwrap();
+
+                                send_to_tile_coord(
+                                    self,
+                                    state,
+                                    target_coord,
+                                    Transaction {
+                                        resource_man,
+                                        tick_count,
+                                        item_stack,
+                                        source_type: tile_type,
+                                        direction: -target,
+                                        source,
+                                    },
+                                );
+                            }
+                        }
+                    }
+                    Void => {
+                        source
+                            .send_message(TransactionResult {
+                                resource_man,
+                                result: Ok(item_stack),
+                            })
+                            .unwrap();
+                    }
+                    Storage(_) => {
+                        if let Some((item, amount)) = state
+                            .data
+                            .get("storage")
+                            .and_then(Data::as_id)
+                            .and_then(|id| resource_man.registry.get_item(id))
+                            .zip(state.data.get("amount").and_then(Data::as_amount).cloned())
+                        {
+                            if item_stack.item == item {
+                                let buffer = state
+                                    .data
+                                    .entry("buffer".to_owned())
+                                    .or_insert_with(Data::inventory)
+                                    .as_inventory_mut()
+                                    .unwrap();
+                                let stored = buffer.0.entry(item.id).or_insert(0);
+
+                                if *stored > amount {
+                                    *stored = amount;
+                                }
+
+                                if *stored == amount {
+                                    source
+                                        .send_message(TransactionResult {
+                                            resource_man,
+                                            result: Err(Full),
+                                        })
+                                        .unwrap();
+
+                                    return Ok(());
+                                }
+
+                                let inserting = item_stack.amount.at_most(amount - *stored);
+                                *stored += inserting;
+
+                                source
+                                    .send_message(TransactionResult {
+                                        resource_man,
+                                        result: Ok(ItemStack {
+                                            item,
+                                            amount: inserting,
+                                        }),
                                     })
-                                    .map_err(|v| {
-                                        v.into_any()
-                                            .unwrap()
-                                            .take_downcast::<TransactionError>()
-                                            .unwrap()
-                                    });
-
-                                sender
-                                    .try_tell(
-                                        TransactionResult {
-                                            result,
-                                            resource_man,
-                                        },
-                                        myself,
-                                    )
-                                    .unwrap();
-                            }
-                        }
-                        Transfer(id) => {
-                            if let Some(function) = resource_man.functions.get(id).cloned() {
-                                let mut vm = Vm::new(function.context, function.unit);
-
-                                let output = vm
-                                    .call(
-                                        ["handle_transaction"],
-                                        (
-                                            &mut *self,
-                                            &resource_man.registry,
-                                            tick_count,
-                                            item_stack,
-                                            &source_type,
-                                            direction,
-                                            random(),
-                                        ),
-                                    )
                                     .unwrap();
 
-                                if let Ok(output) = output.into_tuple() {
-                                    let output = output.take().unwrap();
-
-                                    let target_coord: TileCoord = output
-                                        .get(0)
-                                        .unwrap()
-                                        .clone()
-                                        .into_any()
-                                        .unwrap()
-                                        .take_downcast()
-                                        .unwrap();
-
-                                    let item_stack: ItemStack = output
-                                        .get(1)
-                                        .unwrap()
-                                        .clone()
-                                        .into_any()
-                                        .unwrap()
-                                        .take_downcast()
-                                        .unwrap();
-
-                                    let target: TileCoord = output
-                                        .get(2)
-                                        .unwrap()
-                                        .clone()
-                                        .into_any()
-                                        .unwrap()
-                                        .take_downcast()
-                                        .unwrap();
-
-                                    self.send_tile_msg(
-                                        Some(sender),
-                                        target_coord,
-                                        Transaction {
-                                            resource_man,
-                                            tick_count,
-                                            item_stack,
-                                            source_type: tile_type,
-                                            direction: -target,
-                                        },
-                                    );
-                                }
+                                return Ok(());
                             }
                         }
-                        Void => {
-                            sender
-                                .try_tell(
-                                    TransactionResult {
-                                        resource_man,
-                                        result: Ok(item_stack),
-                                    },
-                                    myself,
-                                )
-                                .unwrap();
-                        }
-                        Storage(_) => {
-                            if let Some((item, amount)) = self
-                                .data
-                                .get("storage")
-                                .and_then(Data::as_id)
-                                .and_then(|id| resource_man.registry.get_item(id))
-                                .zip(self.data.get("amount").and_then(Data::as_amount).cloned())
-                            {
-                                if item_stack.item == item {
-                                    let buffer = self
-                                        .data
-                                        .entry("buffer".to_owned())
-                                        .or_insert_with(Data::inventory)
-                                        .as_inventory_mut()
-                                        .unwrap();
-                                    let stored = buffer.0.entry(item.id).or_insert(0);
 
-                                    if *stored > amount {
-                                        *stored = amount;
-                                    }
-
-                                    if *stored == amount {
-                                        sender
-                                            .try_tell(
-                                                TransactionResult {
-                                                    resource_man,
-                                                    result: Err(Full),
-                                                },
-                                                myself,
-                                            )
-                                            .unwrap();
-                                        return;
-                                    }
-
-                                    let inserting = item_stack.amount.at_most(amount - *stored);
-                                    *stored += inserting;
-
-                                    sender
-                                        .try_tell(
-                                            TransactionResult {
-                                                resource_man,
-                                                result: Ok(ItemStack {
-                                                    item,
-                                                    amount: inserting,
-                                                }),
-                                            },
-                                            myself,
-                                        )
-                                        .unwrap();
-                                    return;
-                                }
-                            }
-                            sender
-                                .try_tell(
-                                    TransactionResult {
-                                        resource_man,
-                                        result: Err(NotSuitable),
-                                    },
-                                    myself,
-                                )
-                                .unwrap();
-                        }
-                        _ => {
-                            sender
-                                .try_tell(
-                                    TransactionResult {
-                                        resource_man,
-                                        result: Err(NotSuitable),
-                                    },
-                                    myself,
-                                )
-                                .unwrap();
-                        }
+                        source
+                            .send_message(TransactionResult {
+                                resource_man,
+                                result: Err(NotSuitable),
+                            })
+                            .unwrap();
+                    }
+                    _ => {
+                        source
+                            .send_message(TransactionResult {
+                                resource_man,
+                                result: Err(NotSuitable),
+                            })
+                            .unwrap();
                     }
                 }
             }
@@ -628,18 +625,18 @@ impl Actor for TileEntity {
                 result,
             } => {
                 if let Ok(transferred) = result {
-                    let tile_type = &resource_man.registry.get_tile(&self.id).unwrap().tile_type;
+                    let tile_type = &resource_man.registry.get_tile(&state.id).unwrap().tile_type;
 
                     match tile_type {
                         Machine(_) => {
-                            if let Some(inputs) = self
+                            if let Some(inputs) = state
                                 .data
                                 .get("script")
                                 .and_then(Data::as_id)
                                 .and_then(|script| resource_man.registry.get_script(script))
                                 .and_then(|script| script.instructions.inputs)
                             {
-                                let buffer = self
+                                let buffer = state
                                     .data
                                     .get_mut("buffer")
                                     .and_then(Data::as_inventory_mut)
@@ -658,8 +655,10 @@ impl Actor for TileEntity {
                             }
                         }
                         Storage(_) => {
-                            if let Some(buffer) =
-                                self.data.get_mut("buffer").and_then(Data::as_inventory_mut)
+                            if let Some(buffer) = state
+                                .data
+                                .get_mut("buffer")
+                                .and_then(Data::as_inventory_mut)
                             {
                                 buffer.take(transferred.item.id, transferred.amount);
                             }
@@ -669,29 +668,21 @@ impl Actor for TileEntity {
                 }
             }
             SetData(key, value) => {
-                self.data.insert(key, value);
+                state.data.insert(key, value);
             }
-            GetData => {
-                if let Some(sender) = sender {
-                    sender.try_tell(self.data.clone(), myself).unwrap()
-                }
+            GetData(reply) => {
+                reply.send(state.data.clone()).unwrap();
             }
-            GetDataValue(key) => {
-                if let Some(sender) = sender {
-                    sender
-                        .try_tell(self.data.get(key).cloned(), myself)
-                        .unwrap()
-                }
+            GetDataValue(key, reply) => {
+                reply.send(state.data.get(key).cloned()).unwrap();
             }
-            GetDataValueAndCoord(key) => {
-                if let Some(sender) = sender {
-                    sender
-                        .try_tell((self.coord, self.data.get(key).cloned()), myself)
-                        .unwrap()
-                }
+            GetDataValueAndCoord(key, reply) => {
+                reply
+                    .send((state.coord, state.data.get(key).cloned()))
+                    .unwrap();
             }
             RemoveData(key) => {
-                self.data.remove(key);
+                state.data.remove(key);
             }
             ExtractRequest {
                 resource_man,
@@ -699,28 +690,34 @@ impl Actor for TileEntity {
                 coord,
                 direction,
             } => {
-                if self.tick_pause {
-                    return;
+                if state.tick_pause {
+                    return Ok(());
                 }
 
-                let tile_type = &resource_man.registry.get_tile(&self.id).unwrap().tile_type;
+                let tile_type = &resource_man.registry.get_tile(&state.id).unwrap().tile_type;
 
                 match tile_type {
                     Storage(_) => {
-                        if let Some(((item, amount), inventory)) = self
+                        if let Some(((item, amount), inventory)) = state
                             .data
                             .get("storage")
                             .and_then(Data::as_id)
                             .and_then(|id| resource_man.registry.get_item(id))
-                            .zip(self.data.get("amount").and_then(Data::as_amount).cloned())
-                            .zip(self.data.get_mut("buffer").and_then(Data::as_inventory_mut))
+                            .zip(state.data.get("amount").and_then(Data::as_amount).cloned())
+                            .zip(
+                                state
+                                    .data
+                                    .get_mut("buffer")
+                                    .and_then(Data::as_inventory_mut),
+                            )
                         {
                             let stored = inventory.get(item.id);
                             let extracting = stored.min(amount);
 
                             if extracting > 0 {
-                                self.send_tile_msg(
-                                    myself,
+                                send_to_tile_coord(
+                                    self,
+                                    state,
                                     coord,
                                     Transaction {
                                         resource_man,
@@ -731,20 +728,23 @@ impl Actor for TileEntity {
                                         },
                                         source_type: tile_type.clone(),
                                         direction,
+                                        source: myself,
                                     },
                                 );
-                                self.tick_pause = true;
+
+                                state.tick_pause = true;
                             }
                         }
                     }
                     Transfer(id) => {
                         if id == &resource_man.registry.tile_ids.master_node {
                             if let Some(target) =
-                                self.data.get("target").and_then(Data::as_coord).cloned()
+                                state.data.get("target").and_then(Data::as_coord).cloned()
                             {
-                                self.send_tile_msg(
-                                    sender,
-                                    self.coord + target,
+                                send_to_tile_coord(
+                                    self,
+                                    state,
+                                    state.coord + target,
                                     ExtractRequest {
                                         resource_man,
                                         tick_count,
@@ -759,34 +759,28 @@ impl Actor for TileEntity {
                 }
             }
             AdjacentState { fulfilled } => {
-                self.adjacent_fulfilled = fulfilled;
+                state.adjacent_fulfilled = fulfilled;
             }
         }
+
+        Ok(())
     }
 }
 
-impl TileEntity {
-    fn send_tile_msg(
-        &mut self,
-        sender: Option<BasicActorRef>,
-        coord: TileCoord,
-        msg: TileEntityMsg,
-    ) {
-        match self
-            .game
-            .try_tell(GameMsg::ForwardMsgToTile(coord, msg), sender)
-        {
-            Ok(_) => {}
-            Err(_) => {
-                self.data.remove("target");
-            }
+fn send_to_tile_coord(
+    myself: &TileEntity,
+    state: &mut TileEntityState,
+    coord: TileCoord,
+    message: TileEntityMsg,
+) {
+    match myself
+        .game
+        .send_message(GameMsg::ForwardMsgToTile(coord, message))
+    {
+        Ok(_) => {}
+        Err(_) => {
+            state.data.remove("target");
         }
-    }
-}
-
-impl ActorFactoryArgs<(BasicActorRef, Id, TileCoord, TileState)> for TileEntity {
-    fn create_args(args: (BasicActorRef, Id, TileCoord, TileState)) -> Self {
-        Self::new(args.0, args.1, args.2, args.3)
     }
 }
 

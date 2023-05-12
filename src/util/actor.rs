@@ -1,55 +1,92 @@
-use futures::channel::mpsc;
-use futures::future::RemoteHandle;
-use futures::StreamExt;
-use riker::actors::{Actor, Context, Props, Run, Sender, Tell};
-use riker::actors::{ActorRefFactory, TmpActorRefFactory};
-use riker::Message;
+use ractor::concurrency::{Duration, MpscSender};
+use ractor::rpc::CallResult;
+use ractor::{concurrency, ActorCell, Message, MessagingErr, RpcReplyPort};
 
-pub fn ask_multi<Msg, Ctx, R, T>(
-    ctx: &Ctx,
-    receiver: &T,
-    msgs: impl Iterator<Item = Msg>,
+pub async fn call_multi<TMessage, TReply, TMsgBuilder>(
+    actor: &ActorCell,
+    msg_builder: TMsgBuilder,
     size: usize,
-) -> RemoteHandle<Vec<R>>
+) -> Result<Vec<TReply>, MessagingErr<TMessage>>
 where
-    Msg: Message,
-    R: Message,
-    Ctx: TmpActorRefFactory + Run,
-    T: Tell<Msg>,
+    TMessage: Message,
+    TMsgBuilder: FnOnce(MpscSender<TReply>) -> Vec<TMessage>,
 {
-    let (tx, rx) = mpsc::channel::<R>(size);
-
-    let props = Props::new_from_args(AskActor::new, (tx, size));
-    let actor = ctx.tmp_actor_of_props(props).unwrap();
+    let (tx, mut rx) = concurrency::mpsc_bounded(size);
+    let msgs = msg_builder(tx);
 
     for msg in msgs {
-        receiver.tell(msg, Some(actor.clone().into()));
+        actor.send_message::<TMessage>(msg)?;
     }
 
-    ctx.run(rx.collect()).unwrap()
-}
+    let mut replies = Vec::with_capacity(size);
 
-struct AskActor<Msg> {
-    tx: mpsc::Sender<Msg>,
-    size: usize,
-    sent: usize,
-}
-
-impl<Msg: Message> AskActor<Msg> {
-    fn new((tx, size): (mpsc::Sender<Msg>, usize)) -> AskActor<Msg> {
-        AskActor { tx, size, sent: 0 }
+    // wait for the reply
+    while let Some(result) = rx.recv().await {
+        replies.push(result);
     }
+
+    Ok(replies)
 }
 
-impl<Msg: Message> Actor for AskActor<Msg> {
-    type Msg = Msg;
+pub async fn multi_call<TMessage, TReply, TMsgBuilder>(
+    actors: &[ActorCell],
+    msg_builder: TMsgBuilder,
+    timeout_option: Option<Duration>,
+) -> Result<Vec<CallResult<TReply>>, MessagingErr<TMessage>>
+where
+    TMessage: Message,
+    TReply: Send + 'static,
+    TMsgBuilder: Fn(RpcReplyPort<TReply>) -> TMessage,
+{
+    let mut rx_ports = Vec::with_capacity(actors.len());
+    // send to all actors
+    for actor in actors {
+        let (tx, rx) = concurrency::oneshot();
+        let port: RpcReplyPort<TReply> = match timeout_option {
+            Some(duration) => (tx, duration).into(),
+            None => tx.into(),
+        };
+        actor.send_message::<TMessage>(msg_builder(port))?;
+        rx_ports.push(rx);
+    }
 
-    fn recv(&mut self, ctx: &Context<Msg>, msg: Msg, _: Sender) {
-        self.tx.try_send(msg).unwrap();
-
-        self.sent += 1;
-        if self.sent >= self.size {
-            ctx.stop(&ctx.myself);
+    let mut join_set = tokio::task::JoinSet::new();
+    for (i, rx) in rx_ports.into_iter().enumerate() {
+        if let Some(duration) = timeout_option {
+            join_set.spawn(async move {
+                (
+                    i,
+                    match tokio::time::timeout(duration, rx).await {
+                        Ok(Ok(result)) => CallResult::Success(result),
+                        Ok(Err(_send_err)) => CallResult::SenderError,
+                        Err(_) => CallResult::Timeout,
+                    },
+                )
+            });
+        } else {
+            join_set.spawn(async move {
+                (
+                    i,
+                    match rx.await {
+                        Ok(result) => CallResult::Success(result),
+                        Err(_send_err) => CallResult::SenderError,
+                    },
+                )
+            });
         }
     }
+
+    // we threaded the index in order to maintain ordering from the originally called
+    // actors.
+    let mut results = Vec::new();
+    results.resize_with(join_set.len(), || CallResult::Timeout);
+    while let Some(result) = join_set.join_next().await {
+        match result {
+            Ok((i, r)) => results[i] = r,
+            _ => return Err(MessagingErr::ChannelClosed),
+        }
+    }
+
+    // wait for the replies
+    Ok(results)
 }

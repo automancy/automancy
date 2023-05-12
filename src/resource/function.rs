@@ -10,7 +10,7 @@ use serde::Deserialize;
 
 use crate::game::item::ItemStack;
 use crate::game::tile::coord::TileCoord;
-use crate::game::tile::entity::TileEntity;
+use crate::game::tile::entity::TileEntityState;
 use crate::resource::item::{id_eq_or_of_tag, Item};
 use crate::resource::script::{Instructions, Script};
 use crate::resource::tag::Tag;
@@ -60,7 +60,7 @@ impl ResourceManager {
             .function(&["id_eq_or_of_tag"], id_eq_or_of_tag)
             .unwrap();
         TileCoord::install(&mut module).unwrap();
-        TileEntity::install(&mut module).unwrap();
+        TileEntityState::install(&mut module).unwrap();
 
         let mut diagnostics = Diagnostics::new();
 
