@@ -1,4 +1,3 @@
-use hashbrown::HashMap;
 use std::f32::consts::FRAC_PI_4;
 use std::sync::Arc;
 
@@ -12,10 +11,10 @@ use egui::{
     Visuals, Window,
 };
 use egui_winit_vulkano::{CallbackFn, Gui, GuiConfig};
-
 use fuse_rust::Fuse;
 use futures::channel::mpsc;
 use genmesh::{EmitTriangles, Quad};
+use hashbrown::HashMap;
 use hexagon_tiles::traits::HexDirection;
 use ractor::ActorRef;
 use rune::Any;
@@ -288,11 +287,8 @@ fn paint_tile_selection(
         .flat_map(|id| {
             let resource = &setup.resource_man.registry.get_tile(id).unwrap();
 
-            match resource.tile_type {
-                TileType::Deposit | TileType::Model => {
-                    return None;
-                }
-                _ => {}
+            if resource.tile_type == TileType::Model {
+                return None;
             }
 
             resource

@@ -18,7 +18,6 @@ pub enum TileTypeRaw {
     Machine(Vec<IdRaw>),
     Transfer(IdRaw),
     Storage(ItemRaw),
-    Deposit,
 }
 
 #[derive(Debug, Clone, PartialEq, Any)]
@@ -29,7 +28,6 @@ pub enum TileType {
     Machine(Vec<Id>),
     Transfer(Id),
     Storage(Item),
-    Deposit,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -79,7 +77,6 @@ impl ResourceManager {
             ),
             TileTypeRaw::Transfer(id) => TileType::Transfer(id.to_id(&mut self.interner)),
             TileTypeRaw::Storage(storage) => TileType::Storage(storage.to_item(&mut self.interner)),
-            TileTypeRaw::Deposit => TileType::Deposit,
         };
 
         let models = tile
@@ -91,10 +88,6 @@ impl ResourceManager {
         let targeted = tile
             .targeted
             .unwrap_or(matches!(&tile_type, TileType::Machine(_)));
-
-        if tile_type == TileType::Deposit {
-            self.registry.deposit_tiles.push(id);
-        }
 
         self.registry.tiles.insert(
             id,

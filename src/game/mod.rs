@@ -1,20 +1,17 @@
-use hashbrown::HashMap;
 use std::mem;
 use std::sync::Arc;
 
 use cgmath::vec3;
 use flexstr::SharedStr;
+use hashbrown::HashMap;
 use hexagon_tiles::layout::hex_to_pixel;
 use hexagon_tiles::traits::HexDirection;
 use ractor::concurrency::MpscSender;
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort, SupervisionEvent};
-use rand::distributions::Bernoulli;
-use rand::distributions::Distribution;
-use rand::Rng;
 
 use crate::game::map::{Map, TileEntities};
 use crate::game::ticking::{tick, TickUnit};
-use crate::game::tile::coord::{ChunkCoord, TileCoord, TileHex, TileUnit};
+use crate::game::tile::coord::{TileCoord, TileHex, TileUnit};
 use crate::game::tile::entity::{
     Data, DataMap, TileEntity, TileEntityMsg, TileEntityState, TileModifier,
 };
@@ -88,8 +85,6 @@ pub enum GameMsg {
     SignalTilesUpdated,
     /// get the last tile update time
     LastTilesUpdate(RpcReplyPort<TickUnit>),
-    /// populate map
-    Populate(ChunkCoord),
     /// get rendering information
     RenderInfoRequest {
         center: TileCoord,
@@ -212,17 +207,6 @@ impl Actor for Game {
                 }
 
                 match rest {
-                    Populate(coord) => {
-                        let key = coord.to_minimal_string();
-
-                        if Some(&true) == state.map.data.get(&key).and_then(Data::as_bool) {
-                            return Ok(());
-                        }
-
-                        populate(&myself, state, coord).await;
-
-                        state.map.data.insert(key, Data::Bool(true));
-                    }
                     SignalTilesUpdated => {
                         state.last_tiles_update_time = state.tick_count;
                     }
@@ -394,6 +378,7 @@ impl Actor for Game {
     }
 }
 
+/// Stops a tile and removes it from the game
 fn stop_tile(state: &mut GameState, coord: TileCoord) -> Option<(Id, TileModifier)> {
     if let Some(tile_entity) = state.tile_entities.get(&coord) {
         tile_entity.stop(Some("Removed from game".to_string()));
@@ -457,23 +442,6 @@ async fn insert_new_tile(
     state.map.tiles.insert(coord, (id, tile_modifier));
 
     old
-}
-
-/// Populates the map.
-async fn populate(game: &ActorRef<GameMsg>, state: &mut GameState, chunk_coord: ChunkCoord) {
-    let registry = &state.resource_man.clone().registry; // this shenanigan is needed because the borrow checker sucks
-    let src = registry.deposit_tiles();
-    let range = 0..src.len();
-
-    let d = Bernoulli::new(0.005).unwrap();
-
-    for coord in chunk_coord.iter() {
-        if d.sample(&mut rand::thread_rng()) {
-            let id = src[rand::thread_rng().gen_range(range.clone())];
-
-            insert_new_tile(game, state, coord, id, 0).await;
-        }
-    }
 }
 
 /// Adds one vector of undo steps to the undo steps array

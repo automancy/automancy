@@ -1,6 +1,6 @@
 ply
 format ascii 1.0
-comment Created by Blender 3.5.0 - www.blender.org
+comment Created by Blender 3.5.1 - www.blender.org
 element vertex 72
 property float x
 property float y

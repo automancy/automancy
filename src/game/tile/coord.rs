@@ -49,7 +49,7 @@ impl From<ChunkCoord> for TileCoord {
 }
 
 // The size of a chunk
-pub const CHUNK_SIZE: TileUnit = 128;
+pub const CHUNK_SIZE: TileUnit = 16;
 
 pub const CHUNK_SIZE_SQUARED: TileUnit = CHUNK_SIZE * CHUNK_SIZE;
 
@@ -118,6 +118,19 @@ impl TileCoord {
     /// Constant. Represents the adjacent coord to the top left. Ordinal of 1.
     pub const TOP_LEFT: Self = Self(TileHex::NEIGHBORS[1]);
 
+    /// Constant. Represents the diagonal coord to the top right. Ordinal of 2.
+    pub const DIAG_TOP: Self = Self(TileHex::DIAGONALS[1]);
+    /// Constant. Represents the diagonal coord to the right. Ordinal of 3.
+    pub const DIAG_TOP_RIGHT: Self = Self(TileHex::DIAGONALS[0]);
+    /// Constant. Represents the diagonal coord to the bottom right. Ordinal of 4.
+    pub const DIAG_BOTTOM_RIGHT: Self = Self(TileHex::DIAGONALS[5]);
+    /// Constant. Represents the diagonal coord to the bottom left. Ordinal of 5.
+    pub const DIAG_BOTTOM: Self = Self(TileHex::DIAGONALS[4]);
+    /// Constant. Represents the diagonal coord to the left. Ordinal of 0.
+    pub const DIAG_BOTTOM_LEFT: Self = Self(TileHex::DIAGONALS[3]);
+    /// Constant. Represents the diagonal coord to the top left. Ordinal of 1.
+    pub const DIAG_TOP_LEFT: Self = Self(TileHex::DIAGONALS[2]);
+
     /// Creates a list of the neighbors
     pub fn neighbors(self) -> [Self; 6] {
         [
@@ -127,6 +140,18 @@ impl TileCoord {
             self + Self::BOTTOM_LEFT,
             self + Self::LEFT,
             self + Self::TOP_LEFT,
+        ]
+    }
+
+    /// Creates a list of the diagonals
+    pub fn diagonals(self) -> [Self; 6] {
+        [
+            self + Self::DIAG_TOP,
+            self + Self::DIAG_TOP_RIGHT,
+            self + Self::DIAG_BOTTOM_RIGHT,
+            self + Self::DIAG_BOTTOM,
+            self + Self::DIAG_BOTTOM_LEFT,
+            self + Self::DIAG_TOP_LEFT,
         ]
     }
 }
@@ -163,6 +188,19 @@ impl ChunkCoord {
     /// Constant. Represents the adjacent coord to the top left. Ordinal of 1.
     pub const TOP_LEFT: Self = Self(TileHex::NEIGHBORS[1]);
 
+    /// Constant. Represents the diagonal coord to the top right. Ordinal of 2.
+    pub const DIAG_TOP: Self = Self(TileHex::DIAGONALS[1]);
+    /// Constant. Represents the diagonal coord to the right. Ordinal of 3.
+    pub const DIAG_TOP_RIGHT: Self = Self(TileHex::DIAGONALS[0]);
+    /// Constant. Represents the diagonal coord to the bottom right. Ordinal of 4.
+    pub const DIAG_BOTTOM_RIGHT: Self = Self(TileHex::DIAGONALS[5]);
+    /// Constant. Represents the diagonal coord to the bottom left. Ordinal of 5.
+    pub const DIAG_BOTTOM: Self = Self(TileHex::DIAGONALS[4]);
+    /// Constant. Represents the diagonal coord to the left. Ordinal of 0.
+    pub const DIAG_BOTTOM_LEFT: Self = Self(TileHex::DIAGONALS[3]);
+    /// Constant. Represents the diagonal coord to the top left. Ordinal of 1.
+    pub const DIAG_TOP_LEFT: Self = Self(TileHex::DIAGONALS[2]);
+
     /// Creates a list of the neighbors
     pub fn neighbors(self) -> [Self; 6] {
         [
@@ -174,11 +212,23 @@ impl ChunkCoord {
             self + Self::TOP_LEFT,
         ]
     }
+
+    /// Creates a list of the diagonals
+    pub fn diagonals(self) -> [Self; 6] {
+        [
+            self + Self::DIAG_TOP,
+            self + Self::DIAG_TOP_RIGHT,
+            self + Self::DIAG_BOTTOM_RIGHT,
+            self + Self::DIAG_BOTTOM,
+            self + Self::DIAG_BOTTOM_LEFT,
+            self + Self::DIAG_TOP_LEFT,
+        ]
+    }
 }
 
 impl ChunkCoord {
-    pub fn iter(self) -> impl Iterator<Item = TileCoord> {
-        let center: TileCoord = self.into();
+    pub fn iter(&self) -> impl Iterator<Item = TileCoord> {
+        let center: TileCoord = (*self).into();
         let center = center.0;
 
         HexRangeIterator::new(CHUNK_SIZE).map(move |hex| TileCoord(hex + center))

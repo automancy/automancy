@@ -1,29 +1,26 @@
-use hashbrown::HashMap;
 use std::error::Error;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use cgmath::{point2, vec3, EuclideanSpace, Matrix4};
 use egui_winit_vulkano::Gui;
-
 use fuse_rust::Fuse;
 use futures::channel::mpsc;
 use futures::executor::block_on;
+use hashbrown::HashMap;
 use tokio::runtime::Runtime;
-
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::ControlFlow;
 
 use crate::game::input::InputHandler;
-
 use crate::game::run::setup::GameSetup;
-use crate::game::tile::coord::{ChunkCoord, TileCoord};
+use crate::game::tile::coord::{ChunkCoord, TileCoord, CHUNK_SIZE_SQUARED};
 use crate::game::tile::entity::{Data, TileEntityMsg, TileModifier};
 use crate::game::{input, GameMsg, PlaceTileResponse};
 use crate::render::camera::{hex_to_normalized, screen_to_normalized, screen_to_world, FAR};
 use crate::render::data::InstanceData;
 use crate::render::gui;
-use crate::render::renderer::{Renderer, RENDER_RANGE};
+use crate::render::renderer::Renderer;
 use crate::resource::item::Item;
 use crate::util::cg::{DPoint3, Double, Float};
 use crate::util::colors;
@@ -53,9 +50,7 @@ pub struct EventLoopStorage {
     pub tag_cache: HashMap<Id, Arc<Vec<Item>>>,
     /// tile currently linking
     pub linking_tile: Option<TileCoord>,
-    /// the last camera position, in populate coord
-    pub last_camera_chunk_coord: Option<ChunkCoord>,
-    /// the instant the last frame started rendering
+    /// the last camera position, in chunk coord
     pub last_frame_start: Instant,
     /// the elapsed time between each frame
     pub elapsed: Duration,
@@ -74,7 +69,6 @@ impl Default for EventLoopStorage {
             config_open: None,
             tag_cache: Default::default(),
             linking_tile: None,
-            last_camera_chunk_coord: None,
             last_frame_start: Instant::now(),
             elapsed: Default::default(),
         }
@@ -173,19 +167,12 @@ pub fn on_event(
             .input_handler(loop_store.input_handler, ignore_move);
 
         {
-            let camera_chunk_coord = setup.camera.get_tile_coord().into();
+            let camera_chunk_coord: ChunkCoord = setup.camera.get_tile_coord().into();
 
-            if Some(camera_chunk_coord) != loop_store.last_camera_chunk_coord {
-                loop_store.last_camera_chunk_coord = Some(camera_chunk_coord);
+            if setup.camera_chunk_coord != camera_chunk_coord {
+                setup.camera_chunk_coord = camera_chunk_coord;
 
-                setup
-                    .game
-                    .send_message(GameMsg::Populate(camera_chunk_coord))
-                    .unwrap();
-
-                for coord in camera_chunk_coord.neighbors() {
-                    setup.game.send_message(GameMsg::Populate(coord)).unwrap();
-                }
+                // camera chunk coord update logic ...
             }
         }
 
@@ -431,7 +418,7 @@ pub fn on_event(
         let render_info = runtime
             .block_on(setup.game.call(
                 |reply| GameMsg::RenderInfoRequest {
-                    range: RENDER_RANGE,
+                    range: CHUNK_SIZE_SQUARED,
                     center: setup.camera.get_tile_coord(),
                     reply,
                 },

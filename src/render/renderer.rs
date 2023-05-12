@@ -1,17 +1,12 @@
-use hashbrown::HashMap;
 use std::f32::consts::PI;
 use std::sync::Arc;
 
 use cgmath::{vec3, SquareMatrix};
 use egui_winit_vulkano::Gui;
-
-use hexagon_tiles::hex::Hex;
-use hexagon_tiles::layout::{hex_to_pixel, pixel_to_hex};
-use hexagon_tiles::point::point;
-use hexagon_tiles::traits::HexRound;
+use hashbrown::HashMap;
+use hexagon_tiles::layout::hex_to_pixel;
 use ractor::rpc::{multi_call, CallResult};
 use tokio::runtime::Runtime;
-
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
 use vulkano::command_buffer::{
     AutoCommandBufferBuilder, CommandBufferInheritanceInfo, CommandBufferUsage,
@@ -28,7 +23,7 @@ use vulkano::sync::GpuFuture;
 
 use crate::game::run::setup::GameSetup;
 use crate::game::ticking::TickUnit;
-use crate::game::tile::coord::{TileCoord, TileHex, TileUnit};
+use crate::game::tile::coord::{ChunkCoord, TileCoord};
 use crate::game::tile::entity::{Data, TileEntityMsg};
 use crate::game::{GameMsg, RenderInfo, RenderUnit};
 use crate::render::camera::FAR;
@@ -43,9 +38,6 @@ use crate::util::cg::{deg, matrix, Float, Matrix4, Point3};
 use crate::util::colors;
 use crate::util::colors::WithAlpha;
 use crate::util::id::Id;
-
-/// render distance
-pub const RENDER_RANGE: TileUnit = 48;
 
 pub struct Renderer {
     resource_man: Arc<ResourceManager>,
@@ -107,10 +99,6 @@ impl Renderer {
         };
 
         let instances = {
-            let pos = setup.camera.get_pos();
-            let pos = point(pos.x, pos.y);
-            let pos: TileHex = pixel_to_hex(HEX_GRID_LAYOUT, pos).round();
-
             let none = self
                 .resource_man
                 .registry
@@ -191,29 +179,33 @@ impl Renderer {
                 }
             }
 
-            for q in -RENDER_RANGE..=RENDER_RANGE {
-                for r in -RENDER_RANGE.max(-q - RENDER_RANGE)..=RENDER_RANGE.min(-q + RENDER_RANGE)
-                {
-                    let pos: TileCoord = Hex::new(q + pos.q(), r + pos.r()).into();
+            let a = [setup.camera_chunk_coord];
+            let b = setup.camera_chunk_coord.neighbors();
+            let c = setup.camera_chunk_coord.diagonals();
 
-                    if !instances.contains_key(&pos) {
-                        let p = hex_to_pixel(HEX_GRID_LAYOUT, pos.into());
+            let rendered_chunks = vec![a.as_slice(), b.as_slice(), c.as_slice()]
+                .into_iter()
+                .flatten()
+                .flat_map(ChunkCoord::iter);
 
-                        instances.insert(
-                            pos,
-                            RenderUnit {
-                                instance: InstanceData::default().with_model_matrix(
-                                    Matrix4::from_translation(vec3(
-                                        p.x as Float,
-                                        p.y as Float,
-                                        FAR as Float,
-                                    )),
-                                ),
-                                tile: none,
-                                model: none,
-                            },
-                        );
-                    }
+            for coord in rendered_chunks {
+                if !instances.contains_key(&coord) {
+                    let p = hex_to_pixel(HEX_GRID_LAYOUT, coord.into());
+
+                    instances.insert(
+                        coord,
+                        RenderUnit {
+                            instance: InstanceData::default().with_model_matrix(
+                                Matrix4::from_translation(vec3(
+                                    p.x as Float,
+                                    p.y as Float,
+                                    FAR as Float,
+                                )),
+                            ),
+                            tile: none,
+                            model: none,
+                        },
+                    );
                 }
             }
 

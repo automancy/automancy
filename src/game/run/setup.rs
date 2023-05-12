@@ -13,6 +13,7 @@ use winit::event_loop::EventLoop;
 use winit::window::{Icon, Window};
 
 use crate::game::ticking::TICK_INTERVAL;
+use crate::game::tile::coord::ChunkCoord;
 use crate::game::{Game, GameMsg};
 use crate::render::camera::Camera;
 use crate::render::gpu::{Gpu, RenderAlloc};
@@ -34,6 +35,8 @@ pub struct GameSetup {
     pub frame: Frame,
     /// the camera
     pub camera: Camera,
+    /// the last camera position, in chunk coord
+    pub camera_chunk_coord: ChunkCoord,
     /// the window
     pub window: Arc<Window>,
 }
@@ -131,6 +134,7 @@ impl GameSetup {
                 game_handle: Some(game_handle),
                 frame,
                 camera,
+                camera_chunk_coord: camera.get_tile_coord().into(),
                 window,
             },
         )

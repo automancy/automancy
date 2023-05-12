@@ -1,9 +1,0 @@
-{
-    "id": "copper_mine",
-    "models": [
-        "copper_mine"
-    ],
-    "tile_type": {
-        "type": "Deposit"
-    }
-}

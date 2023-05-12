@@ -1,6 +1,5 @@
 {
     "id": "iron_ore",
-    "adjacent": "iron_mine",
     "instructions": {
         "output": {
             "item": {
