@@ -116,7 +116,7 @@ fn init_styles(gui: &Gui) {
                     expansion: 0.0,
                 },
                 inactive: WidgetVisuals {
-                    weak_bg_fill: Color32::from_gray(230), // button background
+                    weak_bg_fill: Color32::from_gray(200), // button background
                     bg_fill: Color32::from_gray(200),      // checkbox background
                     bg_stroke: Default::default(),
                     fg_stroke: Stroke::new(1.0, Color32::from_gray(60)), // button text
