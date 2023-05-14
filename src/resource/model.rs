@@ -1,19 +1,19 @@
-use hashbrown::HashMap;
 use std::ffi::OsStr;
 use std::fs::{read_dir, read_to_string, File};
 use std::io::BufReader;
 use std::path::Path;
 
+use hashbrown::HashMap;
 use ply_rs::parser::Parser;
 use serde::Deserialize;
 
-use crate::render::data::{GameVertex, Model, RawFace};
+use crate::render::data::{Face, GameVertex, Model};
 use crate::resource::ResourceManager;
 use crate::resource::JSON_EXT;
 use crate::util::id::IdRaw;
 
 #[derive(Debug, Default, Clone)]
-pub struct Face {
+pub struct Mesh {
     pub offset: u32,
     pub size: u32,
 }
@@ -45,7 +45,7 @@ impl ResourceManager {
         let mut read = BufReader::new(file);
 
         let vertex_parser = Parser::<GameVertex>::new();
-        let face_parser = Parser::<RawFace>::new();
+        let face_parser = Parser::<Face>::new();
 
         let header = vertex_parser.read_header(&mut read).unwrap();
 
@@ -148,11 +148,11 @@ impl ResourceManager {
 
         let mut offset_count = 0;
 
-        let (raw_faces, faces): (Vec<_>, Vec<_>) = raw_faces // TODO we can just draw 3 indices a bunch of times
+        let (faces, meshes): (Vec<_>, Vec<_>) = raw_faces
             .into_iter()
             .enumerate()
             .filter_map(|(i, (id, raw_faces))| {
-                let raw_face = raw_faces
+                let face = raw_faces
                     .into_iter()
                     .map(|face| face.index_offset(index_offsets[i] as u32))
                     .reduce(|mut a, mut b| {
@@ -161,32 +161,26 @@ impl ResourceManager {
                         a
                     });
 
-                raw_face.map(|raw_face| (*id, raw_face))
+                face.map(|face| (*id, face))
             })
-            .map(|(id, raw_face)| {
-                let size: u32 = raw_face.indices.len() as u32;
+            .map(|(id, face)| {
+                let size: u32 = face.indices.len() as u32;
 
-                let face = Face {
+                let mesh = Mesh {
                     offset: offset_count,
                     size,
                 };
 
-                offset_count += face.size;
+                offset_count += mesh.size;
 
-                (raw_face, (id, face))
+                (face, (id, mesh))
             })
             .unzip();
 
-        let faces = HashMap::from_iter(faces.into_iter());
+        let meshes = HashMap::from_iter(meshes.into_iter());
 
-        /*
-        log::debug!("combined_vertices: {:?}", combined_vertices);
-        log::debug!("all_raw_faces: {:?}", all_raw_faces);
-        log::debug!("all_faces: {:?}", all_faces);
-         */
-
-        self.faces = faces;
+        self.meshes = meshes;
         self.all_vertices = all_vertices;
-        self.raw_faces = raw_faces;
+        self.faces = faces;
     }
 }

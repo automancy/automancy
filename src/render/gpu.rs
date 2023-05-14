@@ -342,12 +342,12 @@ pub fn indirect_instance(
             .scan(0, |init, instances| {
                 let instance_count = instances.len() as u32;
 
-                let face = &resource_man.faces[&instances[0].1];
+                let mesh = &resource_man.meshes[&instances[0].1];
 
                 let command = DrawIndexedIndirectCommand {
-                    index_count: face.size,
+                    index_count: mesh.size,
                     instance_count,
-                    first_index: face.offset,
+                    first_index: mesh.offset,
                     vertex_offset: 0,
                     first_instance: *init,
                 };
@@ -495,7 +495,7 @@ impl RenderAlloc {
                 ..Default::default()
             },
             resource_man
-                .raw_faces
+                .faces
                 .iter()
                 .flat_map(|v| v.indices.clone())
                 .collect::<Vec<_>>(),

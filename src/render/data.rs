@@ -148,14 +148,12 @@ pub struct GuiUBO {
     pub matrix: RawMat4,
 }
 
-// face
-
 #[derive(Clone, Debug)]
-pub struct RawFace {
+pub struct Face {
     pub indices: Vec<u32>,
 }
 
-impl RawFace {
+impl Face {
     pub fn index_offset(mut self, offset: u32) -> Self {
         self.indices.iter_mut().for_each(|v| *v += offset);
 
@@ -163,9 +161,9 @@ impl RawFace {
     }
 }
 
-impl PropertyAccess for RawFace {
+impl PropertyAccess for Face {
     fn new() -> Self {
-        RawFace {
+        Face {
             indices: Vec::new(),
         }
     }
@@ -181,11 +179,11 @@ impl PropertyAccess for RawFace {
 #[derive(Debug, Clone)]
 pub struct Model {
     pub vertices: Vec<GameVertex>,
-    pub faces: Vec<RawFace>,
+    pub faces: Vec<Face>,
 }
 
 impl Model {
-    pub fn new(vertices: Vec<GameVertex>, faces: Vec<RawFace>) -> Self {
+    pub fn new(vertices: Vec<GameVertex>, faces: Vec<Face>) -> Self {
         Self { vertices, faces }
     }
 }

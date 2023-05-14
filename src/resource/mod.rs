@@ -9,11 +9,11 @@ use kira::track::TrackHandle;
 use rune::Any;
 use serde::Deserialize;
 
-use crate::render::data::{GameVertex, Model, RawFace};
+use crate::render::data::{Face, GameVertex, Model};
 use crate::render::gui::GuiIds;
 use crate::resource::function::Function;
 use crate::resource::item::Item;
-use crate::resource::model::Face;
+use crate::resource::model::Mesh;
 use crate::resource::script::Script;
 use crate::resource::tag::Tag;
 use crate::resource::tile::{Tile, TileIds};
@@ -84,11 +84,11 @@ pub struct ResourceManager {
     pub functions: HashMap<Id, Function>,
     pub audio: HashMap<SharedStr, StaticSoundData>,
     pub icons: HashMap<SharedStr, TextureHandle>,
-    pub faces: HashMap<Id, Face>,
+    pub meshes: HashMap<Id, Mesh>,
 
     pub all_vertices: Vec<GameVertex>,
     pub raw_models: HashMap<Id, Model>,
-    pub raw_faces: Vec<RawFace>,
+    pub faces: Vec<Face>,
 }
 
 impl Debug for ResourceManager {
@@ -128,11 +128,11 @@ impl ResourceManager {
             functions: Default::default(),
             audio: Default::default(),
             icons: Default::default(),
-            faces: Default::default(),
+            meshes: Default::default(),
 
             all_vertices: Default::default(),
             raw_models: Default::default(),
-            raw_faces: Default::default(),
+            faces: Default::default(),
         }
     }
 }
