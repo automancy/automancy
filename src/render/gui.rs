@@ -210,9 +210,9 @@ fn tile_paint(
         selection_send.try_send(id).unwrap();
     }
 
-    let pos = point3(0.0, 1.0 * hover, 3.0 - 0.5 * hover);
+    let pos = point3(0.0, 1.0 * hover + 0.5, 3.0 - 0.5 * hover);
     let matrix = perspective(FRAC_PI_4, 1.0, 0.01, 10.0)
-        * Matrix4::look_to_rh(pos, vec3(0.0, 0.5 * hover, 1.0), Vector3::unit_y());
+        * Matrix4::look_to_rh(pos, vec3(0.0, 0.5 * hover + 0.2, 1.0), Vector3::unit_y());
 
     let pipeline = renderer.gpu.gui_pipeline.clone();
     let vertex_buffer = renderer.gpu.alloc.vertex_buffer.clone();
