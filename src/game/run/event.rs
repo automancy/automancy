@@ -348,6 +348,9 @@ pub fn on_event(
             &setup.game,
             &mut extra_vertices,
         );
+        if resource_man.error_man.has_errors() {
+            todo!()
+        }
 
         if let Ok(Some(id)) = selection_recv.try_next() {
             loop_store.already_placed_at = None;

@@ -2,3 +2,5 @@
 pub mod event;
 /// Manages the game startup process.
 pub mod setup;
+
+pub mod error;

@@ -1,6 +1,8 @@
 use std::fmt;
 use std::fmt::{Debug, Formatter};
+use std::sync::Arc;
 
+use crate::game::run::error::ErrorManager;
 use egui::TextureHandle;
 use flexstr::SharedStr;
 use hashbrown::HashMap;
@@ -75,6 +77,7 @@ pub struct ResourceManager {
     pub interner: Interner,
     pub track: TrackHandle,
 
+    pub error_man: ErrorManager,
     pub ordered_tiles: Vec<Id>,
     pub ordered_items: Vec<Id>,
 
@@ -109,6 +112,7 @@ impl ResourceManager {
             interner,
             track,
 
+            error_man: Default::default(),
             ordered_tiles: vec![],
             ordered_items: vec![],
 

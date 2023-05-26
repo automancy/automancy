@@ -1,3 +1,5 @@
+use futures::future::err;
+use std::error::Error;
 use std::fmt::Debug;
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
@@ -114,8 +116,13 @@ impl Map {
         let reader = BufReader::with_capacity(MAP_BUFFER_SIZE, file);
         let decoder = Decoder::new(reader).unwrap();
 
-        let (header, tile_data, data): (MapHeader, Vec<(TileCoord, TileData)>, DataMapRaw) =
-            serde_json::from_reader(decoder).unwrap();
+        let map_decoder: serde_json::Result<(MapHeader, Vec<(TileCoord, TileData)>, DataMapRaw)> =
+            serde_json::from_reader(decoder);
+        if map_decoder.is_err() {
+            resource_man.error_man.push("invalid_map_data");
+            return (Map::new_empty("missingno".to_string()), Default::default());
+        }
+        let (header, tile_data, data) = map_decoder.unwrap();
 
         let id_reverse = header.0.into_iter().collect::<HashMap<_, _>>();
 

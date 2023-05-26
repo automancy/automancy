@@ -765,7 +765,6 @@ pub fn tile_config(
         }
     }
 }
-
 pub fn line(a: DPoint2, b: DPoint2, color: Rgba) -> Vec<GameVertex> {
     let v = b - a;
     let l = a.distance(b) * 128.0;

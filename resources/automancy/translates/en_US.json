@@ -57,6 +57,10 @@
         "tile_config": "Config",
         "tile_config_script": "Script:",
         "tile_config_storage": "Storage:",
-        "tile_config_target": "Target:"
+        "tile_config_target": "Target:",
+        "error": "Error"
+    },
+    "error": {
+        "invalid_map_data": "The map was corrupted and could not be repaired! This session will not be written to disk."
     }
 }
