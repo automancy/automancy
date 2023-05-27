@@ -1,19 +1,19 @@
 {
-    "id": "iron_ingot",
+    "id": "sand_to_air",
     "instructions": {
         "inputs": [
             {
                 "item": {
-                    "id": "iron_ore"
+                    "id": "sand"
                 },
-                "amount": 10
+                "amount": 1
             }
         ],
         "output": {
             "item": {
-                "id": "iron_ingot"
+                "id": "air"
             },
-            "amount": 1
+            "amount": 8
         }
     }
 }

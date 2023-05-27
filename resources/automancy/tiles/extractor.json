@@ -6,9 +6,8 @@
     "tile_type": {
         "type": "Machine",
         "param": [
-            "copper_ore",
-            "iron_ore",
-            "coal"
+            "coal",
+            "gravel"
         ]
     }
 }

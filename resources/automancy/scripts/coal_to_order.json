@@ -1,0 +1,19 @@
+{
+    "id": "coal_to_order",
+    "instructions": {
+        "inputs": [
+            {
+                "item": {
+                    "id": "coal"
+                },
+                "amount": 1
+            }
+        ],
+        "output": {
+            "item": {
+                "id": "order"
+            },
+            "amount": 8
+        }
+    }
+}

@@ -1,19 +1,19 @@
 {
-    "id": "coal_fire",
+    "id": "dirt_to_earth",
     "instructions": {
         "inputs": [
             {
                 "item": {
-                    "id": "coal"
+                    "id": "dirt"
                 },
-                "amount": 1
+                "amount": 4
             }
         ],
         "output": {
             "item": {
-                "id": "fire"
+                "id": "earth"
             },
-            "amount": 16
+            "amount": 1
         }
     }
 }

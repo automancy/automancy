@@ -9,8 +9,14 @@
     "tile_type": {
         "type": "Machine",
         "param": [
-            "copper_ingot",
-            "iron_ingot"
+            "sand",
+            "dirt",
+            "mud",
+            "glass",
+            "orb",
+            "silver",
+            "gold",
+            "philosophers_stone"
         ]
     }
 }

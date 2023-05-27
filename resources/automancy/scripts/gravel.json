@@ -1,11 +1,11 @@
 {
-    "id": "copper_ore",
+    "id": "gravel",
     "instructions": {
         "output": {
             "item": {
-                "id": "copper_ore"
+                "id": "gravel"
             },
-            "amount": 5
+            "amount": 4
         }
     }
 }

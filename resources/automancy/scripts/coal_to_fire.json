@@ -1,19 +1,19 @@
 {
-    "id": "copper_ingot",
+    "id": "coal_to_fire",
     "instructions": {
         "inputs": [
             {
                 "item": {
-                    "id": "copper_ore"
+                    "id": "coal"
                 },
-                "amount": 10
+                "amount": 1
             }
         ],
         "output": {
             "item": {
-                "id": "copper_ingot"
+                "id": "fire"
             },
-            "amount": 1
+            "amount": 16
         }
     }
 }

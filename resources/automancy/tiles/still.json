@@ -9,7 +9,12 @@
     "tile_type": {
         "type": "Machine",
         "param": [
-            "coal_fire"
+            "coal_to_fire",
+            "coal_to_chaos",
+            "coal_to_order",
+            "dirt_to_earth",
+            "sand_to_air",
+            "mud_to_water"
         ]
     }
 }

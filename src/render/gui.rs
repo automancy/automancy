@@ -542,7 +542,7 @@ pub fn tile_config(
                                     .iter()
                                     .map(|item_stack| {
                                         format!(
-                                            "{} ({})",
+                                            " + {} ({})",
                                             setup.resource_man.item_name(&item_stack.item.id),
                                             item_stack.amount
                                         )
@@ -569,7 +569,7 @@ pub fn tile_config(
                                 format!("{input}{output}")
                             }
                         } else {
-                            "<none>".to_owned()
+                            setup.resource_man.translates.none.to_string()
                         };
 
                         ui.add_space(MARGIN);
@@ -600,7 +600,7 @@ pub fn tile_config(
                         {
                             setup.resource_man.item_name(&item.id).to_string()
                         } else {
-                            "<none>".to_owned()
+                            setup.resource_man.translates.none.to_string()
                         };
 
                         let items = setup

@@ -1,0 +1,25 @@
+{
+    "id": "mud",
+    "instructions": {
+        "inputs": [
+            {
+                "item": {
+                    "id": "dirt"
+                },
+                "amount": 2
+            },
+            {
+                "item": {
+                    "id": "chaos"
+                },
+                "amount": 4
+            }
+        ],
+        "output": {
+            "item": {
+                "id": "mud"
+            },
+            "amount": 4
+        }
+    }
+}

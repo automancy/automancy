@@ -1,0 +1,67 @@
+{
+    "id": "philosophers_stone",
+    "instructions": {
+        "inputs": [
+            {
+                "item": {
+                    "id": "fire"
+                },
+                "amount": 256
+            },
+            {
+                "item": {
+                    "id": "water"
+                },
+                "amount": 256
+            },
+            {
+                "item": {
+                    "id": "earth"
+                },
+                "amount": 256
+            },
+            {
+                "item": {
+                    "id": "air"
+                },
+                "amount": 256
+            },
+            {
+                "item": {
+                    "id": "order"
+                },
+                "amount": 256
+            },
+            {
+                "item": {
+                    "id": "chaos"
+                },
+                "amount": 256
+            },
+            {
+                "item": {
+                    "id": "gold"
+                },
+                "amount": 16
+            },
+            {
+                "item": {
+                    "id": "silver"
+                },
+                "amount": 16
+            },
+            {
+                "item": {
+                    "id": "orb"
+                },
+                "amount": 1
+            }
+        ],
+        "output": {
+            "item": {
+                "id": "philosophers_stone"
+            },
+            "amount": 1
+        }
+    }
+}
