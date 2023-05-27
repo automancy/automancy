@@ -58,9 +58,14 @@
         "tile_config_script": "Script:",
         "tile_config_storage": "Storage:",
         "tile_config_target": "Target:",
-        "error": "Error"
+        "error_popup": "Error",
+
+        "btn_confirm": "Ok",
+        "btn_exit": "Quit automancy",
+        "btn_cancel": "Cancel"
     },
     "error": {
-        "invalid_map_data": "The map was corrupted and could not be repaired! This session will not be written to disk."
+        "test_error": "automancy is early alpha software and is probably buggy af",
+        "invalid_map_data": "Map {} was corrupted and could not be repaired! This session will instead be written to {}"
     }
 }

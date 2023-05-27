@@ -1,3 +1,6 @@
+use crate::resource::ResourceManager;
+use crate::util::id::{id_static, Id, Interner};
+use rune::Any;
 use std::collections::VecDeque;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
@@ -5,23 +8,52 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 #[derive(Default)]
 pub struct ErrorManager {
-    queue: Arc<Mutex<Vec<&'static str>>>,
+    queue: Arc<Mutex<VecDeque<GameError>>>,
+}
+#[derive(Clone, Copy, Any)]
+pub struct ErrorIds {
+    pub test_error: Id,
+    pub invalid_map_data: Id,
+}
+impl ErrorIds {
+    pub fn new(interner: &mut Interner) -> Self {
+        Self {
+            test_error: id_static("automancy", "test_error").to_id(interner),
+            invalid_map_data: id_static("automancy", "invalid_map_data").to_id(interner),
+        }
+    }
+}
+pub type GameError = (Id, Vec<String>);
+pub fn error_to_string(err: GameError, resource_man: &ResourceManager) -> String {
+    let mut string = resource_man.translates.error[&err.0].to_string();
+    for str in err.1.iter() {
+        string = string.replacen("{}", str, 1);
+    }
+    string
 }
 impl ErrorManager {
-    pub fn push(&self, error: &'static str) {
-        eprintln!("E: {error}");
+    pub fn push(&self, error: GameError) {
+        eprintln!("E: {:?}", error);
         self.queue
             .as_ref()
             .lock()
             .expect("could not write error")
-            .push(error);
+            .push_front(error);
     }
-    pub fn pop(&self) -> Option<&'static str> {
+    pub fn peek(&self) -> Option<GameError> {
         self.queue
             .as_ref()
             .lock()
             .expect("could not read error")
-            .pop()
+            .get(0)
+            .cloned()
+    }
+    pub fn pop(&self) -> Option<GameError> {
+        self.queue
+            .as_ref()
+            .lock()
+            .expect("could not read error")
+            .pop_front()
     }
     pub fn has_errors(&self) -> bool {
         let lock = self.queue.as_ref().try_lock();

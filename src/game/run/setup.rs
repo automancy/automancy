@@ -123,6 +123,10 @@ impl GameSetup {
 
         let camera = Camera::default();
 
+        //TODO remove this line for releases
+        resource_man
+            .error_man
+            .push((resource_man.registry.err_ids.test_error, vec![]));
         // --- event-loop ---
         (
             event_loop,

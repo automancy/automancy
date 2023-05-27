@@ -1,4 +1,5 @@
 use std::f32::consts::FRAC_PI_4;
+use std::process::exit;
 use std::sync::Arc;
 
 use cgmath::{point2, point3, vec3, MetricSpace};
@@ -26,6 +27,7 @@ use vulkano::memory::allocator::{AllocationCreateInfo, MemoryUsage};
 use vulkano::pipeline::{Pipeline, PipelineBindPoint};
 use winit::event_loop::EventLoop;
 
+use crate::game::run::error::error_to_string;
 use crate::game::run::event::EventLoopStorage;
 use crate::game::run::setup::GameSetup;
 use crate::game::tile::coord::TileCoord;
@@ -41,7 +43,7 @@ use crate::resource::tile::TileType;
 use crate::resource::ResourceManager;
 use crate::util::cg::{perspective, DPoint2, DPoint3, Double, Float, Matrix4, Vector3};
 use crate::util::colors;
-use crate::util::id::{id_static, Id, Interner};
+use crate::util::id::{id, id_static, Id, Interner};
 use crate::IOSEVKA_FONT;
 
 #[derive(Clone, Copy, Any)]
@@ -56,6 +58,15 @@ pub struct GuiIds {
     pub tile_config_storage: Id,
     #[rune(get, copy)]
     pub tile_config_target: Id,
+    #[rune(get, copy)]
+    pub error_popup: Id,
+
+    #[rune(get, copy)]
+    pub btn_confirm: Id,
+    #[rune(get, copy)]
+    pub btn_exit: Id,
+    #[rune(get, copy)]
+    pub btn_cancel: Id,
 }
 
 impl GuiIds {
@@ -66,6 +77,11 @@ impl GuiIds {
             tile_config_script: id_static("automancy", "tile_config_script").to_id(interner),
             tile_config_storage: id_static("automancy", "tile_config_storage").to_id(interner),
             tile_config_target: id_static("automancy", "tile_config_target").to_id(interner),
+            error_popup: id_static("automancy", "error_popup").to_id(interner),
+
+            btn_confirm: id_static("automancy", "btn_confirm").to_id(interner),
+            btn_exit: id_static("automancy", "btn_exit").to_id(interner),
+            btn_cancel: id_static("automancy", "btn_cancel").to_id(interner),
         }
     }
 }
@@ -388,6 +404,48 @@ pub fn tile_info(
             }
             //ui.label(format!("State: {}", ask(sys, &game, )))
         }
+    });
+}
+
+pub fn error_popup(setup: &GameSetup, gui: &Gui) {
+    Window::new(
+        setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.error_popup]
+            .to_string(),
+    )
+    .anchor(Align2([Align::Center, Align::Center]), vec2(0.0, 0.0))
+    .resizable(false)
+    .default_width(300.0)
+    .frame(default_frame().inner_margin(Margin::same(10.0)))
+    .show(&gui.context(), |ui| {
+        ui.label(error_to_string(
+            setup.resource_man.error_man.peek().unwrap(),
+            &setup.resource_man,
+        ));
+        //FIXME why are the buttons not right aligned
+        ui.with_layout(ui.layout().with_main_align(Align::RIGHT), |ui| {
+            ui.horizontal(|ui| {
+                if ui
+                    .button(
+                        setup.resource_man.translates.gui
+                            [&setup.resource_man.registry.gui_ids.btn_confirm]
+                            .to_string(),
+                    )
+                    .clicked()
+                {
+                    setup.resource_man.error_man.pop();
+                }
+                if ui
+                    .button(
+                        setup.resource_man.translates.gui
+                            [&setup.resource_man.registry.gui_ids.btn_exit]
+                            .to_string(),
+                    )
+                    .clicked()
+                {
+                    exit(0);
+                }
+            });
+        });
     });
 }
 

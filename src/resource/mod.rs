@@ -2,7 +2,7 @@ use std::fmt;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 
-use crate::game::run::error::ErrorManager;
+use crate::game::run::error::{ErrorIds, ErrorManager};
 use egui::TextureHandle;
 use flexstr::SharedStr;
 use hashbrown::HashMap;
@@ -53,6 +53,8 @@ pub struct Registry {
     pub tile_ids: TileIds,
     #[rune(get, copy)]
     pub gui_ids: GuiIds,
+    #[rune(get, copy)]
+    pub err_ids: ErrorIds,
 }
 
 impl Registry {
@@ -107,6 +109,7 @@ impl ResourceManager {
         let any = id_static("automancy", "#any").to_id(&mut interner);
         let gui_ids = GuiIds::new(&mut interner);
         let tile_ids = TileIds::new(&mut interner);
+        let err_ids = ErrorIds::new(&mut interner);
 
         Self {
             interner,
@@ -126,6 +129,7 @@ impl ResourceManager {
                 any,
                 tile_ids,
                 gui_ids,
+                err_ids,
             },
 
             translates: Default::default(),

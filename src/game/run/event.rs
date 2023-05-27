@@ -349,7 +349,7 @@ pub fn on_event(
             &mut extra_vertices,
         );
         if resource_man.error_man.has_errors() {
-            todo!()
+            gui::error_popup(setup, gui /*resource_man.interner*/);
         }
 
         if let Ok(Some(id)) = selection_recv.try_next() {

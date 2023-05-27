@@ -1,8 +1,13 @@
+use chrono::Local;
 use futures::future::err;
+use std::collections::hash_map::DefaultHasher;
 use std::error::Error;
 use std::fmt::Debug;
 use std::fs::File;
+use std::hash::{Hash, Hasher};
 use std::io::{BufReader, BufWriter};
+use std::os::unix::raw::time_t;
+use std::time::Instant;
 use std::{collections::HashMap, path::PathBuf};
 
 use crate::game;
@@ -118,9 +123,14 @@ impl Map {
 
         let map_decoder: serde_json::Result<(MapHeader, Vec<(TileCoord, TileData)>, DataMapRaw)> =
             serde_json::from_reader(decoder);
+
         if map_decoder.is_err() {
-            resource_man.error_man.push("invalid_map_data");
-            return (Map::new_empty("missingno".to_string()), Default::default());
+            let err_map_name = format!("{}-ERR-{}", map_name, Local::now().format("%y%m%d%H%M%S"));
+            resource_man.error_man.push((
+                resource_man.registry.err_ids.invalid_map_data,
+                vec![map_name, err_map_name.clone()],
+            ));
+            return (Map::new_empty(err_map_name), Default::default());
         }
         let (header, tile_data, data) = map_decoder.unwrap();
 

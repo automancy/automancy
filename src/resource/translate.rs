@@ -17,6 +17,7 @@ pub struct TranslateRaw {
     tiles: HashMap<IdRaw, String>,
     scripts: HashMap<IdRaw, String>,
     gui: HashMap<IdRaw, String>,
+    error: HashMap<IdRaw, String>,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -27,6 +28,7 @@ pub struct Translate {
     pub tiles: HashMap<Id, SharedStr>,
     pub scripts: HashMap<Id, SharedStr>,
     pub gui: HashMap<Id, SharedStr>,
+    pub error: HashMap<Id, SharedStr>,
 }
 
 impl ResourceManager {
@@ -61,7 +63,11 @@ impl ResourceManager {
             .into_iter()
             .map(|(id, str)| (id.to_id(&mut self.interner), str.into()))
             .collect();
-
+        let error = translate
+            .error
+            .into_iter()
+            .map(|(id, str)| (id.to_id(&mut self.interner), str.into()))
+            .collect();
         self.translates = Translate {
             none,
             unnamed,
@@ -69,6 +75,7 @@ impl ResourceManager {
             tiles,
             scripts,
             gui,
+            error,
         };
 
         Some(())
