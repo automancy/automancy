@@ -126,7 +126,7 @@ impl GameSetup {
         //TODO remove this line for releases
         resource_man
             .error_man
-            .push((resource_man.registry.err_ids.test_error, vec![]));
+            .push((resource_man.registry.err_ids.test_error, vec![]), &resource_man);
         // --- event-loop ---
         (
             event_loop,

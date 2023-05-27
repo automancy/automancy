@@ -74,7 +74,34 @@ impl Default for EventLoopStorage {
         }
     }
 }
+pub fn shutdown_graceful(
+    setup: &mut GameSetup,
+    runtime: &Runtime,
+    loop_store: &mut EventLoopStorage,
+    control_flow: &mut ControlFlow,
+) -> Result<i32, Box<dyn Error>> {
+    setup.game.send_message(GameMsg::StopTicking).unwrap();
 
+    let map = runtime
+        .block_on(setup.game.call(GameMsg::TakeMap, None))?
+        .unwrap();
+
+    let tile_entities = runtime
+        .block_on(setup.game.call(GameMsg::TakeTileEntities, None))?
+        .unwrap();
+
+    map.save(runtime, &setup.resource_man.interner, tile_entities);
+
+    setup.game.stop(Some("Game closed".to_string()));
+
+    block_on(setup.game_handle.take().unwrap())?;
+
+    control_flow.set_exit();
+
+    loop_store.closed = true;
+    log::info!("Shut down gracefully");
+    Ok(0)
+}
 /// Triggers every time the event loop is run once.
 pub fn on_event(
     runtime: &Runtime,
@@ -105,29 +132,7 @@ pub fn on_event(
             ..
         } => {
             // game shutdown
-            setup.game.send_message(GameMsg::StopTicking).unwrap();
-
-            let map = runtime
-                .block_on(setup.game.call(GameMsg::TakeMap, None))
-                .unwrap()
-                .unwrap();
-
-            let tile_entities = runtime
-                .block_on(setup.game.call(GameMsg::TakeTileEntities, None))
-                .unwrap()
-                .unwrap();
-
-            map.save(runtime, &setup.resource_man.interner, tile_entities);
-
-            setup.game.stop(Some("Game closed".to_string()));
-
-            block_on(setup.game_handle.take().unwrap())?;
-
-            control_flow.set_exit();
-
-            loop_store.closed = true;
-
-            return Ok(());
+            shutdown_graceful(setup, runtime, loop_store, control_flow)?;
         }
 
         Event::WindowEvent { event, .. } => {
@@ -349,7 +354,7 @@ pub fn on_event(
             &mut extra_vertices,
         );
         if resource_man.error_man.has_errors() {
-            gui::error_popup(setup, gui /*resource_man.interner*/);
+            gui::error_popup(setup, gui, runtime, loop_store, control_flow);
         }
 
         if let Ok(Some(id)) = selection_recv.try_next() {

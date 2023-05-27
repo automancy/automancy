@@ -126,10 +126,13 @@ impl Map {
 
         if map_decoder.is_err() {
             let err_map_name = format!("{}-ERR-{}", map_name, Local::now().format("%y%m%d%H%M%S"));
-            resource_man.error_man.push((
-                resource_man.registry.err_ids.invalid_map_data,
-                vec![map_name, err_map_name.clone()],
-            ));
+            resource_man.error_man.push(
+                (
+                    resource_man.registry.err_ids.invalid_map_data,
+                    vec![map_name, err_map_name.clone()],
+                ),
+                resource_man,
+            );
             return (Map::new_empty(err_map_name), Default::default());
         }
         let (header, tile_data, data) = map_decoder.unwrap();
