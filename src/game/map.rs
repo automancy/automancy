@@ -39,7 +39,12 @@ pub struct Map {
     pub tiles: Tiles,
     pub data: DataMap,
 }
-
+#[derive(Debug, Clone)]
+pub struct MapInfo {
+    pub map_name: String,
+    pub tiles: usize,
+    pub data: usize,
+}
 #[derive(Debug, Serialize, Deserialize)]
 struct MapHeader(Vec<(Id, String)>);
 

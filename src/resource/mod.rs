@@ -1,6 +1,8 @@
-use std::fmt;
 use std::fmt::{Debug, Formatter};
+use std::fs::{DirBuilder, File, Metadata};
+use std::path::Path;
 use std::sync::Arc;
+use std::{fmt, fs};
 
 use crate::game::run::error::{ErrorIds, ErrorManager};
 use egui::TextureHandle;
@@ -40,10 +42,10 @@ pub static RESOURCES_FOLDER: &str = "resources";
 /// Represents the resource registry.
 #[derive(Clone, Any)]
 pub struct Registry {
-    tiles: HashMap<Id, Tile>,
-    scripts: HashMap<Id, Script>,
-    tags: HashMap<Id, Tag>,
-    items: HashMap<Id, Item>,
+    pub(crate) tiles: HashMap<Id, Tile>,
+    pub(crate) scripts: HashMap<Id, Script>,
+    pub(crate) tags: HashMap<Id, Tag>,
+    pub(crate) items: HashMap<Id, Item>,
 
     #[rune(get, copy)]
     pub none: Id,
@@ -94,6 +96,8 @@ pub struct ResourceManager {
     pub all_vertices: Vec<GameVertex>,
     pub raw_models: HashMap<Id, Model>,
     pub faces: Vec<Face>,
+
+    pub maps: HashMap<String, Metadata>, // stores the map files in the "map" folder
 }
 
 impl Debug for ResourceManager {
@@ -111,6 +115,17 @@ impl ResourceManager {
         let tile_ids = TileIds::new(&mut interner);
         let err_ids = ErrorIds::new(&mut interner);
 
+        let maps: HashMap<String, Metadata> = fs::read_dir("map")
+            .unwrap()
+            .filter_map(|f| f.ok())
+            .map(|f| {
+                (
+                    f.file_name().to_str().unwrap().to_string(),
+                    File::open(f.path()).unwrap(),
+                )
+            })
+            .map(|f| (f.0, f.1.metadata().unwrap()))
+            .collect();
         Self {
             interner,
             track,
@@ -141,6 +156,8 @@ impl ResourceManager {
             all_vertices: Default::default(),
             raw_models: Default::default(),
             faces: Default::default(),
+
+            maps,
         }
     }
 }

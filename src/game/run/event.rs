@@ -187,7 +187,6 @@ pub fn on_event(
                 loop_store.linking_tile.take();
             }
         }
-
         if loop_store.input_handler.main_pressed
             || (loop_store.input_handler.shift_held && loop_store.input_handler.main_held)
         {
@@ -331,6 +330,10 @@ pub fn on_event(
         let (selection_send, mut selection_recv) = mpsc::channel(1);
 
         gui.begin_frame();
+
+        if loop_store.input_handler.debug_pressed {
+            gui::debugger(setup, gui, runtime, &setup.game, renderer, loop_store);
+        }
 
         // tile_selections
         gui::tile_selections(

@@ -410,6 +410,8 @@ pub struct RenderAlloc {
 
     pub command_allocator: StandardCommandBufferAllocator,
     pub descriptor_allocator: StandardDescriptorSetAllocator,
+
+    pub physical_device: Arc<PhysicalDevice>,
 }
 
 impl RenderAlloc {
@@ -458,8 +460,12 @@ impl RenderAlloc {
         window: Arc<Window>,
         physical_device: Arc<PhysicalDevice>,
     ) -> Self {
-        let (swapchain, images) =
-            Self::init_swapchain(window.clone(), surface, physical_device, device.clone());
+        let (swapchain, images) = Self::init_swapchain(
+            window.clone(),
+            surface,
+            physical_device.clone(),
+            device.clone(),
+        );
 
         let allocator = StandardMemoryAllocator::new_default(device.clone());
         let descriptor_allocator = StandardDescriptorSetAllocator::new(device.clone());
@@ -589,6 +595,8 @@ impl RenderAlloc {
 
             command_allocator,
             descriptor_allocator,
+
+            physical_device: physical_device.clone(),
         }
     }
 }

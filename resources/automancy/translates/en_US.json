@@ -59,10 +59,15 @@
         "tile_config_storage": "Storage:",
         "tile_config_target": "Target:",
         "error_popup": "Error",
+        "debug_menu": "Debug",
+
+        "lbl_amount": "Amount: ",
+        "lbl_link_destination": "(Right click to link Destination)",
 
         "btn_confirm": "Ok",
         "btn_exit": "Quit automancy",
-        "btn_cancel": "Cancel"
+        "btn_cancel": "Cancel",
+        "btn_link_network": "Link Network!"
     },
     "error": {
         "test_error": "automancy is early alpha software and is probably buggy af",

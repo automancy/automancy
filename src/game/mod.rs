@@ -1,4 +1,5 @@
 use std::mem;
+use std::mem::size_of_val;
 use std::sync::Arc;
 
 use cgmath::vec3;
@@ -9,7 +10,7 @@ use hexagon_tiles::traits::HexDirection;
 use ractor::concurrency::MpscSender;
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort, SupervisionEvent};
 
-use crate::game::map::{Map, TileEntities};
+use crate::game::map::{Map, MapInfo, TileEntities};
 use crate::game::ticking::{tick, TickUnit};
 use crate::game::tile::coord::{TileCoord, TileHex, TileUnit};
 use crate::game::tile::entity::{
@@ -119,6 +120,7 @@ pub enum GameMsg {
     TakeMap(RpcReplyPort<Map>),
     /// load a map
     LoadMap(Arc<ResourceManager>),
+    GetMapInfo(RpcReplyPort<MapInfo>),
     GetDataMap(RpcReplyPort<DataMap>),
     GetDataValue(String, RpcReplyPort<Option<Data>>),
     SetData(String, Data),
@@ -182,6 +184,20 @@ impl Actor for Game {
                 state.map = map;
                 state.tile_entities = tile_entities;
 
+                return Ok(());
+            }
+            GetMapInfo(reply) => {
+                let map_name = state.map.map_name.clone();
+                let tiles = state.map.tiles.len();
+                let data = state.map.data.len();
+
+                reply
+                    .send(MapInfo {
+                        map_name,
+                        tiles,
+                        data,
+                    })
+                    .unwrap();
                 return Ok(());
             }
             GetDataMap(reply) => {

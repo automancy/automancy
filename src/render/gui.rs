@@ -1,5 +1,7 @@
 use std::f32::consts::FRAC_PI_4;
-use std::process::exit;
+use std::fs::File;
+use std::path::Path;
+
 use std::sync::Arc;
 
 use cgmath::{point2, point3, vec3, MetricSpace};
@@ -17,6 +19,7 @@ use futures::channel::mpsc;
 use genmesh::{EmitTriangles, Quad};
 use hashbrown::HashMap;
 use hexagon_tiles::traits::HexDirection;
+use ractor::rpc::CallResult;
 use ractor::ActorRef;
 use rune::Any;
 use tokio::runtime::Runtime;
@@ -25,11 +28,12 @@ use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::image::SampleCount::Sample4;
 use vulkano::memory::allocator::{AllocationCreateInfo, MemoryUsage};
 use vulkano::pipeline::{Pipeline, PipelineBindPoint};
-use winit::event::{Event, WindowEvent};
+
 use winit::event_loop::{ControlFlow, EventLoop};
 
+use crate::game::map::Map;
 use crate::game::run::error::{error_to_key, error_to_string};
-use crate::game::run::event::{on_event, shutdown_graceful, EventLoopStorage};
+use crate::game::run::event::{shutdown_graceful, EventLoopStorage};
 use crate::game::run::setup::GameSetup;
 use crate::game::tile::coord::TileCoord;
 use crate::game::tile::coord::TileHex;
@@ -44,7 +48,7 @@ use crate::resource::tile::TileType;
 use crate::resource::ResourceManager;
 use crate::util::cg::{perspective, DPoint2, DPoint3, Double, Float, Matrix4, Vector3};
 use crate::util::colors;
-use crate::util::id::{id, id_static, Id, Interner};
+use crate::util::id::{id_static, Id, Interner};
 use crate::IOSEVKA_FONT;
 
 #[derive(Clone, Copy, Any)]
@@ -61,6 +65,13 @@ pub struct GuiIds {
     pub tile_config_target: Id,
     #[rune(get, copy)]
     pub error_popup: Id,
+    #[rune(get, copy)]
+    pub debug_menu: Id,
+
+    #[rune(get, copy)]
+    pub lbl_amount: Id,
+    #[rune(get, copy)]
+    pub lbl_link_destination: Id,
 
     #[rune(get, copy)]
     pub btn_confirm: Id,
@@ -68,6 +79,8 @@ pub struct GuiIds {
     pub btn_exit: Id,
     #[rune(get, copy)]
     pub btn_cancel: Id,
+    #[rune(get, copy)]
+    pub btn_link_network: Id,
 }
 
 impl GuiIds {
@@ -79,10 +92,15 @@ impl GuiIds {
             tile_config_storage: id_static("automancy", "tile_config_storage").to_id(interner),
             tile_config_target: id_static("automancy", "tile_config_target").to_id(interner),
             error_popup: id_static("automancy", "error_popup").to_id(interner),
+            debug_menu: id_static("automancy", "debug_menu").to_id(interner),
+
+            lbl_amount: id_static("automancy", "error_popup").to_id(interner),
+            lbl_link_destination: id_static("automancy", "lbl_link_destination").to_id(interner),
 
             btn_confirm: id_static("automancy", "btn_confirm").to_id(interner),
             btn_exit: id_static("automancy", "btn_exit").to_id(interner),
             btn_cancel: id_static("automancy", "btn_cancel").to_id(interner),
+            btn_link_network: id_static("automancy", "btn_link_network").to_id(interner),
         }
     }
 }
@@ -448,16 +466,76 @@ pub fn error_popup(
                     )
                     .clicked()
                 {
-                    exit(
-                        shutdown_graceful(setup, runtime, loop_store, control_flow)
-                            .expect("Failed to shut down gracefully!"),
-                    );
+                    shutdown_graceful(setup, runtime, loop_store, control_flow)
+                        .expect("Failed to shut down gracefully!");
                 }
             });
         });
     });
 }
 
+pub fn debugger(
+    setup: &GameSetup,
+    gui: &mut Gui,
+    runtime: &Runtime,
+    game: &ActorRef<GameMsg>,
+    renderer: &Renderer,
+    loop_store: &mut EventLoopStorage,
+) {
+    let resource_man = setup.resource_man.clone();
+    let device_name = renderer
+        .gpu
+        .alloc
+        .physical_device
+        .properties()
+        .device_name
+        .clone();
+    let fps = 1.0 / loop_store.elapsed.as_secs_f64();
+    let api_version = renderer
+        .gpu
+        .surface
+        .instance()
+        .max_api_version()
+        .to_string();
+    let tiles = resource_man.ordered_tiles.len();
+    let reg_tiles = resource_man.registry.tiles.len();
+    let items = resource_man.ordered_items.len();
+    let reg_items = resource_man.registry.items.len();
+    let tags = resource_man.registry.tags.len();
+    let functions = resource_man.functions.len();
+    let scripts = resource_man.registry.scripts.len();
+    let audio = resource_man.audio.len();
+    let meshes = resource_man.meshes.len();
+    let models = resource_man.raw_models.len();
+
+    let map = runtime
+        .block_on(game.call(GameMsg::GetMapInfo, Some(loop_store.elapsed)))
+        .unwrap()
+        .unwrap();
+    let map_name = map.map_name;
+    let data_size = map.data;
+    let tile_count = map.tiles;
+    let maps = &resource_man.maps;
+    let map_file = &maps[&format!("{map_name}.bin")];
+    let file_size = map_file.len();
+    Window::new(
+        setup.resource_man.translates.gui[&resource_man.registry.gui_ids.debug_menu]
+            .to_string(),
+    )
+    .resizable(false)
+    .default_width(600.0)
+    .frame(default_frame().inner_margin(Margin::same(10.0)))
+    .show(&gui.context(), |ui| {
+        ui.label(format!("FPS: {fps:.1}"));
+        ui.label(format!("Device: {device_name} API {api_version}"));
+        ui.label(format!(
+            "ResourceMan: {tiles}/{reg_tiles}T {items}/{reg_items}I {functions}F {tags}Ta {scripts}S {audio}A {meshes}/{models}M"
+        ));
+        ui.label(format!(
+            "Map \"{map_name}\" ({map_name}.bin): {data_size}D {tile_count}T, {file_size}B (on open)"
+        ))
+    });
+}
 pub fn add_direction(ui: &mut Ui, target_coord: &mut Option<TileCoord>, n: usize) {
     let coord = TileHex::NEIGHBORS[(n + 2) % 6];
     let coord = Some(coord.into());
@@ -690,7 +768,11 @@ pub fn tile_config(
                                 DragValue::new(&mut new_amount)
                                     .clamp_range(0..=65535)
                                     .speed(1.0)
-                                    .prefix("Amount:"), // TODO translate
+                                    .prefix(
+                                        setup.resource_man.translates.gui
+                                            [&setup.resource_man.registry.gui_ids.lbl_amount]
+                                            .to_string(),
+                                    ),
                             );
                         });
 
@@ -710,10 +792,21 @@ pub fn tile_config(
                         if id == &setup.resource_man.registry.tile_ids.master_node {
                             ui.add_space(MARGIN);
 
-                            if ui.button("Link Network!").clicked() {
+                            if ui
+                                .button(
+                                    setup.resource_man.translates.gui
+                                        [&setup.resource_man.registry.gui_ids.btn_link_network]
+                                        .to_string(),
+                                )
+                                .clicked()
+                            {
                                 loop_store.linking_tile = Some(config_open);
                             };
-                            ui.label("(Right click to link Destination)");
+                            ui.label(
+                                setup.resource_man.translates.gui
+                                    [&setup.resource_man.registry.gui_ids.lbl_link_destination]
+                                    .to_string(),
+                            );
 
                             ui.add_space(MARGIN);
                         }
