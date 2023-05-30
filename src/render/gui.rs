@@ -19,7 +19,7 @@ use futures::channel::mpsc;
 use genmesh::{EmitTriangles, Quad};
 use hashbrown::HashMap;
 use hexagon_tiles::traits::HexDirection;
-use ractor::rpc::CallResult;
+
 use ractor::ActorRef;
 use rune::Any;
 use tokio::runtime::Runtime;
@@ -31,7 +31,6 @@ use vulkano::pipeline::{Pipeline, PipelineBindPoint};
 
 use winit::event_loop::{ControlFlow, EventLoop};
 
-use crate::game::map::Map;
 use crate::game::run::error::{error_to_key, error_to_string};
 use crate::game::run::event::{shutdown_graceful, EventLoopStorage};
 use crate::game::run::setup::GameSetup;
@@ -516,8 +515,12 @@ pub fn debugger(
     let data_size = map.data;
     let tile_count = map.tiles;
     let maps = &resource_man.maps;
-    let map_file = &maps[&format!("{map_name}.bin")];
-    let file_size = map_file.len();
+    let map_file = &maps.get(&format!("{map_name}.bin"));
+    let file_size = if map_file.is_some() {
+        map_file.unwrap().len()
+    } else {
+        0
+    };
     Window::new(
         setup.resource_man.translates.gui[&resource_man.registry.gui_ids.debug_menu]
             .to_string(),
