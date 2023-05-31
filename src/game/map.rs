@@ -1,9 +1,12 @@
 use std::fmt::Debug;
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
+use std::ops::Add;
 use std::{collections::HashMap, path::PathBuf};
 
 use chrono::{Local, Utc};
+use futures::executor::block_on;
+use futures::future::join_all;
 use ractor::ActorRef;
 use serde::{Deserialize, Serialize};
 use tokio::runtime::Runtime;
@@ -77,7 +80,7 @@ impl Map {
         PathBuf::from(format!("{MAP_PATH}/{map_name}.bin"))
     }
 
-    pub fn save(&self, runtime: &Runtime, interner: &Interner, tile_entities: TileEntities) {
+    pub async fn save(&self, interner: &Interner, tile_entities: &TileEntities) {
         drop(std::fs::create_dir_all(MAP_PATH));
 
         let path = Self::path(&self.map_name);
@@ -88,30 +91,23 @@ impl Map {
         let mut encoder = Encoder::new(writer, 0).unwrap();
 
         let mut id_map = HashMap::new();
-
-        let serde_tiles = self
-            .tiles
-            .iter()
-            .flat_map(|(coord, (id, tile_modifier))| {
-                if let Some(tile_entity) = tile_entities.get(coord) {
-                    if !id_map.contains_key(id) {
-                        id_map.insert(*id, interner.resolve(*id).unwrap().to_string());
-                    }
-
-                    let data = runtime
-                        .block_on(tile_entity.call(GetData, None))
-                        .unwrap()
-                        .unwrap(); // TODO call multi
-                    let data = data_to_raw(data, interner);
-
-                    tile_entity.stop(None);
-
-                    Some((coord, SerdeTile(*id, *tile_modifier, data)))
-                } else {
-                    None
+        let mut serde_tiles = Vec::new();
+        for (coord, (id, tile_modifier)) in self.tiles.iter() {
+            if let Some(tile_entity) = tile_entities.get(&coord) {
+                if !id_map.contains_key(id) {
+                    id_map.insert(*id, interner.resolve(*id).unwrap().to_string());
                 }
-            })
-            .collect::<Vec<_>>();
+
+                let data = tile_entity.call(GetData, None).await.unwrap().unwrap();
+                let data = data_to_raw(data, interner);
+
+                // tile_entity.stop(None);
+
+                serde_tiles.push(Some((coord, SerdeTile(*id, *tile_modifier, data))));
+            } else {
+                serde_tiles.push(None);
+            }
+        }
 
         let header = MapHeader(id_map.into_iter().collect());
 
@@ -199,5 +195,23 @@ impl Map {
             },
             tile_entities,
         )
+    }
+    pub fn sanitize_name(name: String) -> String {
+        if name.is_empty() {
+            return "empty".to_string();
+        }
+        let mut name = name;
+        name = name.trim().to_string();
+        name = name.trim_matches('.').to_string();
+        name = name.replace(|c: char| !c.is_alphanumeric(), "_");
+        let win_illegal_names = vec![
+            "CON", "PRN", "AUX", "CLOCK$", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6",
+            "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8",
+            "LPT9",
+        ];
+        if win_illegal_names.contains(&name.to_ascii_uppercase().as_str()) {
+            return format!("_{name}");
+        }
+        name
     }
 }

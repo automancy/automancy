@@ -148,6 +148,7 @@ pub struct InputHandler {
 
     pub debug_pressed: bool,
 
+    pub pause_pressed: bool,
     pub scroll: Option<DVector2>,
 
     pub main_move: Option<DVector2>,
@@ -171,6 +172,8 @@ impl Default for InputHandler {
             undo_pressed: false,
 
             debug_pressed: false,
+
+            pause_pressed: false,
 
             scroll: None,
             main_move: None,
@@ -228,6 +231,7 @@ impl InputHandler {
                     match input.virtual_keycode {
                         Some(VirtualKeyCode::Z) => self.undo_pressed = true,
                         Some(VirtualKeyCode::F3) => self.debug_pressed = !self.debug_pressed,
+                        Some(VirtualKeyCode::Escape) => self.pause_pressed = !self.pause_pressed,
                         _ => {}
                     }
                 }

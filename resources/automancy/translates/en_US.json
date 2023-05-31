@@ -53,21 +53,37 @@
         "still": "Alchemical Still"
     },
     "gui": {
-        "tile_info": "Tile Info",
         "tile_config": "Config",
+        "tile_info": "Tile Info",
         "tile_config_script": "Script:",
         "tile_config_storage": "Storage:",
         "tile_config_target": "Target:",
         "error_popup": "Error",
         "debug_menu": "Debug",
+        "load_map": "Load Map",
+        "delete_map": "Delete Map",
+        "create_map": "Create Map",
+        "options": "Options",
 
         "lbl_amount": "Amount: ",
         "lbl_link_destination": "(Right click to link Destination)",
+        "lbl_maps_loaded": "{} maps loaded",
+        "lbl_delete_map_confirm": "This will permanently delete this map. Are you sure?",
 
         "btn_confirm": "Ok",
-        "btn_exit": "Quit automancy",
+        "btn_exit": "Quit",
         "btn_cancel": "Cancel",
-        "btn_link_network": "Link Network!"
+        "btn_link_network": "Link Network!",
+        "btn_play": "Play",
+        "btn_options": "Options",
+        "btn_fedi": "Fedi",
+        "btn_source": "Source",
+        "btn_unpause": "Unpause",
+        "btn_load": "Load",
+        "btn_delete": "Delete",
+        "btn_new_map": "New Map",
+
+        "time_fmt": "%x at %r"
     },
     "error": {
         "test_error": "automancy is early alpha software and is probably buggy af",

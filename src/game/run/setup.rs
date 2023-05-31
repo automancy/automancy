@@ -1,8 +1,10 @@
 use std::fs;
+use std::fs::File;
 use std::sync::Arc;
 
 use egui::Frame;
 use flexstr::SharedStr;
+use futures::executor::block_on;
 use kira::manager::backend::cpal::CpalBackend;
 use kira::manager::{AudioManager, AudioManagerSettings};
 use kira::track::{TrackBuilder, TrackHandle};
@@ -12,6 +14,7 @@ use vulkano::device::DeviceExtensions;
 use winit::event_loop::EventLoop;
 use winit::window::{Icon, Window};
 
+use crate::game::map::MapInfo;
 use crate::game::ticking::TICK_INTERVAL;
 use crate::game::tile::coord::ChunkCoord;
 use crate::game::{Game, GameMsg};
@@ -40,8 +43,8 @@ pub struct GameSetup {
     pub camera_chunk_coord: ChunkCoord,
     /// the window
     pub window: Arc<Window>,
-    /// what menu should be shown
-    pub gui_state: GuiState,
+    /// the list of available maps
+    pub maps: Vec<MapInfo>,
 }
 
 impl GameSetup {
@@ -142,9 +145,37 @@ impl GameSetup {
                 camera,
                 camera_chunk_coord: camera.get_tile_coord().into(),
                 window,
-                gui_state: GuiState::Main,
+
+                maps: Vec::new(),
             },
         )
+    }
+    pub fn refresh_maps(&mut self) {
+        self.maps = fs::read_dir("map")
+            .unwrap()
+            .filter_map(|f| f.ok())
+            .map(|f| f.file_name().to_str().unwrap().to_string())
+            .filter(|f| f.ends_with(".bin"))
+            .map(|f| f.strip_suffix(".bin").unwrap().to_string())
+            .filter(|f| !f.starts_with('.'))
+            .map(|map| {
+                block_on(self.game.call(
+                    |reply| {
+                        GameMsg::GetUnloadedMapInfo(
+                            map.to_string(),
+                            self.resource_man.clone(),
+                            reply,
+                        )
+                    },
+                    None,
+                ))
+                .unwrap()
+                .unwrap()
+            })
+            .collect::<Vec<MapInfo>>();
+        self.maps.sort_by(|a, b| a.map_name.cmp(&b.map_name));
+        self.maps.sort_by(|a, b| a.save_time.cmp(&b.save_time));
+        self.maps.reverse();
     }
 }
 /// Initialize the Resource Manager system, and loads all the resources in all namespaces.

@@ -20,7 +20,7 @@ use crate::game::{input, GameMsg, PlaceTileResponse};
 use crate::render::camera::{hex_to_normalized, screen_to_normalized, screen_to_world, FAR};
 use crate::render::data::InstanceData;
 use crate::render::gui;
-use crate::render::gui::GuiState;
+use crate::render::gui::{GuiState, PopupState};
 use crate::render::renderer::Renderer;
 use crate::resource::item::Item;
 use crate::util::cg::{DPoint3, Double, Float};
@@ -53,6 +53,9 @@ pub struct EventLoopStorage {
     pub last_frame_start: Instant,
     /// the elapsed time between each frame
     pub elapsed: Duration,
+
+    pub gui_state: GuiState,
+    pub popup_state: PopupState,
 }
 
 impl Default for EventLoopStorage {
@@ -69,6 +72,9 @@ impl Default for EventLoopStorage {
             linking_tile: None,
             last_frame_start: Instant::now(),
             elapsed: Default::default(),
+
+            gui_state: GuiState::Main,
+            popup_state: PopupState::None,
         }
     }
 }
@@ -88,7 +94,10 @@ pub fn shutdown_graceful(
         .block_on(setup.game.call(GameMsg::TakeTileEntities, None))?
         .unwrap();
 
-    map.save(runtime, &setup.resource_man.interner, tile_entities);
+    setup
+        .game
+        .send_message(GameMsg::SaveMap(setup.resource_man.clone()))
+        .unwrap();
 
     setup.game.stop(Some("Game closed".to_string()));
 
@@ -327,21 +336,28 @@ pub fn on_event(
         let (selection_send, mut selection_recv) = mpsc::channel(1);
 
         gui.begin_frame();
-        match setup.gui_state {
-            GuiState::Main => gui::main_menu(setup, gui, runtime, control_flow),
-            GuiState::MapLoad => {
+        if loop_store.input_handler.pause_pressed {
+            if loop_store.gui_state == GuiState::Ingame {
                 setup
                     .game
-                    .send_message(GameMsg::LoadMap(
-                        setup.resource_man.clone(),
-                        "test".to_string(),
-                    ))
+                    .send_message(GameMsg::SaveMap(setup.resource_man.clone()))
                     .unwrap();
-
-                setup.gui_state = GuiState::Ingame;
+                loop_store.gui_state = GuiState::Paused;
+            } else if loop_store.gui_state == GuiState::Paused {
+                loop_store.gui_state = GuiState::Ingame;
+            }
+            loop_store.input_handler.pause_pressed = false;
+        }
+        match loop_store.gui_state {
+            GuiState::Main => gui::main_menu(setup, gui, runtime, control_flow, loop_store),
+            GuiState::MapLoad => {
+                gui::map_load_menu(setup, gui, loop_store);
             }
             GuiState::Options => {
-                gui::options_menu(setup, gui);
+                gui::options_menu(setup, gui, loop_store);
+            }
+            GuiState::Paused => {
+                gui::pause_menu(setup, gui, loop_store);
             }
             GuiState::Ingame => {
                 // tile_selections
@@ -433,11 +449,18 @@ pub fn on_event(
                 }
             }
         }
+        match &loop_store.popup_state {
+            PopupState::None => {}
+            PopupState::MapCreate => gui::map_create_menu(setup, gui, loop_store),
+            PopupState::MapDeleteConfirmation(map) => {
+                gui::map_delete_confirmation(setup, gui, loop_store, map.clone());
+            }
+        }
         if loop_store.input_handler.debug_pressed {
             gui::debugger(setup, gui, runtime, &setup.game, renderer, loop_store);
         }
         if resource_man.error_man.has_errors() {
-            gui::error_popup(setup, gui, runtime, control_flow);
+            gui::error_popup(setup, gui);
         }
         let render_info = block_on(setup.game.call(
             |reply| GameMsg::RenderInfoRequest {

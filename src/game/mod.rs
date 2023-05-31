@@ -3,11 +3,13 @@ use std::sync::Arc;
 
 use cgmath::vec3;
 use flexstr::SharedStr;
+use futures::executor::block_on;
 use hashbrown::HashMap;
 use hexagon_tiles::layout::hex_to_pixel;
 use hexagon_tiles::traits::HexDirection;
 use ractor::concurrency::MpscSender;
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort, SupervisionEvent};
+use tokio::runtime::Runtime;
 
 use crate::game::map::{Map, MapInfo, TileEntities};
 use crate::game::ticking::{tick, TickUnit};
@@ -117,9 +119,11 @@ pub enum GameMsg {
     TakeTileEntities(RpcReplyPort<TileEntities>),
     /// get the map
     TakeMap(RpcReplyPort<Map>),
+    SaveMap(Arc<ResourceManager>),
     /// load a map
     LoadMap(Arc<ResourceManager>, String),
     GetMapInfo(RpcReplyPort<MapInfo>),
+    GetUnloadedMapInfo(String, Arc<ResourceManager>, RpcReplyPort<MapInfo>),
     GetDataMap(RpcReplyPort<DataMap>),
     GetDataValue(String, RpcReplyPort<Option<Data>>),
     SetData(String, Data),
@@ -176,12 +180,20 @@ impl Actor for Game {
                     tile_entity.stop(Some("Loading new map".to_string()));
                 });
 
-                let (map, tile_entities) = Map::load(&myself, &resource_man, name).await;
+                let (map, tile_entities) = Map::load(&myself, &resource_man, name.clone()).await;
 
                 state.map = map;
                 state.tile_entities = tile_entities;
                 state.render_cache.clear();
+                log::info!("Successfully loaded map {name}!");
                 return Ok(());
+            }
+            SaveMap(resource_man) => {
+                state
+                    .map
+                    .save(&resource_man.interner, &state.tile_entities)
+                    .await;
+                log::info!("Saved map {}", state.map.map_name.clone())
             }
             GetMapInfo(reply) => {
                 let map_name = state.map.map_name.clone();
@@ -196,6 +208,17 @@ impl Actor for Game {
                         save_time,
                     })
                     .unwrap();
+                return Ok(());
+            }
+            GetUnloadedMapInfo(map, resource_man, reply) => {
+                let map = Map::load(&myself, &resource_man, map).await.0;
+                reply.send(MapInfo {
+                    map_name: map.map_name.clone(),
+                    tiles: map.tiles.len(),
+                    data: map.data.len(),
+                    save_time: map.save_time
+                }).unwrap();
+                drop(map);
                 return Ok(());
             }
             GetDataMap(reply) => {

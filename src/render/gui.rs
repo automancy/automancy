@@ -1,14 +1,16 @@
 use std::f32::consts::FRAC_PI_4;
+use std::fs;
 use std::sync::Arc;
 
 use cgmath::{point2, point3, vec3, MetricSpace};
+use chrono::{DateTime, FixedOffset, Local, NaiveDateTime, TimeZone, Utc};
 use egui::epaint::Shadow;
 use egui::style::{Margin, WidgetVisuals, Widgets};
 use egui::FontFamily::{Monospace, Proportional};
 use egui::{
     vec2, Align, Align2, Color32, CursorIcon, DragValue, FontData, FontDefinitions, FontId, Frame,
-    PaintCallback, Rgba, RichText, Rounding, ScrollArea, Sense, Stroke, Style, TextStyle,
-    TopBottomPanel, Ui, Visuals, Window,
+    PaintCallback, Rect, Rgba, RichText, Rounding, ScrollArea, Sense, Stroke, Style, TextBuffer,
+    TextStyle, TopBottomPanel, Ui, Visuals, Window,
 };
 use egui_winit_vulkano::{CallbackFn, Gui, GuiConfig};
 use fuse_rust::Fuse;
@@ -26,6 +28,7 @@ use vulkano::memory::allocator::{AllocationCreateInfo, MemoryUsage};
 use vulkano::pipeline::{Pipeline, PipelineBindPoint};
 use winit::event_loop::{ControlFlow, EventLoop};
 
+use crate::game::map::{Map, MapInfo};
 use crate::game::run::error::{error_to_key, error_to_string};
 use crate::game::run::event::{shutdown_graceful, EventLoopStorage};
 use crate::game::run::setup::GameSetup;
@@ -43,7 +46,7 @@ use crate::resource::ResourceManager;
 use crate::util::cg::{perspective, DPoint2, DPoint3, Double, Float, Matrix4, Vector3};
 use crate::util::colors;
 use crate::util::id::{id_static, Id, Interner};
-use crate::IOSEVKA_FONT;
+use crate::{util, IOSEVKA_FONT};
 
 #[derive(Clone, Copy, Any)]
 pub struct GuiIds {
@@ -61,11 +64,23 @@ pub struct GuiIds {
     pub error_popup: Id,
     #[rune(get, copy)]
     pub debug_menu: Id,
+    #[rune(get, copy)]
+    pub load_map: Id,
+    #[rune(get, copy)]
+    pub delete_map: Id,
+    #[rune(get, copy)]
+    pub create_map: Id,
+    #[rune(get, copy)]
+    pub options: Id,
 
     #[rune(get, copy)]
     pub lbl_amount: Id,
     #[rune(get, copy)]
     pub lbl_link_destination: Id,
+    #[rune(get, copy)]
+    pub lbl_maps_loaded: Id,
+    #[rune(get, copy)]
+    pub lbl_delete_map_confirm: Id,
 
     #[rune(get, copy)]
     pub btn_confirm: Id,
@@ -75,6 +90,25 @@ pub struct GuiIds {
     pub btn_cancel: Id,
     #[rune(get, copy)]
     pub btn_link_network: Id,
+    #[rune(get, copy)]
+    pub btn_play: Id,
+    #[rune(get, copy)]
+    pub btn_options: Id,
+    #[rune(get, copy)]
+    pub btn_fedi: Id,
+    #[rune(get, copy)]
+    pub btn_source: Id,
+    #[rune(get, copy)]
+    pub btn_unpause: Id,
+    #[rune(get, copy)]
+    pub btn_load: Id,
+    #[rune(get, copy)]
+    pub btn_delete: Id,
+    #[rune(get, copy)]
+    pub btn_new_map: Id,
+
+    #[rune(get, copy)]
+    pub time_fmt: Id,
 }
 
 impl GuiIds {
@@ -87,23 +121,47 @@ impl GuiIds {
             tile_config_target: id_static("automancy", "tile_config_target").to_id(interner),
             error_popup: id_static("automancy", "error_popup").to_id(interner),
             debug_menu: id_static("automancy", "debug_menu").to_id(interner),
+            load_map: id_static("automancy", "load_map").to_id(interner),
+            delete_map: id_static("automancy", "delete_map").to_id(interner),
+            create_map: id_static("automancy", "create_map").to_id(interner),
+            options: id_static("automancy", "options").to_id(interner),
 
             lbl_amount: id_static("automancy", "error_popup").to_id(interner),
             lbl_link_destination: id_static("automancy", "lbl_link_destination").to_id(interner),
+            lbl_maps_loaded: id_static("automancy", "lbl_maps_loaded").to_id(interner),
+            lbl_delete_map_confirm: id_static("automancy", "lbl_delete_map_confirm")
+                .to_id(interner),
 
             btn_confirm: id_static("automancy", "btn_confirm").to_id(interner),
             btn_exit: id_static("automancy", "btn_exit").to_id(interner),
             btn_cancel: id_static("automancy", "btn_cancel").to_id(interner),
             btn_link_network: id_static("automancy", "btn_link_network").to_id(interner),
+            btn_play: id_static("automancy", "btn_play").to_id(interner),
+            btn_options: id_static("automancy", "btn_options").to_id(interner),
+            btn_fedi: id_static("automancy", "btn_fedi").to_id(interner),
+            btn_source: id_static("automancy", "btn_source").to_id(interner),
+            btn_unpause: id_static("automancy", "btn_unpause").to_id(interner),
+            btn_load: id_static("automancy", "btn_load").to_id(interner),
+            btn_delete: id_static("automancy", "btn_delete").to_id(interner),
+            btn_new_map: id_static("automancy", "btn_new_map").to_id(interner),
+
+            time_fmt: id_static("automancy", "time_fmt").to_id(interner),
         }
     }
 }
-
+#[derive(Eq, PartialEq, Copy, Clone)]
 pub enum GuiState {
     Main,
     MapLoad,
     Options,
     Ingame,
+    Paused,
+}
+#[derive(Clone)]
+pub enum PopupState {
+    None,
+    MapCreate,
+    MapDeleteConfirmation(MapInfo),
 }
 fn init_fonts(gui: &Gui) {
     let mut fonts = FontDefinitions::default();
@@ -426,12 +484,7 @@ pub fn tile_info(
     });
 }
 
-pub fn error_popup(
-    setup: &mut GameSetup,
-    gui: &mut Gui,
-    runtime: &Runtime,
-    control_flow: &mut ControlFlow,
-) {
+pub fn error_popup(setup: &mut GameSetup, gui: &mut Gui) {
     let error = setup.resource_man.error_man.peek().unwrap();
     Window::new(
         setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.error_popup]
@@ -456,17 +509,6 @@ pub fn error_popup(
                     .clicked()
                 {
                     setup.resource_man.error_man.pop();
-                }
-                if ui
-                    .button(
-                        setup.resource_man.translates.gui
-                            [&setup.resource_man.registry.gui_ids.btn_exit]
-                            .to_string(),
-                    )
-                    .clicked()
-                {
-                    shutdown_graceful(setup, runtime, control_flow)
-                        .expect("Failed to shut down gracefully!");
                 }
             });
         });
@@ -514,13 +556,6 @@ pub fn debugger(
     let map_name = map.map_name;
     let data_size = map.data;
     let tile_count = map.tiles;
-    let maps = &resource_man.maps;
-    let map_file = &maps.get(&format!("{map_name}.bin"));
-    let file_size = if map_file.is_some() {
-        map_file.unwrap().len()
-    } else {
-        0
-    };
     Window::new(
         setup.resource_man.translates.gui[&resource_man.registry.gui_ids.debug_menu]
             .to_string(),
@@ -535,7 +570,7 @@ pub fn debugger(
             "ResourceMan: {tiles}/{reg_tiles}T {items}/{reg_items}I {functions}F {tags}Ta {scripts}S {audio}A {meshes}/{models}M"
         ));
         ui.label(format!(
-            "Map \"{map_name}\" ({map_name}.bin): {data_size}D {tile_count}T, {file_size}B (on open)"
+            "Map \"{map_name}\" ({map_name}.bin): {data_size}D {tile_count}T"
         ))
     });
 }
@@ -544,6 +579,7 @@ pub fn main_menu(
     gui: &mut Gui,
     runtime: &Runtime,
     control_flow: &mut ControlFlow,
+    loop_store: &mut EventLoopStorage,
 ) {
     Window::new("main_menu".to_string())
         .resizable(false)
@@ -559,21 +595,72 @@ pub fn main_menu(
                     .with_main_align(Align::Center),
                 |ui| {
                     ui.label(RichText::new("automancy").size(30.0));
-                    if ui.button(RichText::new("enter game").heading()).clicked() {
-                        setup.gui_state = GuiState::MapLoad
+                    if ui
+                        .button(
+                            RichText::new(
+                                setup.resource_man.translates.gui
+                                    [&setup.resource_man.registry.gui_ids.btn_play]
+                                    .to_string(),
+                            )
+                            .heading(),
+                        )
+                        .clicked()
+                    {
+                        setup.refresh_maps();
+                        loop_store.gui_state = GuiState::MapLoad
                     };
-                    if ui.button(RichText::new("options").heading()).clicked() {
-                        setup.gui_state = GuiState::Options
+                    if ui
+                        .button(
+                            RichText::new(
+                                setup.resource_man.translates.gui
+                                    [&setup.resource_man.registry.gui_ids.btn_options]
+                                    .to_string(),
+                            )
+                            .heading(),
+                        )
+                        .clicked()
+                    {
+                        loop_store.gui_state = GuiState::Options
                     };
-                    if ui.button(RichText::new("fedi").heading()).clicked() {
+                    if ui
+                        .button(
+                            RichText::new(
+                                setup.resource_man.translates.gui
+                                    [&setup.resource_man.registry.gui_ids.btn_fedi]
+                                    .to_string(),
+                            )
+                            .heading(),
+                        )
+                        .clicked()
+                    {
                         webbrowser::open("https://gamedev.lgbt/@automancy")
                             .expect("Failed to open web browser");
                     };
-                    if ui.button(RichText::new("source").heading()).clicked() {
+                    if ui
+                        .button(
+                            RichText::new(
+                                setup.resource_man.translates.gui
+                                    [&setup.resource_man.registry.gui_ids.btn_source]
+                                    .to_string(),
+                            )
+                            .heading(),
+                        )
+                        .clicked()
+                    {
                         webbrowser::open("https://github.com/sorcerers-class/automancy")
                             .expect("Failed to open web browser");
                     };
-                    if ui.button(RichText::new("quit").heading()).clicked() {
+                    if ui
+                        .button(
+                            RichText::new(
+                                setup.resource_man.translates.gui
+                                    [&setup.resource_man.registry.gui_ids.btn_exit]
+                                    .to_string(),
+                            )
+                            .heading(),
+                        )
+                        .clicked()
+                    {
                         shutdown_graceful(setup, runtime, control_flow)
                             .expect("Failed to shutdown gracefully!");
                     };
@@ -582,18 +669,271 @@ pub fn main_menu(
             );
         });
 }
-pub fn options_menu(setup: &mut GameSetup, gui: &mut Gui) {
-    Window::new("Options".to_string())
+pub fn pause_menu(setup: &mut GameSetup, gui: &mut Gui, loop_store: &mut EventLoopStorage) {
+    Window::new("Game Paused".to_string())
         .resizable(false)
         .default_width(175.0)
         .anchor(Align2([Align::Center, Align::Center]), vec2(0.0, 0.0))
         .frame(default_frame().inner_margin(10.0))
+        .movable(false)
         .show(&gui.context(), |ui| {
-            ui.label("Not yet implemented");
-            if ui.button("Ok").clicked() {
-                setup.gui_state = GuiState::Main
+            ui.with_layout(
+                ui.layout()
+                    .with_cross_align(Align::Center)
+                    .with_main_align(Align::Center),
+                |ui| {
+                    if ui
+                        .button(
+                            RichText::new(
+                                setup.resource_man.translates.gui
+                                    [&setup.resource_man.registry.gui_ids.btn_unpause]
+                                    .to_string(),
+                            )
+                            .heading(),
+                        )
+                        .clicked()
+                    {
+                        loop_store.gui_state = GuiState::Ingame
+                    };
+                    if ui
+                        .button(
+                            RichText::new(
+                                setup.resource_man.translates.gui
+                                    [&setup.resource_man.registry.gui_ids.btn_options]
+                                    .to_string(),
+                            )
+                            .heading(),
+                        )
+                        .clicked()
+                    {
+                        loop_store.gui_state = GuiState::Options
+                    };
+                    if ui
+                        .button(
+                            RichText::new(
+                                setup.resource_man.translates.gui
+                                    [&setup.resource_man.registry.gui_ids.btn_exit]
+                                    .to_string(),
+                            )
+                            .heading(),
+                        )
+                        .clicked()
+                    {
+                        setup
+                            .game
+                            .send_message(GameMsg::SaveMap(setup.resource_man.clone()))
+                            .unwrap();
+                        setup
+                            .game
+                            .send_message(GameMsg::LoadMap(
+                                setup.resource_man.clone(),
+                                ".mainmenu".to_string(),
+                            ))
+                            .unwrap();
+                        loop_store.gui_state = GuiState::Main
+                    };
+                    ui.label("v0.1.0")
+                },
+            );
+        });
+}
+pub fn map_load_menu(setup: &mut GameSetup, gui: &mut Gui, loop_store: &mut EventLoopStorage) {
+    Window::new(
+        setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.load_map]
+            .to_string(),
+    )
+    .resizable(false)
+    .default_width(250.0)
+    .anchor(Align2([Align::Center, Align::Center]), vec2(0.0, 0.0))
+    .frame(default_frame().inner_margin(10.0))
+    .show(&gui.context(), |ui| {
+        ScrollArea::vertical().max_height(225.0).show(ui, |ui| {
+            let mut dirty = false;
+            setup.maps.iter().for_each(|map| {
+                let resource_man = setup.resource_man.clone();
+                let time = util::unix_to_formatted_time(
+                    map.save_time,
+                    resource_man.translates.gui[&resource_man.registry.gui_ids.time_fmt]
+                        .to_string(),
+                );
+                ui.group(|ui| {
+                    ui.label(RichText::new(&map.map_name).heading());
+                    ui.horizontal(|ui| {
+                        ui.label(time);
+                        if ui
+                            .button(
+                                setup.resource_man.translates.gui
+                                    [&setup.resource_man.registry.gui_ids.btn_load]
+                                    .to_string(),
+                            )
+                            .clicked()
+                        {
+                            setup
+                                .game
+                                .send_message(GameMsg::LoadMap(resource_man, map.map_name.clone()))
+                                .unwrap();
+                            loop_store.gui_state = GuiState::Ingame;
+                        }
+                        if ui
+                            .button(
+                                setup.resource_man.translates.gui
+                                    [&setup.resource_man.registry.gui_ids.btn_delete]
+                                    .to_string(),
+                            )
+                            .clicked()
+                        {
+                            loop_store.popup_state = PopupState::MapDeleteConfirmation(map.clone());
+                        }
+                    });
+                });
+            });
+            if dirty {
+                setup.refresh_maps();
             }
         });
+        ui.label(util::format(
+            setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.lbl_maps_loaded]
+                .as_str(),
+            &[setup.maps.len().to_string().as_str()],
+        ));
+        ui.horizontal(|ui| {
+            if ui
+                .button(
+                    RichText::new(
+                        setup.resource_man.translates.gui
+                            [&setup.resource_man.registry.gui_ids.btn_new_map]
+                            .to_string(),
+                    )
+                    .heading(),
+                )
+                .clicked()
+            {
+                loop_store.popup_state = PopupState::MapCreate
+            }
+            if ui
+                .button(
+                    RichText::new(
+                        setup.resource_man.translates.gui
+                            [&setup.resource_man.registry.gui_ids.btn_cancel]
+                            .to_string(),
+                    )
+                    .heading(),
+                )
+                .clicked()
+            {
+                loop_store.gui_state = GuiState::Main
+            }
+        });
+    });
+}
+pub fn map_delete_confirmation(
+    setup: &mut GameSetup,
+    gui: &mut Gui,
+    loop_store: &mut EventLoopStorage,
+    map: MapInfo,
+) {
+    let mut dirty = false;
+    Window::new(
+        setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.delete_map]
+            .to_string(),
+    )
+    .resizable(false)
+    .default_width(250.0)
+    .anchor(Align2([Align::Center, Align::Center]), vec2(0.0, 0.0))
+    .frame(default_frame().inner_margin(10.0))
+    .show(&gui.context(), |ui| {
+        ui.label(
+            setup.resource_man.translates.gui
+                [&setup.resource_man.registry.gui_ids.lbl_delete_map_confirm]
+                .to_string(),
+        );
+        if ui
+            .button(
+                setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.btn_confirm]
+                    .to_string(),
+            )
+            .clicked()
+        {
+            fs::remove_file(format!("map/{}.bin", map.map_name)).unwrap();
+            dirty = true;
+            loop_store.popup_state = PopupState::None;
+            log::info!("Deleted map {}!", map.map_name);
+        }
+        if ui
+            .button(
+                setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.btn_cancel]
+                    .to_string(),
+            )
+            .clicked()
+        {
+            loop_store.popup_state = PopupState::None
+        }
+    });
+    if dirty {
+        setup.refresh_maps();
+    }
+}
+pub fn map_create_menu(setup: &mut GameSetup, gui: &mut Gui, loop_store: &mut EventLoopStorage) {
+    Window::new(
+        setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.create_map]
+            .to_string(),
+    )
+    .resizable(false)
+    .default_width(250.0)
+    .anchor(Align2([Align::Center, Align::Center]), vec2(0.0, 0.0))
+    .frame(default_frame().inner_margin(10.0))
+    .show(&gui.context(), |ui| {
+        ui.horizontal(|ui| {
+            ui.label("Name:");
+            ui.text_edit_singleline(&mut loop_store.filter);
+        });
+        if ui
+            .button(
+                setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.btn_confirm]
+                    .to_string(),
+            )
+            .clicked()
+        {
+            let name = Map::sanitize_name(loop_store.filter.clone());
+            setup
+                .game
+                .send_message(GameMsg::LoadMap(setup.resource_man.clone(), name))
+                .unwrap();
+            loop_store.filter.clear();
+            loop_store.popup_state = PopupState::None;
+            loop_store.gui_state = GuiState::Ingame
+        }
+        if ui
+            .button(
+                setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.btn_cancel]
+                    .to_string(),
+            )
+            .clicked()
+        {
+            loop_store.popup_state = PopupState::None
+        }
+    });
+}
+pub fn options_menu(setup: &mut GameSetup, gui: &mut Gui, loop_store: &mut EventLoopStorage) {
+    Window::new(
+        setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.options].to_string(),
+    )
+    .resizable(false)
+    .default_width(175.0)
+    .anchor(Align2([Align::Center, Align::Center]), vec2(0.0, 0.0))
+    .frame(default_frame().inner_margin(10.0))
+    .show(&gui.context(), |ui| {
+        ui.label("Not yet implemented");
+        if ui
+            .button(
+                setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.btn_confirm]
+                    .to_string(),
+            )
+            .clicked()
+        {
+            loop_store.gui_state = GuiState::Main
+        }
+    });
 }
 pub fn add_direction(ui: &mut Ui, target_coord: &mut Option<TileCoord>, n: usize) {
     let coord = TileHex::NEIGHBORS[(n + 2) % 6];

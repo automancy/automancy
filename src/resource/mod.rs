@@ -94,8 +94,6 @@ pub struct ResourceManager {
     pub all_vertices: Vec<GameVertex>,
     pub raw_models: HashMap<Id, Model>,
     pub faces: Vec<Face>,
-
-    pub maps: HashMap<String, Metadata>, // stores the map files in the "map" folder
 }
 
 impl Debug for ResourceManager {
@@ -113,17 +111,6 @@ impl ResourceManager {
         let tile_ids = TileIds::new(&mut interner);
         let err_ids = ErrorIds::new(&mut interner);
 
-        let maps: HashMap<String, Metadata> = fs::read_dir("map")
-            .unwrap()
-            .filter_map(|f| f.ok())
-            .map(|f| {
-                (
-                    f.file_name().to_str().unwrap().to_string(),
-                    File::open(f.path()).unwrap(),
-                )
-            })
-            .map(|f| (f.0, f.1.metadata().unwrap()))
-            .collect();
         Self {
             interner,
             track,
@@ -154,8 +141,6 @@ impl ResourceManager {
             all_vertices: Default::default(),
             raw_models: Default::default(),
             faces: Default::default(),
-
-            maps,
         }
     }
 }
