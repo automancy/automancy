@@ -1,21 +1,15 @@
-use chrono::{DateTime, Local, Utc};
-use futures::future::err;
-use std::collections::hash_map::DefaultHasher;
-use std::error::Error;
 use std::fmt::Debug;
 use std::fs::File;
-use std::hash::{Hash, Hasher};
 use std::io::{BufReader, BufWriter};
-use std::os::unix::raw::time_t;
-use std::time::Instant;
 use std::{collections::HashMap, path::PathBuf};
 
-use crate::game;
+use chrono::{Local, Utc};
 use ractor::ActorRef;
 use serde::{Deserialize, Serialize};
 use tokio::runtime::Runtime;
 use zstd::{Decoder, Encoder};
 
+use crate::game;
 use crate::game::tile::coord::TileCoord;
 use crate::game::tile::entity::TileEntityMsg::{GetData, SetData};
 use crate::game::tile::entity::{
@@ -41,6 +35,7 @@ pub struct Map {
 
     pub save_time: i64,
 }
+
 #[derive(Debug, Clone)]
 pub struct MapInfo {
     pub map_name: String,
@@ -48,11 +43,24 @@ pub struct MapInfo {
     pub data: usize,
     pub save_time: i64,
 }
-#[derive(Debug, Serialize, Deserialize)]
+
+#[derive(Debug, Serialize, Deserialize, Default)]
 struct MapHeader(Vec<(Id, String)>);
 
 #[derive(Debug, Serialize, Deserialize)]
-struct TileData(Id, TileModifier, DataMapRaw);
+struct SerdeMap {
+    #[serde(default)]
+    pub header: MapHeader,
+    #[serde(default)]
+    pub serde_tiles: Vec<(TileCoord, SerdeTile)>,
+    #[serde(default)]
+    pub data: DataMapRaw,
+    #[serde(default)]
+    pub save_time: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SerdeTile(Id, TileModifier, DataMapRaw);
 
 impl Map {
     pub fn new_empty(map_name: String) -> Self {
@@ -81,7 +89,7 @@ impl Map {
 
         let mut id_map = HashMap::new();
 
-        let tile_data = self
+        let serde_tiles = self
             .tiles
             .iter()
             .flat_map(|(coord, (id, tile_modifier))| {
@@ -96,9 +104,9 @@ impl Map {
                         .unwrap(); // TODO call multi
                     let data = data_to_raw(data, interner);
 
-                    tile_entity.stop(Some("Saving game".to_string()));
+                    tile_entity.stop(None);
 
-                    Some((coord, TileData(*id, *tile_modifier, data)))
+                    Some((coord, SerdeTile(*id, *tile_modifier, data)))
                 } else {
                     None
                 }
@@ -111,7 +119,7 @@ impl Map {
 
         let save_time = Utc::now().timestamp();
 
-        serde_json::to_writer(&mut encoder, &(header, tile_data, data, save_time)).unwrap();
+        serde_json::to_writer(&mut encoder, &(header, serde_tiles, data, save_time)).unwrap();
 
         encoder.do_finish().unwrap();
     }
@@ -132,15 +140,13 @@ impl Map {
         let reader = BufReader::with_capacity(MAP_BUFFER_SIZE, file);
         let decoder = Decoder::new(reader).unwrap();
 
-        let map_decoder: serde_json::Result<(
-            MapHeader,
-            Vec<(TileCoord, TileData)>,
-            DataMapRaw,
-            i64,
-        )> = serde_json::from_reader(decoder);
+        let decoded_map: serde_json::Result<SerdeMap> = serde_json::from_reader(decoder);
 
-        if map_decoder.is_err() {
+        if decoded_map.is_err() {
+            log::error!("serde: {:?}", decoded_map.err());
+
             let err_map_name = format!("{}-ERR-{}", map_name, Local::now().format("%y%m%d%H%M%S"));
+
             resource_man.error_man.push(
                 (
                     resource_man.registry.err_ids.invalid_map_data,
@@ -150,14 +156,20 @@ impl Map {
             );
             return (Map::new_empty(err_map_name), Default::default());
         }
-        let (header, tile_data, data, save_time) = map_decoder.unwrap();
+        let SerdeMap {
+            header,
+            serde_tiles,
+            data,
+            save_time,
+            ..
+        } = decoded_map.unwrap();
 
         let id_reverse = header.0.into_iter().collect::<HashMap<_, _>>();
 
         let mut tiles = HashMap::new();
         let mut tile_entities = HashMap::new();
 
-        for (coord, TileData(id, tile_modifier, data)) in tile_data.into_iter() {
+        for (coord, SerdeTile(id, tile_modifier, data)) in serde_tiles.into_iter() {
             if let Some(id) = id_reverse
                 .get(&id)
                 .and_then(|id| resource_man.interner.get(id.as_str()))

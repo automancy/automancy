@@ -1,15 +1,16 @@
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
+
+use rune::Any;
+
 use crate::resource::ResourceManager;
 use crate::util::id::{id_static, Id, Interner};
-use rune::Any;
-use std::collections::VecDeque;
-use std::error::Error;
-use std::fmt::{Debug, Display, Formatter};
-use std::sync::{Arc, Mutex, PoisonError};
 
 #[derive(Default)]
 pub struct ErrorManager {
     queue: Arc<Mutex<VecDeque<GameError>>>,
 }
+
 #[derive(Clone, Copy, Any)]
 pub struct ErrorIds {
     pub test_error: Id,

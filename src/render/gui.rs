@@ -1,17 +1,14 @@
 use std::f32::consts::FRAC_PI_4;
-use std::fs::File;
-use std::path::Path;
-
 use std::sync::Arc;
 
 use cgmath::{point2, point3, vec3, MetricSpace};
 use egui::epaint::Shadow;
-use egui::style::{default_text_styles, Margin, WidgetVisuals, Widgets};
+use egui::style::{Margin, WidgetVisuals, Widgets};
 use egui::FontFamily::{Monospace, Proportional};
 use egui::{
     vec2, Align, Align2, Color32, CursorIcon, DragValue, FontData, FontDefinitions, FontId, Frame,
     PaintCallback, Rgba, RichText, Rounding, ScrollArea, Sense, Stroke, Style, TextStyle,
-    TopBottomPanel, Ui, Vec2, Visuals, WidgetText, Window,
+    TopBottomPanel, Ui, Visuals, Window,
 };
 use egui_winit_vulkano::{CallbackFn, Gui, GuiConfig};
 use fuse_rust::Fuse;
@@ -19,7 +16,6 @@ use futures::channel::mpsc;
 use genmesh::{EmitTriangles, Quad};
 use hashbrown::HashMap;
 use hexagon_tiles::traits::HexDirection;
-
 use ractor::ActorRef;
 use rune::Any;
 use tokio::runtime::Runtime;
@@ -28,7 +24,6 @@ use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::image::SampleCount::Sample4;
 use vulkano::memory::allocator::{AllocationCreateInfo, MemoryUsage};
 use vulkano::pipeline::{Pipeline, PipelineBindPoint};
-
 use winit::event_loop::{ControlFlow, EventLoop};
 
 use crate::game::run::error::{error_to_key, error_to_string};
@@ -435,7 +430,6 @@ pub fn error_popup(
     setup: &mut GameSetup,
     gui: &mut Gui,
     runtime: &Runtime,
-    loop_store: &mut EventLoopStorage,
     control_flow: &mut ControlFlow,
 ) {
     let error = setup.resource_man.error_man.peek().unwrap();
@@ -471,7 +465,7 @@ pub fn error_popup(
                     )
                     .clicked()
                 {
-                    shutdown_graceful(setup, runtime, loop_store, control_flow)
+                    shutdown_graceful(setup, runtime, control_flow)
                         .expect("Failed to shut down gracefully!");
                 }
             });
@@ -549,7 +543,6 @@ pub fn main_menu(
     setup: &mut GameSetup,
     gui: &mut Gui,
     runtime: &Runtime,
-    loop_store: &mut EventLoopStorage,
     control_flow: &mut ControlFlow,
 ) {
     Window::new("main_menu".to_string())
@@ -581,7 +574,7 @@ pub fn main_menu(
                             .expect("Failed to open web browser");
                     };
                     if ui.button(RichText::new("quit").heading()).clicked() {
-                        shutdown_graceful(setup, runtime, loop_store, control_flow)
+                        shutdown_graceful(setup, runtime, control_flow)
                             .expect("Failed to shutdown gracefully!");
                     };
                     ui.label("v0.1.0")

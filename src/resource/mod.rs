@@ -1,10 +1,7 @@
 use std::fmt::{Debug, Formatter};
-use std::fs::{DirBuilder, File, Metadata};
-use std::path::Path;
-use std::sync::Arc;
+use std::fs::{File, Metadata};
 use std::{fmt, fs};
 
-use crate::game::run::error::{ErrorIds, ErrorManager};
 use egui::TextureHandle;
 use flexstr::SharedStr;
 use hashbrown::HashMap;
@@ -13,6 +10,7 @@ use kira::track::TrackHandle;
 use rune::Any;
 use serde::Deserialize;
 
+use crate::game::run::error::{ErrorIds, ErrorManager};
 use crate::render::data::{Face, GameVertex, Model};
 use crate::render::gui::GuiIds;
 use crate::resource::function::Function;

@@ -4,22 +4,19 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use cgmath::{point2, vec3, EuclideanSpace, Matrix4};
 use egui_winit_vulkano::Gui;
-use flexstr::SharedStr;
 use fuse_rust::Fuse;
 use futures::channel::mpsc;
 use futures::executor::block_on;
 use hashbrown::HashMap;
-use ractor::Actor;
 use tokio::runtime::Runtime;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::ControlFlow;
 
 use crate::game::input::InputHandler;
-use crate::game::run::setup;
 use crate::game::run::setup::GameSetup;
 use crate::game::tile::coord::{ChunkCoord, TileCoord, CHUNK_SIZE_SQUARED};
 use crate::game::tile::entity::{Data, TileEntityMsg, TileModifier};
-use crate::game::{input, Game, GameMsg, PlaceTileResponse};
+use crate::game::{input, GameMsg, PlaceTileResponse};
 use crate::render::camera::{hex_to_normalized, screen_to_normalized, screen_to_world, FAR};
 use crate::render::data::InstanceData;
 use crate::render::gui;
@@ -35,8 +32,6 @@ use crate::util::id::Id;
 pub struct EventLoopStorage {
     /// fuzzy search engine
     pub fuse: Fuse,
-    /// whether or not the game should close.
-    pub closed: bool,
     // TODO most of the following elements should be moved out of here...
     /// the filter for the scripts.
     pub filter: String,
@@ -64,7 +59,6 @@ impl Default for EventLoopStorage {
     fn default() -> Self {
         Self {
             fuse: Default::default(),
-            closed: false,
             filter: "".to_string(),
             input_handler: Default::default(),
             selected_tile_modifiers: Default::default(),
@@ -78,12 +72,12 @@ impl Default for EventLoopStorage {
         }
     }
 }
+
 pub fn shutdown_graceful(
     setup: &mut GameSetup,
     runtime: &Runtime,
-    loop_store: &mut EventLoopStorage,
     control_flow: &mut ControlFlow,
-) -> Result<i32, Box<dyn Error>> {
+) -> Result<(), Box<dyn Error>> {
     setup.game.send_message(GameMsg::StopTicking).unwrap();
 
     let map = runtime
@@ -102,9 +96,8 @@ pub fn shutdown_graceful(
 
     control_flow.set_exit();
 
-    loop_store.closed = true;
     log::info!("Shut down gracefully");
-    Ok(0)
+    Ok(())
 }
 /// Triggers every time the event loop is run once.
 pub fn on_event(
@@ -116,10 +109,6 @@ pub fn on_event(
     event: Event<()>,
     control_flow: &mut ControlFlow,
 ) -> Result<(), Box<dyn Error>> {
-    if loop_store.closed {
-        return Ok(());
-    }
-
     let window_size = setup.window.inner_size();
 
     let mut window_event = None;
@@ -136,7 +125,7 @@ pub fn on_event(
             ..
         } => {
             // game shutdown
-            shutdown_graceful(setup, runtime, loop_store, control_flow)?;
+            shutdown_graceful(setup, runtime, control_flow)?;
         }
 
         Event::WindowEvent { event, .. } => {
@@ -162,6 +151,10 @@ pub fn on_event(
 
         _ => {}
     };
+
+    if *control_flow == ControlFlow::Exit {
+        return Ok(());
+    }
 
     if window_event.is_some() || device_event.is_some() {
         loop_store.input_handler.reset();
@@ -335,12 +328,8 @@ pub fn on_event(
 
         gui.begin_frame();
         match setup.gui_state {
-            GuiState::Main => gui::main_menu(setup, gui, runtime, loop_store, control_flow),
-            GuiState::MapLoad => setup.gui_state = GuiState::Ingame,
-            GuiState::Options => {
-                gui::options_menu(setup, gui);
-            }
-            GuiState::Ingame => {
+            GuiState::Main => gui::main_menu(setup, gui, runtime, control_flow),
+            GuiState::MapLoad => {
                 setup
                     .game
                     .send_message(GameMsg::LoadMap(
@@ -348,6 +337,13 @@ pub fn on_event(
                         "test".to_string(),
                     ))
                     .unwrap();
+
+                setup.gui_state = GuiState::Ingame;
+            }
+            GuiState::Options => {
+                gui::options_menu(setup, gui);
+            }
+            GuiState::Ingame => {
                 // tile_selections
                 gui::tile_selections(
                     setup,
@@ -441,19 +437,17 @@ pub fn on_event(
             gui::debugger(setup, gui, runtime, &setup.game, renderer, loop_store);
         }
         if resource_man.error_man.has_errors() {
-            gui::error_popup(setup, gui, runtime, loop_store, control_flow);
+            gui::error_popup(setup, gui, runtime, control_flow);
         }
-        let render_info = runtime
-            .block_on(setup.game.call(
-                |reply| GameMsg::RenderInfoRequest {
-                    range: CHUNK_SIZE_SQUARED,
-                    center: setup.camera.get_tile_coord(),
-                    reply,
-                },
-                None,
-            ))
-            .unwrap()
-            .unwrap();
+        let render_info = block_on(setup.game.call(
+            |reply| GameMsg::RenderInfoRequest {
+                range: CHUNK_SIZE_SQUARED,
+                center: setup.camera.get_tile_coord(),
+                reply,
+            },
+            None,
+        ))?
+        .unwrap();
 
         renderer.render(
             runtime,

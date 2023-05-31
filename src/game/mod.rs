@@ -1,5 +1,4 @@
 use std::mem;
-use std::mem::size_of_val;
 use std::sync::Arc;
 
 use cgmath::vec3;

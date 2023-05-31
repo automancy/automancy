@@ -596,7 +596,7 @@ impl RenderAlloc {
             command_allocator,
             descriptor_allocator,
 
-            physical_device: physical_device.clone(),
+            physical_device,
         }
     }
 }

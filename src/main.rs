@@ -18,7 +18,7 @@ fn main() {
     let mut storage = EventLoopStorage::default();
 
     event_loop.run(move |event, _, control_flow| {
-        on_event(
+        let _ = on_event(
             &runtime,
             &mut setup,
             &mut storage,
@@ -26,7 +26,6 @@ fn main() {
             &mut gui,
             event,
             control_flow,
-        )
-        .unwrap();
+        );
     });
 }
