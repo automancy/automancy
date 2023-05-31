@@ -18,6 +18,8 @@ winit = "0.28.3"
 egui_winit_vulkano = "0.24.0"
 egui = "0.21.0"
 
+webbrowser = "0.8.10"
+
 string-interner = "0.14.0"
 slice-group-by = "0.3.0"
 hexagon-tiles = { git = "https://github.com/Mg138/hexagon-tiles" }

@@ -119,7 +119,7 @@ pub enum GameMsg {
     /// get the map
     TakeMap(RpcReplyPort<Map>),
     /// load a map
-    LoadMap(Arc<ResourceManager>),
+    LoadMap(Arc<ResourceManager>, String),
     GetMapInfo(RpcReplyPort<MapInfo>),
     GetDataMap(RpcReplyPort<DataMap>),
     GetDataValue(String, RpcReplyPort<Option<Data>>),
@@ -172,30 +172,29 @@ impl Actor for Game {
 
                 return Ok(());
             }
-            LoadMap(resource_man) => {
+            LoadMap(resource_man, name) => {
                 state.tile_entities.values().for_each(|tile_entity| {
                     tile_entity.stop(Some("Loading new map".to_string()));
                 });
-
-                let name = state.map.map_name.clone();
 
                 let (map, tile_entities) = Map::load(&myself, &resource_man, name).await;
 
                 state.map = map;
                 state.tile_entities = tile_entities;
-
+                state.render_cache.clear();
                 return Ok(());
             }
             GetMapInfo(reply) => {
                 let map_name = state.map.map_name.clone();
                 let tiles = state.map.tiles.len();
                 let data = state.map.data.len();
-
+                let save_time = state.map.save_time;
                 reply
                     .send(MapInfo {
                         map_name,
                         tiles,
                         data,
+                        save_time,
                     })
                     .unwrap();
                 return Ok(());

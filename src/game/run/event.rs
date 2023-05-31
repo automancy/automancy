@@ -4,22 +4,26 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use cgmath::{point2, vec3, EuclideanSpace, Matrix4};
 use egui_winit_vulkano::Gui;
+use flexstr::SharedStr;
 use fuse_rust::Fuse;
 use futures::channel::mpsc;
 use futures::executor::block_on;
 use hashbrown::HashMap;
+use ractor::Actor;
 use tokio::runtime::Runtime;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::ControlFlow;
 
 use crate::game::input::InputHandler;
+use crate::game::run::setup;
 use crate::game::run::setup::GameSetup;
 use crate::game::tile::coord::{ChunkCoord, TileCoord, CHUNK_SIZE_SQUARED};
 use crate::game::tile::entity::{Data, TileEntityMsg, TileModifier};
-use crate::game::{input, GameMsg, PlaceTileResponse};
+use crate::game::{input, Game, GameMsg, PlaceTileResponse};
 use crate::render::camera::{hex_to_normalized, screen_to_normalized, screen_to_world, FAR};
 use crate::render::data::InstanceData;
 use crate::render::gui;
+use crate::render::gui::GuiState;
 use crate::render::renderer::Renderer;
 use crate::resource::item::Item;
 use crate::util::cg::{DPoint3, Double, Float};
@@ -330,102 +334,115 @@ pub fn on_event(
         let (selection_send, mut selection_recv) = mpsc::channel(1);
 
         gui.begin_frame();
+        match setup.gui_state {
+            GuiState::Main => gui::main_menu(setup, gui, runtime, loop_store, control_flow),
+            GuiState::MapLoad => setup.gui_state = GuiState::Ingame,
+            GuiState::Options => {
+                gui::options_menu(setup, gui);
+            }
+            GuiState::Ingame => {
+                setup
+                    .game
+                    .send_message(GameMsg::LoadMap(
+                        setup.resource_man.clone(),
+                        "test".to_string(),
+                    ))
+                    .unwrap();
+                // tile_selections
+                gui::tile_selections(
+                    setup,
+                    renderer,
+                    gui,
+                    &loop_store.selected_tile_modifiers,
+                    selection_send,
+                );
 
+                // tile_info
+                gui::tile_info(runtime, setup, gui, &setup.game, setup.camera.pointing_at);
+
+                // tile_config
+                gui::tile_config(
+                    runtime,
+                    setup,
+                    loop_store,
+                    gui,
+                    &setup.game,
+                    &mut extra_vertices,
+                );
+
+                if let Ok(Some(id)) = selection_recv.try_next() {
+                    loop_store.already_placed_at = None;
+
+                    if loop_store.selected_id == Some(id) {
+                        loop_store.selected_id = None;
+                    } else {
+                        loop_store.selected_id = Some(id);
+                    }
+                }
+
+                let mouse_pos = screen_to_world(
+                    window_size.width as Double,
+                    window_size.height as Double,
+                    loop_store.input_handler.main_pos,
+                    setup.camera.get_pos().z,
+                );
+                let mouse_pos = point2(mouse_pos.x, mouse_pos.y);
+                let mouse_pos = mouse_pos + setup.camera.get_pos().to_vec().truncate();
+
+                if let Some(id) = loop_store.selected_id {
+                    if let Some(model) = resource_man.registry.get_tile(&id).and_then(|v| {
+                        v.models
+                            .get(
+                                loop_store
+                                    .selected_tile_modifiers
+                                    .get(&id)
+                                    .cloned()
+                                    .unwrap_or(0) as usize,
+                            )
+                            .cloned()
+                    }) {
+                        let time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+
+                        let glow = (time.as_secs_f64() * 3.0).sin() / 10.0;
+
+                        let instance = InstanceData {
+                            model_matrix: Matrix4::from_translation(vec3(
+                                mouse_pos.x as Float,
+                                mouse_pos.y as Float,
+                                FAR as Float,
+                            )),
+                            color_offset: colors::TRANSPARENT.with_alpha(glow as Float).to_array(),
+                        };
+
+                        gui_instances.push((instance.into(), model));
+                    }
+                }
+
+                if let Some(coord) = loop_store.linking_tile {
+                    let DPoint3 { x, y, .. } = hex_to_normalized(
+                        window_size.width as Double,
+                        window_size.height as Double,
+                        setup.camera.get_pos(),
+                        coord,
+                    );
+                    let a = point2(x, y);
+
+                    let b = screen_to_normalized(
+                        window_size.width as Double,
+                        window_size.height as Double,
+                        loop_store.input_handler.main_pos,
+                    );
+
+                    extra_vertices.append(&mut gui::line(a, b, colors::RED));
+                }
+            }
+        }
         if loop_store.input_handler.debug_pressed {
             gui::debugger(setup, gui, runtime, &setup.game, renderer, loop_store);
         }
-
-        // tile_selections
-        gui::tile_selections(
-            setup,
-            renderer,
-            gui,
-            &loop_store.selected_tile_modifiers,
-            selection_send,
-        );
-
-        // tile_info
-        gui::tile_info(runtime, setup, gui, &setup.game, setup.camera.pointing_at);
-
-        // tile_config
-        gui::tile_config(
-            runtime,
-            setup,
-            loop_store,
-            gui,
-            &setup.game,
-            &mut extra_vertices,
-        );
         if resource_man.error_man.has_errors() {
             gui::error_popup(setup, gui, runtime, loop_store, control_flow);
         }
-
-        if let Ok(Some(id)) = selection_recv.try_next() {
-            loop_store.already_placed_at = None;
-
-            if loop_store.selected_id == Some(id) {
-                loop_store.selected_id = None;
-            } else {
-                loop_store.selected_id = Some(id);
-            }
-        }
-
-        let mouse_pos = screen_to_world(
-            window_size.width as Double,
-            window_size.height as Double,
-            loop_store.input_handler.main_pos,
-            setup.camera.get_pos().z,
-        );
-        let mouse_pos = point2(mouse_pos.x, mouse_pos.y);
-        let mouse_pos = mouse_pos + setup.camera.get_pos().to_vec().truncate();
-
-        if let Some(id) = loop_store.selected_id {
-            if let Some(model) = resource_man.registry.get_tile(&id).and_then(|v| {
-                v.models
-                    .get(
-                        loop_store
-                            .selected_tile_modifiers
-                            .get(&id)
-                            .cloned()
-                            .unwrap_or(0) as usize,
-                    )
-                    .cloned()
-            }) {
-                let time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-
-                let glow = (time.as_secs_f64() * 3.0).sin() / 10.0;
-
-                let instance = InstanceData {
-                    model_matrix: Matrix4::from_translation(vec3(
-                        mouse_pos.x as Float,
-                        mouse_pos.y as Float,
-                        FAR as Float,
-                    )),
-                    color_offset: colors::TRANSPARENT.with_alpha(glow as Float).to_array(),
-                };
-
-                gui_instances.push((instance.into(), model));
-            }
-        }
-
-        if let Some(coord) = loop_store.linking_tile {
-            let DPoint3 { x, y, .. } = hex_to_normalized(
-                window_size.width as Double,
-                window_size.height as Double,
-                setup.camera.get_pos(),
-                coord,
-            );
-            let a = point2(x, y);
-
-            let b = screen_to_normalized(
-                window_size.width as Double,
-                window_size.height as Double,
-                loop_store.input_handler.main_pos,
-            );
-
-            extra_vertices.append(&mut gui::line(a, b, colors::RED));
-        }
-
         let render_info = runtime
             .block_on(setup.game.call(
                 |reply| GameMsg::RenderInfoRequest {

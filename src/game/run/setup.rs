@@ -17,6 +17,7 @@ use crate::game::tile::coord::ChunkCoord;
 use crate::game::{Game, GameMsg};
 use crate::render::camera::Camera;
 use crate::render::gpu::{Gpu, RenderAlloc};
+use crate::render::gui::GuiState;
 use crate::render::{gpu, gui};
 use crate::resource::{ResourceManager, RESOURCES_FOLDER};
 use crate::LOGO;
@@ -39,6 +40,8 @@ pub struct GameSetup {
     pub camera_chunk_coord: ChunkCoord,
     /// the window
     pub window: Arc<Window>,
+    /// what menu should be shown
+    pub gui_state: GuiState,
 }
 
 impl GameSetup {
@@ -101,7 +104,7 @@ impl GameSetup {
         log::info!("Renderer setup complete");
         // --- setup game ---
         // TODO map selection
-        let map_name = SharedStr::from_static("test");
+        let map_name = SharedStr::from_static(".mainmenu");
 
         let (game, game_handle) = Actor::spawn(
             Some("game".to_string()),
@@ -111,8 +114,11 @@ impl GameSetup {
         .await
         .unwrap();
 
-        game.send_message(GameMsg::LoadMap(resource_man.clone()))
-            .unwrap();
+        game.send_message(GameMsg::LoadMap(
+            resource_man.clone(),
+            ".mainmenu".to_string(),
+        ))
+        .unwrap();
 
         game.send_interval(TICK_INTERVAL, || GameMsg::Tick);
 
@@ -123,10 +129,6 @@ impl GameSetup {
 
         let camera = Camera::default();
 
-        //TODO remove this line for releases
-        resource_man
-            .error_man
-            .push((resource_man.registry.err_ids.test_error, vec![]), &resource_man);
         // --- event-loop ---
         (
             event_loop,
@@ -140,11 +142,11 @@ impl GameSetup {
                 camera,
                 camera_chunk_coord: camera.get_tile_coord().into(),
                 window,
+                gui_state: GuiState::Main,
             },
         )
     }
 }
-
 /// Initialize the Resource Manager system, and loads all the resources in all namespaces.
 fn load_resources(track: TrackHandle) -> Arc<ResourceManager> {
     let mut resource_man = ResourceManager::new(track);

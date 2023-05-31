@@ -6,12 +6,12 @@ use std::sync::Arc;
 
 use cgmath::{point2, point3, vec3, MetricSpace};
 use egui::epaint::Shadow;
-use egui::style::{Margin, WidgetVisuals, Widgets};
+use egui::style::{default_text_styles, Margin, WidgetVisuals, Widgets};
 use egui::FontFamily::{Monospace, Proportional};
 use egui::{
     vec2, Align, Align2, Color32, CursorIcon, DragValue, FontData, FontDefinitions, FontId, Frame,
-    PaintCallback, Rgba, Rounding, ScrollArea, Sense, Stroke, Style, TextStyle, TopBottomPanel, Ui,
-    Visuals, Window,
+    PaintCallback, Rgba, RichText, Rounding, ScrollArea, Sense, Stroke, Style, TextStyle,
+    TopBottomPanel, Ui, Vec2, Visuals, WidgetText, Window,
 };
 use egui_winit_vulkano::{CallbackFn, Gui, GuiConfig};
 use fuse_rust::Fuse;
@@ -104,6 +104,12 @@ impl GuiIds {
     }
 }
 
+pub enum GuiState {
+    Main,
+    MapLoad,
+    Options,
+    Ingame,
+}
 fn init_fonts(gui: &Gui) {
     let mut fonts = FontDefinitions::default();
     let iosevka = "iosevka";
@@ -538,6 +544,63 @@ pub fn debugger(
             "Map \"{map_name}\" ({map_name}.bin): {data_size}D {tile_count}T, {file_size}B (on open)"
         ))
     });
+}
+pub fn main_menu(
+    setup: &mut GameSetup,
+    gui: &mut Gui,
+    runtime: &Runtime,
+    loop_store: &mut EventLoopStorage,
+    control_flow: &mut ControlFlow,
+) {
+    Window::new("main_menu".to_string())
+        .resizable(false)
+        .default_width(175.0)
+        .anchor(Align2([Align::Center, Align::Center]), vec2(0.0, 0.0))
+        .frame(default_frame().inner_margin(10.0))
+        .movable(false)
+        .title_bar(false)
+        .show(&gui.context(), |ui| {
+            ui.with_layout(
+                ui.layout()
+                    .with_cross_align(Align::Center)
+                    .with_main_align(Align::Center),
+                |ui| {
+                    ui.label(RichText::new("automancy").size(30.0));
+                    if ui.button(RichText::new("enter game").heading()).clicked() {
+                        setup.gui_state = GuiState::MapLoad
+                    };
+                    if ui.button(RichText::new("options").heading()).clicked() {
+                        setup.gui_state = GuiState::Options
+                    };
+                    if ui.button(RichText::new("fedi").heading()).clicked() {
+                        webbrowser::open("https://gamedev.lgbt/@automancy")
+                            .expect("Failed to open web browser");
+                    };
+                    if ui.button(RichText::new("source").heading()).clicked() {
+                        webbrowser::open("https://github.com/sorcerers-class/automancy")
+                            .expect("Failed to open web browser");
+                    };
+                    if ui.button(RichText::new("quit").heading()).clicked() {
+                        shutdown_graceful(setup, runtime, loop_store, control_flow)
+                            .expect("Failed to shutdown gracefully!");
+                    };
+                    ui.label("v0.1.0")
+                },
+            );
+        });
+}
+pub fn options_menu(setup: &mut GameSetup, gui: &mut Gui) {
+    Window::new("Options".to_string())
+        .resizable(false)
+        .default_width(175.0)
+        .anchor(Align2([Align::Center, Align::Center]), vec2(0.0, 0.0))
+        .frame(default_frame().inner_margin(10.0))
+        .show(&gui.context(), |ui| {
+            ui.label("Not yet implemented");
+            if ui.button("Ok").clicked() {
+                setup.gui_state = GuiState::Main
+            }
+        });
 }
 pub fn add_direction(ui: &mut Ui, target_coord: &mut Option<TileCoord>, n: usize) {
     let coord = TileHex::NEIGHBORS[(n + 2) % 6];

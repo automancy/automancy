@@ -1,4 +1,4 @@
-use chrono::Local;
+use chrono::{DateTime, Local, Utc};
 use futures::future::err;
 use std::collections::hash_map::DefaultHasher;
 use std::error::Error;
@@ -38,12 +38,15 @@ pub struct Map {
 
     pub tiles: Tiles,
     pub data: DataMap,
+
+    pub save_time: i64,
 }
 #[derive(Debug, Clone)]
 pub struct MapInfo {
     pub map_name: String,
     pub tiles: usize,
     pub data: usize,
+    pub save_time: i64,
 }
 #[derive(Debug, Serialize, Deserialize)]
 struct MapHeader(Vec<(Id, String)>);
@@ -58,6 +61,7 @@ impl Map {
 
             tiles: Default::default(),
             data: Default::default(),
+            save_time: Local::now().timestamp(),
         }
     }
 
@@ -105,7 +109,9 @@ impl Map {
 
         let data = data_to_raw(self.data.clone(), interner);
 
-        serde_json::to_writer(&mut encoder, &(header, tile_data, data)).unwrap();
+        let save_time = Utc::now().timestamp();
+
+        serde_json::to_writer(&mut encoder, &(header, tile_data, data, save_time)).unwrap();
 
         encoder.do_finish().unwrap();
     }
@@ -126,8 +132,12 @@ impl Map {
         let reader = BufReader::with_capacity(MAP_BUFFER_SIZE, file);
         let decoder = Decoder::new(reader).unwrap();
 
-        let map_decoder: serde_json::Result<(MapHeader, Vec<(TileCoord, TileData)>, DataMapRaw)> =
-            serde_json::from_reader(decoder);
+        let map_decoder: serde_json::Result<(
+            MapHeader,
+            Vec<(TileCoord, TileData)>,
+            DataMapRaw,
+            i64,
+        )> = serde_json::from_reader(decoder);
 
         if map_decoder.is_err() {
             let err_map_name = format!("{}-ERR-{}", map_name, Local::now().format("%y%m%d%H%M%S"));
@@ -140,7 +150,7 @@ impl Map {
             );
             return (Map::new_empty(err_map_name), Default::default());
         }
-        let (header, tile_data, data) = map_decoder.unwrap();
+        let (header, tile_data, data, save_time) = map_decoder.unwrap();
 
         let id_reverse = header.0.into_iter().collect::<HashMap<_, _>>();
 
@@ -172,6 +182,8 @@ impl Map {
 
                 tiles,
                 data,
+
+                save_time,
             },
             tile_entities,
         )
