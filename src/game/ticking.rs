@@ -21,7 +21,7 @@ fn inner_tick(state: &mut GameState) {
         }
     });
 
-    state.tick_count = state.tick_count.overflowing_add(1).0;
+    state.tick_count = state.tick_count.wrapping_add(1);
 }
 
 /// Runs the game for one tick, logging if the tick is too long.

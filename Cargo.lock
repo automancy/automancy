@@ -225,6 +225,7 @@ dependencies = [
  "hexagon-tiles",
  "image",
  "kira",
+ "lazy_static",
  "log",
  "num",
  "ply-rs",

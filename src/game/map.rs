@@ -1,12 +1,15 @@
 use std::fmt::Debug;
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
+use std::iter::Iterator;
 use std::ops::Add;
 use std::{collections::HashMap, path::PathBuf};
 
 use chrono::{Local, Utc};
 use futures::executor::block_on;
 use futures::future::join_all;
+use hashbrown::HashSet;
+use lazy_static::lazy_static;
 use ractor::ActorRef;
 use serde::{Deserialize, Serialize};
 use tokio::runtime::Runtime;
@@ -196,6 +199,7 @@ impl Map {
             tile_entities,
         )
     }
+
     pub fn sanitize_name(name: String) -> String {
         if name.is_empty() {
             return "empty".to_string();
@@ -204,14 +208,17 @@ impl Map {
         name = name.trim().to_string();
         name = name.trim_matches('.').to_string();
         name = name.replace(|c: char| !c.is_alphanumeric(), "_");
-        let win_illegal_names = vec![
-            "CON", "PRN", "AUX", "CLOCK$", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6",
-            "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8",
-            "LPT9",
-        ];
-        if win_illegal_names.contains(&name.to_ascii_uppercase().as_str()) {
+
+        if WIN_ILLEGAL_NAMES.contains(&name.to_ascii_uppercase().as_str()) {
             return format!("_{name}");
         }
         name
     }
+}
+lazy_static! {
+    static ref WIN_ILLEGAL_NAMES: HashSet<&'static str> = HashSet::from([
+        "CON", "PRN", "AUX", "CLOCK$", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6",
+        "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8",
+        "LPT9",
+    ]);
 }
