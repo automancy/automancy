@@ -4,4 +4,6 @@ pub mod data;
 pub mod event;
 pub mod gpu;
 pub mod gui;
+/// Handles input.
+pub mod input;
 pub mod renderer;
