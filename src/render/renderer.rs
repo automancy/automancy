@@ -22,9 +22,9 @@ use vulkano::sync;
 use vulkano::sync::GpuFuture;
 
 use crate::game::run::setup::GameSetup;
-use crate::game::ticking::TickUnit;
 use crate::game::tile::coord::{ChunkCoord, TileCoord};
 use crate::game::tile::entity::{Data, TileEntityMsg};
+use crate::game::tile::ticking::TickUnit;
 use crate::game::{GameMsg, RenderInfo, RenderUnit};
 use crate::render::camera::FAR;
 use crate::render::data::{

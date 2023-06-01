@@ -1,8 +1,8 @@
 use env_logger::Env;
 use tokio::runtime::Runtime;
 
-use automancy::game::run::event::{on_event, EventLoopStorage};
 use automancy::game::run::setup::GameSetup;
+use automancy::render::event::{on_event, EventLoopStorage};
 use automancy::render::gui;
 use automancy::render::renderer::Renderer;
 

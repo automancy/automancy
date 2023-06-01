@@ -73,7 +73,7 @@ impl Default for EventLoopStorage {
             last_frame_start: Instant::now(),
             elapsed: Default::default(),
 
-            gui_state: GuiState::Main,
+            gui_state: GuiState::MainMenu,
             popup_state: PopupState::None,
         }
     }
@@ -349,7 +349,7 @@ pub fn on_event(
             loop_store.input_handler.pause_pressed = false;
         }
         match loop_store.gui_state {
-            GuiState::Main => gui::main_menu(setup, gui, runtime, control_flow, loop_store),
+            GuiState::MainMenu => gui::main_menu(setup, gui, runtime, control_flow, loop_store),
             GuiState::MapLoad => {
                 gui::map_load_menu(setup, gui, loop_store);
             }

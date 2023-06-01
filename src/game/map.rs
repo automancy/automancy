@@ -1,18 +1,13 @@
-use std::fmt::Debug;
-use std::fs::File;
-use std::io::{BufReader, BufWriter};
-use std::iter::Iterator;
-use std::ops::Add;
-use std::{collections::HashMap, path::PathBuf};
-
 use chrono::{Local, Utc};
-use futures::executor::block_on;
-use futures::future::join_all;
 use hashbrown::HashSet;
 use lazy_static::lazy_static;
 use ractor::ActorRef;
 use serde::{Deserialize, Serialize};
-use tokio::runtime::Runtime;
+use std::fmt::Debug;
+use std::fs::File;
+use std::io::{BufReader, BufWriter};
+use std::iter::Iterator;
+use std::{collections::HashMap, path::PathBuf};
 use zstd::{Decoder, Encoder};
 
 use crate::game;
@@ -32,16 +27,20 @@ const MAP_BUFFER_SIZE: usize = 256 * 1024;
 pub type Tiles = HashMap<TileCoord, (Id, TileModifier)>;
 pub type TileEntities = HashMap<TileCoord, ActorRef<TileEntityMsg>>;
 
+/// A map stores tiles and tile entities to disk.
 #[derive(Debug, Clone)]
 pub struct Map {
+    /// The name of the map. Should be sanitized.
     pub map_name: String,
-
+    /// The list of tiles.
     pub tiles: Tiles,
+    /// The list of tile data.
     pub data: DataMap,
-
+    /// The last save time as a UTC Unix timestamp.
     pub save_time: i64,
 }
 
+/// Contains information about a map to be saved to disk.
 #[derive(Debug, Clone)]
 pub struct MapInfo {
     pub map_name: String,
@@ -69,6 +68,7 @@ struct SerdeMap {
 struct SerdeTile(Id, TileModifier, DataMapRaw);
 
 impl Map {
+    /// Creates a new empty map.
     pub fn new_empty(map_name: String) -> Self {
         Self {
             map_name,
@@ -78,11 +78,11 @@ impl Map {
             save_time: Local::now().timestamp(),
         }
     }
-
+    /// Gets the path to a map from its name.
     pub fn path(map_name: &str) -> PathBuf {
         PathBuf::from(format!("{MAP_PATH}/{map_name}.bin"))
     }
-
+    /// Saves a map to disk.
     pub async fn save(&self, interner: &Interner, tile_entities: &TileEntities) {
         drop(std::fs::create_dir_all(MAP_PATH));
 
@@ -122,7 +122,7 @@ impl Map {
 
         encoder.do_finish().unwrap();
     }
-
+    /// Loads a map from disk.
     pub async fn load(
         game: &ActorRef<GameMsg>,
         resource_man: &ResourceManager,
@@ -199,7 +199,7 @@ impl Map {
             tile_entities,
         )
     }
-
+    /// Sanitizes the name to ensure that the map can be used without problems on all platforms. This includes removing leading/trailing whitespace and periods, replacing non-alphanumeric characters, and replacing Windows disallowed names.
     pub fn sanitize_name(name: String) -> String {
         if name.is_empty() {
             return "empty".to_string();

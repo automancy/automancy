@@ -30,7 +30,6 @@ use winit::event_loop::{ControlFlow, EventLoop};
 
 use crate::game::map::{Map, MapInfo};
 use crate::game::run::error::{error_to_key, error_to_string};
-use crate::game::run::event::{shutdown_graceful, EventLoopStorage};
 use crate::game::run::setup::GameSetup;
 use crate::game::tile::coord::TileCoord;
 use crate::game::tile::coord::TileHex;
@@ -38,6 +37,7 @@ use crate::game::tile::entity::{Data, TileEntityMsg, TileModifier};
 use crate::game::GameMsg;
 use crate::render::camera::hex_to_normalized;
 use crate::render::data::{GameUBO, GameVertex, InstanceData};
+use crate::render::event::{shutdown_graceful, EventLoopStorage};
 use crate::render::gpu::Gpu;
 use crate::render::renderer::Renderer;
 use crate::render::{gpu, gui};
@@ -48,6 +48,7 @@ use crate::util::colors;
 use crate::util::id::{id_static, Id, Interner};
 use crate::{util, IOSEVKA_FONT};
 
+/// The list of GUI translation keys.
 #[derive(Clone, Copy, Any)]
 pub struct GuiIds {
     #[rune(get, copy)]
@@ -149,20 +150,23 @@ impl GuiIds {
         }
     }
 }
+/// The state of the main game GUI.
 #[derive(Eq, PartialEq, Copy, Clone)]
 pub enum GuiState {
-    Main,
+    MainMenu,
     MapLoad,
     Options,
     Ingame,
     Paused,
 }
+/// The state of popups (which are on top of the main GUI), if any should be displayed.
 #[derive(Clone)]
 pub enum PopupState {
     None,
     MapCreate,
     MapDeleteConfirmation(MapInfo),
 }
+/// Initialize the font families.
 fn init_fonts(gui: &Gui) {
     let mut fonts = FontDefinitions::default();
     let iosevka = "iosevka";
@@ -184,7 +188,7 @@ fn init_fonts(gui: &Gui) {
 
     gui.context().set_fonts(fonts);
 }
-
+/// Initialize the GUI style.
 fn init_styles(gui: &Gui) {
     gui.context().set_style(Style {
         override_text_style: None,
@@ -246,7 +250,7 @@ fn init_styles(gui: &Gui) {
         ..Default::default()
     });
 }
-
+/// Initializes the GUI.
 pub fn init_gui(event_loop: &EventLoop<()>, gpu: &Gpu) -> Gui {
     let gui = Gui::new_with_subpass(
         event_loop,
@@ -265,7 +269,7 @@ pub fn init_gui(event_loop: &EventLoop<()>, gpu: &Gpu) -> Gui {
 
     gui
 }
-
+/// Creates a default frame.
 pub fn default_frame() -> Frame {
     Frame::none()
         .fill(colors::WHITE.multiply(0.65).into())
@@ -275,7 +279,7 @@ pub fn default_frame() -> Frame {
         })
         .rounding(Rounding::same(5.0))
 }
-
+/// Draws a tile on a UI.
 fn tile_paint(
     setup: &GameSetup,
     renderer: &Renderer,
@@ -363,7 +367,7 @@ fn tile_paint(
         })),
     }
 }
-
+/// Draws the tile selection.
 fn paint_tile_selection(
     setup: &GameSetup,
     renderer: &Renderer,
@@ -403,7 +407,7 @@ fn paint_tile_selection(
             ui.painter().add(callback);
         });
 }
-
+/// Creates the tile selection GUI.
 pub fn tile_selections(
     setup: &GameSetup,
     renderer: &Renderer,
@@ -437,7 +441,7 @@ pub fn tile_selections(
                 });
         });
 }
-
+/// Draws the tile info GUI.
 pub fn tile_info(
     runtime: &Runtime,
     setup: &GameSetup,
@@ -483,7 +487,7 @@ pub fn tile_info(
         }
     });
 }
-
+/// Draws an error popup. Can only be called when there are errors in the queue!
 pub fn error_popup(setup: &mut GameSetup, gui: &mut Gui) {
     let error = setup.resource_man.error_man.peek().unwrap();
     Window::new(
@@ -514,7 +518,7 @@ pub fn error_popup(setup: &mut GameSetup, gui: &mut Gui) {
         });
     });
 }
-
+/// Draws the debug menu (F3).
 pub fn debugger(
     setup: &GameSetup,
     gui: &mut Gui,
@@ -574,6 +578,7 @@ pub fn debugger(
         ))
     });
 }
+/// Draws the main menu.
 pub fn main_menu(
     setup: &mut GameSetup,
     gui: &mut Gui,
@@ -669,6 +674,7 @@ pub fn main_menu(
             );
         });
 }
+/// Draws the pause menu.
 pub fn pause_menu(setup: &mut GameSetup, gui: &mut Gui, loop_store: &mut EventLoopStorage) {
     Window::new("Game Paused".to_string())
         .resizable(false)
@@ -730,13 +736,14 @@ pub fn pause_menu(setup: &mut GameSetup, gui: &mut Gui, loop_store: &mut EventLo
                                 ".mainmenu".to_string(),
                             ))
                             .unwrap();
-                        loop_store.gui_state = GuiState::Main
+                        loop_store.gui_state = GuiState::MainMenu
                     };
                     ui.label("v0.1.0")
                 },
             );
         });
 }
+/// Draws the map loading menu.
 pub fn map_load_menu(setup: &mut GameSetup, gui: &mut Gui, loop_store: &mut EventLoopStorage) {
     Window::new(
         setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.load_map]
@@ -821,11 +828,12 @@ pub fn map_load_menu(setup: &mut GameSetup, gui: &mut Gui, loop_store: &mut Even
                 )
                 .clicked()
             {
-                loop_store.gui_state = GuiState::Main
+                loop_store.gui_state = GuiState::MainMenu
             }
         });
     });
 }
+/// Draws the map deletion confirmation popup.
 pub fn map_delete_confirmation(
     setup: &mut GameSetup,
     gui: &mut Gui,
@@ -873,6 +881,7 @@ pub fn map_delete_confirmation(
         setup.refresh_maps();
     }
 }
+/// Draws the map creation popup.
 pub fn map_create_menu(setup: &mut GameSetup, gui: &mut Gui, loop_store: &mut EventLoopStorage) {
     Window::new(
         setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.create_map]
@@ -914,6 +923,7 @@ pub fn map_create_menu(setup: &mut GameSetup, gui: &mut Gui, loop_store: &mut Ev
         }
     });
 }
+/// Draws the options menu. TODO
 pub fn options_menu(setup: &mut GameSetup, gui: &mut Gui, loop_store: &mut EventLoopStorage) {
     Window::new(
         setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.options].to_string(),
@@ -931,10 +941,11 @@ pub fn options_menu(setup: &mut GameSetup, gui: &mut Gui, loop_store: &mut Event
             )
             .clicked()
         {
-            loop_store.gui_state = GuiState::Main
+            loop_store.gui_state = GuiState::MainMenu
         }
     });
 }
+/// Draws the direction selector.
 pub fn add_direction(ui: &mut Ui, target_coord: &mut Option<TileCoord>, n: usize) {
     let coord = TileHex::NEIGHBORS[(n + 2) % 6];
     let coord = Some(coord.into());
@@ -953,7 +964,7 @@ pub fn add_direction(ui: &mut Ui, target_coord: &mut Option<TileCoord>, n: usize
         },
     );
 }
-
+/// Draws a search bar.
 pub fn searchable_id<'a>(
     ui: &mut Ui,
     resource_man: &'a ResourceManager,
@@ -995,7 +1006,7 @@ pub fn searchable_id<'a>(
         })
     });
 }
-
+/// Draws the targets UI.
 pub fn targets(ui: &mut Ui, new_target_coord: &mut Option<TileCoord>) {
     ui.vertical(|ui| {
         ui.horizontal(|ui| {
@@ -1017,7 +1028,7 @@ pub fn targets(ui: &mut Ui, new_target_coord: &mut Option<TileCoord>) {
         });
     });
 }
-
+/// Draws the tile configuration menu.
 pub fn tile_config(
     runtime: &Runtime,
     setup: &GameSetup,
@@ -1324,6 +1335,7 @@ pub fn tile_config(
         }
     }
 }
+/// Draws a line overlay.
 pub fn line(a: DPoint2, b: DPoint2, color: Rgba) -> Vec<GameVertex> {
     let v = b - a;
     let l = a.distance(b) * 128.0;

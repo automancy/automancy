@@ -12,11 +12,11 @@ use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort, SupervisionEvent
 use tokio::runtime::Runtime;
 
 use crate::game::map::{Map, MapInfo, TileEntities};
-use crate::game::ticking::{tick, TickUnit};
 use crate::game::tile::coord::{TileCoord, TileHex, TileUnit};
 use crate::game::tile::entity::{
     Data, DataMap, TileEntity, TileEntityMsg, TileEntityState, TileModifier,
 };
+use crate::game::tile::ticking::{tick, TickUnit};
 use crate::game::GameMsg::*;
 use crate::render::camera::FAR;
 use crate::render::data::{InstanceData, HEX_GRID_LAYOUT};
@@ -28,16 +28,12 @@ use crate::util::id::Id;
 
 /// Handles input.
 pub mod input;
-/// Handles the inventory of tiles.
-pub mod inventory;
 /// Defines items and moving them around.
 pub mod item;
 /// Defines the map.
 pub mod map;
 /// Starts and runs the game.
 pub mod run;
-/// Manages ticking the game state.
-pub mod ticking;
 /// Defines tiles and tile entities.
 pub mod tile;
 
@@ -119,10 +115,13 @@ pub enum GameMsg {
     TakeTileEntities(RpcReplyPort<TileEntities>),
     /// get the map
     TakeMap(RpcReplyPort<Map>),
+    /// saves the map to disk
     SaveMap(Arc<ResourceManager>),
-    /// load a map
+    /// load a map from disk
     LoadMap(Arc<ResourceManager>, String),
+    /// get information about a map without taking ownership of it
     GetMapInfo(RpcReplyPort<MapInfo>),
+    /// get info of an unloaded map from disk
     GetUnloadedMapInfo(String, Arc<ResourceManager>, RpcReplyPort<MapInfo>),
     GetDataMap(RpcReplyPort<DataMap>),
     GetDataValue(String, RpcReplyPort<Option<Data>>),
@@ -145,7 +144,7 @@ impl Actor for Game {
     type Msg = GameMsg;
     type State = GameState;
     type Arguments = (Arc<ResourceManager>, SharedStr);
-
+    /// creates the game state
     async fn pre_start(
         &self,
         _myself: ActorRef<Self::Msg>,
@@ -153,7 +152,7 @@ impl Actor for Game {
     ) -> Result<Self::State, ActorProcessingErr> {
         Ok(Self::State::new(args.0, args.1))
     }
-
+    /// Handles incoming messages and replies to them.
     async fn handle(
         &self,
         myself: ActorRef<Self::Msg>,
@@ -212,12 +211,14 @@ impl Actor for Game {
             }
             GetUnloadedMapInfo(map, resource_man, reply) => {
                 let map = Map::load(&myself, &resource_man, map).await.0;
-                reply.send(MapInfo {
-                    map_name: map.map_name.clone(),
-                    tiles: map.tiles.len(),
-                    data: map.data.len(),
-                    save_time: map.save_time
-                }).unwrap();
+                reply
+                    .send(MapInfo {
+                        map_name: map.map_name.clone(),
+                        tiles: map.tiles.len(),
+                        data: map.data.len(),
+                        save_time: map.save_time,
+                    })
+                    .unwrap();
                 drop(map);
                 return Ok(());
             }

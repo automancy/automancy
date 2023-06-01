@@ -37,7 +37,7 @@ pub static OGG_EXT: &str = "ogg";
 pub static PNG_EXT: &str = "png";
 pub static RESOURCES_FOLDER: &str = "resources";
 
-/// Represents the resource registry.
+/// Represents the resource registry, which stores IDs.
 #[derive(Clone, Any)]
 pub struct Registry {
     pub(crate) tiles: HashMap<Id, Tile>,
@@ -74,7 +74,7 @@ impl Registry {
         self.items.get(id).cloned()
     }
 }
-
+/// Represents a resource manager, which contains all resources (apart from maps) loaded from disk dynamically.
 pub struct ResourceManager {
     pub interner: Interner,
     pub track: TrackHandle,

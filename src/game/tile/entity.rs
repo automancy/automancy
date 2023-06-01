@@ -7,11 +7,11 @@ use rand::{thread_rng, RngCore};
 use rune::{Any, ContextError, Module, Vm};
 use serde::{Deserialize, Serialize};
 
-use crate::game::inventory::{Inventory, InventoryRaw};
 use crate::game::item::{ItemAmount, ItemStack};
 use crate::game::tile::coord::TileCoord;
 use crate::game::tile::entity::TileEntityMsg::*;
 use crate::game::tile::entity::TransactionError::*;
+use crate::game::tile::inventory::{Inventory, InventoryRaw};
 use crate::game::{GameMsg, TickUnit};
 use crate::resource::tile::TileType;
 use crate::resource::tile::TileType::*;

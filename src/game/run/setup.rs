@@ -15,8 +15,8 @@ use winit::event_loop::EventLoop;
 use winit::window::{Icon, Window};
 
 use crate::game::map::MapInfo;
-use crate::game::ticking::TICK_INTERVAL;
 use crate::game::tile::coord::ChunkCoord;
+use crate::game::tile::ticking::TICK_INTERVAL;
 use crate::game::{Game, GameMsg};
 use crate::render::camera::Camera;
 use crate::render::gpu::{Gpu, RenderAlloc};
@@ -150,6 +150,7 @@ impl GameSetup {
             },
         )
     }
+    /// Refreshes the list of maps on the filesystem. Should be done every time the list of maps could have changed (on map creation/delete and on game load).
     pub fn refresh_maps(&mut self) {
         self.maps = fs::read_dir("map")
             .unwrap()
