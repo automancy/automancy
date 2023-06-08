@@ -1,20 +1,22 @@
 {
     "id": "still",
+    "tile_type": "machine",
     "models": [
         "still"
     ],
     "model_attributes": {
         "auto_rotate": true
     },
-    "tile_type": {
-        "type": "Machine",
-        "param": [
-            "coal_to_fire",
-            "coal_to_chaos",
-            "coal_to_order",
-            "dirt_to_earth",
-            "sand_to_air",
-            "mud_to_water"
-        ]
+    "data": {
+        "scripts": {
+            "VecId": [
+                "coal_to_fire",
+                "coal_to_chaos",
+                "coal_to_order",
+                "dirt_to_earth",
+                "sand_to_air",
+                "mud_to_water"
+            ]
+        }
     }
 }

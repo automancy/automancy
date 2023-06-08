@@ -29,11 +29,11 @@ genmesh = "0.6.2"
 flexstr = { version = "0.9.2", features = ["serde", "fast_format"] }
 uuid = { version = "1.2.2", features = ["v4"] }
 
-hashbrown = { version = "0.13", features = ["serde", "rayon"] }
+hashbrown = { version = "0.14.0", features = ["serde", "rayon"] }
 bytemuck = "1.8.0"
 cgmath = "0.18.0"
 rayon = "1.7.0"
-kira = "0.7.1"
+kira = "0.8.3"
 rand = "0.8.5"
 num = "0.4.0"
 chrono = "0.4.24"
@@ -50,5 +50,3 @@ async-trait = "0.1.68"
 futures = "0.3.28"
 ractor = "0.8"
 tokio = { version = "1", features = ["full"] }
-
-rune = "0.12.0"

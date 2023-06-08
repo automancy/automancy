@@ -1,5 +1,6 @@
-use chrono::{DateTime, FixedOffset, Local, Utc};
 use std::time::{Duration, UNIX_EPOCH};
+
+use chrono::{DateTime, Local, Utc};
 
 pub mod actor;
 pub mod cg;
@@ -14,6 +15,7 @@ pub fn format(format: &str, args: &[&str]) -> String {
     }
     string
 }
+
 pub fn unix_to_formatted_time(utc: i64, fmt: String) -> String {
     let from_epoch = UNIX_EPOCH + Duration::from_secs(utc as u64);
     let past = DateTime::<Utc>::from(from_epoch);

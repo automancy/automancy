@@ -1,5 +1,4 @@
 use std::fs;
-use std::fs::File;
 use std::sync::Arc;
 
 use egui::Frame;
@@ -20,7 +19,6 @@ use crate::game::tile::coord::ChunkCoord;
 use crate::game::{Game, GameMsg};
 use crate::render::camera::Camera;
 use crate::render::gpu::{Gpu, RenderAlloc};
-use crate::render::gui::GuiState;
 use crate::render::{gpu, gui};
 use crate::resource::{ResourceManager, RESOURCES_FOLDER};
 use crate::LOGO;
@@ -193,7 +191,7 @@ fn load_resources(track: TrackHandle) -> Arc<ResourceManager> {
             resource_man.load_scripts(&dir);
             resource_man.load_translates(&dir);
             resource_man.load_audio(&dir);
-            resource_man.load_functions(&dir);
+            //resource_man.load_functions(&dir);
             resource_man.load_items(&dir);
             resource_man.load_tags(&dir);
             resource_man.load_tiles(&dir);

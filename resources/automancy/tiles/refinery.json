@@ -1,22 +1,24 @@
 {
     "id": "refinery",
+    "tile_type": "machine",
     "models": [
         "refinery"
     ],
     "model_attributes": {
         "auto_rotate": true
     },
-    "tile_type": {
-        "type": "Machine",
-        "param": [
-            "sand",
-            "dirt",
-            "mud",
-            "glass",
-            "orb",
-            "silver",
-            "gold",
-            "philosophers_stone"
-        ]
+    "data": {
+        "scripts": {
+            "VecId": [
+                "sand",
+                "dirt",
+                "mud",
+                "glass",
+                "orb",
+                "silver",
+                "gold",
+                "philosophers_stone"
+            ]
+        }
     }
 }

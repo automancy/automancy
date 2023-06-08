@@ -1,8 +1,8 @@
-use flexstr::ToSharedStr;
 use std::ffi::OsStr;
 use std::fs::read_dir;
 use std::path::Path;
 
+use flexstr::ToSharedStr;
 use kira::sound::static_sound::{StaticSoundData, StaticSoundSettings};
 
 use crate::resource::{ResourceManager, OGG_EXT};
@@ -22,7 +22,7 @@ impl ResourceManager {
 
                 if let Ok(audio) = StaticSoundData::from_file(
                     file.clone(),
-                    StaticSoundSettings::default().track(&self.track),
+                    StaticSoundSettings::default().output_destination(&self.track),
                 ) {
                     self.audio.insert(
                         file.file_stem().unwrap().to_str().unwrap().to_shared_str(),

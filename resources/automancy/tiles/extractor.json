@@ -1,13 +1,15 @@
 {
     "id": "extractor",
+    "tile_type": "machine",
     "models": [
         "extractor"
     ],
-    "tile_type": {
-        "type": "Machine",
-        "param": [
-            "coal",
-            "gravel"
-        ]
+    "data": {
+        "scripts": {
+            "VecId": [
+                "coal",
+                "gravel"
+            ]
+        }
     }
 }

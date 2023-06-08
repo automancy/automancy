@@ -1,10 +1,9 @@
-use hashbrown::HashMap;
 use std::ffi::OsStr;
 use std::fs::{read_dir, read_to_string};
 use std::path::Path;
 use std::sync::Arc;
 
-use rune::Any;
+use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::resource::{Registry, ResourceManager, JSON_EXT};
@@ -23,13 +22,12 @@ impl ItemRaw {
     }
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Any)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct Item {
-    #[rune(get, copy)]
     pub id: Id,
 }
 
-pub fn id_eq_or_of_tag(registry: &Registry, id: Id, other: Id) -> bool {
+pub fn id_match(registry: &Registry, id: Id, other: Id) -> bool {
     if id == other {
         return true;
     }
@@ -81,7 +79,7 @@ impl ResourceManager {
                 let items = self
                     .ordered_items
                     .iter()
-                    .filter(|v| id_eq_or_of_tag(&self.registry, **v, id))
+                    .filter(|v| id_match(&self.registry, **v, id))
                     .map(|v| Item { id: *v })
                     .collect();
 

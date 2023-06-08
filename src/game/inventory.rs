@@ -1,18 +1,24 @@
 use hashbrown::HashMap;
-
-use rune::Any;
 use serde::{Deserialize, Serialize};
 
 use crate::game::item::{ItemAmount, ItemStackRaw};
 use crate::resource::item::ItemRaw;
 use crate::util::id::{Id, IdRaw, Interner};
 
-#[derive(Debug, Default, Clone, Any)]
+#[derive(Debug, Default, Clone)]
 pub struct Inventory(pub HashMap<Id, ItemAmount>);
 
 impl Inventory {
+    pub fn try_get(&self, id: Id) -> Option<ItemAmount> {
+        self.0.get(&id).cloned()
+    }
+
     pub fn get(&mut self, id: Id) -> ItemAmount {
         *self.0.entry(id).or_insert(0)
+    }
+
+    pub fn get_mut(&mut self, id: Id) -> &mut ItemAmount {
+        self.0.entry(id).or_insert(0)
     }
 
     pub fn insert(&mut self, id: Id, amount: ItemAmount) {
@@ -37,6 +43,20 @@ impl Inventory {
 pub struct InventoryRaw(pub Vec<ItemStackRaw>);
 
 impl InventoryRaw {
+    pub fn intern_to_inventory(self, interner: &mut Interner) -> Inventory {
+        Inventory(
+            self.0
+                .into_iter()
+                .map(|item| {
+                    (
+                        interner.get_or_intern(item.item.id.to_string()),
+                        item.amount,
+                    )
+                })
+                .collect(),
+        )
+    }
+
     pub fn to_inventory(self, interner: &Interner) -> Inventory {
         Inventory(
             self.0

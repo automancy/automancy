@@ -1,12 +1,12 @@
 {
     "id": "small_storage",
+    "tile_type": "storage",
     "models": [
         "small_storage"
     ],
-    "tile_type": {
-        "type": "Storage",
-        "param": {
-            "id": "#any"
+    "data": {
+        "storage_type": {
+            "Id": "#any"
         }
     }
 }

@@ -52,6 +52,10 @@ pub struct Renderer {
 }
 
 impl Renderer {
+    pub fn reset_last_tiles_update(&mut self) {
+        self.last_tiles_update = None;
+    }
+
     pub fn new(resource_man: Arc<ResourceManager>, gpu: Gpu) -> Self {
         let device = gpu.device.clone();
 
@@ -102,7 +106,7 @@ impl Renderer {
             let none = self
                 .resource_man
                 .registry
-                .get_tile(&self.resource_man.registry.none)
+                .tile(self.resource_man.registry.none)
                 .unwrap()
                 .models[0];
 
@@ -115,7 +119,7 @@ impl Renderer {
                         if self
                             .resource_man
                             .registry
-                            .get_tile(tile)
+                            .tile(*tile)
                             .unwrap()
                             .model_attributes
                             .auto_rotate
@@ -147,7 +151,12 @@ impl Renderer {
                     self.tile_targets = runtime
                         .block_on(multi_call(
                             tile_entities.as_slice(),
-                            |reply| TileEntityMsg::GetDataValueAndCoord("target", reply),
+                            |reply| {
+                                TileEntityMsg::GetDataValueAndCoord(
+                                    setup.resource_man.registry.data_ids.target,
+                                    reply,
+                                )
+                            },
                             None,
                         ))
                         .unwrap()

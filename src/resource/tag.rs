@@ -3,7 +3,6 @@ use std::fs::{read_dir, read_to_string};
 use std::path::Path;
 
 use egui::epaint::ahash::HashSet;
-use rune::Any;
 use serde::{Deserialize, Serialize};
 
 use crate::resource::{Registry, ResourceManager, JSON_EXT};
@@ -15,9 +14,8 @@ pub struct TagRaw {
     pub entries: Vec<IdRaw>,
 }
 
-#[derive(Debug, Clone, Any)]
+#[derive(Debug, Clone)]
 pub struct Tag {
-    #[rune(get, copy)]
     pub id: Id,
     pub entries: HashSet<Id>,
 }

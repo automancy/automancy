@@ -3,13 +3,11 @@ use std::sync::Arc;
 
 use cgmath::vec3;
 use flexstr::SharedStr;
-use futures::executor::block_on;
 use hashbrown::HashMap;
 use hexagon_tiles::layout::hex_to_pixel;
 use hexagon_tiles::traits::HexDirection;
 use ractor::concurrency::MpscSender;
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort, SupervisionEvent};
-use tokio::runtime::Runtime;
 
 use crate::game::map::{Map, MapInfo, TileEntities};
 use crate::game::ticking::{tick, TickUnit};
@@ -20,7 +18,7 @@ use crate::game::tile::entity::{
 use crate::game::GameMsg::*;
 use crate::render::camera::FAR;
 use crate::render::data::{InstanceData, HEX_GRID_LAYOUT};
-use crate::resource::item::id_eq_or_of_tag;
+use crate::resource::item::id_match;
 use crate::resource::script::Script;
 use crate::resource::ResourceManager;
 use crate::util::cg::{Float, Matrix4};
@@ -119,15 +117,15 @@ pub enum GameMsg {
     TakeTileEntities(RpcReplyPort<TileEntities>),
     /// get the map
     TakeMap(RpcReplyPort<Map>),
-    SaveMap(Arc<ResourceManager>),
+    SaveMap(Arc<ResourceManager>, RpcReplyPort<()>),
     /// load a map
     LoadMap(Arc<ResourceManager>, String),
     GetMapInfo(RpcReplyPort<MapInfo>),
     GetUnloadedMapInfo(String, Arc<ResourceManager>, RpcReplyPort<MapInfo>),
     GetDataMap(RpcReplyPort<DataMap>),
-    GetDataValue(String, RpcReplyPort<Option<Data>>),
-    SetData(String, Data),
-    RemoveData(String),
+    GetDataValue(Id, RpcReplyPort<Option<Data>>),
+    SetData(Id, Data),
+    RemoveData(Id),
     StopTicking,
 }
 
@@ -188,12 +186,13 @@ impl Actor for Game {
                 log::info!("Successfully loaded map {name}!");
                 return Ok(());
             }
-            SaveMap(resource_man) => {
+            SaveMap(resource_man, reply) => {
                 state
                     .map
                     .save(&resource_man.interner, &state.tile_entities)
                     .await;
-                log::info!("Saved map {}", state.map.map_name.clone())
+                log::info!("Saved map {}", state.map.map_name.clone());
+                reply.send(()).unwrap();
             }
             GetMapInfo(reply) => {
                 let map_name = state.map.map_name.clone();
@@ -212,12 +211,14 @@ impl Actor for Game {
             }
             GetUnloadedMapInfo(map, resource_man, reply) => {
                 let map = Map::load(&myself, &resource_man, map).await.0;
-                reply.send(MapInfo {
-                    map_name: map.map_name.clone(),
-                    tiles: map.tiles.len(),
-                    data: map.data.len(),
-                    save_time: map.save_time
-                }).unwrap();
+                reply
+                    .send(MapInfo {
+                        map_name: map.map_name.clone(),
+                        tiles: map.tiles.len(),
+                        data: map.data.len(),
+                        save_time: map.save_time,
+                    })
+                    .unwrap();
                 drop(map);
                 return Ok(());
             }
@@ -227,9 +228,7 @@ impl Actor for Game {
                 return Ok(());
             }
             GetDataValue(key, reply) => {
-                reply
-                    .send(state.map.data.get(key.as_str()).cloned())
-                    .unwrap();
+                reply.send(state.map.data.get(&key).cloned()).unwrap();
 
                 return Ok(());
             }
@@ -353,8 +352,7 @@ impl Actor for Game {
 
                             for neighbor in TileHex::NEIGHBORS.iter().map(|v| coord + (*v).into()) {
                                 if let Some((id, _)) = state.map.tiles.get(&neighbor) {
-                                    if id_eq_or_of_tag(&state.resource_man.registry, *id, adjacent)
-                                    {
+                                    if id_match(&state.resource_man.registry, *id, adjacent) {
                                         fulfilled = true;
                                         break;
                                     }
@@ -506,7 +504,7 @@ fn render_info(state: &mut GameState, center: TileCoord, range: TileUnit) -> Arc
             state
                 .resource_man
                 .registry
-                .get_tile(id)
+                .tile(*id)
                 .and_then(|r| r.models.get(*tile_modifier as usize).cloned())
                 .map(|model| {
                     let p = hex_to_pixel(HEX_GRID_LAYOUT, (*coord).into());

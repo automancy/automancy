@@ -1,33 +1,36 @@
 use std::ffi::OsStr;
 use std::fs::{read_dir, read_to_string};
-use std::path::Path;
-use std::sync::Arc;
+use std::path::{Path, PathBuf};
 
-use rune::runtime::RuntimeContext;
-use rune::termcolor::StandardStream;
-use rune::{Context, Diagnostics, Module, Source, Sources, Unit};
+use boa_engine::syntax::ast::node::StatementList;
+use boa_engine::Context;
 use serde::Deserialize;
 
-use crate::game::item::ItemStack;
-use crate::game::tile::coord::TileCoord;
-use crate::game::tile::entity::TileEntityState;
-use crate::resource::item::{id_eq_or_of_tag, Item};
-use crate::resource::script::{Instructions, Script};
-use crate::resource::tag::Tag;
-use crate::resource::tile::{Tile, TileType};
-use crate::resource::{Registry, ResourceManager, JSON_EXT};
-use crate::util::id::{Id, IdRaw};
+use crate::resource::{ResourceManager, JSON_EXT};
+use crate::util::id::IdRaw;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct FunctionRaw {
     pub id: IdRaw,
-    pub file: String,
+    pub tick: Option<String>,
+    pub transaction: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Function {
-    pub context: Arc<RuntimeContext>,
-    pub unit: Arc<Unit>,
+    pub tick: Option<StatementList>,
+    pub transaction: Option<StatementList>,
+}
+
+fn load_function(context: &mut Context, file: Option<PathBuf>) -> Option<StatementList> {
+    if let Some(file) = file {
+        log::info!("loading function at {file:?}");
+
+        let ast = context.parse(&read_to_string(file).unwrap()).unwrap();
+        Some(ast)
+    } else {
+        None
+    }
 }
 
 impl ResourceManager {
@@ -35,39 +38,7 @@ impl ResourceManager {
         let functions = dir.join("functions");
         let functions = read_dir(functions).ok()?;
 
-        let mut module = Module::new();
-        module.ty::<Id>().unwrap();
-
-        module.ty::<Tile>().unwrap();
-        module.ty::<TileType>().unwrap();
-
-        module.ty::<Script>().unwrap();
-        module.ty::<Instructions>().unwrap();
-
-        module.ty::<Tag>().unwrap();
-
-        module.ty::<Item>().unwrap();
-
-        module.ty::<ItemStack>().unwrap();
-
-        module.ty::<Registry>().unwrap();
-        module.inst_fn("get_tile", Registry::get_tile).unwrap();
-        module.inst_fn("get_script", Registry::get_script).unwrap();
-        module.inst_fn("get_tag", Registry::get_tag).unwrap();
-        module.inst_fn("get_item", Registry::get_item).unwrap();
-
-        module
-            .function(&["id_eq_or_of_tag"], id_eq_or_of_tag)
-            .unwrap();
-        TileCoord::install(&mut module).unwrap();
-        TileEntityState::install(&mut module).unwrap();
-
-        let mut diagnostics = Diagnostics::new();
-
-        let mut context = Context::with_default_modules().unwrap();
-        context.install(&module).unwrap();
-
-        let runtime = Arc::new(context.runtime());
+        let mut context = Context::default();
 
         functions
             .into_iter()
@@ -83,36 +54,18 @@ impl ResourceManager {
                 )
                 .unwrap_or_else(|e| panic!("error loading {file:?} {e:?}"));
 
-                (function.id, file.parent().unwrap().join(function.file))
+                let tick = function.tick.map(|v| file.parent().unwrap().join(v));
+                let transaction = function.transaction.map(|v| file.parent().unwrap().join(v));
+
+                (function.id, (tick, transaction))
             })
-            .for_each(|(id, rune)| {
-                log::info!("loading rune script at {rune:?}");
-
-                let mut sources = Sources::new();
-                sources.insert(Source::new(id.to_string(), read_to_string(rune).unwrap()));
-
-                let unit = rune::prepare(&mut sources)
-                    .with_context(&context)
-                    .with_diagnostics(&mut diagnostics)
-                    .build();
-
-                if !diagnostics.is_empty() {
-                    let mut writer = StandardStream::stderr(Default::default());
-
-                    diagnostics.emit(&mut writer, &sources).unwrap();
-                }
-
-                let unit = unit.unwrap();
-
+            .for_each(|(id, (tick, transaction))| {
                 let id = id.to_id(&mut self.interner);
 
-                self.functions.insert(
-                    id,
-                    Function {
-                        context: runtime.clone(),
-                        unit: Arc::new(unit),
-                    },
-                );
+                let tick = load_function(&mut context, tick);
+                let transaction = load_function(&mut context, transaction);
+
+                self.functions.insert(id, Function { tick, transaction });
             });
 
         Some(())
