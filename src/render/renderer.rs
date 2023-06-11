@@ -12,9 +12,8 @@ use vulkano::command_buffer::{
     AutoCommandBufferBuilder, CommandBufferInheritanceInfo, CommandBufferUsage,
     RenderPassBeginInfo, SubpassContents,
 };
-use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::format::ClearValue;
-use vulkano::memory::allocator::{AllocationCreateInfo, MemoryUsage, StandardMemoryAllocator};
+use vulkano::memory::allocator::{AllocationCreateInfo, MemoryUsage};
 use vulkano::pipeline::graphics::viewport::Scissor;
 use vulkano::pipeline::{Pipeline, PipelineBindPoint};
 use vulkano::swapchain::{acquire_next_image, AcquireError};
@@ -269,10 +268,8 @@ impl Renderer {
 
         self.previous_frame_end.as_mut().unwrap().cleanup_finished();
 
-        let allocator = StandardMemoryAllocator::new_default(self.gpu.device.clone());
-
         self.gpu
-            .resize_images(&allocator, dimensions, &mut self.recreate_swapchain);
+            .resize_images(dimensions, &mut self.recreate_swapchain);
 
         if self.recreate_swapchain {
             self.gpu
@@ -316,7 +313,8 @@ impl Renderer {
             )
             .unwrap();
 
-        let indirect_instance = gpu::indirect_instance(&allocator, &self.resource_man, instances);
+        let indirect_instance =
+            gpu::indirect_instance(&self.gpu.alloc.allocator, &self.resource_man, instances);
 
         // game
         let mut game_builder = AutoCommandBufferBuilder::secondary(
@@ -331,19 +329,7 @@ impl Renderer {
         .unwrap();
 
         if let Some((indirect_commands, instance_buffer)) = indirect_instance {
-            let ubo = GameUBO::new(matrix, camera_pos);
-
-            *self.gpu.alloc.game_uniform_buffer.write().unwrap() = ubo;
-
-            let ubo_set = PersistentDescriptorSet::new(
-                &self.gpu.alloc.descriptor_allocator,
-                self.gpu.game_pipeline.layout().set_layouts()[0].clone(),
-                [WriteDescriptorSet::buffer(
-                    0,
-                    self.gpu.alloc.game_uniform_buffer.clone(),
-                )],
-            )
-            .unwrap();
+            *self.gpu.alloc.game_uniform_buffer.write().unwrap() = GameUBO::new(matrix, camera_pos);
 
             game_builder
                 .set_viewport(0, [gpu::viewport(&self.gpu.window)])
@@ -354,7 +340,7 @@ impl Renderer {
                     PipelineBindPoint::Graphics,
                     self.gpu.game_pipeline.layout().clone(),
                     0,
-                    ubo_set,
+                    self.gpu.game_descriptor_set.clone(),
                 )
                 .draw_indexed_indirect(indirect_commands)
                 .unwrap();
@@ -386,23 +372,14 @@ impl Renderer {
                 .set_scissor(0, [Scissor::irrelevant()]);
 
             if !gui_instances.is_empty() {
-                let ubo = GameUBO::new(matrix, camera_pos);
+                *self.gpu.alloc.gui_uniform_buffer.write().unwrap() =
+                    GameUBO::new(matrix, camera_pos);
 
-                *self.gpu.alloc.gui_uniform_buffer.write().unwrap() = ubo;
-
-                let ubo_set = PersistentDescriptorSet::new(
-                    &self.gpu.alloc.descriptor_allocator,
-                    self.gpu.gui_pipeline.layout().set_layouts()[0].clone(),
-                    [WriteDescriptorSet::buffer(
-                        0,
-                        self.gpu.alloc.gui_uniform_buffer.clone(),
-                    )],
-                )
-                .unwrap();
-
-                if let Some((indirect_commands, instance_buffer)) =
-                    gpu::indirect_instance(&allocator, &self.resource_man, gui_instances)
-                {
+                if let Some((indirect_commands, instance_buffer)) = gpu::indirect_instance(
+                    &self.gpu.alloc.allocator,
+                    &self.resource_man,
+                    gui_instances,
+                ) {
                     gui_builder
                         .bind_pipeline_graphics(self.gpu.gui_pipeline.clone())
                         .bind_vertex_buffers(
@@ -414,7 +391,7 @@ impl Renderer {
                             PipelineBindPoint::Graphics,
                             self.gpu.gui_pipeline.layout().clone(),
                             0,
-                            ubo_set,
+                            self.gpu.gui_descriptor_set.clone(),
                         )
                         .draw_indexed_indirect(indirect_commands)
                         .unwrap();
@@ -422,26 +399,14 @@ impl Renderer {
             }
 
             if !extra_vertices.is_empty() {
-                let ubo = GuiUBO {
+                *self.gpu.alloc.overlay_uniform_buffer.write().unwrap() = GuiUBO {
                     matrix: Matrix4::identity().into(),
                 };
-
-                *self.gpu.alloc.overlay_uniform_buffer.write().unwrap() = ubo;
-
-                let ubo_set = PersistentDescriptorSet::new(
-                    &self.gpu.alloc.descriptor_allocator,
-                    self.gpu.overlay_pipeline.layout().set_layouts()[0].clone(),
-                    [WriteDescriptorSet::buffer(
-                        0,
-                        self.gpu.alloc.overlay_uniform_buffer.clone(),
-                    )],
-                )
-                .unwrap();
 
                 let vertex_count = extra_vertices.len();
 
                 let extra_vertex_buffer = Buffer::from_iter(
-                    &allocator,
+                    &self.gpu.alloc.allocator,
                     BufferCreateInfo {
                         usage: BufferUsage::VERTEX_BUFFER,
                         ..Default::default()
@@ -461,7 +426,7 @@ impl Renderer {
                         PipelineBindPoint::Graphics,
                         self.gpu.overlay_pipeline.layout().clone(),
                         0,
-                        ubo_set,
+                        self.gpu.overlay_descriptor_set.clone(),
                     )
                     .draw(vertex_count as u32, 1, 0, 0)
                     .unwrap();

@@ -7,6 +7,7 @@ use vulkano::command_buffer::allocator::{
 };
 use vulkano::command_buffer::PrimaryAutoCommandBuffer;
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
+use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType};
 use vulkano::device::{DeviceCreateInfo, DeviceExtensions, Features, QueueCreateInfo, QueueFlags};
 use vulkano::format::{Format, NumericType};
@@ -21,7 +22,7 @@ use vulkano::pipeline::graphics::multisample::MultisampleState;
 use vulkano::pipeline::graphics::rasterization::RasterizationState;
 use vulkano::pipeline::graphics::vertex_input::Vertex;
 use vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
-use vulkano::pipeline::GraphicsPipeline;
+use vulkano::pipeline::{GraphicsPipeline, Pipeline};
 use vulkano::render_pass::Subpass;
 use vulkano::swapchain::{
     Swapchain, SwapchainAcquireFuture, SwapchainCreateInfo, SwapchainCreationError,
@@ -391,6 +392,7 @@ pub fn indirect_instance(
         indirect_commands.into_iter(),
     )
     .unwrap();
+
     Some((indirect_buffer, instance_buffer))
 }
 
@@ -408,8 +410,8 @@ pub struct RenderAlloc {
     pub game_depth_buffer: Arc<AttachmentImage>,
     pub gui_depth_buffer: Arc<AttachmentImage>,
 
+    pub allocator: StandardMemoryAllocator,
     pub command_allocator: StandardCommandBufferAllocator,
-    pub descriptor_allocator: StandardDescriptorSetAllocator,
 
     pub physical_device: Arc<PhysicalDevice>,
 }
@@ -468,7 +470,6 @@ impl RenderAlloc {
         );
 
         let allocator = StandardMemoryAllocator::new_default(device.clone());
-        let descriptor_allocator = StandardDescriptorSetAllocator::new(device.clone());
         let command_allocator = StandardCommandBufferAllocator::new(
             device,
             StandardCommandBufferAllocatorCreateInfo {
@@ -577,8 +578,6 @@ impl RenderAlloc {
         )
         .unwrap();
 
-        drop(allocator);
-
         Self {
             swapchain,
             images,
@@ -593,8 +592,8 @@ impl RenderAlloc {
             game_depth_buffer,
             gui_depth_buffer,
 
+            allocator,
             command_allocator,
-            descriptor_allocator,
 
             physical_device,
         }
@@ -612,6 +611,10 @@ pub struct Gpu {
     pub gui_pipeline: Arc<GraphicsPipeline>,
     pub overlay_pipeline: Arc<GraphicsPipeline>,
 
+    pub game_descriptor_set: Arc<PersistentDescriptorSet>,
+    pub gui_descriptor_set: Arc<PersistentDescriptorSet>,
+    pub overlay_descriptor_set: Arc<PersistentDescriptorSet>,
+
     pub game_subpass: Subpass,
     pub gui_subpass: Subpass,
 
@@ -620,29 +623,24 @@ pub struct Gpu {
 }
 
 impl Gpu {
-    pub fn resize_images(
-        &mut self,
-        allocator: &impl MemoryAllocator,
-        dimensions: [u32; 2],
-        recreate_swapchain: &mut bool,
-    ) {
+    pub fn resize_images(&mut self, dimensions: [u32; 2], recreate_swapchain: &mut bool) {
         Self::resize_image_with_samples(
             dimensions,
-            allocator,
+            &self.alloc.allocator,
             Sample4,
             &mut self.alloc.color_image,
             recreate_swapchain,
         );
         Self::resize_image_with_samples(
             dimensions,
-            allocator,
+            &self.alloc.allocator,
             Sample4,
             &mut self.alloc.game_depth_buffer,
             recreate_swapchain,
         );
         Self::resize_image_with_samples(
             dimensions,
-            allocator,
+            &self.alloc.allocator,
             Sample4,
             &mut self.alloc.gui_depth_buffer,
             recreate_swapchain,
@@ -761,6 +759,38 @@ impl Gpu {
         let gui_pipeline = create_gui_pipeline(device.clone(), &gui_subpass);
         let overlay_pipeline = create_overlay_pipeline(device.clone(), &gui_subpass);
 
+        let descriptor_allocator = StandardDescriptorSetAllocator::new(device.clone());
+
+        let game_descriptor_set = PersistentDescriptorSet::new(
+            &descriptor_allocator,
+            game_pipeline.layout().set_layouts()[0].clone(),
+            [WriteDescriptorSet::buffer(
+                0,
+                alloc.game_uniform_buffer.clone(),
+            )],
+        )
+        .unwrap();
+
+        let gui_descriptor_set = PersistentDescriptorSet::new(
+            &descriptor_allocator,
+            gui_pipeline.layout().set_layouts()[0].clone(),
+            [WriteDescriptorSet::buffer(
+                0,
+                alloc.gui_uniform_buffer.clone(),
+            )],
+        )
+        .unwrap();
+
+        let overlay_descriptor_set = PersistentDescriptorSet::new(
+            &descriptor_allocator,
+            overlay_pipeline.layout().set_layouts()[0].clone(),
+            [WriteDescriptorSet::buffer(
+                0,
+                alloc.overlay_uniform_buffer.clone(),
+            )],
+        )
+        .unwrap();
+
         let framebuffers = framebuffers(
             &alloc.images,
             render_pass.clone(),
@@ -779,6 +809,10 @@ impl Gpu {
             game_pipeline,
             gui_pipeline,
             overlay_pipeline,
+
+            game_descriptor_set,
+            gui_descriptor_set,
+            overlay_descriptor_set,
 
             game_subpass,
             gui_subpass,
