@@ -2,28 +2,23 @@ use std::ffi::OsStr;
 use std::fs::{read_dir, read_to_string};
 use std::path::Path;
 
-use rune::Any;
 use serde::Deserialize;
 
 use crate::game::item::{ItemStack, ItemStackRaw};
 use crate::resource::{ResourceManager, JSON_EXT};
 use crate::util::id::{Id, IdRaw};
 
-#[derive(Debug, Clone, Any)]
+#[derive(Debug, Clone)]
 pub struct Script {
-    #[rune(get, copy)]
     pub id: Id,
-    #[rune(get, copy)]
+
     pub adjacent: Option<Id>,
-    #[rune(get)]
     pub instructions: Instructions,
 }
 
-#[derive(Debug, Clone, Any)]
+#[derive(Debug, Clone)]
 pub struct Instructions {
-    #[rune(get)]
     pub inputs: Option<Vec<ItemStack>>,
-    #[rune(get, copy)]
     pub output: Option<ItemStack>,
 }
 

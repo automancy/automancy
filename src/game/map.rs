@@ -1,13 +1,14 @@
-use chrono::{Local, Utc};
-use hashbrown::HashSet;
-use lazy_static::lazy_static;
-use ractor::ActorRef;
-use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::iter::Iterator;
 use std::{collections::HashMap, path::PathBuf};
+
+use chrono::{Local, Utc};
+use hashbrown::HashSet;
+use lazy_static::lazy_static;
+use ractor::ActorRef;
+use serde::{Deserialize, Serialize};
 use zstd::{Decoder, Encoder};
 
 use crate::game;
@@ -96,7 +97,7 @@ impl Map {
         let mut id_map = HashMap::new();
         let mut serde_tiles = Vec::new();
         for (coord, (id, tile_modifier)) in self.tiles.iter() {
-            if let Some(tile_entity) = tile_entities.get(&coord) {
+            if let Some(tile_entity) = tile_entities.get(coord) {
                 if !id_map.contains_key(id) {
                     id_map.insert(*id, interner.resolve(*id).unwrap().to_string());
                 }

@@ -4,8 +4,6 @@ use std::ops::{Add, Div, Mul, Neg, RangeInclusive, Sub};
 use hexagon_tiles::fractional::FractionalHex;
 use hexagon_tiles::hex::{hex, Hex};
 use hexagon_tiles::traits::{HexDirection, HexMath, HexRound};
-use rune::Any;
-use rune::Module;
 use serde::de::{SeqAccess, Visitor};
 use serde::ser::SerializeTuple;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -19,11 +17,11 @@ pub type TileUnit = i32;
 pub type TileHex = Hex<TileUnit>;
 
 /// Represents a tile's position.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Any)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct TileCoord(TileHex);
 
 /// Represents a chunk's position.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Any)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct ChunkCoord(TileHex);
 
 /// Copied from https://youtu.be/Zz296fdB8rc
@@ -54,28 +52,6 @@ pub const CHUNK_SIZE: TileUnit = 16;
 pub const CHUNK_SIZE_SQUARED: TileUnit = CHUNK_SIZE * CHUNK_SIZE;
 
 pub const CHUNK_ARIA: Double = (3 * CHUNK_SIZE_SQUARED + 3 * CHUNK_SIZE + 1) as Double;
-
-impl TileCoord {
-    /// Adds TileCoord to the function API.
-    pub fn install(module: &mut Module) -> Result<(), rune::ContextError> {
-        module.ty::<Self>()?;
-        module.inst_fn("neg", Self::neg)?;
-        module.inst_fn("add", Self::add)?;
-        module.inst_fn("sub", Self::sub)?;
-        module.inst_fn("mul", Self::mul)?;
-        module.inst_fn("div", Self::div)?;
-        module.inst_fn("eq", Self::eq)?;
-        module.inst_fn("clone", Self::clone)?;
-        module.function(["TOP_RIGHT"], || Self::TOP_RIGHT)?;
-        module.function(["RIGHT"], || Self::RIGHT)?;
-        module.function(["BOTTOM_RIGHT"], || Self::BOTTOM_RIGHT)?;
-        module.function(["BOTTOM_LEFT"], || Self::BOTTOM_LEFT)?;
-        module.function(["LEFT"], || Self::LEFT)?;
-        module.function(["TOP_LEFT"], || Self::TOP_LEFT)?;
-
-        Ok(())
-    }
-}
 
 impl TileCoord {
     /// Shorthand for the tile at position (0, 0, 0).

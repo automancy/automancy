@@ -2,8 +2,5 @@
     "id": "void",
     "models": [
         "void"
-    ],
-    "tile_type": {
-        "type": "Void"
-    }
+    ]
 }

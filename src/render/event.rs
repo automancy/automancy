@@ -81,23 +81,15 @@ impl Default for EventLoopStorage {
 
 pub fn shutdown_graceful(
     setup: &mut GameSetup,
-    runtime: &Runtime,
     control_flow: &mut ControlFlow,
 ) -> Result<(), Box<dyn Error>> {
     setup.game.send_message(GameMsg::StopTicking).unwrap();
 
-    let map = runtime
-        .block_on(setup.game.call(GameMsg::TakeMap, None))?
-        .unwrap();
-
-    let tile_entities = runtime
-        .block_on(setup.game.call(GameMsg::TakeTileEntities, None))?
-        .unwrap();
-
-    setup
-        .game
-        .send_message(GameMsg::SaveMap(setup.resource_man.clone()))
-        .unwrap();
+    block_on(setup.game.call(
+        |reply| GameMsg::SaveMap(setup.resource_man.clone(), reply),
+        None,
+    ))
+    .unwrap();
 
     setup.game.stop(Some("Game closed".to_string()));
 
@@ -259,16 +251,23 @@ pub fn on_event(
                 if let Some(((id, _), tile_entity)) = tile.zip(tile_entity) {
                     if id == resource_man.registry.tile_ids.node {
                         let old = runtime
-                            .block_on(
-                                tile_entity
-                                    .call(|reply| TileEntityMsg::GetDataValue("link", reply), None),
-                            )
+                            .block_on(tile_entity.call(
+                                |reply| {
+                                    TileEntityMsg::GetDataValue(
+                                        resource_man.registry.data_ids.link,
+                                        reply,
+                                    )
+                                },
+                                None,
+                            ))
                             .unwrap()
                             .unwrap();
 
                         if old.is_some() {
                             tile_entity
-                                .send_message(TileEntityMsg::RemoveData("link"))
+                                .send_message(TileEntityMsg::RemoveData(
+                                    resource_man.registry.data_ids.link,
+                                ))
                                 .unwrap();
 
                             setup
@@ -282,7 +281,7 @@ pub fn on_event(
                         } else {
                             tile_entity
                                 .send_message(TileEntityMsg::SetData(
-                                    "link".to_owned(),
+                                    resource_man.registry.data_ids.link,
                                     Data::Coord(linking_tile - setup.camera.pointing_at),
                                 ))
                                 .unwrap();
@@ -301,7 +300,7 @@ pub fn on_event(
                 }
             } else if let Some(id) = loop_store.selected_id {
                 let new = loop_store.selected_tile_modifiers.get(&id).unwrap_or(&0) + 1;
-                let max = resource_man.registry.get_tile(&id).unwrap().models.len() as i32;
+                let max = resource_man.registry.tile(id).unwrap().models.len() as i32;
 
                 loop_store.selected_tile_modifiers.insert(id, new % max);
                 loop_store.already_placed_at = None;
@@ -338,10 +337,10 @@ pub fn on_event(
         gui.begin_frame();
         if loop_store.input_handler.pause_pressed {
             if loop_store.gui_state == GuiState::Ingame {
-                setup
-                    .game
-                    .send_message(GameMsg::SaveMap(setup.resource_man.clone()))
-                    .unwrap();
+                let _ = setup.game.call(
+                    |reply| GameMsg::SaveMap(setup.resource_man.clone(), reply),
+                    None,
+                );
                 loop_store.gui_state = GuiState::Paused;
             } else if loop_store.gui_state == GuiState::Paused {
                 loop_store.gui_state = GuiState::Ingame;
@@ -351,13 +350,13 @@ pub fn on_event(
         match loop_store.gui_state {
             GuiState::MainMenu => gui::main_menu(setup, gui, runtime, control_flow, loop_store),
             GuiState::MapLoad => {
-                gui::map_load_menu(setup, gui, loop_store);
+                gui::map_load_menu(setup, gui, loop_store, renderer);
             }
             GuiState::Options => {
                 gui::options_menu(setup, gui, loop_store);
             }
             GuiState::Paused => {
-                gui::pause_menu(setup, gui, loop_store);
+                gui::pause_menu(setup, gui, loop_store, renderer);
             }
             GuiState::Ingame => {
                 // tile_selections
@@ -402,7 +401,7 @@ pub fn on_event(
                 let mouse_pos = mouse_pos + setup.camera.get_pos().to_vec().truncate();
 
                 if let Some(id) = loop_store.selected_id {
-                    if let Some(model) = resource_man.registry.get_tile(&id).and_then(|v| {
+                    if let Some(model) = resource_man.registry.tile(id).and_then(|v| {
                         v.models
                             .get(
                                 loop_store

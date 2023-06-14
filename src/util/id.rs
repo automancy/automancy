@@ -1,8 +1,8 @@
 use std::fmt::{self, Display, Formatter};
+use std::hash::Hash;
 
-use bytemuck::{Pod, PodInOption, Zeroable, ZeroableInOption};
+use bytemuck::{Pod, Zeroable};
 use flexstr::SharedStr;
-use rune::Any;
 use serde::de::{Error, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use string_interner::backend::StringBackend;
@@ -13,45 +13,29 @@ pub struct IdRaw(SharedStr, SharedStr);
 
 #[repr(C)]
 #[derive(
-    Debug,
-    Clone,
-    Copy,
-    Hash,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Zeroable,
-    Pod,
-    Any,
-    Serialize,
-    Deserialize,
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Zeroable, Pod, Serialize, Deserialize,
 )]
-pub struct Id(#[rune(get, copy)] usize);
-
-unsafe impl ZeroableInOption for Id {}
-
-unsafe impl PodInOption for Id {}
+pub struct Id(u64);
 
 impl From<Id> for usize {
     fn from(value: Id) -> Self {
-        value.0
+        value.0 as usize
     }
 }
 
 impl From<usize> for Id {
     fn from(value: usize) -> Self {
-        Self(value)
+        Self(value as u64)
     }
 }
 
 impl Symbol for Id {
     fn try_from_usize(index: usize) -> Option<Self> {
-        Some(Self(index))
+        Some(Self(index as u64))
     }
 
     fn to_usize(self) -> usize {
-        self.0
+        self.0 as usize
     }
 }
 
