@@ -7,7 +7,7 @@ use crate::game::tile::entity::{
 use crate::game::tile::ticking::{tick, TickUnit};
 use crate::render::camera::FAR;
 use crate::render::data::{InstanceData, HEX_GRID_LAYOUT};
-use crate::resource::item::id_eq_or_of_tag;
+use crate::resource::item::id_match;
 use crate::resource::script::Script;
 use crate::resource::ResourceManager;
 use crate::util::cg::{Float, Matrix4};
@@ -36,13 +36,13 @@ pub type RenderInfo = HashMap<TileCoord, RenderUnit>;
 #[derive(Debug)]
 pub struct GameState {
     /// a count of all the ticks that have happened
-    tick_count: TickUnit,
+    pub(crate) tick_count: TickUnit,
 
     /// the resource manager
-    resource_man: Arc<ResourceManager>,
+    pub(crate) resource_man: Arc<ResourceManager>,
 
     /// the tile entities
-    tile_entities: TileEntities,
+    pub(crate) tile_entities: TileEntities,
 
     /// the map
     map: Map,
@@ -100,18 +100,15 @@ pub enum GameMsg {
     TakeTileEntities(RpcReplyPort<TileEntities>),
     /// get the map
     TakeMap(RpcReplyPort<Map>),
-    /// saves the map to disk
-    SaveMap(Arc<ResourceManager>),
-    /// load a map from disk
+    SaveMap(Arc<ResourceManager>, RpcReplyPort<()>),
+    /// load a map
     LoadMap(Arc<ResourceManager>, String),
-    /// get information about a map without taking ownership of it
     GetMapInfo(RpcReplyPort<MapInfo>),
-    /// get info of an unloaded map from disk
     GetUnloadedMapInfo(String, Arc<ResourceManager>, RpcReplyPort<MapInfo>),
     GetDataMap(RpcReplyPort<DataMap>),
-    GetDataValue(String, RpcReplyPort<Option<Data>>),
-    SetData(String, Data),
-    RemoveData(String),
+    GetDataValue(Id, RpcReplyPort<Option<Data>>),
+    SetData(Id, Data),
+    RemoveData(Id),
     StopTicking,
 }
 
@@ -129,7 +126,7 @@ impl Actor for Game {
     type Msg = GameMsg;
     type State = GameState;
     type Arguments = (Arc<ResourceManager>, SharedStr);
-    /// creates the game state
+
     async fn pre_start(
         &self,
         _myself: ActorRef<Self::Msg>,
@@ -137,7 +134,7 @@ impl Actor for Game {
     ) -> Result<Self::State, ActorProcessingErr> {
         Ok(Self::State::new(args.0, args.1))
     }
-    /// Handles incoming messages and replies to them.
+
     async fn handle(
         &self,
         myself: ActorRef<Self::Msg>,
@@ -172,12 +169,13 @@ impl Actor for Game {
                 log::info!("Successfully loaded map {name}!");
                 return Ok(());
             }
-            SaveMap(resource_man) => {
+            SaveMap(resource_man, reply) => {
                 state
                     .map
                     .save(&resource_man.interner, &state.tile_entities)
                     .await;
-                log::info!("Saved map {}", state.map.map_name.clone())
+                log::info!("Saved map {}", state.map.map_name.clone());
+                reply.send(()).unwrap();
             }
             GetMapInfo(reply) => {
                 let map_name = state.map.map_name.clone();
@@ -213,9 +211,7 @@ impl Actor for Game {
                 return Ok(());
             }
             GetDataValue(key, reply) => {
-                reply
-                    .send(state.map.data.get(key.as_str()).cloned())
-                    .unwrap();
+                reply.send(state.map.data.get(&key).cloned()).unwrap();
 
                 return Ok(());
             }
@@ -339,8 +335,7 @@ impl Actor for Game {
 
                             for neighbor in TileHex::NEIGHBORS.iter().map(|v| coord + (*v).into()) {
                                 if let Some((id, _)) = state.map.tiles.get(&neighbor) {
-                                    if id_eq_or_of_tag(&state.resource_man.registry, *id, adjacent)
-                                    {
+                                    if id_match(&state.resource_man.registry, *id, adjacent) {
                                         fulfilled = true;
                                         break;
                                     }
@@ -390,7 +385,7 @@ impl Actor for Game {
                     let tile_state: TileEntityState = tile_state.take().unwrap();
                     let coord = tile_state.coord;
 
-                    log::debug!("game: tile entity at {} has been removed", coord)
+                    log::debug!("game: tile entity at {:?} has been removed", coord)
                 }
             }
             other => {
@@ -431,7 +426,7 @@ fn undo_once(game: &ActorRef<GameMsg>, state: &mut GameState) {
 }
 
 /// Creates a new tile of given type at the given position, and with an initial state.
-async fn new_tile(
+pub(crate) async fn new_tile(
     game: &ActorRef<GameMsg>,
     coord: TileCoord,
     id: Id,
@@ -492,7 +487,7 @@ fn render_info(state: &mut GameState, center: TileCoord, range: TileUnit) -> Arc
             state
                 .resource_man
                 .registry
-                .get_tile(id)
+                .tile(*id)
                 .and_then(|r| r.models.get(*tile_modifier as usize).cloned())
                 .map(|model| {
                     let p = hex_to_pixel(HEX_GRID_LAYOUT, (*coord).into());

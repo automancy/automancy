@@ -1,7 +1,6 @@
 use crate::resource::ResourceManager;
 use crate::util;
 use crate::util::id::{id_static, Id, Interner};
-use rune::Any;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
@@ -11,7 +10,7 @@ pub struct ErrorManager {
     queue: Arc<Mutex<VecDeque<GameError>>>,
 }
 /// Contains a list of errors that can be displayed.
-#[derive(Clone, Copy, Any)]
+#[derive(Clone, Copy)]
 pub struct ErrorIds {
     /// This error is displayed to test that the error manager is working. TODO this can probably be removed.
     pub test_error: Id,

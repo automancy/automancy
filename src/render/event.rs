@@ -12,16 +12,16 @@ use tokio::runtime::Runtime;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::ControlFlow;
 
-use crate::game::input::InputHandler;
 use crate::game::run::setup::GameSetup;
+use crate::game::state::{GameMsg, PlaceTileResponse};
 use crate::game::tile::coord::{ChunkCoord, TileCoord, CHUNK_SIZE_SQUARED};
 use crate::game::tile::entity::{Data, TileEntityMsg, TileModifier};
-use crate::game::{input, GameMsg, PlaceTileResponse};
 use crate::render::camera::{hex_to_normalized, screen_to_normalized, screen_to_world, FAR};
 use crate::render::data::InstanceData;
-use crate::render::gui;
 use crate::render::gui::{GuiState, PopupState};
+use crate::render::input::InputHandler;
 use crate::render::renderer::Renderer;
+use crate::render::{gui, input};
 use crate::resource::item::Item;
 use crate::util::cg::{DPoint3, Double, Float};
 use crate::util::colors;
@@ -126,7 +126,7 @@ pub fn on_event(
             ..
         } => {
             // game shutdown
-            shutdown_graceful(setup, runtime, control_flow)?;
+            shutdown_graceful(setup, control_flow)?;
         }
 
         Event::WindowEvent { event, .. } => {
@@ -348,7 +348,7 @@ pub fn on_event(
             loop_store.input_handler.pause_pressed = false;
         }
         match loop_store.gui_state {
-            GuiState::MainMenu => gui::main_menu(setup, gui, runtime, control_flow, loop_store),
+            GuiState::MainMenu => gui::main_menu(setup, gui, control_flow, loop_store),
             GuiState::MapLoad => {
                 gui::map_load_menu(setup, gui, loop_store, renderer);
             }
@@ -450,7 +450,7 @@ pub fn on_event(
         }
         match &loop_store.popup_state {
             PopupState::None => {}
-            PopupState::MapCreate => gui::map_create_menu(setup, gui, loop_store),
+            PopupState::MapCreate => gui::map_create_menu(setup, gui, loop_store, renderer),
             PopupState::MapDeleteConfirmation(map) => {
                 gui::map_delete_confirmation(setup, gui, loop_store, map.clone());
             }

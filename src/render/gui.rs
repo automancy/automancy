@@ -30,10 +30,10 @@ use winit::event_loop::{ControlFlow, EventLoop};
 use crate::game::map::{Map, MapInfo};
 use crate::game::run::error::{error_to_key, error_to_string};
 use crate::game::run::setup::GameSetup;
+use crate::game::state::GameMsg;
 use crate::game::tile::coord::TileCoord;
 use crate::game::tile::coord::TileHex;
 use crate::game::tile::entity::{Data, TileEntityMsg, TileModifier};
-use crate::game::GameMsg;
 use crate::render::camera::hex_to_normalized;
 use crate::render::data::{GameUBO, GameVertex, InstanceData};
 use crate::render::event::{shutdown_graceful, EventLoopStorage};
@@ -810,7 +810,7 @@ pub fn map_load_menu(
                 )
                 .clicked()
             {
-                loop_store.gui_state = GuiState::Main
+                loop_store.gui_state = GuiState::MainMenu
             }
         });
     });

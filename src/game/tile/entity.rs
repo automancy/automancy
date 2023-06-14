@@ -6,11 +6,12 @@ use rand::{thread_rng, RngCore};
 use serde::{Deserialize, Serialize};
 
 use crate::game::item::{ItemAmount, ItemStack};
+use crate::game::state::GameMsg;
 use crate::game::tile::coord::TileCoord;
 use crate::game::tile::entity::TileEntityMsg::*;
 use crate::game::tile::entity::TransactionError::*;
 use crate::game::tile::inventory::{Inventory, InventoryRaw};
-use crate::game::{GameMsg, TickUnit};
+use crate::game::tile::ticking::TickUnit;
 use crate::resource::item::id_match;
 use crate::resource::ResourceManager;
 use crate::util::id::{Id, IdRaw, Interner};

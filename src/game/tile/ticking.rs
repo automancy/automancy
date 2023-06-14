@@ -1,8 +1,8 @@
 use rayon::prelude::*;
 use std::time::{Duration, Instant};
 
+use crate::game::state::GameState;
 use crate::game::tile::entity::TileEntityMsg;
-use crate::game::GameState;
 
 pub const TPS: u64 = 30;
 

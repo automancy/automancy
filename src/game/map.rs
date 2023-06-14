@@ -12,12 +12,12 @@ use serde::{Deserialize, Serialize};
 use zstd::{Decoder, Encoder};
 
 use crate::game;
+use crate::game::state::GameMsg;
 use crate::game::tile::coord::TileCoord;
 use crate::game::tile::entity::TileEntityMsg::{GetData, SetData};
 use crate::game::tile::entity::{
     data_from_raw, data_to_raw, DataMap, DataMapRaw, TileEntityMsg, TileModifier,
 };
-use crate::game::GameMsg;
 use crate::resource::ResourceManager;
 use crate::util::id::{Id, Interner};
 
@@ -174,7 +174,7 @@ impl Map {
                 .get(&id)
                 .and_then(|id| resource_man.interner.get(id.as_str()))
             {
-                let tile_entity = game::new_tile(game, coord, id, tile_modifier).await;
+                let tile_entity = game::state::new_tile(game, coord, id, tile_modifier).await;
                 let data = data_from_raw(data, &resource_man.interner);
 
                 data.into_iter().for_each(|(key, value)| {

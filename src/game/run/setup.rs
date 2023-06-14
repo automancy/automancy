@@ -14,9 +14,9 @@ use winit::event_loop::EventLoop;
 use winit::window::{Icon, Window};
 
 use crate::game::map::MapInfo;
+use crate::game::state::{Game, GameMsg};
 use crate::game::tile::coord::ChunkCoord;
 use crate::game::tile::ticking::TICK_INTERVAL;
-use crate::game::{Game, GameMsg};
 use crate::render::camera::Camera;
 use crate::render::gpu::{Gpu, RenderAlloc};
 use crate::render::{gpu, gui};

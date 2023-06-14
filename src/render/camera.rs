@@ -9,9 +9,9 @@ use hexagon_tiles::point::{point, Point};
 use hexagon_tiles::traits::HexRound;
 use num::clamp;
 
-use crate::game::input::InputHandler;
 use crate::game::tile::coord::TileCoord;
 use crate::render::data::HEX_GRID_LAYOUT;
+use crate::render::input::InputHandler;
 use crate::util::cg::{matrix, DPoint2, DPoint3, DVector2, Double};
 
 pub const FAR: Double = 1.0;
