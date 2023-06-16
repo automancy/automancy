@@ -685,7 +685,7 @@ impl Actor for TileEntity {
                                 source_type: Some(resource_man.registry.tile_ids.transfer),
                                 source_id: state.id,
                                 direction: -target,
-                                source: source,
+                                source,
                             },
                             &resource_man,
                         )

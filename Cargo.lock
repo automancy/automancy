@@ -248,6 +248,7 @@ dependencies = [
  "vulkano",
  "vulkano-shaders",
  "vulkano-win",
+ "walkdir",
  "webbrowser",
  "winit",
  "zstd",

@@ -1,11 +1,11 @@
 use std::ffi::OsStr;
-use std::fs::{read_dir, read_to_string};
+use std::fs::read_to_string;
 use std::path::Path;
 
 use egui::epaint::ahash::HashSet;
 use serde::{Deserialize, Serialize};
 
-use crate::resource::{Registry, ResourceManager, JSON_EXT};
+use crate::resource::{load_recursively, Registry, ResourceManager, JSON_EXT};
 use crate::util::id::{Id, IdRaw};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -57,14 +57,11 @@ impl ResourceManager {
 
     pub fn load_tags(&mut self, dir: &Path) -> Option<()> {
         let tags = dir.join("tags");
-        let tags = read_dir(tags).ok()?;
 
-        tags.into_iter()
-            .flatten()
-            .map(|v| v.path())
-            .filter(|v| v.extension() == Some(OsStr::new(JSON_EXT)))
-            .for_each(|tag| {
-                self.load_tag(&tag);
+        load_recursively(&tags, OsStr::new(JSON_EXT))
+            .into_iter()
+            .for_each(|file| {
+                self.load_tag(&file);
             });
 
         Some(())

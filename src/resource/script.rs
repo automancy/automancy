@@ -1,11 +1,11 @@
 use std::ffi::OsStr;
-use std::fs::{read_dir, read_to_string};
+use std::fs::read_to_string;
 use std::path::Path;
 
 use serde::Deserialize;
 
 use crate::game::item::{ItemStack, ItemStackRaw};
-use crate::resource::{ResourceManager, JSON_EXT};
+use crate::resource::{load_recursively, ResourceManager, JSON_EXT};
 use crate::util::id::{Id, IdRaw};
 
 #[derive(Debug, Clone)]
@@ -73,15 +73,11 @@ impl ResourceManager {
 
     pub fn load_scripts(&mut self, dir: &Path) -> Option<()> {
         let scripts = dir.join("scripts");
-        let scripts = read_dir(scripts).ok()?;
 
-        scripts
+        load_recursively(&scripts, OsStr::new(JSON_EXT))
             .into_iter()
-            .flatten()
-            .map(|v| v.path())
-            .filter(|v| v.extension() == Some(OsStr::new(JSON_EXT)))
-            .for_each(|script| {
-                self.load_script(&script);
+            .for_each(|file| {
+                self.load_script(&file);
             });
 
         Some(())

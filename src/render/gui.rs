@@ -520,7 +520,6 @@ pub fn debugger(
     let scripts = resource_man.registry.scripts.len();
     let audio = resource_man.audio.len();
     let meshes = resource_man.meshes.len();
-    let models = resource_man.raw_models.len();
 
     let map = runtime
         .block_on(game.call(GameMsg::GetMapInfo, Some(loop_store.elapsed)))
@@ -541,7 +540,7 @@ pub fn debugger(
         ui.label(format!("FPS: {fps:.1}"));
         ui.label(format!("Device: {device_name} API {api_version}"));
         ui.label(format!(
-            "ResourceMan: {reg_tiles}T {reg_items}I {tags}Ta {scripts}S {audio}A {meshes}/{models}M"
+            "ResourceMan: {reg_tiles}T {reg_items}I {tags}Ta {scripts}S {audio}A {meshes}/{tiles}M"
         ));
         ui.label(format!(
             "Map \"{map_name}\" ({map_name}.bin): {data_size}D {tile_count}T"

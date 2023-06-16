@@ -1,12 +1,12 @@
 use std::ffi::OsStr;
-use std::fs::{read_dir, read_to_string};
+use std::fs::read_to_string;
 use std::path::Path;
 use std::sync::Arc;
 
 use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
 
-use crate::resource::{Registry, ResourceManager, JSON_EXT};
+use crate::resource::{load_recursively, Registry, ResourceManager, JSON_EXT};
 use crate::util::id::{Id, IdRaw, Interner};
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -57,15 +57,11 @@ impl ResourceManager {
 
     pub fn load_items(&mut self, dir: &Path) -> Option<()> {
         let items = dir.join("items");
-        let items = read_dir(items).ok()?;
 
-        items
+        load_recursively(&items, OsStr::new(JSON_EXT))
             .into_iter()
-            .flatten()
-            .map(|v| v.path())
-            .filter(|v| v.extension() == Some(OsStr::new(JSON_EXT)))
-            .for_each(|item| {
-                self.load_item(&item);
+            .for_each(|file| {
+                self.load_item(&file);
             });
 
         Some(())

@@ -1,11 +1,11 @@
 use std::ffi::OsStr;
-use std::fs::{read_dir, read_to_string};
+use std::fs::read_to_string;
 use std::path::Path;
 
 use serde::Deserialize;
 
 use crate::game::tile::entity::{intern_data_from_raw, DataMap, DataMapRaw};
-use crate::resource::{ResourceManager, JSON_EXT};
+use crate::resource::{load_recursively, ResourceManager, JSON_EXT};
 use crate::util::id::{id_static, Id, IdRaw, Interner};
 
 #[derive(Debug, Clone, Copy, Default, Deserialize)]
@@ -74,15 +74,11 @@ impl ResourceManager {
     }
     pub fn load_tiles(&mut self, dir: &Path) -> Option<()> {
         let tiles = dir.join("tiles");
-        let tiles = read_dir(tiles).ok()?;
 
-        tiles
+        load_recursively(&tiles, OsStr::new(JSON_EXT))
             .into_iter()
-            .flatten()
-            .map(|v| v.path())
-            .filter(|v| v.extension() == Some(OsStr::new(JSON_EXT)))
-            .for_each(|tile| {
-                self.load_tile(&tile);
+            .for_each(|file| {
+                self.load_tile(&file);
             });
 
         Some(())

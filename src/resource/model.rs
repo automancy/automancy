@@ -1,5 +1,5 @@
 use std::ffi::OsStr;
-use std::fs::{read_dir, read_to_string, File};
+use std::fs::{read_to_string, File};
 use std::io::BufReader;
 use std::path::Path;
 
@@ -8,8 +8,8 @@ use ply_rs::parser::Parser;
 use serde::Deserialize;
 
 use crate::render::data::{Face, GameVertex, Model};
-use crate::resource::ResourceManager;
 use crate::resource::JSON_EXT;
+use crate::resource::{load_recursively, ResourceManager};
 use crate::util::id::IdRaw;
 
 #[derive(Debug, Default, Clone)]
@@ -79,16 +79,12 @@ impl ResourceManager {
     }
 
     pub fn load_models(&mut self, dir: &Path) -> Option<()> {
-        let models = dir.join("models");
-        let models = read_dir(models).ok()?;
+        let models = dir.join("tiles");
 
-        models
+        load_recursively(&models, OsStr::new(JSON_EXT))
             .into_iter()
-            .flatten()
-            .map(|v| v.path())
-            .filter(|v| v.extension() == Some(OsStr::new(JSON_EXT)))
-            .for_each(|model| {
-                self.load_model(&model);
+            .for_each(|file| {
+                self.load_model(&file);
             });
 
         Some(())

@@ -1,9 +1,9 @@
-use hashbrown::HashMap;
 use std::ffi::OsStr;
 use std::fs::{read_dir, read_to_string};
 use std::path::Path;
 
 use flexstr::{SharedStr, ToSharedStr};
+use hashbrown::HashMap;
 
 use crate::resource::ResourceManager;
 use crate::resource::{Deserialize, JSON_EXT};
@@ -68,6 +68,7 @@ impl ResourceManager {
             .into_iter()
             .map(|(id, str)| (id.to_id(&mut self.interner), str.into()))
             .collect();
+
         self.translates = Translate {
             none,
             unnamed,

@@ -1,12 +1,14 @@
+use std::ffi::OsStr;
 use std::fmt;
 use std::fmt::{Debug, Formatter};
+use std::path::{Path, PathBuf};
 
-use egui::TextureHandle;
 use flexstr::SharedStr;
 use hashbrown::HashMap;
 use kira::sound::static_sound::StaticSoundData;
 use kira::track::TrackHandle;
 use serde::Deserialize;
+use walkdir::WalkDir;
 
 use crate::game::run::error::{ErrorIds, ErrorManager};
 use crate::render::data::{Face, GameVertex, Model};
@@ -21,13 +23,22 @@ use crate::util::id::{id_static, Id, IdRaw, Interner};
 
 pub mod audio;
 //pub mod function;
-pub mod icon;
 pub mod item;
 pub mod model;
 pub mod script;
 pub mod tag;
 pub mod tile;
 pub mod translate;
+
+pub fn load_recursively(path: &Path, extension: &OsStr) -> Vec<PathBuf> {
+    WalkDir::new(path)
+        .follow_links(false)
+        .into_iter()
+        .flatten()
+        .filter(|v| v.path().extension() == Some(extension))
+        .map(|v| v.path().to_path_buf())
+        .collect()
+}
 
 pub static JSON_EXT: &str = "json";
 pub static OGG_EXT: &str = "ogg";
@@ -82,7 +93,6 @@ pub struct ResourceManager {
     pub translates: Translate,
     //pub functions: HashMap<Id, Function>,
     pub audio: HashMap<SharedStr, StaticSoundData>,
-    pub icons: HashMap<SharedStr, TextureHandle>,
     pub meshes: HashMap<Id, Mesh>,
 
     pub all_vertices: Vec<GameVertex>,
@@ -132,7 +142,6 @@ impl ResourceManager {
             translates: Default::default(),
             //functions: Default::default(),
             audio: Default::default(),
-            icons: Default::default(),
             meshes: Default::default(),
 
             all_vertices: Default::default(),

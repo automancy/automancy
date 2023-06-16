@@ -337,10 +337,11 @@ pub fn on_event(
         gui.begin_frame();
         if loop_store.input_handler.pause_pressed {
             if loop_store.gui_state == GuiState::Ingame {
-                let _ = setup.game.call(
+                block_on(setup.game.call(
                     |reply| GameMsg::SaveMap(setup.resource_man.clone(), reply),
                     None,
-                );
+                ))
+                .unwrap();
                 loop_store.gui_state = GuiState::Paused;
             } else if loop_store.gui_state == GuiState::Paused {
                 loop_store.gui_state = GuiState::Ingame;
