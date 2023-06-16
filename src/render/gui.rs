@@ -540,7 +540,7 @@ pub fn debugger(
         ui.label(format!("FPS: {fps:.1}"));
         ui.label(format!("Device: {device_name} API {api_version}"));
         ui.label(format!(
-            "ResourceMan: {reg_tiles}T {reg_items}I {tags}Ta {scripts}S {audio}A {meshes}/{tiles}M"
+            "ResourceMan: {reg_tiles}T {reg_items}I {tags}Ta {scripts}S {audio}A {meshes}M"
         ));
         ui.label(format!(
             "Map \"{map_name}\" ({map_name}.bin): {data_size}D {tile_count}T"
