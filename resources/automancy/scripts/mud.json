@@ -2,24 +2,18 @@
     "id": "mud",
     "instructions": {
         "inputs": [
-            {
-                "item": {
-                    "id": "dirt"
-                },
-                "amount": 2
-            },
-            {
-                "item": {
-                    "id": "chaos"
-                },
-                "amount": 4
-            }
+            [
+                "dirt",
+                2
+            ],
+            [
+                "chaos",
+                4
+            ]
         ],
-        "output": {
-            "item": {
-                "id": "mud"
-            },
-            "amount": 4
-        }
+        "output": [
+            "mud",
+            4
+        ]
     }
 }

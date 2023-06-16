@@ -12,7 +12,7 @@ use crate::resource::JSON_EXT;
 use crate::resource::{load_recursively, ResourceManager};
 use crate::util::id::IdRaw;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct Mesh {
     pub offset: u32,
     pub size: u32,
@@ -41,7 +41,7 @@ impl ResourceManager {
 
         log::info!("loading model file at: {file:?}");
 
-        let file = File::open(file).ok().unwrap();
+        let file = File::open(file).unwrap();
         let mut read = BufReader::new(file);
 
         let vertex_parser = Parser::<GameVertex>::new();
@@ -79,7 +79,7 @@ impl ResourceManager {
     }
 
     pub fn load_models(&mut self, dir: &Path) -> Option<()> {
-        let models = dir.join("tiles");
+        let models = dir.join("models");
 
         load_recursively(&models, OsStr::new(JSON_EXT))
             .into_iter()

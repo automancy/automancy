@@ -27,7 +27,8 @@ use crate::game::tile::entity::{Data, TileEntityMsg};
 use crate::game::tile::ticking::TickUnit;
 use crate::render::camera::FAR;
 use crate::render::data::{
-    GameUBO, GameVertex, GuiUBO, InstanceData, RawInstanceData, HEX_GRID_LAYOUT,
+    GameUBO, GameVertex, InstanceData, LightInfo, OverlayUBO, RawInstanceData, DEFAULT_LIGHT_COLOR,
+    HEX_GRID_LAYOUT,
 };
 use crate::render::gpu;
 use crate::render::gpu::Gpu;
@@ -78,7 +79,7 @@ impl Renderer {
         runtime: &Runtime,
         setup: &GameSetup,
         map_render_info: &RenderInfo,
-        gui_instances: Vec<(RawInstanceData, Id)>,
+        gui_instances: Vec<(InstanceData, Id)>,
         extra_vertices: Vec<GameVertex>,
         gui: &mut Gui,
     ) {
@@ -256,7 +257,7 @@ impl Renderer {
         matrix: Matrix4,
         camera_pos: Point3,
         instances: &[(RawInstanceData, Id)],
-        gui_instances: &[(RawInstanceData, Id)],
+        gui_instances: &[(InstanceData, Id)],
         extra_vertices: Vec<GameVertex>,
         gui: &mut Gui,
     ) {
@@ -313,9 +314,6 @@ impl Renderer {
             )
             .unwrap();
 
-        let indirect_instance =
-            gpu::indirect_instance(&self.gpu.alloc.allocator, &self.resource_man, instances);
-
         // game
         let mut game_builder = AutoCommandBufferBuilder::secondary(
             &self.gpu.alloc.command_allocator,
@@ -328,7 +326,9 @@ impl Renderer {
         )
         .unwrap();
 
-        if let Some((indirect_commands, instance_buffer)) = indirect_instance {
+        if let Some((indirect_commands, instance_buffer)) =
+            gpu::indirect_instance(&self.gpu.alloc.allocator, &self.resource_man, instances)
+        {
             *self.gpu.alloc.game_uniform_buffer.write().unwrap() = GameUBO::new(matrix, camera_pos);
 
             game_builder
@@ -372,34 +372,58 @@ impl Renderer {
                 .set_scissor(0, [Scissor::irrelevant()]);
 
             if !gui_instances.is_empty() {
-                *self.gpu.alloc.gui_uniform_buffer.write().unwrap() =
-                    GameUBO::new(matrix, camera_pos);
+                let instances = gui_instances
+                    .iter()
+                    .map(|(instance, id)| {
+                        (
+                            RawInstanceData::from(
+                                instance.with_model_matrix(matrix * instance.model_matrix),
+                            ),
+                            *id,
+                        )
+                    })
+                    .collect::<Vec<_>>();
 
                 if let Some((indirect_commands, instance_buffer)) = gpu::indirect_instance(
                     &self.gpu.alloc.allocator,
                     &self.resource_man,
-                    gui_instances,
+                    instances.as_slice(),
                 ) {
+                    let light_info = Buffer::from_data(
+                        &self.gpu.alloc.allocator,
+                        BufferCreateInfo {
+                            usage: BufferUsage::VERTEX_BUFFER,
+                            ..Default::default()
+                        },
+                        AllocationCreateInfo {
+                            usage: MemoryUsage::Upload,
+                            ..Default::default()
+                        },
+                        LightInfo {
+                            light_pos: camera_pos.into(),
+                            light_color: DEFAULT_LIGHT_COLOR,
+                        },
+                    )
+                    .unwrap();
+
                     gui_builder
                         .bind_pipeline_graphics(self.gpu.gui_pipeline.clone())
                         .bind_vertex_buffers(
                             0,
-                            (self.gpu.alloc.vertex_buffer.clone(), instance_buffer),
+                            (
+                                self.gpu.alloc.vertex_buffer.clone(),
+                                instance_buffer,
+                                light_info,
+                            ),
                         )
                         .bind_index_buffer(self.gpu.alloc.index_buffer.clone())
-                        .bind_descriptor_sets(
-                            PipelineBindPoint::Graphics,
-                            self.gpu.gui_pipeline.layout().clone(),
-                            0,
-                            self.gpu.gui_descriptor_set.clone(),
-                        )
                         .draw_indexed_indirect(indirect_commands)
                         .unwrap();
                 }
             }
 
             if !extra_vertices.is_empty() {
-                *self.gpu.alloc.overlay_uniform_buffer.write().unwrap() = GuiUBO {
+                *self.gpu.alloc.overlay_uniform_buffer.write().unwrap() = OverlayUBO {
                     matrix: Matrix4::identity().into(),
                 };
 

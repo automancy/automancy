@@ -1,3 +1,4 @@
 {
-    "id": "gravel"
+    "id": "gravel",
+    "model": "item/gravel"
 }

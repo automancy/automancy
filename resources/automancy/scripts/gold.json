@@ -2,24 +2,18 @@
     "id": "gold",
     "instructions": {
         "inputs": [
-            {
-                "item": {
-                    "id": "water"
-                },
-                "amount": 16
-            },
-            {
-                "item": {
-                    "id": "gravel"
-                },
-                "amount": 256
-            }
+            [
+                "water",
+                16
+            ],
+            [
+                "gravel",
+                256
+            ]
         ],
-        "output": {
-            "item": {
-                "id": "gold"
-            },
-            "amount": 1
-        }
+        "output": [
+            "gold",
+            1
+        ]
     }
 }

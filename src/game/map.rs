@@ -175,7 +175,7 @@ impl Map {
                 .and_then(|id| resource_man.interner.get(id.as_str()))
             {
                 let tile_entity = game::state::new_tile(game, coord, id, tile_modifier).await;
-                let data = data_from_raw(data, &resource_man.interner);
+                let data = data_from_raw(data, resource_man);
 
                 data.into_iter().for_each(|(key, value)| {
                     tile_entity.send_message(SetData(key, value)).unwrap();
@@ -186,7 +186,7 @@ impl Map {
             }
         }
 
-        let data = data_from_raw(data, &resource_man.interner);
+        let data = data_from_raw(data, resource_man);
 
         (
             Self {

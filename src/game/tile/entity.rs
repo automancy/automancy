@@ -196,48 +196,51 @@ pub fn data_to_raw(data: DataMap, interner: &Interner) -> DataMapRaw {
         .collect()
 }
 
-pub fn intern_data_from_raw(data: DataMapRaw, interner: &mut Interner) -> DataMap {
+pub fn intern_data_from_raw(data: DataMapRaw, resource_man: &mut ResourceManager) -> DataMap {
     data.into_iter()
         .map(|(key, value)| {
             let value = match value {
                 DataRaw::Inventory(inventory) => {
-                    Data::Inventory(inventory.intern_to_inventory(interner))
+                    Data::Inventory(inventory.intern_to_inventory(resource_man))
                 }
                 DataRaw::Coord(coord) => Data::Coord(coord),
                 DataRaw::VecCoord(vec) => Data::VecCoord(vec),
-                DataRaw::Id(id) => Data::Id(interner.get_or_intern(id.to_string())),
+                DataRaw::Id(id) => Data::Id(resource_man.interner.get_or_intern(id.to_string())),
                 DataRaw::VecId(set) => Data::VecId(
                     set.into_iter()
-                        .map(|id| interner.get_or_intern(id.to_string()))
+                        .map(|id| resource_man.interner.get_or_intern(id.to_string()))
                         .collect(),
                 ),
                 DataRaw::Amount(amount) => Data::Amount(amount),
                 DataRaw::Bool(v) => Data::Bool(v),
             };
 
-            (IdRaw::parse(&key).to_id(interner), value)
+            (IdRaw::parse(&key).to_id(&mut resource_man.interner), value)
         })
         .collect()
 }
 
-pub fn data_from_raw(data: DataMapRaw, interner: &Interner) -> DataMap {
+pub fn data_from_raw(data: DataMapRaw, resource_man: &ResourceManager) -> DataMap {
     data.into_iter()
         .flat_map(|(key, value)| {
             let value = match value {
-                DataRaw::Inventory(inventory) => Data::Inventory(inventory.to_inventory(interner)),
+                DataRaw::Inventory(inventory) => {
+                    Data::Inventory(inventory.to_inventory(resource_man))
+                }
                 DataRaw::Coord(coord) => Data::Coord(coord),
                 DataRaw::VecCoord(vec) => Data::VecCoord(vec),
-                DataRaw::Id(id) => Data::Id(interner.get(id.to_string()).unwrap()),
+                DataRaw::Id(id) => Data::Id(resource_man.interner.get(id.to_string()).unwrap()),
                 DataRaw::VecId(set) => Data::VecId(
                     set.into_iter()
-                        .flat_map(|id| interner.get(id.to_string()))
+                        .flat_map(|id| resource_man.interner.get(id.to_string()))
                         .collect(),
                 ),
                 DataRaw::Amount(amount) => Data::Amount(amount),
                 DataRaw::Bool(v) => Data::Bool(v),
             };
 
-            interner
+            resource_man
+                .interner
                 .get(IdRaw::parse(&key).to_string())
                 .map(|key| (key, value))
         })
@@ -341,34 +344,32 @@ impl TileEntity {
         {
             let coord = state.coord + target;
 
-            if let Some(output) = &script.instructions.output {
-                if let Some(inputs) = &script.instructions.inputs {
-                    if let Some(buffer) = state
-                        .data
-                        .get_mut(&resource_man.registry.data_ids.buffer)
-                        .and_then(Data::as_inventory_mut)
-                    {
-                        for input in inputs {
-                            let stored = buffer.get(input.item.id);
+            if let Some(inputs) = &script.instructions.inputs {
+                if let Some(buffer) = state
+                    .data
+                    .get_mut(&resource_man.registry.data_ids.buffer)
+                    .and_then(Data::as_inventory_mut)
+                {
+                    for input in inputs {
+                        let stored = buffer.get(input.item);
 
-                            if stored < input.amount {
-                                return None;
-                            }
+                        if stored < input.amount {
+                            return None;
                         }
-
-                        return Some(MachineTickResult {
-                            target: coord,
-                            direction: -target,
-                            item_stack: *output,
-                        });
                     }
-                } else {
+
                     return Some(MachineTickResult {
                         target: coord,
                         direction: -target,
-                        item_stack: *output,
+                        item_stack: script.instructions.output,
                     });
                 }
+            } else {
+                return Some(MachineTickResult {
+                    target: coord,
+                    direction: -target,
+                    item_stack: script.instructions.output,
+                });
             }
         }
 
@@ -406,7 +407,7 @@ impl TileEntity {
 
                 let matched = matched.unwrap();
 
-                let amount = buffer.get_mut(item_stack.item.id);
+                let amount = buffer.get_mut(item_stack.item);
                 if *amount >= matched.amount {
                     return Err(Full);
                 }
@@ -579,7 +580,7 @@ impl Actor for TileEntity {
                                 .or_insert_with(Data::inventory)
                                 .as_inventory_mut()
                                 .unwrap();
-                            let stored = buffer.0.entry(item.id).or_insert(0);
+                            let stored = buffer.0.entry(item).or_insert(0);
 
                             if *stored > amount {
                                 *stored = amount;
@@ -714,7 +715,7 @@ impl Actor for TileEntity {
                                 .unwrap();
 
                             inputs.iter().for_each(|item_stack| {
-                                let stored = buffer.0.entry(item_stack.item.id).or_insert(0);
+                                let stored = buffer.0.entry(item_stack.item).or_insert(0);
 
                                 if *stored < item_stack.amount {
                                     log::error!("in transaction result: tile does not have enough input for the supposed output!");
@@ -732,7 +733,7 @@ impl Actor for TileEntity {
                             .get_mut(&resource_man.registry.data_ids.buffer)
                             .and_then(Data::as_inventory_mut)
                         {
-                            buffer.take(transferred.item.id, transferred.amount);
+                            buffer.take(transferred.item, transferred.amount);
                         }
                     }
                 }
@@ -782,7 +783,7 @@ impl Actor for TileEntity {
                                 .and_then(Data::as_inventory_mut),
                         )
                     {
-                        let stored = inventory.get(item.id);
+                        let stored = inventory.get(item);
                         let extracting = stored.min(amount);
 
                         if extracting > 0 {

@@ -1,3 +1,4 @@
 {
-    "id": "order"
+    "id": "order",
+    "model": "item/order"
 }

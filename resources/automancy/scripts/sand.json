@@ -2,24 +2,18 @@
     "id": "sand",
     "instructions": {
         "inputs": [
-            {
-                "item": {
-                    "id": "gravel"
-                },
-                "amount": 2
-            },
-            {
-                "item": {
-                    "id": "chaos"
-                },
-                "amount": 2
-            }
+            [
+                "gravel",
+                2
+            ],
+            [
+                "chaos",
+                2
+            ]
         ],
-        "output": {
-            "item": {
-                "id": "sand"
-            },
-            "amount": 1
-        }
+        "output": [
+            "sand",
+            1
+        ]
     }
 }

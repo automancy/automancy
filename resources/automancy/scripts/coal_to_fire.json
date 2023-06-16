@@ -2,18 +2,14 @@
     "id": "coal_to_fire",
     "instructions": {
         "inputs": [
-            {
-                "item": {
-                    "id": "coal"
-                },
-                "amount": 1
-            }
+            [
+                "coal",
+                1
+            ]
         ],
-        "output": {
-            "item": {
-                "id": "fire"
-            },
-            "amount": 16
-        }
+        "output": [
+            "fire",
+            16
+        ]
     }
 }

@@ -4,7 +4,7 @@ use std::path::Path;
 
 use serde::Deserialize;
 
-use crate::game::item::{ItemStack, ItemStackRaw};
+use crate::game::item::{ItemAmount, ItemStack};
 use crate::resource::{load_recursively, ResourceManager, JSON_EXT};
 use crate::util::id::{Id, IdRaw};
 
@@ -19,7 +19,7 @@ pub struct Script {
 #[derive(Debug, Clone)]
 pub struct Instructions {
     pub inputs: Option<Vec<ItemStack>>,
-    pub output: Option<ItemStack>,
+    pub output: ItemStack,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -31,8 +31,8 @@ pub struct ScriptRaw {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct InstructionsRaw {
-    pub inputs: Option<Vec<ItemStackRaw>>,
-    pub output: Option<ItemStackRaw>,
+    pub inputs: Option<Vec<(IdRaw, ItemAmount)>>,
+    pub output: (IdRaw, ItemAmount),
 }
 
 impl ResourceManager {
@@ -49,13 +49,21 @@ impl ResourceManager {
         let instructions = Instructions {
             inputs: script.instructions.inputs.map(|v| {
                 v.into_iter()
-                    .map(|item_stack| item_stack.to_item(&mut self.interner))
+                    .flat_map(|(id, amount)| {
+                        self.registry
+                            .item(id.to_id(&mut self.interner))
+                            .cloned()
+                            .map(|item| ItemStack { item, amount })
+                    })
                     .collect()
             }),
-            output: script
-                .instructions
-                .output
-                .map(|item_stack| item_stack.to_item(&mut self.interner)),
+            output: ItemStack {
+                item: *self
+                    .registry
+                    .item(script.instructions.output.0.to_id(&mut self.interner))
+                    .unwrap(),
+                amount: script.instructions.output.1,
+            },
         };
 
         let adjacent = script.adjacent.map(|id| id.to_id(&mut self.interner));

@@ -1,3 +1,4 @@
 {
-    "id": "coal"
+    "id": "coal",
+    "model": "item/coal"
 }

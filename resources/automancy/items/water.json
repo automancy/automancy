@@ -1,3 +1,4 @@
 {
-    "id": "water"
+    "id": "water",
+    "model": "item/water"
 }

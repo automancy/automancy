@@ -1,3 +1,4 @@
 {
-    "id": "gold"
+    "id": "gold",
+    "model": "item/gold"
 }

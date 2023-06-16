@@ -45,7 +45,7 @@ use winit::event_loop::EventLoop;
 use winit::window::{Icon, WindowBuilder};
 use winit::{dpi::LogicalSize, window::Window};
 
-use crate::render::data::{GameVertex, GuiUBO, RawInstanceData};
+use crate::render::data::{GameVertex, LightInfo, OverlayUBO, RawInstanceData};
 use crate::resource::ResourceManager;
 use crate::util::cg::Double;
 use crate::util::cg::Float;
@@ -64,6 +64,20 @@ pub mod game_frag_shader {
     vulkano_shaders::shader! {
         ty: "fragment",
         path: "compile/shaders/game_frag.glsl"
+    }
+}
+
+pub mod gui_vert_shader {
+    vulkano_shaders::shader! {
+        ty: "vertex",
+        path: "compile/shaders/gui_vert.glsl"
+    }
+}
+
+pub mod gui_frag_shader {
+    vulkano_shaders::shader! {
+        ty: "fragment",
+        path: "compile/shaders/gui_frag.glsl"
     }
 }
 
@@ -140,12 +154,16 @@ pub fn create_game_pipeline(device: Arc<Device>, subpass: &Subpass) -> Arc<Graph
 }
 
 pub fn create_gui_pipeline(device: Arc<Device>, subpass: &Subpass) -> Arc<GraphicsPipeline> {
-    let vs = game_vert_shader::load(device.clone()).unwrap();
-    let fs = game_frag_shader::load(device.clone()).unwrap();
+    let vs = gui_vert_shader::load(device.clone()).unwrap();
+    let fs = gui_frag_shader::load(device.clone()).unwrap();
 
     let pipeline = GraphicsPipeline::start()
         .vertex_shader(vs.entry_point("main").unwrap(), ())
-        .vertex_input_state([GameVertex::per_vertex(), RawInstanceData::per_instance()])
+        .vertex_input_state([
+            GameVertex::per_vertex(),
+            RawInstanceData::per_instance(),
+            LightInfo::per_instance(),
+        ])
         .input_assembly_state(InputAssemblyState::new().topology(PrimitiveTopology::TriangleList))
         .fragment_shader(fs.entry_point("main").unwrap(), ())
         .viewport_state(ViewportState::viewport_dynamic_scissor_dynamic(1))
@@ -337,6 +355,7 @@ pub fn indirect_instance(
     if instances.is_empty() {
         return None;
     }
+
     let (indirect_commands, instance_buffer) = {
         let indirect_commands = instances
             .exponential_group_by(|a, b| a.1 == b.1)
@@ -379,6 +398,7 @@ pub fn indirect_instance(
     if indirect_commands.is_empty() {
         return None;
     }
+
     let indirect_buffer = Buffer::from_iter(
         allocator,
         BufferCreateInfo {
@@ -403,8 +423,7 @@ pub struct RenderAlloc {
     pub vertex_buffer: Subbuffer<[GameVertex]>,
     pub index_buffer: Subbuffer<[u32]>,
     pub game_uniform_buffer: Subbuffer<GameUBO>,
-    pub gui_uniform_buffer: Subbuffer<GameUBO>,
-    pub overlay_uniform_buffer: Subbuffer<GuiUBO>,
+    pub overlay_uniform_buffer: Subbuffer<OverlayUBO>,
 
     pub color_image: Arc<AttachmentImage>,
     pub game_depth_buffer: Arc<AttachmentImage>,
@@ -523,20 +542,6 @@ impl RenderAlloc {
         )
         .unwrap();
 
-        let gui_uniform_buffer = Buffer::from_data(
-            &allocator,
-            BufferCreateInfo {
-                usage: BufferUsage::UNIFORM_BUFFER,
-                ..Default::default()
-            },
-            AllocationCreateInfo {
-                usage: MemoryUsage::Upload,
-                ..Default::default()
-            },
-            GameUBO::default(),
-        )
-        .unwrap();
-
         let overlay_uniform_buffer = Buffer::from_data(
             &allocator,
             BufferCreateInfo {
@@ -547,7 +552,7 @@ impl RenderAlloc {
                 usage: MemoryUsage::Upload,
                 ..Default::default()
             },
-            GuiUBO::default(),
+            OverlayUBO::default(),
         )
         .unwrap();
 
@@ -585,7 +590,6 @@ impl RenderAlloc {
             vertex_buffer,
             index_buffer,
             game_uniform_buffer,
-            gui_uniform_buffer,
             overlay_uniform_buffer,
 
             color_image,
@@ -612,7 +616,6 @@ pub struct Gpu {
     pub overlay_pipeline: Arc<GraphicsPipeline>,
 
     pub game_descriptor_set: Arc<PersistentDescriptorSet>,
-    pub gui_descriptor_set: Arc<PersistentDescriptorSet>,
     pub overlay_descriptor_set: Arc<PersistentDescriptorSet>,
 
     pub game_subpass: Subpass,
@@ -771,16 +774,6 @@ impl Gpu {
         )
         .unwrap();
 
-        let gui_descriptor_set = PersistentDescriptorSet::new(
-            &descriptor_allocator,
-            gui_pipeline.layout().set_layouts()[0].clone(),
-            [WriteDescriptorSet::buffer(
-                0,
-                alloc.gui_uniform_buffer.clone(),
-            )],
-        )
-        .unwrap();
-
         let overlay_descriptor_set = PersistentDescriptorSet::new(
             &descriptor_allocator,
             overlay_pipeline.layout().set_layouts()[0].clone(),
@@ -811,7 +804,6 @@ impl Gpu {
             overlay_pipeline,
 
             game_descriptor_set,
-            gui_descriptor_set,
             overlay_descriptor_set,
 
             game_subpass,

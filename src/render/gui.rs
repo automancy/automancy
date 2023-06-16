@@ -21,10 +21,8 @@ use hexagon_tiles::traits::HexDirection;
 use ractor::ActorRef;
 use tokio::runtime::Runtime;
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
-use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::image::SampleCount::Sample4;
 use vulkano::memory::allocator::{AllocationCreateInfo, MemoryUsage};
-use vulkano::pipeline::{Pipeline, PipelineBindPoint};
 use winit::event_loop::{ControlFlow, EventLoop};
 
 use crate::game::map::{Map, MapInfo};
@@ -35,91 +33,18 @@ use crate::game::tile::coord::TileCoord;
 use crate::game::tile::coord::TileHex;
 use crate::game::tile::entity::{Data, TileEntityMsg, TileModifier};
 use crate::render::camera::hex_to_normalized;
-use crate::render::data::{GameUBO, GameVertex, InstanceData};
+use crate::render::data::{GameVertex, InstanceData, LightInfo};
 use crate::render::event::{shutdown_graceful, EventLoopStorage};
 use crate::render::gpu::Gpu;
 use crate::render::renderer::Renderer;
 use crate::render::{gpu, gui};
+use crate::resource::item::Item;
 use crate::resource::ResourceManager;
 use crate::util::cg::{perspective, DPoint2, DPoint3, Double, Float, Matrix4, Vector3};
 use crate::util::colors;
-use crate::util::id::{id_static, Id, Interner};
+use crate::util::id::Id;
 use crate::{util, IOSEVKA_FONT};
 
-/// The list of GUI translation keys.
-#[derive(Clone, Copy)]
-pub struct GuiIds {
-    pub tile_config: Id,
-    pub tile_info: Id,
-    pub tile_config_script: Id,
-    pub tile_config_storage: Id,
-    pub tile_config_target: Id,
-    pub error_popup: Id,
-    pub debug_menu: Id,
-    pub load_map: Id,
-    pub delete_map: Id,
-    pub create_map: Id,
-    pub options: Id,
-
-    pub lbl_amount: Id,
-    pub lbl_link_destination: Id,
-    pub lbl_maps_loaded: Id,
-    pub lbl_delete_map_confirm: Id,
-
-    pub btn_confirm: Id,
-    pub btn_exit: Id,
-    pub btn_cancel: Id,
-    pub btn_link_network: Id,
-    pub btn_play: Id,
-    pub btn_options: Id,
-    pub btn_fedi: Id,
-    pub btn_source: Id,
-    pub btn_unpause: Id,
-    pub btn_load: Id,
-    pub btn_delete: Id,
-    pub btn_new_map: Id,
-
-    pub time_fmt: Id,
-}
-
-impl GuiIds {
-    pub fn new(interner: &mut Interner) -> Self {
-        Self {
-            tile_config: id_static("automancy", "tile_config").to_id(interner),
-            tile_info: id_static("automancy", "tile_info").to_id(interner),
-            tile_config_script: id_static("automancy", "tile_config_script").to_id(interner),
-            tile_config_storage: id_static("automancy", "tile_config_storage").to_id(interner),
-            tile_config_target: id_static("automancy", "tile_config_target").to_id(interner),
-            error_popup: id_static("automancy", "error_popup").to_id(interner),
-            debug_menu: id_static("automancy", "debug_menu").to_id(interner),
-            load_map: id_static("automancy", "load_map").to_id(interner),
-            delete_map: id_static("automancy", "delete_map").to_id(interner),
-            create_map: id_static("automancy", "create_map").to_id(interner),
-            options: id_static("automancy", "options").to_id(interner),
-
-            lbl_amount: id_static("automancy", "error_popup").to_id(interner),
-            lbl_link_destination: id_static("automancy", "lbl_link_destination").to_id(interner),
-            lbl_maps_loaded: id_static("automancy", "lbl_maps_loaded").to_id(interner),
-            lbl_delete_map_confirm: id_static("automancy", "lbl_delete_map_confirm")
-                .to_id(interner),
-
-            btn_confirm: id_static("automancy", "btn_confirm").to_id(interner),
-            btn_exit: id_static("automancy", "btn_exit").to_id(interner),
-            btn_cancel: id_static("automancy", "btn_cancel").to_id(interner),
-            btn_link_network: id_static("automancy", "btn_link_network").to_id(interner),
-            btn_play: id_static("automancy", "btn_play").to_id(interner),
-            btn_options: id_static("automancy", "btn_options").to_id(interner),
-            btn_fedi: id_static("automancy", "btn_fedi").to_id(interner),
-            btn_source: id_static("automancy", "btn_source").to_id(interner),
-            btn_unpause: id_static("automancy", "btn_unpause").to_id(interner),
-            btn_load: id_static("automancy", "btn_load").to_id(interner),
-            btn_delete: id_static("automancy", "btn_delete").to_id(interner),
-            btn_new_map: id_static("automancy", "btn_new_map").to_id(interner),
-
-            time_fmt: id_static("automancy", "time_fmt").to_id(interner),
-        }
-    }
-}
 /// The state of the main game GUI.
 #[derive(Eq, PartialEq, Copy, Clone)]
 pub enum GuiState {
@@ -129,6 +54,7 @@ pub enum GuiState {
     Ingame,
     Paused,
 }
+
 /// The state of popups (which are on top of the main GUI), if any should be displayed.
 #[derive(Clone)]
 pub enum PopupState {
@@ -136,6 +62,7 @@ pub enum PopupState {
     MapCreate,
     MapDeleteConfirmation(MapInfo),
 }
+
 /// Initialize the font families.
 fn init_fonts(gui: &Gui) {
     let mut fonts = FontDefinitions::default();
@@ -158,6 +85,7 @@ fn init_fonts(gui: &Gui) {
 
     gui.context().set_fonts(fonts);
 }
+
 /// Initialize the GUI style.
 fn init_styles(gui: &Gui) {
     gui.context().set_style(Style {
@@ -220,6 +148,7 @@ fn init_styles(gui: &Gui) {
         ..Default::default()
     });
 }
+
 /// Initializes the GUI.
 pub fn init_gui(event_loop: &EventLoop<()>, gpu: &Gpu) -> Gui {
     let gui = Gui::new_with_subpass(
@@ -239,6 +168,7 @@ pub fn init_gui(event_loop: &EventLoop<()>, gpu: &Gpu) -> Gui {
 
     gui
 }
+
 /// Creates a default frame.
 pub fn default_frame() -> Frame {
     Frame::none()
@@ -250,93 +180,6 @@ pub fn default_frame() -> Frame {
         .rounding(Rounding::same(5.0))
 }
 
-fn tile_paint(
-    setup: &GameSetup,
-    renderer: &Renderer,
-    ui: &mut Ui,
-    size: f32,
-    id: Id,
-    model: Id,
-    selection_send: &mut mpsc::Sender<Id>,
-) -> PaintCallback {
-    let (rect, response) = ui.allocate_exact_size(vec2(size, size), Sense::click());
-
-    response
-        .clone()
-        .on_hover_text(setup.resource_man.tile_name(&id));
-    response.clone().on_hover_cursor(CursorIcon::Grab);
-
-    let hover = if response.hovered() {
-        ui.ctx()
-            .animate_value_with_time(ui.next_auto_id(), 1.0, 0.3)
-    } else {
-        ui.ctx()
-            .animate_value_with_time(ui.next_auto_id(), 0.0, 0.3)
-    };
-    if response.clicked() {
-        selection_send.try_send(id).unwrap();
-    }
-
-    let pos = point3(0.0, 1.0 * hover + 0.5, 3.0 - 0.5 * hover);
-    let matrix = perspective(FRAC_PI_4, 1.0, 0.01, 10.0)
-        * Matrix4::look_to_rh(pos, vec3(0.0, 0.5 * hover + 0.2, 1.0), Vector3::unit_y());
-
-    let pipeline = renderer.gpu.gui_pipeline.clone();
-    let vertex_buffer = renderer.gpu.alloc.vertex_buffer.clone();
-    let index_buffer = renderer.gpu.alloc.index_buffer.clone();
-    let ubo_layout = pipeline.layout().set_layouts()[0].clone();
-    let resource_man = setup.resource_man.clone();
-
-    PaintCallback {
-        rect,
-        callback: Arc::new(CallbackFn::new(move |_info, context| {
-            let ubo = GameUBO::new(matrix, pos);
-
-            let uniform_buffer = Buffer::from_data(
-                &context.resources.memory_allocator,
-                BufferCreateInfo {
-                    usage: BufferUsage::UNIFORM_BUFFER,
-                    ..Default::default()
-                },
-                AllocationCreateInfo {
-                    usage: MemoryUsage::Upload,
-                    ..Default::default()
-                },
-                ubo,
-            )
-            .unwrap();
-
-            let ubo_set = PersistentDescriptorSet::new(
-                context.resources.descriptor_set_allocator,
-                ubo_layout.clone(),
-                [WriteDescriptorSet::buffer(0, uniform_buffer)],
-            )
-            .unwrap();
-
-            let instance = (InstanceData::default().into(), model);
-
-            if let Some((indirect_commands, instance_buffer)) = gpu::indirect_instance(
-                &context.resources.memory_allocator,
-                &resource_man,
-                &[instance],
-            ) {
-                context
-                    .builder
-                    .bind_pipeline_graphics(pipeline.clone())
-                    .bind_vertex_buffers(0, (vertex_buffer.clone(), instance_buffer))
-                    .bind_index_buffer(index_buffer.clone())
-                    .bind_descriptor_sets(
-                        PipelineBindPoint::Graphics,
-                        pipeline.layout().clone(),
-                        0,
-                        ubo_set,
-                    )
-                    .draw_indexed_indirect(indirect_commands)
-                    .unwrap();
-            }
-        })),
-    }
-}
 /// Draws the tile selection.
 fn paint_tile_selection(
     setup: &GameSetup,
@@ -352,27 +195,91 @@ fn paint_tile_selection(
         .ordered_tiles
         .iter()
         .flat_map(|id| {
-            let resource = &setup.resource_man.registry.tile(*id).unwrap();
-
-            resource
+            setup
+                .resource_man
+                .registry
+                .tile(*id)
+                .unwrap()
                 .models
                 .get(*selected_tile_modifiers.get(id).unwrap_or(&0) as usize)
-                .map(|v| (*id, *v))
+                .map(|model| (*id, *model))
         })
-        .for_each(|(id, faces_index)| {
-            let callback = tile_paint(
-                setup,
-                renderer,
-                ui,
-                size,
-                id,
-                faces_index,
-                &mut selection_send,
-            );
+        .for_each(|(id, model)| {
+            let (rect, response) = ui.allocate_exact_size(vec2(size, size), Sense::click());
+
+            response
+                .clone()
+                .on_hover_text(setup.resource_man.tile_name(&id));
+            response.clone().on_hover_cursor(CursorIcon::Grab);
+
+            let hover = if response.hovered() {
+                ui.ctx()
+                    .animate_value_with_time(ui.next_auto_id(), 1.0, 0.3)
+            } else {
+                ui.ctx()
+                    .animate_value_with_time(ui.next_auto_id(), 0.0, 0.3)
+            };
+            if response.clicked() {
+                selection_send.try_send(id).unwrap();
+            }
+
+            let pos = point3(0.0, 1.0 * hover + 0.5, 3.0 - 0.5 * hover);
+            let matrix = perspective(FRAC_PI_4, 1.0, 0.01, 10.0)
+                * Matrix4::look_to_rh(pos, vec3(0.0, 0.5 * hover + 0.2, 1.0), Vector3::unit_y());
+
+            let pipeline = renderer.gpu.gui_pipeline.clone();
+            let vertex_buffer = renderer.gpu.alloc.vertex_buffer.clone();
+            let index_buffer = renderer.gpu.alloc.index_buffer.clone();
+            let resource_man = setup.resource_man.clone();
+
+            let callback = PaintCallback {
+                rect,
+                callback: Arc::new(CallbackFn::new(move |_info, context| {
+                    let instance = (
+                        InstanceData::default().with_model_matrix(matrix).into(),
+                        model,
+                    );
+
+                    let light_info = Buffer::from_data(
+                        &context.resources.memory_allocator,
+                        BufferCreateInfo {
+                            usage: BufferUsage::VERTEX_BUFFER,
+                            ..Default::default()
+                        },
+                        AllocationCreateInfo {
+                            usage: MemoryUsage::Upload,
+                            ..Default::default()
+                        },
+                        LightInfo {
+                            light_pos: [0.0, 0.0, 12.0],
+                            light_color: [1.0; 4],
+                        },
+                    )
+                    .unwrap();
+
+                    if let Some((indirect_commands, instance_buffer)) = gpu::indirect_instance(
+                        &context.resources.memory_allocator,
+                        &resource_man,
+                        &[instance],
+                    ) {
+                        context
+                            .builder
+                            .bind_pipeline_graphics(pipeline.clone())
+                            .bind_vertex_buffers(
+                                0,
+                                (vertex_buffer.clone(), instance_buffer, light_info),
+                            )
+                            .bind_index_buffer(index_buffer.clone())
+                            .draw_indexed_indirect(indirect_commands)
+                            .unwrap();
+                    }
+                })),
+            };
 
             ui.painter().add(callback);
         });
 }
+
 /// Creates the tile selection GUI.
 pub fn tile_selections(
     setup: &GameSetup,
@@ -407,14 +314,9 @@ pub fn tile_selections(
                 });
         });
 }
+
 /// Draws the tile info GUI.
-pub fn tile_info(
-    runtime: &Runtime,
-    setup: &GameSetup,
-    gui: &Gui,
-    game: &ActorRef<GameMsg>,
-    pointing_at: TileCoord,
-) {
+pub fn tile_info(runtime: &Runtime, setup: &GameSetup, gui: &Gui) {
     Window::new(
         setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.tile_info]
             .to_string(),
@@ -424,15 +326,21 @@ pub fn tile_info(
     .default_width(300.0)
     .frame(default_frame().inner_margin(Margin::same(10.0)))
     .show(&gui.context(), |ui| {
-        ui.colored_label(colors::DARK_GRAY, pointing_at.to_string());
+        ui.colored_label(colors::DARK_GRAY, setup.camera.pointing_at.to_string());
 
         let tile_entity = runtime
-            .block_on(game.call(|reply| GameMsg::GetTileEntity(pointing_at, reply), None))
+            .block_on(setup.game.call(
+                |reply| GameMsg::GetTileEntity(setup.camera.pointing_at, reply),
+                None,
+            ))
             .unwrap()
             .unwrap();
 
         let tile = runtime
-            .block_on(game.call(|reply| GameMsg::GetTile(pointing_at, reply), None))
+            .block_on(setup.game.call(
+                |reply| GameMsg::GetTile(setup.camera.pointing_at, reply),
+                None,
+            ))
             .unwrap()
             .unwrap();
 
@@ -448,14 +356,19 @@ pub fn tile_info(
                 .get(&setup.resource_man.registry.data_ids.buffer)
                 .and_then(Data::as_inventory)
             {
-                for (id, amount) in inventory.0.iter() {
-                    ui.label(format!("{} - {}", setup.resource_man.item_name(id), amount));
+                for (item, amount) in inventory.0.iter() {
+                    ui.label(format!(
+                        "{} - {}",
+                        setup.resource_man.item_name(&item.id),
+                        amount
+                    ));
                 }
             }
             //ui.label(format!("State: {}", ask(sys, &game, )))
         }
     });
 }
+
 /// Draws an error popup. Can only be called when there are errors in the queue!
 pub fn error_popup(setup: &mut GameSetup, gui: &mut Gui) {
     let error = setup.resource_man.error_man.peek().unwrap();
@@ -487,6 +400,7 @@ pub fn error_popup(setup: &mut GameSetup, gui: &mut Gui) {
         });
     });
 }
+
 /// Draws the debug menu (F3).
 pub fn debugger(
     setup: &GameSetup,
@@ -547,6 +461,7 @@ pub fn debugger(
         ))
     });
 }
+
 /// Draws the main menu.
 pub fn main_menu(
     setup: &mut GameSetup,
@@ -642,6 +557,7 @@ pub fn main_menu(
             );
         });
 }
+
 /// Draws the pause menu.
 pub fn pause_menu(
     setup: &mut GameSetup,
@@ -718,6 +634,7 @@ pub fn pause_menu(
             );
         });
 }
+
 /// Draws the map loading menu.
 pub fn map_load_menu(
     setup: &mut GameSetup,
@@ -814,6 +731,7 @@ pub fn map_load_menu(
         });
     });
 }
+
 pub fn map_delete_confirmation(
     setup: &mut GameSetup,
     gui: &mut Gui,
@@ -861,6 +779,7 @@ pub fn map_delete_confirmation(
         setup.refresh_maps();
     }
 }
+
 /// Draws the map creation popup.
 pub fn map_create_menu(
     setup: &mut GameSetup,
@@ -931,6 +850,7 @@ pub fn options_menu(setup: &mut GameSetup, gui: &mut Gui, loop_store: &mut Event
         }
     });
 }
+
 /// Draws the direction selector.
 pub fn add_direction(ui: &mut Ui, target_coord: &mut Option<TileCoord>, n: usize) {
     let coord = TileHex::NEIGHBORS[(n + 2) % 6];
@@ -950,6 +870,7 @@ pub fn add_direction(ui: &mut Ui, target_coord: &mut Option<TileCoord>, n: usize
         },
     );
 }
+
 /// Draws a search bar.
 pub fn searchable_id<'a>(
     ui: &mut Ui,
@@ -992,6 +913,7 @@ pub fn searchable_id<'a>(
         })
     });
 }
+
 /// Draws the targets UI.
 pub fn targets(ui: &mut Ui, new_target_coord: &mut Option<TileCoord>) {
     ui.vertical(|ui| {
@@ -1014,25 +936,94 @@ pub fn targets(ui: &mut Ui, new_target_coord: &mut Option<TileCoord>) {
         });
     });
 }
+
+pub fn draw_item(
+    ui: &mut Ui,
+    resource_man: Arc<ResourceManager>,
+    renderer: &Renderer,
+    item: Item,
+    size: f32,
+) {
+    let model = if resource_man.meshes.contains_key(&item.model) {
+        item.model
+    } else {
+        resource_man.registry.model_ids.items_missing
+    };
+
+    let (_, rect) = ui.allocate_space(vec2(size, size));
+
+    let pipeline = renderer.gpu.gui_pipeline.clone();
+    let vertex_buffer = renderer.gpu.alloc.vertex_buffer.clone();
+    let index_buffer = renderer.gpu.alloc.index_buffer.clone();
+
+    let callback = PaintCallback {
+        rect,
+        callback: Arc::new(CallbackFn::new(move |_info, context| {
+            let instance = (InstanceData::default().into(), model);
+
+            let light_info = Buffer::from_data(
+                &context.resources.memory_allocator,
+                BufferCreateInfo {
+                    usage: BufferUsage::VERTEX_BUFFER,
+                    ..Default::default()
+                },
+                AllocationCreateInfo {
+                    usage: MemoryUsage::Upload,
+                    ..Default::default()
+                },
+                LightInfo {
+                    light_pos: [0.0, 0.0, 2.0],
+                    light_color: [1.0; 4],
+                },
+            )
+            .unwrap();
+
+            if let Some((indirect_commands, instance_buffer)) = gpu::indirect_instance(
+                &context.resources.memory_allocator,
+                &resource_man,
+                &[instance],
+            ) {
+                context
+                    .builder
+                    .bind_pipeline_graphics(pipeline.clone())
+                    .bind_vertex_buffers(0, (vertex_buffer.clone(), instance_buffer, light_info))
+                    .bind_index_buffer(index_buffer.clone())
+                    .draw_indexed_indirect(indirect_commands)
+                    .unwrap();
+            }
+        })),
+    };
+
+    ui.painter().add(callback);
+}
+
 /// Draws the tile configuration menu.
 pub fn tile_config(
     runtime: &Runtime,
     setup: &GameSetup,
     loop_store: &mut EventLoopStorage,
+    renderer: &Renderer,
     gui: &Gui,
-    game: &ActorRef<GameMsg>,
     extra_vertices: &mut Vec<GameVertex>,
 ) {
     let window_size = setup.window.inner_size();
 
     if let Some(config_open) = loop_store.config_open {
         let tile = runtime
-            .block_on(game.call(|reply| GameMsg::GetTile(config_open, reply), None))
+            .block_on(
+                setup
+                    .game
+                    .call(|reply| GameMsg::GetTile(config_open, reply), None),
+            )
             .unwrap()
             .unwrap();
 
         let tile_entity = runtime
-            .block_on(game.call(|reply| GameMsg::GetTileEntity(config_open, reply), None))
+            .block_on(
+                setup
+                    .game
+                    .call(|reply| GameMsg::GetTileEntity(config_open, reply), None),
+            )
             .unwrap()
             .unwrap();
 
@@ -1088,44 +1079,6 @@ pub fn tile_config(
                     .get(&setup.resource_man.registry.data_ids.scripts)
                     .and_then(Data::as_vec_id)
                 {
-                    let script_text = if let Some(script) =
-                        new_script.and_then(|id| setup.resource_man.registry.script(id))
-                    {
-                        let input = if let Some(inputs) = &script.instructions.inputs {
-                            inputs
-                                .iter()
-                                .map(|item_stack| {
-                                    format!(
-                                        " + {} ({})",
-                                        setup.resource_man.item_name(&item_stack.item.id),
-                                        item_stack.amount
-                                    )
-                                })
-                                .collect::<Vec<_>>()
-                                .join("\n")
-                        } else {
-                            String::new()
-                        };
-
-                        let output = if let Some(output) = script.instructions.output {
-                            format!(
-                                "=> {} ({})",
-                                setup.resource_man.item_name(&output.item.id),
-                                output.amount
-                            )
-                        } else {
-                            String::new()
-                        };
-
-                        if !input.is_empty() && !output.is_empty() {
-                            format!("{input}\n{output}")
-                        } else {
-                            format!("{input}{output}")
-                        }
-                    } else {
-                        setup.resource_man.translates.none.to_string()
-                    };
-
                     ui.add_space(MARGIN);
 
                     ui.label(
@@ -1133,7 +1086,54 @@ pub fn tile_config(
                             [&setup.resource_man.registry.gui_ids.tile_config_script]
                             .as_str(),
                     );
-                    ui.label(script_text);
+
+                    ui.vertical(|ui| {
+                        if let Some(script) =
+                            new_script.and_then(|id| setup.resource_man.registry.script(id))
+                        {
+                            if let Some(inputs) = &script.instructions.inputs {
+                                inputs.iter().for_each(|item_stack| {
+                                    ui.horizontal(|ui| {
+                                        ui.set_height(32.0);
+
+                                        ui.label(" + ");
+                                        draw_item(
+                                            ui,
+                                            setup.resource_man.clone(),
+                                            renderer,
+                                            item_stack.item,
+                                            32.0,
+                                        );
+                                        ui.label(format!(
+                                            "{} ({})",
+                                            setup.resource_man.item_name(&item_stack.item.id),
+                                            item_stack.amount
+                                        ));
+                                    });
+                                })
+                            }
+
+                            ui.horizontal(|ui| {
+                                ui.set_height(32.0);
+
+                                ui.label("=> ");
+                                draw_item(
+                                    ui,
+                                    setup.resource_man.clone(),
+                                    renderer,
+                                    script.instructions.output.item,
+                                    32.0,
+                                );
+                                ui.label(format!(
+                                    "{} ({})",
+                                    setup
+                                        .resource_man
+                                        .item_name(&script.instructions.output.item.id),
+                                    script.instructions.output.amount
+                                ));
+                            });
+                        }
+                    });
 
                     ui.add_space(MARGIN);
 
@@ -1227,7 +1227,9 @@ pub fn tile_config(
                 if id == setup.resource_man.registry.tile_ids.node {
                     if let Some(tile_entity) = runtime
                         .block_on(
-                            game.call(|reply| GameMsg::GetTileEntity(config_open, reply), None),
+                            setup
+                                .game
+                                .call(|reply| GameMsg::GetTileEntity(config_open, reply), None),
                         )
                         .unwrap()
                         .unwrap()
@@ -1324,27 +1326,38 @@ pub fn tile_config(
 
             if new_target_coord != current_target_coord {
                 if let Some(target_coord) = new_target_coord {
-                    game.send_message(GameMsg::ForwardMsgToTile(
-                        config_open,
-                        TileEntityMsg::SetData(
-                            setup.resource_man.registry.data_ids.target,
-                            Data::Coord(target_coord),
-                        ),
-                    ))
-                    .unwrap();
-                    game.send_message(GameMsg::SignalTilesUpdated).unwrap();
+                    setup
+                        .game
+                        .send_message(GameMsg::ForwardMsgToTile(
+                            config_open,
+                            TileEntityMsg::SetData(
+                                setup.resource_man.registry.data_ids.target,
+                                Data::Coord(target_coord),
+                            ),
+                        ))
+                        .unwrap();
+                    setup
+                        .game
+                        .send_message(GameMsg::SignalTilesUpdated)
+                        .unwrap();
                 } else {
-                    game.send_message(GameMsg::ForwardMsgToTile(
-                        config_open,
-                        TileEntityMsg::RemoveData(setup.resource_man.registry.data_ids.target),
-                    ))
-                    .unwrap();
-                    game.send_message(GameMsg::SignalTilesUpdated).unwrap();
+                    setup
+                        .game
+                        .send_message(GameMsg::ForwardMsgToTile(
+                            config_open,
+                            TileEntityMsg::RemoveData(setup.resource_man.registry.data_ids.target),
+                        ))
+                        .unwrap();
+                    setup
+                        .game
+                        .send_message(GameMsg::SignalTilesUpdated)
+                        .unwrap();
                 }
             }
         }
     }
 }
+
 /// Draws a line overlay.
 pub fn line(a: DPoint2, b: DPoint2, color: Rgba) -> Vec<GameVertex> {
     let v = b - a;

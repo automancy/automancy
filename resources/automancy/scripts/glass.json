@@ -2,24 +2,18 @@
     "id": "glass",
     "instructions": {
         "inputs": [
-            {
-                "item": {
-                    "id": "sand"
-                },
-                "amount": 1
-            },
-            {
-                "item": {
-                    "id": "fire"
-                },
-                "amount": 1
-            }
+            [
+                "sand",
+                1
+            ],
+            [
+                "fire",
+                1
+            ]
         ],
-        "output": {
-            "item": {
-                "id": "glass"
-            },
-            "amount": 1
-        }
+        "output": [
+            "glass",
+            1
+        ]
     }
 }

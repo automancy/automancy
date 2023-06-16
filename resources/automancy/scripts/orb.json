@@ -2,18 +2,14 @@
     "id": "orb",
     "instructions": {
         "inputs": [
-            {
-                "item": {
-                    "id": "glass"
-                },
-                "amount": 128
-            }
+            [
+                "glass",
+                256
+            ]
         ],
-        "output": {
-            "item": {
-                "id": "orb"
-            },
-            "amount": 1
-        }
+        "output": [
+            "orb",
+            1
+        ]
     }
 }

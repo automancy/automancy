@@ -2,18 +2,14 @@
     "id": "mud_to_water",
     "instructions": {
         "inputs": [
-            {
-                "item": {
-                    "id": "mud"
-                },
-                "amount": 1
-            }
+            [
+                "mud",
+                1
+            ]
         ],
-        "output": {
-            "item": {
-                "id": "water"
-            },
-            "amount": 16
-        }
+        "output": [
+            "water",
+            16
+        ]
     }
 }

@@ -94,6 +94,13 @@ impl Default for InstanceData {
 
 impl InstanceData {
     #[inline]
+    pub fn add_model_matrix(mut self, model_matrix: Matrix4) -> Self {
+        self.model_matrix = self.model_matrix * model_matrix;
+
+        self
+    }
+
+    #[inline]
     pub fn add_translation(mut self, translation: Vector3) -> Self {
         self.model_matrix = self.model_matrix * Matrix4::from_translation(translation);
 
@@ -122,29 +129,41 @@ impl InstanceData {
     }
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Zeroable, Pod, Vertex)]
+pub struct LightInfo {
+    #[format(R32G32B32_SFLOAT)]
+    pub light_pos: VertexPos,
+    #[format(R32G32B32A32_SFLOAT)]
+    pub light_color: VertexColor,
+}
+
 // UBO
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
 pub struct GameUBO {
     pub matrix: RawMat4,
-    pub light_pos: VertexPos,
-    pub light_color: [Float; 4],
+    pub light: LightInfo,
 }
+
+pub static DEFAULT_LIGHT_COLOR: VertexColor = [0.9, 0.9, 0.9, 0.9];
 
 impl GameUBO {
     pub fn new(matrix: Matrix4, camera_pos: Point3) -> Self {
         Self {
             matrix: matrix.into(),
-            light_pos: camera_pos.into(),
-            light_color: [0.9, 0.9, 0.9, 0.9],
+            light: LightInfo {
+                light_pos: camera_pos.into(),
+                light_color: DEFAULT_LIGHT_COLOR,
+            },
         }
     }
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
-pub struct GuiUBO {
+pub struct OverlayUBO {
     pub matrix: RawMat4,
 }
 

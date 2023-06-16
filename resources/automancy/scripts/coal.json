@@ -1,11 +1,9 @@
 {
     "id": "coal",
     "instructions": {
-        "output": {
-            "item": {
-                "id": "coal"
-            },
-            "amount": 8
-        }
+        "output": [
+            "coal",
+            8
+        ]
     }
 }

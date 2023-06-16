@@ -1,11 +1,9 @@
 {
     "id": "gravel",
     "instructions": {
-        "output": {
-            "item": {
-                "id": "gravel"
-            },
-            "amount": 4
-        }
+        "output": [
+            "gravel",
+            4
+        ]
     }
 }

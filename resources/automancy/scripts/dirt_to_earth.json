@@ -2,18 +2,14 @@
     "id": "dirt_to_earth",
     "instructions": {
         "inputs": [
-            {
-                "item": {
-                    "id": "dirt"
-                },
-                "amount": 4
-            }
+            [
+                "dirt",
+                1
+            ]
         ],
-        "output": {
-            "item": {
-                "id": "earth"
-            },
-            "amount": 1
-        }
+        "output": [
+            "earth",
+            8
+        ]
     }
 }

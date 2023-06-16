@@ -12,19 +12,38 @@ use crate::util::id::{Id, IdRaw, Interner};
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct ItemRaw {
     pub id: IdRaw,
+    pub model: IdRaw,
 }
 
 impl ItemRaw {
-    pub fn to_item(self, interner: &mut Interner) -> Item {
+    pub fn intern_to_item(self, interner: &mut Interner) -> Item {
         Item {
             id: self.id.to_id(interner),
+            model: self.model.to_id(interner),
         }
+    }
+
+    pub fn to_item(self, interner: &Interner) -> Option<Item> {
+        let id = interner.get(self.id.to_string())?;
+        let model = interner.get(self.model.to_string())?;
+
+        Some(Item { id, model })
     }
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct Item {
     pub id: Id,
+    pub model: Id,
+}
+
+impl Item {
+    pub fn to_item_raw(self, interner: &Interner) -> Option<ItemRaw> {
+        let id = IdRaw::parse(interner.resolve(self.id)?);
+        let model = IdRaw::parse(interner.resolve(self.model)?);
+
+        Some(ItemRaw { id, model })
+    }
 }
 
 pub fn id_match(registry: &Registry, id: Id, other: Id) -> bool {
@@ -48,7 +67,7 @@ impl ResourceManager {
         )
         .unwrap_or_else(|e| panic!("error loading {file:?} {e:?}"));
 
-        let item = item.to_item(&mut self.interner);
+        let item = item.intern_to_item(&mut self.interner);
 
         self.registry.items.insert(item.id, item);
 
@@ -76,7 +95,7 @@ impl ResourceManager {
                     .ordered_items
                     .iter()
                     .filter(|v| id_match(&self.registry, **v, id))
-                    .map(|v| Item { id: *v })
+                    .flat_map(|v| self.registry.item(*v).cloned())
                     .collect();
 
                 Arc::new(items)

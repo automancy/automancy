@@ -2,18 +2,14 @@
     "id": "sand_to_air",
     "instructions": {
         "inputs": [
-            {
-                "item": {
-                    "id": "sand"
-                },
-                "amount": 1
-            }
+            [
+                "sand",
+                1
+            ]
         ],
-        "output": {
-            "item": {
-                "id": "air"
-            },
-            "amount": 8
-        }
+        "output": [
+            "air",
+            8
+        ]
     }
 }

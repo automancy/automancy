@@ -370,15 +370,15 @@ pub fn on_event(
                 );
 
                 // tile_info
-                gui::tile_info(runtime, setup, gui, &setup.game, setup.camera.pointing_at);
+                gui::tile_info(runtime, setup, gui);
 
                 // tile_config
                 gui::tile_config(
                     runtime,
                     setup,
                     loop_store,
+                    renderer,
                     gui,
-                    &setup.game,
                     &mut extra_vertices,
                 );
 
@@ -415,7 +415,7 @@ pub fn on_event(
                     }) {
                         let time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
 
-                        let glow = (time.as_secs_f64() * 3.0).sin() / 10.0;
+                        let glow = (time.as_secs_f64() * 3.0).sin() / 3.0;
 
                         let instance = InstanceData {
                             model_matrix: Matrix4::from_translation(vec3(
@@ -426,7 +426,7 @@ pub fn on_event(
                             color_offset: colors::TRANSPARENT.with_alpha(glow as Float).to_array(),
                         };
 
-                        gui_instances.push((instance.into(), model));
+                        gui_instances.push((instance, model));
                     }
                 }
 

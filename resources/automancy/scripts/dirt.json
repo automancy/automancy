@@ -2,24 +2,18 @@
     "id": "dirt",
     "instructions": {
         "inputs": [
-            {
-                "item": {
-                    "id": "gravel"
-                },
-                "amount": 6
-            },
-            {
-                "item": {
-                    "id": "chaos"
-                },
-                "amount": 3
-            }
+            [
+                "gravel",
+                6
+            ],
+            [
+                "chaos",
+                3
+            ]
         ],
-        "output": {
-            "item": {
-                "id": "dirt"
-            },
-            "amount": 1
-        }
+        "output": [
+            "dirt",
+            1
+        ]
     }
 }

@@ -2,18 +2,14 @@
     "id": "coal_to_chaos",
     "instructions": {
         "inputs": [
-            {
-                "item": {
-                    "id": "coal"
-                },
-                "amount": 1
-            }
+            [
+                "coal",
+                1
+            ]
         ],
-        "output": {
-            "item": {
-                "id": "chaos"
-            },
-            "amount": 8
-        }
+        "output": [
+            "chaos",
+            8
+        ]
     }
 }
