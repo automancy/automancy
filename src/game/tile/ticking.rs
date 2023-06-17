@@ -1,5 +1,8 @@
-use rayon::prelude::*;
 use std::time::{Duration, Instant};
+
+use rayon::prelude::*;
+
+use automancy_defs::log;
 
 use crate::game::state::GameState;
 use crate::game::tile::entity::TileEntityMsg;

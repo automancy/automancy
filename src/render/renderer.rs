@@ -1,10 +1,6 @@
 use std::f32::consts::PI;
 use std::sync::Arc;
 
-use cgmath::{vec3, SquareMatrix};
-use egui_winit_vulkano::Gui;
-use hashbrown::HashMap;
-use hexagon_tiles::layout::hex_to_pixel;
 use ractor::rpc::{multi_call, CallResult};
 use tokio::runtime::Runtime;
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
@@ -20,24 +16,30 @@ use vulkano::swapchain::{acquire_next_image, AcquireError};
 use vulkano::sync;
 use vulkano::sync::GpuFuture;
 
-use crate::game::run::setup::GameSetup;
-use crate::game::state::{GameMsg, RenderInfo, RenderUnit};
-use crate::game::tile::coord::{ChunkCoord, TileCoord};
-use crate::game::tile::entity::{Data, TileEntityMsg};
-use crate::game::tile::ticking::TickUnit;
-use crate::render::camera::FAR;
-use crate::render::data::{
+use automancy_defs::cg::{deg, matrix, Float, Matrix4, Point3};
+use automancy_defs::cgmath::{vec3, SquareMatrix};
+use automancy_defs::colors;
+use automancy_defs::colors::WithAlpha;
+use automancy_defs::coord::{ChunkCoord, TileCoord};
+use automancy_defs::egui_winit_vulkano::Gui;
+use automancy_defs::hashbrown::HashMap;
+use automancy_defs::hexagon_tiles::layout::hex_to_pixel;
+use automancy_defs::id::Id;
+use automancy_defs::rendering::{
     GameUBO, GameVertex, InstanceData, LightInfo, OverlayUBO, RawInstanceData, DEFAULT_LIGHT_COLOR,
     HEX_GRID_LAYOUT,
 };
+use automancy_resources::data::Data;
+use automancy_resources::ResourceManager;
+
+use crate::game::run::setup::GameSetup;
+use crate::game::state::{GameMsg, RenderInfo, RenderUnit};
+use crate::game::tile::entity::TileEntityMsg;
+use crate::game::tile::ticking::TickUnit;
+use crate::render::camera::FAR;
 use crate::render::gpu;
 use crate::render::gpu::Gpu;
-use crate::resource::ResourceManager;
 use crate::util::actor::call_multi;
-use crate::util::cg::{deg, matrix, Float, Matrix4, Point3};
-use crate::util::colors;
-use crate::util::colors::WithAlpha;
-use crate::util::id::Id;
 
 pub struct Renderer {
     resource_man: Arc<ResourceManager>,

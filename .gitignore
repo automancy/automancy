@@ -1,11 +1,13 @@
-/target
-/.fleet
-/.vscode
-/.cargo
-/map
+**/target
+**/.cargo
+
+.fleet
+.vscode
+
+map
 
 *.spv
 *.blend1
 
-/renderdoc.cap
+renderdoc.cap
 

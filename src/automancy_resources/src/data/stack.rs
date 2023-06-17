@@ -1,4 +1,4 @@
-use crate::resource::item::Item;
+use crate::data::item::Item;
 
 pub type ItemAmount = u64;
 

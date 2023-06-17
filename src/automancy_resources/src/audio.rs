@@ -2,13 +2,14 @@ use std::ffi::OsStr;
 use std::fs::read_dir;
 use std::path::Path;
 
-use flexstr::ToSharedStr;
+use automancy_defs::flexstr::ToSharedStr;
+use automancy_defs::log;
 use kira::sound::static_sound::{StaticSoundData, StaticSoundSettings};
 
-use crate::resource::{ResourceManager, OGG_EXT};
+use crate::{ResourceManager, OGG_EXT};
 
 impl ResourceManager {
-    pub fn load_audio(&mut self, dir: &Path) -> Option<()> {
+    pub fn load_audios(&mut self, dir: &Path) -> Option<()> {
         let audio = dir.join("audio");
         let audio = read_dir(audio).ok()?;
 

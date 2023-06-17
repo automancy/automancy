@@ -1,283 +1,54 @@
 use std::sync::Arc;
 
-use egui::NumExt;
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort};
 use rand::{thread_rng, RngCore};
-use serde::{Deserialize, Serialize};
 
-use crate::game::item::{ItemAmount, ItemStack};
+use automancy_defs::coord::TileCoord;
+use automancy_defs::egui::NumExt;
+use automancy_defs::id::Id;
+use automancy_defs::log;
+use automancy_resources::data::item::item_match;
+use automancy_resources::data::stack::ItemStack;
+use automancy_resources::data::{Data, DataMap};
+use automancy_resources::ResourceManager;
+
 use crate::game::state::GameMsg;
-use crate::game::tile::coord::TileCoord;
 use crate::game::tile::entity::TileEntityMsg::*;
 use crate::game::tile::entity::TransactionError::*;
-use crate::game::tile::inventory::{Inventory, InventoryRaw};
 use crate::game::tile::ticking::TickUnit;
-use crate::resource::item::id_match;
-use crate::resource::ResourceManager;
-use crate::util::id::{Id, IdRaw, Interner};
 
-/// Represents the various types of errors a tile can run into.
-#[derive(Debug, Copy, Clone)]
-pub enum TransactionError {
-    /// Tried to execute a script but could not find one.
-    NoScript,
-    /// Transaction type could not be applied to the specified tile.
-    NotSuitable,
-    /// Target inventory is full.
-    Full,
-}
+pub type TileModifier = i32;
 
-/// Represents the data a tile entity holds. This data is given to functions.
-#[derive(Debug, Clone)]
-pub enum Data {
-    /// The tile entity's inventory.
-    Inventory(Inventory),
-    /// The coordinates of the tile.
-    Coord(TileCoord),
-    /// The tile's ID.
-    VecCoord(Vec<TileCoord>),
-    Id(Id),
-    VecId(Vec<Id>),
-    Amount(ItemAmount),
-    Bool(bool),
-}
-
-impl Data {
-    /// Gets the default Inventory.
-    pub fn inventory() -> Self {
-        Self::Inventory(Default::default())
-    }
-
-    pub fn vec_coord() -> Self {
-        Self::VecCoord(Default::default())
-    }
-
-    /// Gets a mutable reference to  the tile's Inventory, or None.
-    pub fn as_inventory_mut(&mut self) -> Option<&mut Inventory> {
-        if let Self::Inventory(v) = self {
-            return Some(v);
-        }
-        None
-    }
-
-    /// Gets a mutable reference to  the tile's coordinates, or None.
-    pub fn as_coord_mut(&mut self) -> Option<&mut TileCoord> {
-        if let Self::Coord(v) = self {
-            return Some(v);
-        }
-        None
-    }
-
-    pub fn as_bool_mut(&mut self) -> Option<&mut bool> {
-        if let Self::Bool(v) = self {
-            return Some(v);
-        }
-        None
-    }
-
-    pub fn as_vec_coord_mut(&mut self) -> Option<&mut Vec<TileCoord>> {
-        if let Self::VecCoord(v) = self {
-            return Some(v);
-        }
-        None
-    }
-
-    /// Gets a mutable reference to the tile's ID, or None.
-    pub fn as_id_mut(&mut self) -> Option<&mut Id> {
-        if let Self::Id(v) = self {
-            return Some(v);
-        }
-        None
-    }
-
-    pub fn as_vec_id_mut(&mut self) -> Option<&mut Vec<Id>> {
-        if let Self::VecId(v) = self {
-            return Some(v);
-        }
-        None
-    }
-
-    pub fn as_amount_mut(&mut self) -> Option<&mut ItemAmount> {
-        if let Self::Amount(v) = self {
-            return Some(v);
-        }
-        None
-    }
-
-    /// Gets an immutable reference to  the tile's Inventory, or None.
-    pub fn as_inventory(&self) -> Option<&Inventory> {
-        if let Self::Inventory(v) = self {
-            return Some(v);
-        }
-        None
-    }
-
-    /// Gets an immutable reference to  the tile's coordinates, or None.
-    pub fn as_coord(&self) -> Option<&TileCoord> {
-        if let Self::Coord(v) = self {
-            return Some(v);
-        }
-        None
-    }
-
-    /// Gets an immutable reference to the tile's ID, or None.
-    pub fn as_bool(&self) -> Option<&bool> {
-        if let Self::Bool(v) = self {
-            return Some(v);
-        }
-        None
-    }
-
-    pub fn as_vec_coord(&self) -> Option<&Vec<TileCoord>> {
-        if let Self::VecCoord(v) = self {
-            return Some(v);
-        }
-        None
-    }
-
-    pub fn as_id(&self) -> Option<&Id> {
-        if let Self::Id(v) = self {
-            return Some(v);
-        }
-        None
-    }
-
-    pub fn as_vec_id(&self) -> Option<&Vec<Id>> {
-        if let Self::VecId(v) = self {
-            return Some(v);
-        }
-        None
-    }
-
-    pub fn as_amount(&self) -> Option<&ItemAmount> {
-        if let Self::Amount(v) = self {
-            return Some(v);
-        }
-        None
-    }
-}
-
-pub type DataMap = std::collections::BTreeMap<Id, Data>;
-
-#[derive(Debug, Serialize, Deserialize)]
-pub enum DataRaw {
-    Inventory(InventoryRaw),
-    Coord(TileCoord),
-    VecCoord(Vec<TileCoord>),
-    Id(IdRaw),
-    VecId(Vec<IdRaw>),
-    Amount(ItemAmount),
-    Bool(bool),
-}
-
-pub type DataMapRaw = std::collections::HashMap<String, DataRaw>;
-
-pub fn data_to_raw(data: DataMap, interner: &Interner) -> DataMapRaw {
-    data.into_iter()
-        .flat_map(|(key, value)| {
-            let value = match value {
-                Data::Inventory(inventory) => {
-                    DataRaw::Inventory(InventoryRaw::from_inventory(inventory, interner))
-                }
-                Data::Coord(coord) => DataRaw::Coord(coord),
-                Data::VecCoord(vec) => DataRaw::VecCoord(vec),
-                Data::Id(id) => DataRaw::Id(IdRaw::parse(interner.resolve(id).unwrap())),
-                Data::VecId(set) => DataRaw::VecId(
-                    set.into_iter()
-                        .map(|id| IdRaw::parse(interner.resolve(id).unwrap()))
-                        .collect(),
-                ),
-                Data::Amount(amount) => DataRaw::Amount(amount),
-                Data::Bool(v) => DataRaw::Bool(v),
-            };
-
-            interner.resolve(key).map(|key| (key.to_string(), value))
-        })
-        .collect()
-}
-
-pub fn intern_data_from_raw(data: DataMapRaw, resource_man: &mut ResourceManager) -> DataMap {
-    data.into_iter()
-        .map(|(key, value)| {
-            let value = match value {
-                DataRaw::Inventory(inventory) => {
-                    Data::Inventory(inventory.intern_to_inventory(resource_man))
-                }
-                DataRaw::Coord(coord) => Data::Coord(coord),
-                DataRaw::VecCoord(vec) => Data::VecCoord(vec),
-                DataRaw::Id(id) => Data::Id(resource_man.interner.get_or_intern(id.to_string())),
-                DataRaw::VecId(set) => Data::VecId(
-                    set.into_iter()
-                        .map(|id| resource_man.interner.get_or_intern(id.to_string()))
-                        .collect(),
-                ),
-                DataRaw::Amount(amount) => Data::Amount(amount),
-                DataRaw::Bool(v) => Data::Bool(v),
-            };
-
-            (IdRaw::parse(&key).to_id(&mut resource_man.interner), value)
-        })
-        .collect()
-}
-
-pub fn data_from_raw(data: DataMapRaw, resource_man: &ResourceManager) -> DataMap {
-    data.into_iter()
-        .flat_map(|(key, value)| {
-            let value = match value {
-                DataRaw::Inventory(inventory) => {
-                    Data::Inventory(inventory.to_inventory(resource_man))
-                }
-                DataRaw::Coord(coord) => Data::Coord(coord),
-                DataRaw::VecCoord(vec) => Data::VecCoord(vec),
-                DataRaw::Id(id) => Data::Id(resource_man.interner.get(id.to_string()).unwrap()),
-                DataRaw::VecId(set) => Data::VecId(
-                    set.into_iter()
-                        .flat_map(|id| resource_man.interner.get(id.to_string()))
-                        .collect(),
-                ),
-                DataRaw::Amount(amount) => Data::Amount(amount),
-                DataRaw::Bool(v) => Data::Bool(v),
-            };
-
-            resource_man
-                .interner
-                .get(IdRaw::parse(&key).to_string())
-                .map(|key| (key, value))
-        })
-        .collect()
-}
-
-/// Represents a tile entity. A tile entity is the actor that allows the tile to take, process, and output resources.
-#[derive(Debug, Clone)]
-pub struct TileEntityState {
+pub struct TileEntity {
     /// The ID of the tile entity.
     pub id: Id,
-    //TODO can this be moved
     /// The coordinates of the tile entity.
     pub coord: TileCoord,
-    /// The tile state of the tile entity.
+    /// The tile modifier of the tile entity.
     pub tile_modifier: TileModifier,
-    /// The data map stored by the tile.
-    pub data: DataMap,
+    /// A handle to the game.
+    pub game: ActorRef<GameMsg>,
+}
 
+/// Represents a tile entity's state. A tile entity is the actor that allows the tile to take, process, and output resources.
+#[derive(Debug, Clone)]
+pub struct TileEntityState {
+    /// The data map stored by the tile.
+    data: DataMap,
+
+    /// Are adjacent tiles requirement fulfilled
     adjacent_fulfilled: bool,
 }
 
 impl TileEntityState {
-    /// Creates a new tile entity.
-    fn new(id: Id, coord: TileCoord, tile_modifier: TileModifier) -> Self {
+    fn new() -> Self {
         Self {
-            id,
-            coord,
-            tile_modifier,
             data: DataMap::default(),
 
             adjacent_fulfilled: false,
         }
     }
 }
-
-pub type TileModifier = i32;
 
 #[derive(Debug)]
 pub enum TileEntityMsg {
@@ -314,18 +85,26 @@ pub enum TileEntityMsg {
     GetDataValueAndCoord(Id, RpcReplyPort<(TileCoord, Option<Data>)>),
 }
 
+/// Represents the various types of errors a tile can run into.
+#[derive(Debug, Copy, Clone)]
+pub enum TransactionError {
+    /// Tried to execute a script but could not find one.
+    NoScript,
+    /// Transaction type could not be applied to the specified tile.
+    NotSuitable,
+    /// Target inventory is full.
+    Full,
+}
+
 struct MachineTickResult {
     pub target: TileCoord,
     pub direction: TileCoord,
     pub item_stack: ItemStack,
 }
 
-pub struct TileEntity {
-    pub(crate) game: ActorRef<GameMsg>,
-}
-
 impl TileEntity {
     fn machine_tick(
+        &self,
         state: &mut TileEntityState,
         resource_man: &ResourceManager,
     ) -> Option<MachineTickResult> {
@@ -342,7 +121,7 @@ impl TileEntity {
                     .and_then(|id| resource_man.registry.script(*id)),
             )
         {
-            let coord = state.coord + target;
+            let coord = self.coord + target;
 
             if let Some(inputs) = &script.instructions.inputs {
                 if let Some(buffer) = state
@@ -394,12 +173,13 @@ impl TileEntity {
         {
             if let Data::Inventory(buffer) = state
                 .data
+                .0
                 .entry(resource_man.registry.data_ids.buffer)
                 .or_insert_with(Data::inventory)
             {
                 let matched = inputs
                     .iter()
-                    .find(|v| id_match(&resource_man.registry, item_stack.item.id, v.item.id));
+                    .find(|v| item_match(&resource_man.registry, item_stack.item.id, v.item.id));
 
                 if matched.is_none() {
                     return Err(NotSuitable);
@@ -429,14 +209,14 @@ impl TileEntity {
 impl Actor for TileEntity {
     type Msg = TileEntityMsg;
     type State = TileEntityState;
-    type Arguments = (Id, TileCoord, TileModifier);
+    type Arguments = ();
 
     async fn pre_start(
         &self,
         _myself: ActorRef<Self::Msg>,
-        args: Self::Arguments,
+        _args: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
-        Ok(TileEntityState::new(args.0, args.1, args.2))
+        Ok(TileEntityState::new())
     }
 
     async fn handle(
@@ -450,7 +230,7 @@ impl Actor for TileEntity {
                 resource_man,
                 tick_count,
             } => {
-                let tile_type = resource_man.registry.tile(state.id).unwrap().tile_type;
+                let tile_type = resource_man.registry.tile(self.id).unwrap().tile_type;
 
                 if tile_type == Some(resource_man.registry.tile_ids.machine) {
                     if tick_count % 10 == 0 {
@@ -463,8 +243,8 @@ impl Actor for TileEntity {
                                 self.game
                                     .send_message(GameMsg::CheckAdjacent {
                                         script,
-                                        coord: state.coord,
-                                        self_coord: state.coord,
+                                        coord: self.coord,
+                                        self_coord: self.coord,
                                     })
                                     .unwrap();
                             }
@@ -479,7 +259,7 @@ impl Actor for TileEntity {
                         target,
                         direction,
                         item_stack,
-                    }) = TileEntity::machine_tick(state, &resource_man)
+                    }) = self.machine_tick(state, &resource_man)
                     {
                         send_to_tile_coord(
                             self,
@@ -490,7 +270,7 @@ impl Actor for TileEntity {
                                 tick_count,
                                 item_stack,
                                 source_type: tile_type,
-                                source_id: state.id,
+                                source_id: self.id,
                                 direction,
                                 source: myself,
                             },
@@ -499,7 +279,7 @@ impl Actor for TileEntity {
                     }
                 }
 
-                if state.id == resource_man.registry.tile_ids.node {
+                if self.id == resource_man.registry.tile_ids.node {
                     if let Some((target, link)) = state
                         .data
                         .get(&resource_man.registry.data_ids.target)
@@ -516,11 +296,11 @@ impl Actor for TileEntity {
                         send_to_tile_coord(
                             self,
                             state,
-                            state.coord + link,
+                            self.coord + link,
                             ExtractRequest {
                                 resource_man: resource_man.clone(),
                                 tick_count,
-                                coord: state.coord + target,
+                                coord: self.coord + target,
                                 direction: -target,
                             },
                             &resource_man,
@@ -537,7 +317,7 @@ impl Actor for TileEntity {
                 direction,
                 source,
             } => {
-                if state.id == resource_man.registry.tile_ids.void {
+                if self.id == resource_man.registry.tile_ids.void {
                     source
                         .send_message(TransactionResult {
                             resource_man: resource_man.clone(),
@@ -546,7 +326,7 @@ impl Actor for TileEntity {
                         .unwrap()
                 }
 
-                let tile = resource_man.registry.tile(state.id).unwrap();
+                let tile = resource_man.registry.tile(self.id).unwrap();
 
                 if tile.tile_type == Some(resource_man.registry.tile_ids.machine) {
                     let result = TileEntity::machine_transaction(state, &resource_man, item_stack);
@@ -576,6 +356,7 @@ impl Actor for TileEntity {
                         if item_stack.item == item {
                             let buffer = state
                                 .data
+                                .0
                                 .entry(resource_man.registry.data_ids.buffer)
                                 .or_insert_with(Data::inventory)
                                 .as_inventory_mut()
@@ -622,14 +403,14 @@ impl Actor for TileEntity {
                         .unwrap();
                 }
 
-                if state.id == resource_man.registry.tile_ids.merger {
+                if self.id == resource_man.registry.tile_ids.merger {
                     if let Some(target) = state
                         .data
                         .get(&resource_man.registry.data_ids.target)
                         .and_then(Data::as_coord)
                         .cloned()
                     {
-                        let target_coord = state.coord + target;
+                        let target_coord = self.coord + target;
 
                         send_to_tile_coord(
                             self,
@@ -640,7 +421,7 @@ impl Actor for TileEntity {
                                 tick_count,
                                 item_stack,
                                 source_type: Some(resource_man.registry.tile_ids.transfer),
-                                source_id: state.id,
+                                source_id: self.id,
                                 direction: -target,
                                 source: source.clone(),
                             },
@@ -649,8 +430,8 @@ impl Actor for TileEntity {
                     }
                 }
 
-                if state.id == resource_man.registry.tile_ids.splitter {
-                    if let Some((a, b, c)) = match state.tile_modifier {
+                if self.id == resource_man.registry.tile_ids.splitter {
+                    if let Some((a, b, c)) = match self.tile_modifier {
                         0 => Some((
                             TileCoord::TOP_LEFT,
                             TileCoord::BOTTOM_LEFT,
@@ -673,7 +454,7 @@ impl Actor for TileEntity {
 
                         let target = if random() % 2 == 0 { first } else { second };
 
-                        let target_coord = state.coord + target;
+                        let target_coord = self.coord + target;
 
                         send_to_tile_coord(
                             self,
@@ -684,7 +465,7 @@ impl Actor for TileEntity {
                                 tick_count,
                                 item_stack,
                                 source_type: Some(resource_man.registry.tile_ids.transfer),
-                                source_id: state.id,
+                                source_id: self.id,
                                 direction: -target,
                                 source,
                             },
@@ -698,7 +479,7 @@ impl Actor for TileEntity {
                 result,
             } => {
                 if let Ok(transferred) = result {
-                    let tile_type = resource_man.registry.tile(state.id).unwrap().tile_type;
+                    let tile_type = resource_man.registry.tile(self.id).unwrap().tile_type;
 
                     if tile_type == Some(resource_man.registry.tile_ids.machine) {
                         if let Some(inputs) = state
@@ -739,7 +520,7 @@ impl Actor for TileEntity {
                 }
             }
             SetData(key, value) => {
-                state.data.insert(key, value);
+                state.data.0.insert(key, value);
             }
             GetData(reply) => {
                 reply.send(state.data.clone()).unwrap();
@@ -749,7 +530,7 @@ impl Actor for TileEntity {
             }
             GetDataValueAndCoord(key, reply) => {
                 reply
-                    .send((state.coord, state.data.get(&key).cloned()))
+                    .send((self.coord, state.data.get(&key).cloned()))
                     .unwrap();
             }
             RemoveData(key) => {
@@ -761,7 +542,7 @@ impl Actor for TileEntity {
                 coord,
                 direction,
             } => {
-                let tile_type = resource_man.registry.tile(state.id).unwrap().tile_type;
+                let tile_type = resource_man.registry.tile(self.id).unwrap().tile_type;
 
                 if tile_type == Some(resource_man.registry.tile_ids.storage) {
                     if let Some(((item, amount), inventory)) = state
@@ -799,7 +580,7 @@ impl Actor for TileEntity {
                                         amount: extracting,
                                     },
                                     source_type: tile_type,
-                                    source_id: state.id,
+                                    source_id: self.id,
                                     direction,
                                     source: myself,
                                 },
@@ -809,7 +590,7 @@ impl Actor for TileEntity {
                     }
                 }
 
-                if state.id == resource_man.registry.tile_ids.master_node {
+                if self.id == resource_man.registry.tile_ids.master_node {
                     if let Some(target) = state
                         .data
                         .get(&resource_man.registry.data_ids.target)
@@ -819,7 +600,7 @@ impl Actor for TileEntity {
                         send_to_tile_coord(
                             self,
                             state,
-                            state.coord + target,
+                            self.coord + target,
                             ExtractRequest {
                                 resource_man: resource_man.clone(),
                                 tick_count,

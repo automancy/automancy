@@ -2,17 +2,18 @@ use std::f64::consts::PI;
 use std::ops::{Div, Sub};
 use std::time::Duration;
 
-use cgmath::{point2, point3, vec2, EuclideanSpace, Zero};
-use hexagon_tiles::fractional::FractionalHex;
-use hexagon_tiles::layout::{hex_to_pixel, pixel_to_hex};
-use hexagon_tiles::point::{point, Point};
-use hexagon_tiles::traits::HexRound;
-use num::clamp;
+use num::{clamp, Zero};
 
-use crate::game::tile::coord::TileCoord;
-use crate::render::data::HEX_GRID_LAYOUT;
+use automancy_defs::cg::{matrix, DPoint2, DPoint3, DVector2, Double};
+use automancy_defs::cgmath::{point2, point3, vec2, EuclideanSpace};
+use automancy_defs::coord::TileCoord;
+use automancy_defs::hexagon_tiles::fractional::FractionalHex;
+use automancy_defs::hexagon_tiles::layout::{hex_to_pixel, pixel_to_hex};
+use automancy_defs::hexagon_tiles::point::{point, Point};
+use automancy_defs::hexagon_tiles::traits::HexRound;
+use automancy_defs::rendering::HEX_GRID_LAYOUT;
+
 use crate::render::input::InputHandler;
-use crate::util::cg::{matrix, DPoint2, DPoint3, DVector2, Double};
 
 pub const FAR: Double = 1.0;
 

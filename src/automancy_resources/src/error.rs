@@ -1,6 +1,6 @@
-use crate::resource::ResourceManager;
-use crate::util;
-use crate::util::id::{id_static, Id, Interner};
+use crate::{format, ResourceManager};
+use automancy_defs::id::Id;
+use automancy_defs::log;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
@@ -9,27 +9,13 @@ use std::sync::{Arc, Mutex};
 pub struct ErrorManager {
     queue: Arc<Mutex<VecDeque<GameError>>>,
 }
-/// Contains a list of errors that can be displayed.
-#[derive(Clone, Copy)]
-pub struct ErrorIds {
-    /// This error is displayed to test that the error manager is working. TODO this can probably be removed.
-    pub test_error: Id,
-    /// This error is displayed when the map cannot be read.
-    pub invalid_map_data: Id,
-}
-impl ErrorIds {
-    pub fn new(interner: &mut Interner) -> Self {
-        Self {
-            test_error: id_static("automancy", "test_error").to_id(interner),
-            invalid_map_data: id_static("automancy", "invalid_map_data").to_id(interner),
-        }
-    }
-}
+
 pub type GameError = (Id, Vec<String>);
+
 /// Gets the ID of an error along with its arguments and converts it into a human-readable string.
 pub fn error_to_string(err: &GameError, resource_man: &ResourceManager) -> String {
     let mut string = resource_man.translates.error[&err.0].to_string();
-    string = util::format(
+    string = format(
         &string,
         err.1
             .iter()
@@ -39,10 +25,12 @@ pub fn error_to_string(err: &GameError, resource_man: &ResourceManager) -> Strin
     );
     string
 }
+
 /// Gets the unlocalized key of an error's ID.
 pub fn error_to_key(err: &GameError, resource_man: &ResourceManager) -> String {
     resource_man.interner.resolve(err.0).unwrap().to_string()
 }
+
 impl ErrorManager {
     /// Adds a new error to the queue.
     pub fn push(&self, error: GameError, resource_man: &ResourceManager) {

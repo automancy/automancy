@@ -1,16 +1,15 @@
+use automancy_defs::hashbrown::HashMap;
+use automancy_defs::id::IdRaw;
+use automancy_defs::ply_rs::parser::Parser;
+use automancy_defs::rendering::{Face, GameVertex, Model};
+use automancy_defs::{id, log};
+use serde::Deserialize;
 use std::ffi::OsStr;
 use std::fs::{read_to_string, File};
 use std::io::BufReader;
 use std::path::Path;
 
-use hashbrown::HashMap;
-use ply_rs::parser::Parser;
-use serde::Deserialize;
-
-use crate::render::data::{Face, GameVertex, Model};
-use crate::resource::JSON_EXT;
-use crate::resource::{load_recursively, ResourceManager};
-use crate::util::id::IdRaw;
+use crate::{load_recursively, ResourceManager, JSON_EXT};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Mesh {
@@ -19,7 +18,7 @@ pub struct Mesh {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct ModelRaw {
+pub struct ModelJson {
     pub id: IdRaw,
     pub file: String,
 }
@@ -28,7 +27,7 @@ impl ResourceManager {
     fn load_model(&mut self, file: &Path) -> Option<()> {
         log::info!("loading model at: {file:?}");
 
-        let model: ModelRaw = serde_json::from_str(
+        let model: ModelJson = serde_json::from_str(
             &read_to_string(file).unwrap_or_else(|e| panic!("error loading {file:?} {e:?}")),
         )
         .unwrap_or_else(|e| panic!("error loading {file:?} {e:?}"));
@@ -104,7 +103,7 @@ impl ResourceManager {
         if let Some(none_idx) =
             ids.iter().enumerate().find_map(
                 |(idx, id)| {
-                    if id == &IdRaw::NONE {
+                    if id == &id::NONE {
                         Some(idx)
                     } else {
                         None

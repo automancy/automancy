@@ -1,12 +1,13 @@
+use automancy_defs::id::{Id, IdRaw};
+use automancy_defs::log;
+use serde::Deserialize;
+use serde_json;
 use std::ffi::OsStr;
 use std::fs::read_to_string;
 use std::path::Path;
 
-use serde::Deserialize;
-
-use crate::game::tile::entity::{intern_data_from_raw, DataMap, DataMapRaw};
-use crate::resource::{load_recursively, ResourceManager, JSON_EXT};
-use crate::util::id::{Id, IdRaw};
+use crate::data::{DataMap, DataMapRaw};
+use crate::{load_recursively, ResourceManager, JSON_EXT};
 
 #[derive(Debug, Clone, Copy, Default, Deserialize)]
 pub struct ModelAttributes {
@@ -14,7 +15,7 @@ pub struct ModelAttributes {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct TileRaw {
+pub struct TileJson {
     pub id: IdRaw,
     pub tile_type: Option<IdRaw>,
     pub models: Vec<IdRaw>,
@@ -38,7 +39,7 @@ impl ResourceManager {
     fn load_tile(&mut self, file: &Path) -> Option<()> {
         log::info!("loading tile at {file:?}");
 
-        let tile: TileRaw = serde_json::from_str(
+        let tile: TileJson = serde_json::from_str(
             &read_to_string(file).unwrap_or_else(|e| panic!("error loading {file:?} {e:?}")),
         )
         .unwrap_or_else(|e| panic!("error loading {file:?} {e:?}"));
@@ -47,7 +48,7 @@ impl ResourceManager {
 
         let tile_type = tile.tile_type.map(|v| v.to_id(&mut self.interner));
 
-        let data = intern_data_from_raw(tile.data, self);
+        let data = tile.data.intern_to_data(self);
 
         let models = tile
             .models
@@ -91,7 +92,7 @@ impl ResourceManager {
         }
     }
 
-    pub fn try_item_name(&self, id: &Option<Id>) -> &str {
+    pub fn try_item_name(&self, id: Option<&Id>) -> &str {
         if let Some(id) = id {
             self.item_name(id)
         } else {
@@ -106,7 +107,7 @@ impl ResourceManager {
         }
     }
 
-    pub fn try_script_name(&self, id: &Option<Id>) -> &str {
+    pub fn try_script_name(&self, id: Option<&Id>) -> &str {
         if let Some(id) = id {
             self.item_name(id)
         } else {
@@ -121,7 +122,7 @@ impl ResourceManager {
         }
     }
 
-    pub fn try_tile_name(&self, id: &Option<Id>) -> &str {
+    pub fn try_tile_name(&self, id: Option<&Id>) -> &str {
         if let Some(id) = id {
             self.tile_name(id)
         } else {

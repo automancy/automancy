@@ -1,33 +1,35 @@
 use std::fs;
 use std::sync::Arc;
 
-use egui::Frame;
-use flexstr::SharedStr;
 use futures::executor::block_on;
-use kira::manager::backend::cpal::CpalBackend;
-use kira::manager::{AudioManager, AudioManagerSettings};
-use kira::track::{TrackBuilder, TrackHandle};
 use ractor::concurrency::JoinHandle;
 use ractor::{Actor, ActorRef};
 use vulkano::device::DeviceExtensions;
-use winit::event_loop::EventLoop;
-use winit::window::{Icon, Window};
+
+use automancy_defs::coord::ChunkCoord;
+use automancy_defs::egui::Frame;
+use automancy_defs::flexstr::SharedStr;
+use automancy_defs::log;
+use automancy_defs::winit::event_loop::EventLoop;
+use automancy_defs::winit::window::{Icon, Window};
+use automancy_resources::kira::manager::backend::cpal::CpalBackend;
+use automancy_resources::kira::manager::{AudioManager, AudioManagerSettings};
+use automancy_resources::kira::track::{TrackBuilder, TrackHandle};
+use automancy_resources::{ResourceManager, RESOURCES_FOLDER};
 
 use crate::game::map::MapInfo;
 use crate::game::state::{Game, GameMsg};
-use crate::game::tile::coord::ChunkCoord;
 use crate::game::tile::ticking::TICK_INTERVAL;
 use crate::render::camera::Camera;
 use crate::render::gpu::{Gpu, RenderAlloc};
 use crate::render::{gpu, gui};
-use crate::resource::{ResourceManager, RESOURCES_FOLDER};
 use crate::LOGO;
 
 /// Stores what the game initializes on startup.
 pub struct GameSetup {
     /// the audio manager
     pub audio_man: AudioManager,
-    /// the resource manager
+    /// the resources manager
     pub resource_man: Arc<ResourceManager>,
     /// the game messaging system
     pub game: ActorRef<GameMsg>,
@@ -104,7 +106,6 @@ impl GameSetup {
 
         log::info!("Renderer setup complete");
         // --- setup game ---
-        // TODO map selection
         let map_name = SharedStr::from_static(".mainmenu");
 
         let (game, game_handle) = Actor::spawn(
@@ -189,7 +190,7 @@ fn load_resources(track: TrackHandle) -> Arc<ResourceManager> {
             let namespace = dir.file_name().unwrap().to_str().unwrap();
             log::info!("loading namespace {namespace}");
             resource_man.load_models(&dir);
-            resource_man.load_audio(&dir);
+            resource_man.load_audios(&dir);
             resource_man.load_tiles(&dir);
             resource_man.load_items(&dir);
             resource_man.load_tags(&dir);

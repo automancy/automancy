@@ -1,16 +1,15 @@
+use crate::{ResourceManager, JSON_EXT};
+use automancy_defs::flexstr::{SharedStr, ToSharedStr};
+use automancy_defs::hashbrown::HashMap;
+use automancy_defs::id::{Id, IdRaw};
+use automancy_defs::log;
+use serde::Deserialize;
 use std::ffi::OsStr;
 use std::fs::{read_dir, read_to_string};
 use std::path::Path;
 
-use flexstr::{SharedStr, ToSharedStr};
-use hashbrown::HashMap;
-
-use crate::resource::ResourceManager;
-use crate::resource::{Deserialize, JSON_EXT};
-use crate::util::id::{Id, IdRaw};
-
 #[derive(Debug, Default, Clone, Deserialize)]
-pub struct TranslateRaw {
+pub struct TranslateJson {
     none: String,
     unnamed: String,
     items: HashMap<IdRaw, String>,
@@ -35,7 +34,7 @@ impl ResourceManager {
     fn load_translate(&mut self, file: &Path) -> Option<()> {
         log::info!("loading translate at: {file:?}");
 
-        let translate: TranslateRaw = serde_json::from_str(
+        let translate: TranslateJson = serde_json::from_str(
             &read_to_string(file).unwrap_or_else(|e| panic!("error loading {file:?} {e:?}")),
         )
         .unwrap_or_else(|e| panic!("error loading {file:?} {e:?}"));

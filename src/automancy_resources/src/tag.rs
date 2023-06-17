@@ -1,15 +1,15 @@
+use crate::registry::Registry;
+use crate::{load_recursively, ResourceManager, JSON_EXT};
+use automancy_defs::hashbrown::HashSet;
+use automancy_defs::id::{Id, IdRaw};
+use automancy_defs::log;
+use serde::Deserialize;
 use std::ffi::OsStr;
 use std::fs::read_to_string;
 use std::path::Path;
 
-use egui::epaint::ahash::HashSet;
-use serde::{Deserialize, Serialize};
-
-use crate::resource::{load_recursively, Registry, ResourceManager, JSON_EXT};
-use crate::util::id::{Id, IdRaw};
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct TagRaw {
+#[derive(Debug, Clone, Deserialize)]
+pub struct TagJson {
     pub id: IdRaw,
     pub entries: Vec<IdRaw>,
 }
@@ -34,7 +34,7 @@ impl ResourceManager {
     fn load_tag(&mut self, file: &Path) -> Option<()> {
         log::info!("loading tag at: {file:?}");
 
-        let tag: TagRaw = serde_json::from_str(
+        let tag: TagJson = serde_json::from_str(
             &read_to_string(file).unwrap_or_else(|e| panic!("error loading {file:?} {e:?}")),
         )
         .unwrap_or_else(|e| panic!("error loading {file:?} {e:?}"));

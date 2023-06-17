@@ -1,4 +1,4 @@
-use automancy::game::tile::coord::TileCoord;
+use automancy_defs::coord::TileCoord;
 
 #[test]
 fn test_tile_coord_serde() {

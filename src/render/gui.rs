@@ -2,48 +2,49 @@ use std::f32::consts::FRAC_PI_4;
 use std::fs;
 use std::sync::Arc;
 
-use cgmath::{point2, point3, vec3, MetricSpace};
-use egui::epaint::Shadow;
-use egui::style::{Margin, WidgetVisuals, Widgets};
-use egui::FontFamily::{Monospace, Proportional};
-use egui::{
-    vec2, Align, Align2, Color32, CursorIcon, DragValue, FontData, FontDefinitions, FontId, Frame,
-    PaintCallback, Rgba, RichText, Rounding, ScrollArea, Sense, Stroke, Style, TextStyle,
-    TopBottomPanel, Ui, Visuals, Window,
-};
-use egui_winit_vulkano::{CallbackFn, Gui, GuiConfig};
 use fuse_rust::Fuse;
 use futures::channel::mpsc;
 use futures::executor::block_on;
 use genmesh::{EmitTriangles, Quad};
-use hashbrown::HashMap;
-use hexagon_tiles::traits::HexDirection;
 use ractor::ActorRef;
 use tokio::runtime::Runtime;
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
 use vulkano::image::SampleCount::Sample4;
 use vulkano::memory::allocator::{AllocationCreateInfo, MemoryUsage};
-use winit::event_loop::{ControlFlow, EventLoop};
+
+use automancy_defs::cg::{perspective, DPoint2, DPoint3, Double, Float, Matrix4, Vector3};
+use automancy_defs::cgmath::{point2, point3, vec3, MetricSpace};
+use automancy_defs::coord::{TileCoord, TileHex};
+use automancy_defs::egui::epaint::Shadow;
+use automancy_defs::egui::style::{WidgetVisuals, Widgets};
+use automancy_defs::egui::FontFamily::{Monospace, Proportional};
+use automancy_defs::egui::{
+    vec2, Align, Align2, Color32, CursorIcon, DragValue, FontData, FontDefinitions, FontId, Frame,
+    Margin, PaintCallback, Rgba, RichText, Rounding, ScrollArea, Sense, Stroke, Style, TextStyle,
+    TopBottomPanel, Ui, Visuals, Window,
+};
+use automancy_defs::egui_winit_vulkano::{CallbackFn, Gui, GuiConfig};
+use automancy_defs::hashbrown::HashMap;
+use automancy_defs::hexagon_tiles::traits::HexDirection;
+use automancy_defs::id::Id;
+use automancy_defs::rendering::{GameVertex, InstanceData, LightInfo};
+use automancy_defs::winit::event_loop::{ControlFlow, EventLoop};
+use automancy_defs::{cgmath, colors, log};
+use automancy_resources::data::item::Item;
+use automancy_resources::data::Data;
+use automancy_resources::error::{error_to_key, error_to_string};
+use automancy_resources::{format, unix_to_formatted_time, ResourceManager};
 
 use crate::game::map::{Map, MapInfo};
-use crate::game::run::error::{error_to_key, error_to_string};
 use crate::game::run::setup::GameSetup;
 use crate::game::state::GameMsg;
-use crate::game::tile::coord::TileCoord;
-use crate::game::tile::coord::TileHex;
-use crate::game::tile::entity::{Data, TileEntityMsg, TileModifier};
+use crate::game::tile::entity::{TileEntityMsg, TileModifier};
 use crate::render::camera::hex_to_normalized;
-use crate::render::data::{GameVertex, InstanceData, LightInfo};
 use crate::render::event::{shutdown_graceful, EventLoopStorage};
 use crate::render::gpu::Gpu;
 use crate::render::renderer::Renderer;
 use crate::render::{gpu, gui};
-use crate::resource::item::Item;
-use crate::resource::ResourceManager;
-use crate::util::cg::{perspective, DPoint2, DPoint3, Double, Float, Matrix4, Vector3};
-use crate::util::colors;
-use crate::util::id::Id;
-use crate::{util, IOSEVKA_FONT};
+use crate::{IOSEVKA_FONT, VERSION};
 
 /// The state of the main game GUI.
 #[derive(Eq, PartialEq, Copy, Clone)]
@@ -552,7 +553,7 @@ pub fn main_menu(
                         shutdown_graceful(setup, control_flow)
                             .expect("Failed to shutdown gracefully!");
                     };
-                    ui.label("v0.1.0")
+                    ui.label(VERSION)
                 },
             );
         });
@@ -629,7 +630,7 @@ pub fn pause_menu(
                         renderer.reset_last_tiles_update();
                         loop_store.gui_state = GuiState::MainMenu
                     };
-                    ui.label("v0.1.0")
+                    ui.label(VERSION)
                 },
             );
         });
@@ -655,10 +656,9 @@ pub fn map_load_menu(
             let dirty = false;
             setup.maps.iter().for_each(|map| {
                 let resource_man = setup.resource_man.clone();
-                let time = util::unix_to_formatted_time(
+                let time = unix_to_formatted_time(
                     map.save_time,
-                    resource_man.translates.gui[&resource_man.registry.gui_ids.time_fmt]
-                        .to_string(),
+                    resource_man.translates.gui[&resource_man.registry.gui_ids.time_fmt].as_str(),
                 );
                 ui.group(|ui| {
                     ui.label(RichText::new(&map.map_name).heading());
@@ -696,7 +696,7 @@ pub fn map_load_menu(
                 setup.refresh_maps();
             }
         });
-        ui.label(util::format(
+        ui.label(format(
             setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.lbl_maps_loaded]
                 .as_str(),
             &[setup.maps.len().to_string().as_str()],
@@ -828,6 +828,7 @@ pub fn map_create_menu(
         }
     });
 }
+
 /// Draws the options menu. TODO
 pub fn options_menu(setup: &mut GameSetup, gui: &mut Gui, loop_store: &mut EventLoopStorage) {
     Window::new(
@@ -942,7 +943,7 @@ pub fn draw_item(
     resource_man: Arc<ResourceManager>,
     renderer: &Renderer,
     item: Item,
-    size: f32,
+    size: Float,
 ) {
     let model = if resource_man.meshes.contains_key(&item.model) {
         item.model
@@ -1088,13 +1089,15 @@ pub fn tile_config(
                     );
 
                     ui.vertical(|ui| {
+                        const SIZE: Float = 32.0;
+
                         if let Some(script) =
                             new_script.and_then(|id| setup.resource_man.registry.script(id))
                         {
                             if let Some(inputs) = &script.instructions.inputs {
                                 inputs.iter().for_each(|item_stack| {
                                     ui.horizontal(|ui| {
-                                        ui.set_height(32.0);
+                                        ui.set_height(SIZE);
 
                                         ui.label(" + ");
                                         draw_item(
@@ -1102,7 +1105,7 @@ pub fn tile_config(
                                             setup.resource_man.clone(),
                                             renderer,
                                             item_stack.item,
-                                            32.0,
+                                            SIZE,
                                         );
                                         ui.label(format!(
                                             "{} ({})",
@@ -1114,7 +1117,7 @@ pub fn tile_config(
                             }
 
                             ui.horizontal(|ui| {
-                                ui.set_height(32.0);
+                                ui.set_height(SIZE);
 
                                 ui.label("=> ");
                                 draw_item(
@@ -1122,7 +1125,7 @@ pub fn tile_config(
                                     setup.resource_man.clone(),
                                     renderer,
                                     script.instructions.output.item,
-                                    32.0,
+                                    SIZE,
                                 );
                                 ui.label(format!(
                                     "{} ({})",

@@ -1,26 +1,29 @@
-use crate::game::map::{Map, MapInfo, TileEntities};
-use crate::game::state::GameMsg::*;
-use crate::game::tile::coord::{TileCoord, TileHex, TileUnit};
-use crate::game::tile::entity::{
-    Data, DataMap, TileEntity, TileEntityMsg, TileEntityState, TileModifier,
-};
-use crate::game::tile::ticking::{tick, TickUnit};
-use crate::render::camera::FAR;
-use crate::render::data::{InstanceData, HEX_GRID_LAYOUT};
-use crate::resource::item::id_match;
-use crate::resource::script::Script;
-use crate::resource::ResourceManager;
-use crate::util::cg::{Float, Matrix4};
-use crate::util::id::Id;
-use cgmath::vec3;
-use flexstr::SharedStr;
-use hashbrown::HashMap;
-use hexagon_tiles::layout::hex_to_pixel;
-use hexagon_tiles::traits::HexDirection;
-use ractor::concurrency::MpscSender;
-use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort, SupervisionEvent};
 use std::mem;
 use std::sync::Arc;
+
+use ractor::concurrency::MpscSender;
+use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort, SupervisionEvent};
+
+use automancy_defs::cg::{Float, Matrix4};
+use automancy_defs::cgmath::vec3;
+use automancy_defs::coord::{TileCoord, TileHex, TileUnit};
+use automancy_defs::flexstr::SharedStr;
+use automancy_defs::hashbrown::HashMap;
+use automancy_defs::hexagon_tiles::layout::hex_to_pixel;
+use automancy_defs::hexagon_tiles::traits::HexDirection;
+use automancy_defs::id::Id;
+use automancy_defs::log;
+use automancy_defs::rendering::{InstanceData, HEX_GRID_LAYOUT};
+use automancy_resources::data::item::item_match;
+use automancy_resources::data::{Data, DataMap};
+use automancy_resources::script::Script;
+use automancy_resources::ResourceManager;
+
+use crate::game::map::{Map, MapInfo, TileEntities};
+use crate::game::state::GameMsg::*;
+use crate::game::tile::entity::{TileEntity, TileEntityMsg, TileModifier};
+use crate::game::tile::ticking::{tick, TickUnit};
+use crate::render::camera::FAR;
 
 const UNDO_CACHE_SIZE: usize = 16;
 
@@ -38,7 +41,7 @@ pub struct GameState {
     /// a count of all the ticks that have happened
     pub(crate) tick_count: TickUnit,
 
-    /// the resource manager
+    /// the automancy_resources manager
     pub(crate) resource_man: Arc<ResourceManager>,
 
     /// the tile entities
@@ -180,7 +183,7 @@ impl Actor for Game {
             GetMapInfo(reply) => {
                 let map_name = state.map.map_name.clone();
                 let tiles = state.map.tiles.len();
-                let data = state.map.data.len();
+                let data = state.map.data.0.len();
                 let save_time = state.map.save_time;
                 reply
                     .send(MapInfo {
@@ -198,7 +201,7 @@ impl Actor for Game {
                     .send(MapInfo {
                         map_name: map.map_name.clone(),
                         tiles: map.tiles.len(),
-                        data: map.data.len(),
+                        data: map.data.0.len(),
                         save_time: map.save_time,
                     })
                     .unwrap();
@@ -320,7 +323,7 @@ impl Actor for Game {
                         }
                     }
                     SetData(key, value) => {
-                        state.map.data.insert(key, value);
+                        state.map.data.0.insert(key, value);
                     }
                     RemoveData(key) => {
                         state.map.data.remove(&key);
@@ -335,7 +338,7 @@ impl Actor for Game {
 
                             for neighbor in TileHex::NEIGHBORS.iter().map(|v| coord + (*v).into()) {
                                 if let Some((id, _)) = state.map.tiles.get(&neighbor) {
-                                    if id_match(&state.resource_man.registry, *id, adjacent) {
+                                    if item_match(&state.resource_man.registry, *id, adjacent) {
                                         fulfilled = true;
                                         break;
                                     }
@@ -380,13 +383,8 @@ impl Actor for Game {
                     panic_msg
                 );
             }
-            SupervisionEvent::ActorTerminated(_dead_actor, tile_state, ..) => {
-                if let Some(mut tile_state) = tile_state {
-                    let tile_state: TileEntityState = tile_state.take().unwrap();
-                    let coord = tile_state.coord;
-
-                    log::debug!("game: tile entity at {:?} has been removed", coord)
-                }
+            SupervisionEvent::ActorTerminated(dead_actor, _tile_state, reason) => {
+                log::debug!("game: tile entity {dead_actor:?} has been removed. reason (if any): {reason:?}")
             }
             other => {
                 log::debug!("game: supervision event: {other}")
@@ -434,8 +432,13 @@ pub(crate) async fn new_tile(
 ) -> ActorRef<TileEntityMsg> {
     let (actor, _handle) = Actor::spawn_linked(
         None,
-        TileEntity { game: game.clone() },
-        (id, coord, tile_modifier),
+        TileEntity {
+            id,
+            coord,
+            tile_modifier,
+            game: game.clone(),
+        },
+        (),
         game.get_cell(),
     )
     .await

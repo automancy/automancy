@@ -2,24 +2,27 @@ use std::fmt::Debug;
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::iter::Iterator;
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+};
 
-use chrono::{Local, Utc};
-use hashbrown::HashSet;
 use lazy_static::lazy_static;
 use ractor::ActorRef;
 use serde::{Deserialize, Serialize};
 use zstd::{Decoder, Encoder};
 
+use automancy_defs::coord::TileCoord;
+use automancy_defs::id::{Id, Interner};
+use automancy_defs::log;
+use automancy_resources::chrono::{Local, Utc};
+use automancy_resources::data::{DataMap, DataMapRaw};
+use automancy_resources::ResourceManager;
+
 use crate::game;
 use crate::game::state::GameMsg;
-use crate::game::tile::coord::TileCoord;
 use crate::game::tile::entity::TileEntityMsg::{GetData, SetData};
-use crate::game::tile::entity::{
-    data_from_raw, data_to_raw, DataMap, DataMapRaw, TileEntityMsg, TileModifier,
-};
-use crate::resource::ResourceManager;
-use crate::util::id::{Id, Interner};
+use crate::game::tile::entity::{TileEntityMsg, TileModifier};
 
 pub const MAP_PATH: &str = "map";
 
@@ -103,7 +106,7 @@ impl Map {
                 }
 
                 let data = tile_entity.call(GetData, None).await.unwrap().unwrap();
-                let data = data_to_raw(data, interner);
+                let data = data.to_raw(interner);
 
                 // tile_entity.stop(None);
 
@@ -115,7 +118,7 @@ impl Map {
 
         let header = MapHeader(id_map.into_iter().collect());
 
-        let data = data_to_raw(self.data.clone(), interner);
+        let data = self.data.to_raw(interner);
 
         let save_time = Utc::now().timestamp();
 
@@ -175,9 +178,9 @@ impl Map {
                 .and_then(|id| resource_man.interner.get(id.as_str()))
             {
                 let tile_entity = game::state::new_tile(game, coord, id, tile_modifier).await;
-                let data = data_from_raw(data, resource_man);
+                let data = data.to_data(resource_man);
 
-                data.into_iter().for_each(|(key, value)| {
+                data.0.into_iter().for_each(|(key, value)| {
                     tile_entity.send_message(SetData(key, value)).unwrap();
                 });
 
@@ -186,7 +189,7 @@ impl Map {
             }
         }
 
-        let data = data_from_raw(data, resource_man);
+        let data = data.to_data(resource_man);
 
         (
             Self {

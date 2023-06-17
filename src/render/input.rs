@@ -1,11 +1,10 @@
-use cgmath::{point2, vec2};
-use winit::event::ElementState::Pressed;
-use winit::event::{
+use automancy_defs::cg::{DPoint2, DVector2, Double};
+use automancy_defs::cgmath::{point2, vec2};
+use automancy_defs::winit::event::ElementState::Pressed;
+use automancy_defs::winit::event::{
     DeviceEvent, KeyboardInput, ModifiersState, MouseButton, MouseScrollDelta, VirtualKeyCode,
     WindowEvent,
 };
-
-use crate::util::cg::{DPoint2, DVector2, Double};
 
 /// The various controls of the game.
 #[derive(Debug, Copy, Clone)]

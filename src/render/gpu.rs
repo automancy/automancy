@@ -41,54 +41,52 @@ use vulkano::{
     VulkanLibrary,
 };
 use vulkano_win::create_surface_from_winit;
-use winit::event_loop::EventLoop;
-use winit::window::{Icon, WindowBuilder};
-use winit::{dpi::LogicalSize, window::Window};
 
-use crate::render::data::{GameVertex, LightInfo, OverlayUBO, RawInstanceData};
-use crate::resource::ResourceManager;
-use crate::util::cg::Double;
-use crate::util::cg::Float;
-use crate::util::id::Id;
+use automancy_defs::cg::{Double, Float};
+use automancy_defs::id::Id;
+use automancy_defs::log;
+use automancy_defs::rendering::{GameUBO, GameVertex, LightInfo, OverlayUBO, RawInstanceData};
+use automancy_defs::winit::event_loop::EventLoop;
+use automancy_defs::winit::window::{Icon, WindowBuilder};
+use automancy_defs::winit::{dpi::LogicalSize, window::Window};
+use automancy_resources::ResourceManager;
 
-use super::data::GameUBO;
-
-pub mod game_vert_shader {
+mod game_vert_shader {
     vulkano_shaders::shader! {
         ty: "vertex",
         path: "compile/shaders/game_vert.glsl"
     }
 }
 
-pub mod game_frag_shader {
+mod game_frag_shader {
     vulkano_shaders::shader! {
         ty: "fragment",
         path: "compile/shaders/game_frag.glsl"
     }
 }
 
-pub mod gui_vert_shader {
+mod gui_vert_shader {
     vulkano_shaders::shader! {
         ty: "vertex",
         path: "compile/shaders/gui_vert.glsl"
     }
 }
 
-pub mod gui_frag_shader {
+mod gui_frag_shader {
     vulkano_shaders::shader! {
         ty: "fragment",
         path: "compile/shaders/gui_frag.glsl"
     }
 }
 
-pub mod overlay_vert_shader {
+mod overlay_vert_shader {
     vulkano_shaders::shader! {
         ty: "vertex",
         path: "compile/shaders/overlay_vert.glsl"
     }
 }
 
-pub mod overlay_frag_shader {
+mod overlay_frag_shader {
     vulkano_shaders::shader! {
         ty: "fragment",
         path: "compile/shaders/overlay_frag.glsl"

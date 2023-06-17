@@ -1,12 +1,11 @@
+use crate::data::stack::{ItemAmount, ItemStack};
+use crate::{load_recursively, ResourceManager, JSON_EXT};
+use automancy_defs::id::{Id, IdRaw};
+use automancy_defs::log;
+use serde::Deserialize;
 use std::ffi::OsStr;
 use std::fs::read_to_string;
 use std::path::Path;
-
-use serde::Deserialize;
-
-use crate::game::item::{ItemAmount, ItemStack};
-use crate::resource::{load_recursively, ResourceManager, JSON_EXT};
-use crate::util::id::{Id, IdRaw};
 
 #[derive(Debug, Clone)]
 pub struct Script {
@@ -23,14 +22,14 @@ pub struct Instructions {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct ScriptRaw {
+pub struct ScriptJson {
     pub id: IdRaw,
     pub adjacent: Option<IdRaw>,
-    pub instructions: InstructionsRaw,
+    pub instructions: InstructionsJson,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct InstructionsRaw {
+pub struct InstructionsJson {
     pub inputs: Option<Vec<(IdRaw, ItemAmount)>>,
     pub output: (IdRaw, ItemAmount),
 }
@@ -39,7 +38,7 @@ impl ResourceManager {
     fn load_script(&mut self, file: &Path) -> Option<()> {
         log::info!("loading script at: {file:?}");
 
-        let script: ScriptRaw = serde_json::from_str(
+        let script: ScriptJson = serde_json::from_str(
             &read_to_string(file).unwrap_or_else(|e| panic!("error loading {file:?} {e:?}")),
         )
         .unwrap_or_else(|e| panic!("error loading {file:?}: {e:?}"));

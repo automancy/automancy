@@ -6,11 +6,17 @@
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/tests" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/resources/automancy/functions/splitter/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/src/automancy_defs/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/src/automancy_macros/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/src/automancy_resources/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/.fleet" />
       <excludeFolder url="file://$MODULE_DIR$/.vscode" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
       <excludeFolder url="file://$MODULE_DIR$/resources/automancy/functions/splitter/target" />
       <excludeFolder url="file://$MODULE_DIR$/map" />
+      <excludeFolder url="file://$MODULE_DIR$/src/automancy_defs/target" />
+      <excludeFolder url="file://$MODULE_DIR$/src/automancy_macros/target" />
+      <excludeFolder url="file://$MODULE_DIR$/src/automancy_resources/target" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />

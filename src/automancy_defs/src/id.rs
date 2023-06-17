@@ -11,6 +11,8 @@ use string_interner::{StringInterner, Symbol};
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct IdRaw(SharedStr, SharedStr);
 
+pub static NONE: IdRaw = id_static("automancy", "none");
+
 #[repr(C)]
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Zeroable, Pod, Serialize, Deserialize,
@@ -40,10 +42,6 @@ impl Symbol for Id {
 }
 
 pub type Interner = StringInterner<StringBackend<Id>>;
-
-impl IdRaw {
-    pub const NONE: IdRaw = id_static("automancy", "none");
-}
 
 impl Display for IdRaw {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
