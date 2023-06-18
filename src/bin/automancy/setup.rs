@@ -1,11 +1,6 @@
 use std::fs;
 use std::sync::Arc;
 
-use futures::executor::block_on;
-use ractor::concurrency::JoinHandle;
-use ractor::{Actor, ActorRef};
-use vulkano::device::DeviceExtensions;
-
 use automancy_defs::coord::ChunkCoord;
 use automancy_defs::egui::Frame;
 use automancy_defs::flexstr::SharedStr;
@@ -16,13 +11,18 @@ use automancy_resources::kira::manager::backend::cpal::CpalBackend;
 use automancy_resources::kira::manager::{AudioManager, AudioManagerSettings};
 use automancy_resources::kira::track::{TrackBuilder, TrackHandle};
 use automancy_resources::{ResourceManager, RESOURCES_FOLDER};
+use futures::executor::block_on;
+use ractor::concurrency::JoinHandle;
+use ractor::{Actor, ActorRef};
+use vulkano::device::DeviceExtensions;
 
-use crate::game::map::MapInfo;
-use crate::game::state::{Game, GameMsg};
-use crate::game::tile::ticking::TICK_INTERVAL;
-use crate::render::camera::Camera;
-use crate::render::gpu::{Gpu, RenderAlloc};
-use crate::render::{gpu, gui};
+use automancy::game::map::MapInfo;
+use automancy::game::state::GameMsg;
+use automancy::game::tile::ticking::TICK_INTERVAL;
+use automancy::render::camera::Camera;
+use automancy::render::gpu::{Gpu, RenderAlloc};
+use automancy::render::{gpu, gui};
+
 use crate::LOGO;
 
 /// Stores what the game initializes on startup.
@@ -155,8 +155,8 @@ impl GameSetup {
             .unwrap()
             .filter_map(|f| f.ok())
             .map(|f| f.file_name().to_str().unwrap().to_string())
-            .filter(|f| f.ends_with(".bin"))
-            .map(|f| f.strip_suffix(".bin").unwrap().to_string())
+            .filter(|f| f.ends_with(".run"))
+            .map(|f| f.strip_suffix(".run").unwrap().to_string())
             .filter(|f| !f.starts_with('.'))
             .map(|map| {
                 block_on(self.game.call(
@@ -178,6 +178,16 @@ impl GameSetup {
         self.maps.reverse();
     }
 }
+
+/// Gets the game icon.
+fn get_icon() -> Icon {
+    let image = image::load_from_memory(LOGO).unwrap().to_rgba8();
+    let width = image.width();
+    let height = image.height();
+
+    Icon::from_rgba(image.into_flat_samples().samples, width, height).unwrap()
+}
+
 /// Initialize the Resource Manager system, and loads all the resources in all namespaces.
 fn load_resources(track: TrackHandle) -> Arc<ResourceManager> {
     let mut resource_man = ResourceManager::new(track);
@@ -203,13 +213,4 @@ fn load_resources(track: TrackHandle) -> Arc<ResourceManager> {
     resource_man.compile_models();
 
     Arc::new(resource_man)
-}
-
-/// Gets the game icon.
-fn get_icon() -> Icon {
-    let image = image::load_from_memory(LOGO).unwrap().to_rgba8();
-    let width = image.width();
-    let height = image.height();
-
-    Icon::from_rgba(image.into_flat_samples().samples, width, height).unwrap()
 }
