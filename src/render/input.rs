@@ -1,11 +1,20 @@
 use automancy_defs::cg::{DPoint2, DVector2, Double};
 use automancy_defs::cgmath::{point2, vec2};
+use automancy_defs::hashbrown::HashMap;
 use automancy_defs::winit::event::ElementState::Pressed;
 use automancy_defs::winit::event::{
     DeviceEvent, KeyboardInput, ModifiersState, MouseButton, MouseScrollDelta, VirtualKeyCode,
     WindowEvent,
 };
+use lazy_static::lazy_static;
+use serde::{Deserialize, Serialize};
 
+#[derive(Serialize, Deserialize, Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
+pub enum KeyActions {
+    UNDO,
+    DEBUG,
+    PAUSE,
+}
 /// The various controls of the game.
 #[derive(Debug, Copy, Clone)]
 pub enum GameWindowEvent {
@@ -113,83 +122,72 @@ pub fn convert_input(
 
                 device = MainMove { delta };
             }
-            DeviceEvent::Key(keyboard_input) => {
-                if let Some(VirtualKeyCode::Escape) = keyboard_input.virtual_keycode {
-                    device = if keyboard_input.state == Pressed {
-                        ExitPressed
-                    } else {
-                        ExitReleased
-                    }
-                }
-            }
             _ => {}
         }
     }
 
     GameInputEvent { window, device }
 }
-
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct InputHandler {
     pub main_pos: DPoint2,
+    pub scroll: Option<DVector2>,
+    pub main_move: Option<DVector2>,
 
     pub main_held: bool,
     pub control_held: bool,
     pub alternate_held: bool,
-    pub exit_held: bool,
     pub shift_held: bool,
 
     pub main_pressed: bool,
     pub alternate_pressed: bool,
-    pub exit_pressed: bool,
 
-    pub undo_pressed: bool,
-
-    pub debug_pressed: bool,
-
-    pub pause_pressed: bool,
-    pub scroll: Option<DVector2>,
-
-    pub main_move: Option<DVector2>,
+    pub keymap: HashMap<u32, KeyActions>,
+    pub keystates: HashMap<KeyActions, bool>,
 }
 
 impl Default for InputHandler {
     fn default() -> Self {
         Self {
             main_pos: point2(0.0, 0.0),
+            scroll: None,
+            main_move: None,
 
             main_held: false,
             control_held: false,
             alternate_held: false,
-            exit_held: false,
             shift_held: false,
 
             main_pressed: false,
             alternate_pressed: false,
-            exit_pressed: false,
 
-            undo_pressed: false,
-
-            debug_pressed: false,
-
-            pause_pressed: false,
-
-            scroll: None,
-            main_move: None,
+            keymap: HashMap::from([
+                (VirtualKeyCode::Z as u32, KeyActions::UNDO),
+                (VirtualKeyCode::Escape as u32, KeyActions::PAUSE),
+                (VirtualKeyCode::F3 as u32, KeyActions::DEBUG),
+            ]),
+            keystates: HashMap::from([
+                (KeyActions::UNDO, false),
+                (KeyActions::DEBUG, false),
+                (KeyActions::PAUSE, false),
+            ]),
         }
     }
 }
-
+lazy_static! {
+    static ref DEFAULT_KEYSTATE: HashMap<KeyActions, bool> = HashMap::from([
+        (KeyActions::UNDO, false),
+        (KeyActions::DEBUG, false),
+        (KeyActions::PAUSE, false),
+    ]);
+}
 impl InputHandler {
     pub fn reset(&mut self) {
         self.main_pressed = false;
         self.alternate_pressed = false;
-        self.exit_pressed = false;
-
-        self.undo_pressed = false;
-
         self.main_move = None;
         self.scroll = None;
+        self.keystates = DEFAULT_KEYSTATE.clone(); //i feel like a clone here is okay
     }
 
     pub fn update(&mut self, event: GameInputEvent) {
@@ -226,12 +224,10 @@ impl InputHandler {
                 }
             }
             GameWindowEvent::KeyboardEvent { input } => {
-                if input.state == Pressed {
-                    match input.virtual_keycode {
-                        Some(VirtualKeyCode::Z) => self.undo_pressed = true,
-                        Some(VirtualKeyCode::F3) => self.debug_pressed = !self.debug_pressed,
-                        Some(VirtualKeyCode::Escape) => self.pause_pressed = !self.pause_pressed,
-                        _ => {}
+                if input.state == Pressed && input.virtual_keycode.is_some() {
+                    let action = self.keymap.get(&(input.virtual_keycode.unwrap() as u32));
+                    if action.is_some() {
+                        self.set_action(action.unwrap());
                     }
                 }
             }
@@ -242,14 +238,13 @@ impl InputHandler {
             GameDeviceEvent::MainMove { delta } => {
                 self.main_move = Some(delta);
             }
-            GameDeviceEvent::ExitPressed => {
-                self.exit_pressed = true;
-                self.exit_held = true;
-            }
-            GameDeviceEvent::ExitReleased => {
-                self.exit_held = false;
-            }
-            GameDeviceEvent::None => {}
+            _ => {}
         }
+    }
+    pub fn set_action(&mut self, action: &KeyActions) {
+        *self.keystates.get_mut(action).unwrap() = true;
+    }
+    pub fn key_pressed(&self, action: &KeyActions) -> bool {
+        self.keystates.get(action).unwrap().clone()
     }
 }
