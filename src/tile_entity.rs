@@ -12,10 +12,8 @@ use automancy_resources::data::stack::ItemStack;
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::ResourceManager;
 
-use crate::game::state::GameMsg;
-use crate::game::tile::entity::TileEntityMsg::*;
-use crate::game::tile::entity::TransactionError::*;
-use crate::game::tile::ticking::TickUnit;
+use crate::game::{GameMsg, TickUnit};
+use crate::tile_entity::TileEntityMsg::*;
 
 pub type TileModifier = i32;
 
@@ -163,7 +161,7 @@ impl TileEntity {
         let script = state.data.get(&resource_man.registry.data_ids.script);
 
         if script.is_none() {
-            return Err(NoScript);
+            return Err(TransactionError::NoScript);
         }
 
         if let Some(inputs) = script
@@ -182,14 +180,14 @@ impl TileEntity {
                     .find(|v| item_match(&resource_man.registry, item_stack.item.id, v.item.id));
 
                 if matched.is_none() {
-                    return Err(NotSuitable);
+                    return Err(TransactionError::NotSuitable);
                 }
 
                 let matched = matched.unwrap();
 
                 let amount = buffer.get_mut(item_stack.item);
                 if *amount >= matched.amount {
-                    return Err(Full);
+                    return Err(TransactionError::Full);
                 }
 
                 *amount += item_stack.amount;
@@ -201,7 +199,7 @@ impl TileEntity {
             }
         }
 
-        Err(NotSuitable)
+        Err(TransactionError::NotSuitable)
     }
 }
 
@@ -371,7 +369,7 @@ impl Actor for TileEntity {
                                 source
                                     .send_message(TransactionResult {
                                         resource_man: resource_man.clone(),
-                                        result: Err(Full),
+                                        result: Err(TransactionError::Full),
                                     })
                                     .unwrap();
 
@@ -398,7 +396,7 @@ impl Actor for TileEntity {
                     source
                         .send_message(TransactionResult {
                             resource_man: resource_man.clone(),
-                            result: Err(NotSuitable),
+                            result: Err(TransactionError::NotSuitable),
                         })
                         .unwrap();
                 }

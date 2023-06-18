@@ -1,6 +1,10 @@
-pub static IOSEVKA_FONT: &[u8] = include_bytes!("../compile/fonts/iosevka-extended.ttf");
 pub static VERSION: &str = include_str!("../compile/version.txt");
 
+pub mod camera;
 pub mod game;
-pub mod render;
+pub mod gpu;
+pub mod input;
+pub mod map;
+pub mod renderer;
+pub mod tile_entity;
 pub mod util;

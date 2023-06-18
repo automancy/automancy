@@ -1,5 +1,6 @@
 use std::mem;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use ractor::concurrency::MpscSender;
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort, SupervisionEvent};
@@ -18,14 +19,21 @@ use automancy_resources::data::item::item_match;
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::script::Script;
 use automancy_resources::ResourceManager;
+use rayon::prelude::*;
 
-use crate::game::map::{Map, MapInfo, TileEntities};
-use crate::game::state::GameMsg::*;
-use crate::game::tile::entity::{TileEntity, TileEntityMsg, TileModifier};
-use crate::game::tile::ticking::{tick, TickUnit};
-use crate::render::camera::FAR;
+use crate::camera::FAR;
+use crate::game::GameMsg::*;
+use crate::map::{Map, MapInfo, TileEntities};
+use crate::tile_entity::{TileEntity, TileEntityMsg, TileModifier};
 
 const UNDO_CACHE_SIZE: usize = 16;
+
+pub const TPS: u64 = 30;
+
+pub const TICK_INTERVAL: Duration = Duration::from_nanos(1_000_000_000 / TPS);
+pub const MAX_ALLOWED_TICK_INTERVAL: Duration = TICK_INTERVAL.saturating_mul(5);
+
+pub type TickUnit = u16;
 
 #[derive(Debug, Clone)]
 pub struct RenderUnit {
@@ -39,19 +47,19 @@ pub type RenderInfo = HashMap<TileCoord, RenderUnit>;
 #[derive(Debug)]
 pub struct GameState {
     /// a count of all the ticks that have happened
-    pub(crate) tick_count: TickUnit,
+    tick_count: TickUnit,
 
     /// the automancy_resources manager
-    pub(crate) resource_man: Arc<ResourceManager>,
+    resource_man: Arc<ResourceManager>,
 
     /// the tile entities
-    pub(crate) tile_entities: TileEntities,
+    tile_entities: TileEntities,
 
     /// the map
     map: Map,
 
     /// render cache
-    pub render_cache: HashMap<(TileUnit, TileCoord), Arc<RenderInfo>>,
+    render_cache: HashMap<(TileUnit, TileCoord), Arc<RenderInfo>>,
     /// is the game stopped
     stopped: bool,
     /// the last time the tiles are updated
@@ -164,7 +172,8 @@ impl Actor for Game {
                     tile_entity.stop(Some("Loading new map".to_string()));
                 });
 
-                let (map, tile_entities) = Map::load(&myself, &resource_man, name.clone()).await;
+                let (map, tile_entities) =
+                    Map::load(myself.clone(), &resource_man, name.clone()).await;
 
                 state.map = map;
                 state.tile_entities = tile_entities;
@@ -196,7 +205,7 @@ impl Actor for Game {
                 return Ok(());
             }
             GetUnloadedMapInfo(map, resource_man, reply) => {
-                let map = Map::load(&myself, &resource_man, map).await.0;
+                let map = Map::load(myself.clone(), &resource_man, map).await.0;
                 reply
                     .send(MapInfo {
                         map_name: map.map_name.clone(),
@@ -280,7 +289,7 @@ impl Actor for Game {
                                 reply.send(PlaceTileResponse::Placed).unwrap();
                             }
 
-                            insert_new_tile(&myself, state, coord, id, tile_modifier).await
+                            insert_new_tile(myself.clone(), state, coord, id, tile_modifier).await
                         };
 
                         if record {
@@ -360,7 +369,7 @@ impl Actor for Game {
                         state.stopped = true;
                     }
                     Undo => {
-                        undo_once(&myself, state);
+                        undo_once(myself.clone(), state);
                     }
                     _ => {}
                 }
@@ -405,7 +414,7 @@ fn stop_tile(state: &mut GameState, coord: TileCoord) -> Option<(Id, TileModifie
 }
 
 /// Undoes the last undo-able action with step stored in the undo steps array
-fn undo_once(game: &ActorRef<GameMsg>, state: &mut GameState) {
+fn undo_once(game: ActorRef<GameMsg>, state: &mut GameState) {
     if state.undo_steps.iter().all(Option::is_none) {
         return;
     }
@@ -424,8 +433,8 @@ fn undo_once(game: &ActorRef<GameMsg>, state: &mut GameState) {
 }
 
 /// Creates a new tile of given type at the given position, and with an initial state.
-pub(crate) async fn new_tile(
-    game: &ActorRef<GameMsg>,
+pub async fn new_tile(
+    game: ActorRef<GameMsg>,
     coord: TileCoord,
     id: Id,
     tile_modifier: TileModifier,
@@ -449,7 +458,7 @@ pub(crate) async fn new_tile(
 
 /// Makes a new tile and add it into both the map and the game
 async fn insert_new_tile(
-    game: &ActorRef<GameMsg>,
+    game: ActorRef<GameMsg>,
     state: &mut GameState,
     coord: TileCoord,
     id: Id,
@@ -522,6 +531,36 @@ fn render_info(state: &mut GameState, center: TileCoord, range: TileUnit) -> Arc
     state.render_cache.insert((range, center), info.clone());
 
     info
+}
+
+fn inner_tick(state: &mut GameState) {
+    state.tile_entities.par_iter().for_each(|(_, tile_entity)| {
+        if let Err(e) = tile_entity.send_message(TileEntityMsg::Tick {
+            resource_man: state.resource_man.clone(),
+            tick_count: state.tick_count,
+        }) {
+            println!("{e}");
+        }
+    });
+
+    state.tick_count = state.tick_count.wrapping_add(1);
+}
+
+/// Runs the game for one tick, logging if the tick is too long.
+pub fn tick(state: &mut GameState) {
+    let start = Instant::now();
+    inner_tick(state);
+    let finish = Instant::now();
+
+    let tick_time = finish - start;
+
+    if tick_time >= MAX_ALLOWED_TICK_INTERVAL {
+        log::warn!(
+            "tick took longer than allowed maximum! tick_time: {:?}, maximum: {:?}",
+            tick_time,
+            MAX_ALLOWED_TICK_INTERVAL
+        );
+    }
 }
 
 impl GameState {

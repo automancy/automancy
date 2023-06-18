@@ -1,6 +1,7 @@
 use std::f32::consts::PI;
 use std::sync::Arc;
 
+use crate::camera::FAR;
 use automancy_defs::cg::{deg, matrix, Float, Matrix4, Point3};
 use automancy_defs::cgmath::{vec3, SquareMatrix};
 use automancy_defs::colors;
@@ -17,6 +18,7 @@ use automancy_defs::rendering::{
 use automancy_resources::data::Data;
 use automancy_resources::ResourceManager;
 use ractor::rpc::{multi_call, CallResult};
+use ractor::ActorRef;
 use tokio::runtime::Runtime;
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
 use vulkano::command_buffer::{
@@ -31,12 +33,10 @@ use vulkano::swapchain::{acquire_next_image, AcquireError};
 use vulkano::sync;
 use vulkano::sync::GpuFuture;
 
-use crate::game::state::{GameMsg, RenderInfo, RenderUnit};
-use crate::game::tile::entity::TileEntityMsg;
-use crate::game::tile::ticking::TickUnit;
-use crate::render::camera::FAR;
-use crate::render::gpu;
-use crate::render::gpu::Gpu;
+use crate::game::{GameMsg, RenderInfo, RenderUnit, TickUnit};
+use crate::gpu;
+use crate::gpu::Gpu;
+use crate::tile_entity::TileEntityMsg;
 use crate::util::actor::call_multi;
 
 pub struct Renderer {
@@ -77,7 +77,11 @@ impl Renderer {
     pub fn render(
         &mut self,
         runtime: &Runtime,
-        setup: &GameSetup,
+        resource_man: Arc<ResourceManager>,
+        camera_pos: Point3,
+        camera_pointing_at: TileCoord,
+        camera_chunk_coord: ChunkCoord,
+        game: ActorRef<GameMsg>,
         map_render_info: &RenderInfo,
         gui_instances: Vec<(InstanceData, Id)>,
         extra_vertices: Vec<GameVertex>,
@@ -85,7 +89,7 @@ impl Renderer {
     ) {
         let update = {
             let new_last_tiles_update = runtime
-                .block_on(setup.game.call(GameMsg::LastTilesUpdate, None))
+                .block_on(game.call(GameMsg::LastTilesUpdate, None))
                 .unwrap()
                 .unwrap();
 
@@ -135,7 +139,7 @@ impl Renderer {
                 if size > 0 {
                     let tile_entities = runtime
                         .block_on(call_multi(
-                            &setup.game,
+                            &game,
                             |reply| {
                                 coords
                                     .into_iter()
@@ -153,7 +157,7 @@ impl Renderer {
                             tile_entities.as_slice(),
                             |reply| {
                                 TileEntityMsg::GetDataValueAndCoord(
-                                    setup.resource_man.registry.data_ids.target,
+                                    resource_man.registry.data_ids.target,
                                     reply,
                                 )
                             },
@@ -188,9 +192,9 @@ impl Renderer {
                 }
             }
 
-            let a = [setup.camera_chunk_coord];
-            let b = setup.camera_chunk_coord.neighbors();
-            let c = setup.camera_chunk_coord.diagonals();
+            let a = [camera_chunk_coord];
+            let b = camera_chunk_coord.neighbors();
+            let c = camera_chunk_coord.diagonals();
 
             let rendered_chunks = vec![a.as_slice(), b.as_slice(), c.as_slice()]
                 .into_iter()
@@ -218,8 +222,7 @@ impl Renderer {
                 }
             }
 
-            if let Some(RenderUnit { instance, .. }) = instances.get_mut(&setup.camera.pointing_at)
-            {
+            if let Some(RenderUnit { instance, .. }) = instances.get_mut(&camera_pointing_at) {
                 *instance = instance.with_color_offset(colors::ORANGE.with_alpha(0.5).to_array())
             }
 
@@ -239,7 +242,6 @@ impl Renderer {
 
         let (width, height) = gpu::window_size(&self.gpu.window);
         let aspect = width / height;
-        let camera_pos = setup.camera.get_pos().cast::<Float>().unwrap();
         let matrix = matrix(camera_pos, aspect as Float, PI);
 
         self.inner_render(

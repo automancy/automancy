@@ -1,6 +1,7 @@
 use std::fs;
 use std::sync::Arc;
 
+use automancy::camera::Camera;
 use automancy_defs::coord::ChunkCoord;
 use automancy_defs::egui::Frame;
 use automancy_defs::flexstr::SharedStr;
@@ -16,14 +17,12 @@ use ractor::concurrency::JoinHandle;
 use ractor::{Actor, ActorRef};
 use vulkano::device::DeviceExtensions;
 
-use automancy::game::map::MapInfo;
-use automancy::game::state::GameMsg;
-use automancy::game::tile::ticking::TICK_INTERVAL;
-use automancy::render::camera::Camera;
-use automancy::render::gpu::{Gpu, RenderAlloc};
-use automancy::render::{gpu, gui};
+use automancy::game::{Game, GameMsg, TICK_INTERVAL};
+use automancy::gpu;
+use automancy::gpu::{Gpu, RenderAlloc};
+use automancy::map::MapInfo;
 
-use crate::LOGO;
+use crate::{gui, LOGO};
 
 /// Stores what the game initializes on startup.
 pub struct GameSetup {
@@ -106,7 +105,7 @@ impl GameSetup {
 
         log::info!("Renderer setup complete");
         // --- setup game ---
-        let map_name = SharedStr::from_static(".mainmenu");
+        let map_name = SharedStr::from_static(".mainmenu"); // TODO DRY principle
 
         let (game, game_handle) = Actor::spawn(
             Some("game".to_string()),
@@ -155,8 +154,8 @@ impl GameSetup {
             .unwrap()
             .filter_map(|f| f.ok())
             .map(|f| f.file_name().to_str().unwrap().to_string())
-            .filter(|f| f.ends_with(".run"))
-            .map(|f| f.strip_suffix(".run").unwrap().to_string())
+            .filter(|f| f.ends_with(".bin"))
+            .map(|f| f.strip_suffix(".bin").unwrap().to_string())
             .filter(|f| !f.starts_with('.'))
             .map(|map| {
                 block_on(self.game.call(

@@ -13,22 +13,19 @@ pub struct ErrorManager {
 pub type GameError = (Id, Vec<String>);
 
 /// Gets the ID of an error along with its arguments and converts it into a human-readable string.
-pub fn error_to_string(err: &GameError, resource_man: &ResourceManager) -> String {
-    let mut string = resource_man.translates.error[&err.0].to_string();
-    string = format(
-        &string,
-        err.1
-            .iter()
-            .map(|s| s.as_str())
-            .collect::<Vec<&str>>()
+pub fn error_to_string((id, args): &GameError, resource_man: &ResourceManager) -> String {
+    format(
+        resource_man.translates.error[id].as_str(),
+        args.into_iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>()
             .as_slice(),
-    );
-    string
+    )
 }
 
 /// Gets the unlocalized key of an error's ID.
-pub fn error_to_key(err: &GameError, resource_man: &ResourceManager) -> String {
-    resource_man.interner.resolve(err.0).unwrap().to_string()
+pub fn error_to_key((id, ..): &GameError, resource_man: &ResourceManager) -> String {
+    resource_man.interner.resolve(*id).unwrap().to_string()
 }
 
 impl ErrorManager {
@@ -36,35 +33,27 @@ impl ErrorManager {
     pub fn push(&self, error: GameError, resource_man: &ResourceManager) {
         log::error!("ERR: {}", error_to_key(&error, resource_man));
         self.queue
-            .as_ref()
             .lock()
             .expect("could not write error")
             .push_front(error);
     }
-    /// Copies the top error off of the queue and returns it, or None if the queue is empty.
+
+    /// Copies the top error of the queue and returns it, or None if the queue is empty.
     pub fn peek(&self) -> Option<GameError> {
         self.queue
-            .as_ref()
             .lock()
             .expect("could not read error")
-            .get(0)
+            .front()
             .cloned()
     }
+
     /// Removes the top error off of the stack and returns it or None if the queue is empty.
     pub fn pop(&self) -> Option<GameError> {
-        self.queue
-            .as_ref()
-            .lock()
-            .expect("could not read error")
-            .pop_front()
+        self.queue.lock().expect("could not read error").pop_front()
     }
+
     /// Returns true if the queue contains errors, otherwise false.
     pub fn has_errors(&self) -> bool {
-        let lock = self.queue.as_ref().try_lock();
-        if let Ok(queue) = lock {
-            !queue.is_empty()
-        } else {
-            false
-        }
+        !self.queue.lock().unwrap().is_empty()
     }
 }

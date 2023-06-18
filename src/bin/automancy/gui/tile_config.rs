@@ -1,3 +1,7 @@
+use automancy::game::GameMsg;
+use automancy::renderer::Renderer;
+use automancy::tile_entity::TileEntityMsg;
+use automancy::util::render::hex_to_normalized;
 use automancy_defs::cg::{DPoint3, Double, Float};
 use automancy_defs::cgmath::point2;
 use automancy_defs::colors;
@@ -13,12 +17,6 @@ use automancy_resources::tile::Tile;
 use automancy_resources::ResourceManager;
 use ractor::ActorRef;
 use tokio::runtime::Runtime;
-
-use automancy::game::state::GameMsg;
-use automancy::game::tile::entity::TileEntityMsg;
-use automancy::render::camera::hex_to_normalized;
-use automancy::render::gui::{draw_item, tile_info};
-use automancy::render::renderer::Renderer;
 
 use crate::event::EventLoopStorage;
 use crate::gui::{draw_item, make_line, searchable_id};
@@ -202,6 +200,7 @@ fn node(
 fn storage(
     ui: &mut Ui,
     setup: &GameSetup,
+    loop_store: &mut EventLoopStorage,
     data: &DataMap,
     tile_entity: ActorRef<TileEntityMsg>,
     tile_info: &Tile,
@@ -303,6 +302,7 @@ fn script(
     ui: &mut Ui,
     setup: &GameSetup,
     renderer: &Renderer,
+    loop_store: &mut EventLoopStorage,
     data: &DataMap,
     tile_entity: ActorRef<TileEntityMsg>,
     tile_info: &Tile,
@@ -452,8 +452,16 @@ pub fn tile_config(
                 let window_size = setup.window.inner_size();
                 let tile_info = setup.resource_man.registry.tile(id).unwrap();
 
-                script(ui, setup, renderer, &data, tile_entity.clone(), tile_info);
-                storage(ui, setup, &data, tile_entity.clone(), tile_info);
+                script(
+                    ui,
+                    setup,
+                    renderer,
+                    loop_store,
+                    &data,
+                    tile_entity.clone(),
+                    tile_info,
+                );
+                storage(ui, setup, loop_store, &data, tile_entity.clone(), tile_info);
                 target(ui, setup, &data, tile_entity.clone(), id);
                 node(runtime, setup, config_open, extra_vertices, window_size, id);
                 master_node(ui, setup, loop_store, config_open, id);

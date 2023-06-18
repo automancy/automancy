@@ -19,9 +19,8 @@ use serde::{Deserialize, Serialize};
 use zstd::{Decoder, Encoder};
 
 use crate::game;
-use crate::game::state::GameMsg;
-use crate::game::tile::entity::TileEntityMsg::{GetData, SetData};
-use crate::game::tile::entity::{TileEntityMsg, TileModifier};
+use crate::game::GameMsg;
+use crate::tile_entity::{TileEntityMsg, TileModifier};
 
 pub const MAP_PATH: &str = "map";
 
@@ -83,7 +82,7 @@ impl Map {
     }
     /// Gets the path to a map from its name.
     pub fn path(map_name: &str) -> PathBuf {
-        PathBuf::from(format!("{MAP_PATH}/{map_name}.run"))
+        PathBuf::from(format!("{MAP_PATH}/{map_name}.bin"))
     }
     /// Saves a map to disk.
     pub async fn save(&self, interner: &Interner, tile_entities: &TileEntities) {
@@ -104,7 +103,11 @@ impl Map {
                     id_map.insert(*id, interner.resolve(*id).unwrap().to_string());
                 }
 
-                let data = tile_entity.call(GetData, None).await.unwrap().unwrap();
+                let data = tile_entity
+                    .call(TileEntityMsg::GetData, None)
+                    .await
+                    .unwrap()
+                    .unwrap();
                 let data = data.to_raw(interner);
 
                 // tile_entity.stop(None);
@@ -127,7 +130,7 @@ impl Map {
     }
     /// Loads a map from disk.
     pub async fn load(
-        game: &ActorRef<GameMsg>,
+        game: ActorRef<GameMsg>,
         resource_man: &ResourceManager,
         map_name: String,
     ) -> (Self, TileEntities) {
@@ -176,11 +179,13 @@ impl Map {
                 .get(&id)
                 .and_then(|id| resource_man.interner.get(id.as_str()))
             {
-                let tile_entity = game::state::new_tile(game, coord, id, tile_modifier).await;
+                let tile_entity = game::new_tile(game.clone(), coord, id, tile_modifier).await;
                 let data = data.to_data(resource_man);
 
                 data.0.into_iter().for_each(|(key, value)| {
-                    tile_entity.send_message(SetData(key, value)).unwrap();
+                    tile_entity
+                        .send_message(TileEntityMsg::SetData(key, value))
+                        .unwrap();
                 });
 
                 tiles.insert(coord, (id, tile_modifier));

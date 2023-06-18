@@ -2,6 +2,8 @@ use std::error::Error;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use automancy::camera::FAR;
+use automancy::game::{GameMsg, PlaceTileResponse};
 use automancy_defs::cg::{DPoint3, Double, Float, Matrix4};
 use automancy_defs::cgmath::{point2, vec3, EuclideanSpace};
 use automancy_defs::colors::WithAlpha;
@@ -20,13 +22,14 @@ use futures::channel::mpsc;
 use futures::executor::block_on;
 use tokio::runtime::Runtime;
 
-use automancy::game::state::{GameMsg, PlaceTileResponse};
-use automancy::game::tile::entity::{TileEntityMsg, TileModifier};
-use automancy::render::camera::{hex_to_normalized, screen_to_normalized, screen_to_world, FAR};
-use automancy::render::gui::{GuiState, PopupState};
-use automancy::render::input::InputHandler;
-use automancy::render::renderer::Renderer;
-use automancy::render::{gui, input};
+use crate::gui::{
+    debug, error, make_line, menu, tile_config, tile_info, tile_selection, GuiState, PopupState,
+};
+use automancy::input;
+use automancy::input::InputHandler;
+use automancy::renderer::Renderer;
+use automancy::tile_entity::{TileEntityMsg, TileModifier};
+use automancy::util::render::{hex_to_normalized, screen_to_normalized, screen_to_world};
 
 use crate::setup::GameSetup;
 
@@ -351,19 +354,19 @@ pub fn on_event(
             loop_store.input_handler.pause_pressed = false;
         }
         match loop_store.gui_state {
-            GuiState::MainMenu => gui::main_menu(setup, gui, control_flow, loop_store),
+            GuiState::MainMenu => menu::main_menu(setup, gui, control_flow, loop_store),
             GuiState::MapLoad => {
-                gui::map_load_menu(setup, gui, loop_store, renderer);
+                menu::map_load_menu(setup, gui, loop_store, renderer);
             }
             GuiState::Options => {
-                gui::options_menu(setup, gui, loop_store);
+                menu::options_menu(setup, gui, loop_store);
             }
             GuiState::Paused => {
-                gui::pause_menu(setup, gui, loop_store, renderer);
+                menu::pause_menu(setup, gui, loop_store, renderer);
             }
             GuiState::Ingame => {
                 // tile_selections
-                gui::tile_selections(
+                tile_selection::tile_selections(
                     setup,
                     renderer,
                     gui,
@@ -372,10 +375,10 @@ pub fn on_event(
                 );
 
                 // tile_info
-                gui::tile_info(runtime, setup, gui);
+                tile_info::tile_info(runtime, setup, gui);
 
                 // tile_config
-                gui::tile_config(
+                tile_config::tile_config(
                     runtime,
                     setup,
                     loop_store,
@@ -447,22 +450,29 @@ pub fn on_event(
                         loop_store.input_handler.main_pos,
                     );
 
-                    extra_vertices.append(&mut gui::line(a, b, colors::RED));
+                    extra_vertices.append(&mut make_line(a, b, colors::RED));
                 }
             }
         }
         match &loop_store.popup_state {
             PopupState::None => {}
-            PopupState::MapCreate => gui::map_create_menu(setup, gui, loop_store, renderer),
+            PopupState::MapCreate => menu::map_create_menu(setup, gui, loop_store, renderer),
             PopupState::MapDeleteConfirmation(map) => {
-                gui::map_delete_confirmation(setup, gui, loop_store, map.clone());
+                menu::map_delete_confirmation(setup, gui, loop_store, map.clone());
             }
         }
         if loop_store.input_handler.debug_pressed {
-            gui::debugger(setup, gui, runtime, &setup.game, renderer, loop_store);
+            debug::debugger(
+                setup,
+                gui,
+                runtime,
+                setup.game.clone(),
+                renderer,
+                loop_store,
+            );
         }
         if resource_man.error_man.has_errors() {
-            gui::error_popup(setup, gui);
+            error::error_popup(setup, gui);
         }
         let render_info = block_on(setup.game.call(
             |reply| GameMsg::RenderInfoRequest {
@@ -476,7 +486,11 @@ pub fn on_event(
 
         renderer.render(
             runtime,
-            setup,
+            setup.resource_man.clone(),
+            setup.camera.get_pos().cast().unwrap(),
+            setup.camera.pointing_at,
+            setup.camera_chunk_coord,
+            setup.game.clone(),
             &render_info,
             gui_instances,
             extra_vertices,
