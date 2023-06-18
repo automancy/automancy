@@ -7,17 +7,16 @@ use std::{
     path::PathBuf,
 };
 
-use lazy_static::lazy_static;
-use ractor::ActorRef;
-use serde::{Deserialize, Serialize};
-use zstd::{Decoder, Encoder};
-
 use automancy_defs::coord::TileCoord;
 use automancy_defs::id::{Id, Interner};
 use automancy_defs::log;
 use automancy_resources::chrono::{Local, Utc};
 use automancy_resources::data::{DataMap, DataMapRaw};
 use automancy_resources::ResourceManager;
+use lazy_static::lazy_static;
+use ractor::ActorRef;
+use serde::{Deserialize, Serialize};
+use zstd::{Decoder, Encoder};
 
 use crate::game;
 use crate::game::state::GameMsg;
@@ -84,7 +83,7 @@ impl Map {
     }
     /// Gets the path to a map from its name.
     pub fn path(map_name: &str) -> PathBuf {
-        PathBuf::from(format!("{MAP_PATH}/{map_name}.bin"))
+        PathBuf::from(format!("{MAP_PATH}/{map_name}.run"))
     }
     /// Saves a map to disk.
     pub async fn save(&self, interner: &Interner, tile_entities: &TileEntities) {
@@ -219,6 +218,7 @@ impl Map {
         name
     }
 }
+
 lazy_static! {
     static ref WIN_ILLEGAL_NAMES: HashSet<&'static str> = HashSet::from([
         "CON", "PRN", "AUX", "CLOCK$", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6",

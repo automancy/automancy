@@ -1,21 +1,6 @@
 use std::f32::consts::PI;
 use std::sync::Arc;
 
-use ractor::rpc::{multi_call, CallResult};
-use tokio::runtime::Runtime;
-use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
-use vulkano::command_buffer::{
-    AutoCommandBufferBuilder, CommandBufferInheritanceInfo, CommandBufferUsage,
-    RenderPassBeginInfo, SubpassContents,
-};
-use vulkano::format::ClearValue;
-use vulkano::memory::allocator::{AllocationCreateInfo, MemoryUsage};
-use vulkano::pipeline::graphics::viewport::Scissor;
-use vulkano::pipeline::{Pipeline, PipelineBindPoint};
-use vulkano::swapchain::{acquire_next_image, AcquireError};
-use vulkano::sync;
-use vulkano::sync::GpuFuture;
-
 use automancy_defs::cg::{deg, matrix, Float, Matrix4, Point3};
 use automancy_defs::cgmath::{vec3, SquareMatrix};
 use automancy_defs::colors;
@@ -31,8 +16,21 @@ use automancy_defs::rendering::{
 };
 use automancy_resources::data::Data;
 use automancy_resources::ResourceManager;
+use ractor::rpc::{multi_call, CallResult};
+use tokio::runtime::Runtime;
+use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
+use vulkano::command_buffer::{
+    AutoCommandBufferBuilder, CommandBufferInheritanceInfo, CommandBufferUsage,
+    RenderPassBeginInfo, SubpassContents,
+};
+use vulkano::format::ClearValue;
+use vulkano::memory::allocator::{AllocationCreateInfo, MemoryUsage};
+use vulkano::pipeline::graphics::viewport::Scissor;
+use vulkano::pipeline::{Pipeline, PipelineBindPoint};
+use vulkano::swapchain::{acquire_next_image, AcquireError};
+use vulkano::sync;
+use vulkano::sync::GpuFuture;
 
-use crate::game::run::setup::GameSetup;
 use crate::game::state::{GameMsg, RenderInfo, RenderUnit};
 use crate::game::tile::entity::TileEntityMsg;
 use crate::game::tile::ticking::TickUnit;

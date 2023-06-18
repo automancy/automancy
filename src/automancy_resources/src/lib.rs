@@ -19,8 +19,8 @@ use kira::sound::static_sound::StaticSoundData;
 use kira::track::TrackHandle;
 use walkdir::WalkDir;
 
-pub extern crate chrono;
-pub extern crate kira;
+pub use chrono;
+pub use kira;
 
 pub mod audio;
 pub mod data;

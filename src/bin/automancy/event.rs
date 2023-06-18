@@ -2,11 +2,6 @@ use std::error::Error;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use fuse_rust::Fuse;
-use futures::channel::mpsc;
-use futures::executor::block_on;
-use tokio::runtime::Runtime;
-
 use automancy_defs::cg::{DPoint3, Double, Float, Matrix4};
 use automancy_defs::cgmath::{point2, vec3, EuclideanSpace};
 use automancy_defs::colors::WithAlpha;
@@ -20,15 +15,20 @@ use automancy_defs::winit::event_loop::ControlFlow;
 use automancy_defs::{colors, log};
 use automancy_resources::data::item::Item;
 use automancy_resources::data::Data;
+use fuse_rust::Fuse;
+use futures::channel::mpsc;
+use futures::executor::block_on;
+use tokio::runtime::Runtime;
 
-use crate::game::run::setup::GameSetup;
-use crate::game::state::{GameMsg, PlaceTileResponse};
-use crate::game::tile::entity::{TileEntityMsg, TileModifier};
-use crate::render::camera::{hex_to_normalized, screen_to_normalized, screen_to_world, FAR};
-use crate::render::gui::{GuiState, PopupState};
-use crate::render::input::InputHandler;
-use crate::render::renderer::Renderer;
-use crate::render::{gui, input};
+use automancy::game::state::{GameMsg, PlaceTileResponse};
+use automancy::game::tile::entity::{TileEntityMsg, TileModifier};
+use automancy::render::camera::{hex_to_normalized, screen_to_normalized, screen_to_world, FAR};
+use automancy::render::gui::{GuiState, PopupState};
+use automancy::render::input::InputHandler;
+use automancy::render::renderer::Renderer;
+use automancy::render::{gui, input};
+
+use crate::setup::GameSetup;
 
 /// Stores information that lives for the entire lifetime of the session, and is not dropped at the end of one event cycle or handled elsewhere.
 pub struct EventLoopStorage {

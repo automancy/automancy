@@ -1,10 +1,13 @@
 use env_logger::Env;
 use tokio::runtime::Runtime;
 
-use automancy::game::run::setup::GameSetup;
-use automancy::render::event::{on_event, EventLoopStorage};
-use automancy::render::gui;
 use automancy::render::renderer::Renderer;
+
+pub static LOGO: &[u8] = include_bytes!("../../compile/logo.png");
+
+mod event;
+mod gui;
+mod setup;
 
 fn main() {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();

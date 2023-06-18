@@ -6,6 +6,9 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[[bin]]
+name = "automancy"
+
 [dependencies]
 automancy_resources = { path = "src/automancy_resources" }
 automancy_defs = { path = "src/automancy_defs" }
