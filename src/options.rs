@@ -1,10 +1,12 @@
-use crate::render::input::KeyActions;
-use automancy_defs::hashbrown::HashMap;
-use automancy_defs::winit::event::VirtualKeyCode;
-use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write};
+
+use automancy_defs::hashbrown::HashMap;
+use automancy_defs::winit::event::VirtualKeyCode;
+use serde::{Deserialize, Serialize};
+
+use crate::input::KeyActions;
 
 #[derive(Serialize, Deserialize)]
 pub struct Options {

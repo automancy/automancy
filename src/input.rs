@@ -225,9 +225,12 @@ impl InputHandler {
             }
             GameWindowEvent::KeyboardEvent { input } => {
                 if input.state == Pressed && input.virtual_keycode.is_some() {
-                    let action = self.keymap.get(&(input.virtual_keycode.unwrap() as u32));
-                    if action.is_some() {
-                        self.set_action(action.unwrap());
+                    let action = self
+                        .keymap
+                        .get(&(input.virtual_keycode.unwrap() as u32))
+                        .cloned();
+                    if let Some(action) = action {
+                        self.set_action(&action);
                     }
                 }
             }
@@ -245,6 +248,6 @@ impl InputHandler {
         *self.keystates.get_mut(action).unwrap() = true;
     }
     pub fn key_pressed(&self, action: &KeyActions) -> bool {
-        self.keystates.get(action).unwrap().clone()
+        *self.keystates.get(action).unwrap()
     }
 }
