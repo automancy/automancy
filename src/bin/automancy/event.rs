@@ -1,5 +1,5 @@
 use std::error::Error;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use automancy::camera::FAR;
@@ -26,7 +26,7 @@ use crate::gui::{
     debug, error, make_line, menu, tile_config, tile_info, tile_selection, GuiState, PopupState,
 };
 use automancy::input;
-use automancy::input::InputHandler;
+use automancy::input::{actions, InputHandler, KeyActions};
 use automancy::renderer::Renderer;
 use automancy::tile_entity::{TileEntityMsg, TileModifier};
 use automancy::util::render::{hex_to_normalized, screen_to_normalized, screen_to_world};
@@ -61,6 +61,7 @@ pub struct EventLoopStorage {
 
     pub gui_state: GuiState,
     pub popup_state: PopupState,
+    pub show_debugger: bool,
 }
 
 impl Default for EventLoopStorage {
@@ -80,6 +81,7 @@ impl Default for EventLoopStorage {
 
             gui_state: GuiState::MainMenu,
             popup_state: PopupState::None,
+            show_debugger: false,
         }
     }
 }
@@ -124,7 +126,6 @@ pub fn on_event(
     let mut extra_vertices = vec![];
 
     let resource_man = setup.resource_man.clone();
-
     match &event {
         Event::WindowEvent {
             event: WindowEvent::CloseRequested,
@@ -172,7 +173,7 @@ pub fn on_event(
 
         setup
             .camera
-            .input_handler(loop_store.input_handler, ignore_move);
+            .input_handler(&loop_store.input_handler, ignore_move);
 
         {
             let camera_chunk_coord: ChunkCoord = setup.camera.get_tile_coord().into();
@@ -184,7 +185,7 @@ pub fn on_event(
             }
         }
 
-        if loop_store.input_handler.exit_pressed {
+        if loop_store.input_handler.key_pressed(&actions::PAUSE) {
             // cancel one by one
             if loop_store.selected_id.take().is_none() {
                 loop_store.linking_tile.take();
@@ -323,7 +324,8 @@ pub fn on_event(
         }
     }
 
-    if loop_store.input_handler.control_held && loop_store.input_handler.undo_pressed {
+    if loop_store.input_handler.control_held && loop_store.input_handler.key_pressed(&actions::UNDO)
+    {
         setup.game.send_message(GameMsg::Undo).unwrap();
     }
 
@@ -340,7 +342,7 @@ pub fn on_event(
         let (selection_send, mut selection_recv) = mpsc::channel(1);
 
         gui.begin_frame();
-        if loop_store.input_handler.pause_pressed {
+        if loop_store.input_handler.key_pressed(&actions::PAUSE) {
             if loop_store.gui_state == GuiState::Ingame {
                 block_on(setup.game.call(
                     |reply| GameMsg::SaveMap(setup.resource_man.clone(), reply),
@@ -351,7 +353,6 @@ pub fn on_event(
             } else if loop_store.gui_state == GuiState::Paused {
                 loop_store.gui_state = GuiState::Ingame;
             }
-            loop_store.input_handler.pause_pressed = false;
         }
         match loop_store.gui_state {
             GuiState::MainMenu => menu::main_menu(setup, gui, control_flow, loop_store),
@@ -461,7 +462,7 @@ pub fn on_event(
                 menu::map_delete_confirmation(setup, gui, loop_store, map.clone());
             }
         }
-        if loop_store.input_handler.debug_pressed {
+        if loop_store.input_handler.key_pressed(&input::actions::DEBUG) {
             debug::debugger(
                 setup,
                 gui,

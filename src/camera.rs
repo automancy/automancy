@@ -47,7 +47,7 @@ impl Camera {
 
 impl Camera {
     /// Updates the movement state of the camera based on control input.
-    pub fn input_handler(&mut self, input: InputHandler, ignore_move: bool) {
+    pub fn input_handler(&mut self, input: &InputHandler, ignore_move: bool) {
         if !ignore_move && input.main_held {
             if let Some(delta) = input.main_move {
                 self.on_moving_main(delta);

@@ -1,20 +1,52 @@
 use automancy_defs::cg::{DPoint2, DVector2, Double};
 use automancy_defs::cgmath::{point2, vec2};
+use automancy_defs::egui::Key;
 use automancy_defs::hashbrown::HashMap;
-use automancy_defs::winit::event::ElementState::Pressed;
+use automancy_defs::winit::event::ElementState::{Pressed, Released};
 use automancy_defs::winit::event::{
-    DeviceEvent, KeyboardInput, ModifiersState, MouseButton, MouseScrollDelta, VirtualKeyCode,
-    WindowEvent,
+    DeviceEvent, ElementState, KeyboardInput, ModifiersState, MouseButton, MouseScrollDelta,
+    VirtualKeyCode, WindowEvent,
 };
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub enum KeyActions {
+    PAUSE,
     UNDO,
     DEBUG,
-    PAUSE,
 }
+
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
+pub enum PressTypes {
+    ONESHOT, // returns true when the key is pressed once and will not press again until released
+    HOLD,    // returns true whenever the key is down
+    TOGGLE,  // pressing the key will either toggle it on or off
+}
+
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
+pub struct KeyAction {
+    pub action: KeyActions,
+    pub press_type: PressTypes,
+}
+
+pub mod actions {
+    use super::{KeyAction, KeyActions, PressTypes};
+
+    pub static PAUSE: KeyAction = KeyAction {
+        action: KeyActions::PAUSE,
+        press_type: PressTypes::ONESHOT,
+    };
+    pub static UNDO: KeyAction = KeyAction {
+        action: KeyActions::UNDO,
+        press_type: PressTypes::ONESHOT,
+    };
+    pub static DEBUG: KeyAction = KeyAction {
+        action: KeyActions::DEBUG,
+        press_type: PressTypes::TOGGLE,
+    };
+}
+
 /// The various controls of the game.
 #[derive(Debug, Copy, Clone)]
 pub enum GameWindowEvent {
@@ -114,20 +146,18 @@ pub fn convert_input(
     if let Some(event) = device_event {
         use GameDeviceEvent::*;
 
-        match event {
-            DeviceEvent::MouseMotion { delta } => {
-                let (x, y) = delta;
+        if let DeviceEvent::MouseMotion { delta } = event {
+            let (x, y) = delta;
 
-                let delta = vec2(*x, -*y);
+            let delta = vec2(*x, -*y);
 
-                device = MainMove { delta };
-            }
-            _ => {}
+            device = MainMove { delta };
         }
     }
 
     GameInputEvent { window, device }
 }
+
 #[derive(Debug, Clone)]
 pub struct InputHandler {
     pub main_pos: DPoint2,
@@ -142,8 +172,10 @@ pub struct InputHandler {
     pub main_pressed: bool,
     pub alternate_pressed: bool,
 
-    pub keymap: HashMap<u32, KeyActions>,
-    pub keystates: HashMap<KeyActions, bool>,
+    pub keymap: HashMap<u32, KeyAction>,
+    pub keystates: HashMap<KeyAction, bool>,
+
+    pub previous: Option<VirtualKeyCode>,
 }
 
 impl Default for InputHandler {
@@ -162,32 +194,27 @@ impl Default for InputHandler {
             alternate_pressed: false,
 
             keymap: HashMap::from([
-                (VirtualKeyCode::Z as u32, KeyActions::UNDO),
-                (VirtualKeyCode::Escape as u32, KeyActions::PAUSE),
-                (VirtualKeyCode::F3 as u32, KeyActions::DEBUG),
+                (VirtualKeyCode::Z as u32, actions::UNDO),
+                (VirtualKeyCode::Escape as u32, actions::PAUSE),
+                (VirtualKeyCode::F3 as u32, actions::DEBUG),
             ]),
             keystates: HashMap::from([
-                (KeyActions::UNDO, false),
-                (KeyActions::DEBUG, false),
-                (KeyActions::PAUSE, false),
+                (actions::UNDO, false),
+                (actions::DEBUG, false),
+                (actions::PAUSE, false),
             ]),
+
+            previous: None,
         }
     }
 }
-lazy_static! {
-    static ref DEFAULT_KEYSTATE: HashMap<KeyActions, bool> = HashMap::from([
-        (KeyActions::UNDO, false),
-        (KeyActions::DEBUG, false),
-        (KeyActions::PAUSE, false),
-    ]);
-}
+
 impl InputHandler {
     pub fn reset(&mut self) {
         self.main_pressed = false;
         self.alternate_pressed = false;
         self.main_move = None;
         self.scroll = None;
-        self.keystates = DEFAULT_KEYSTATE.clone(); //i feel like a clone here is okay
     }
 
     pub fn update(&mut self, event: GameInputEvent) {
@@ -224,30 +251,54 @@ impl InputHandler {
                 }
             }
             GameWindowEvent::KeyboardEvent { input } => {
-                if input.state == Pressed && input.virtual_keycode.is_some() {
-                    let action = self
-                        .keymap
-                        .get(&(input.virtual_keycode.unwrap() as u32))
-                        .cloned();
-                    if let Some(action) = action {
-                        self.set_action(&action);
-                    }
-                }
+                self.handle_key(input);
+                self.previous = input.virtual_keycode;
             }
             GameWindowEvent::None => {}
         }
-
-        match event.device {
-            GameDeviceEvent::MainMove { delta } => {
-                self.main_move = Some(delta);
-            }
-            _ => {}
+        if let GameDeviceEvent::MainMove { delta } = event.device {
+            self.main_move = Some(delta);
         }
     }
-    pub fn set_action(&mut self, action: &KeyActions) {
-        *self.keystates.get_mut(action).unwrap() = true;
+
+    pub fn handle_key(&mut self, input: KeyboardInput) {
+        println!("{:?} {:?}", self.keystates, &input);
+        let action = self.keymap.get(&(input.virtual_keycode.unwrap() as u32));
+        if action.is_none() {
+            return;
+        }
+        let action = action.unwrap();
+        match action.press_type {
+            PressTypes::ONESHOT => match input.state {
+                Pressed => {
+                    if input.virtual_keycode != self.previous {
+                        self.keystates.insert(*action, true);
+                    }
+                }
+                Released => {
+                    self.previous = None;
+                    self.keystates.insert(*action, false);
+                }
+            },
+            PressTypes::HOLD => match input.state {
+                Pressed => {
+                    self.keystates.insert(*action, true);
+                }
+                Released => {
+                    self.keystates.insert(*action, false);
+                }
+            },
+            PressTypes::TOGGLE => match input.state {
+                Pressed => {
+                    let curr = *self.keystates.get(action).unwrap();
+                    self.keystates.insert(*action, !curr);
+                }
+                Released => {}
+            },
+        }
     }
-    pub fn key_pressed(&self, action: &KeyActions) -> bool {
+
+    pub fn key_pressed(&self, action: &KeyAction) -> bool {
         *self.keystates.get(action).unwrap()
     }
 }
