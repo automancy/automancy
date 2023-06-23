@@ -1,11 +1,13 @@
-use crate::event::{on_event, EventLoopStorage};
-use crate::setup::GameSetup;
-use automancy::renderer::Renderer;
 use env_logger::Env;
 use tokio::runtime::Runtime;
 
-pub static LOGO: &[u8] = include_bytes!("../../../compile/logo.png");
-pub static IOSEVKA_FONT: &[u8] = include_bytes!("../../../compile/fonts/iosevka-extended.ttf");
+use automancy::renderer::Renderer;
+
+use crate::event::{on_event, EventLoopStorage};
+use crate::setup::GameSetup;
+
+pub static LOGO: &[u8] = include_bytes!("assets/logo.png");
+pub static IOSEVKA_FONT: &[u8] = include_bytes!("fonts/iosevka-extended.ttf");
 
 mod event;
 mod gui;
