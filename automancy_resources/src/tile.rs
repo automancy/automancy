@@ -1,10 +1,12 @@
-use automancy_defs::id::{Id, IdRaw};
-use automancy_defs::log;
-use serde::Deserialize;
-use serde_json;
 use std::ffi::OsStr;
 use std::fs::read_to_string;
 use std::path::Path;
+
+use serde::Deserialize;
+use serde_json;
+
+use automancy_defs::id::{Id, IdRaw};
+use automancy_defs::log;
 
 use crate::data::{DataMap, DataMapRaw};
 use crate::{load_recursively, ResourceManager, JSON_EXT};

@@ -1,8 +1,10 @@
-use crate::{format, ResourceManager};
-use automancy_defs::id::Id;
-use automancy_defs::log;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
+
+use automancy_defs::id::Id;
+use automancy_defs::log;
+
+use crate::{format, ResourceManager};
 
 /// An ErrorManager contains a queue of errors to be displayed.
 #[derive(Default)]
@@ -16,7 +18,7 @@ pub type GameError = (Id, Vec<String>);
 pub fn error_to_string((id, args): &GameError, resource_man: &ResourceManager) -> String {
     format(
         resource_man.translates.error[id].as_str(),
-        args.into_iter()
+        args.iter()
             .map(String::as_str)
             .collect::<Vec<_>>()
             .as_slice(),

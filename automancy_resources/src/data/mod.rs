@@ -1,11 +1,14 @@
-use crate::data::inventory::{Inventory, InventoryRaw};
-use crate::data::stack::ItemAmount;
-use crate::ResourceManager;
+use std::collections::BTreeMap;
+
+use serde::{Deserialize, Serialize};
+
 use automancy_defs::coord::TileCoord;
 use automancy_defs::hashbrown::HashMap;
 use automancy_defs::id::{Id, IdRaw, Interner};
-use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+
+use crate::data::inventory::{Inventory, InventoryRaw};
+use crate::data::stack::ItemAmount;
+use crate::ResourceManager;
 
 pub mod inventory;
 pub mod item;

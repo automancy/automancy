@@ -1,35 +1,43 @@
 use std::sync::Arc;
 
 use slice_group_by::GroupBy;
-use vulkano::buffer::{Buffer, BufferCreateInfo, Subbuffer};
-use vulkano::command_buffer::allocator::{
+
+use automancy_defs::cg::{Double, Float};
+use automancy_defs::id::Id;
+use automancy_defs::rendering::{GameUBO, GameVertex, LightInfo, OverlayUBO, RawInstanceData};
+use automancy_defs::vulkano::buffer::{Buffer, BufferCreateInfo, Subbuffer};
+use automancy_defs::vulkano::command_buffer::allocator::{
     StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo,
 };
-use vulkano::command_buffer::PrimaryAutoCommandBuffer;
-use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
-use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
-use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType};
-use vulkano::device::{DeviceCreateInfo, DeviceExtensions, Features, QueueCreateInfo, QueueFlags};
-use vulkano::format::{Format, NumericType};
-use vulkano::image::{ImageAccess, ImageUsage, SampleCount, SampleCount::Sample4};
-use vulkano::instance::{Instance, InstanceCreateInfo};
-use vulkano::memory::allocator::{
+use automancy_defs::vulkano::command_buffer::PrimaryAutoCommandBuffer;
+use automancy_defs::vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
+use automancy_defs::vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
+use automancy_defs::vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType};
+use automancy_defs::vulkano::device::{
+    DeviceCreateInfo, DeviceExtensions, Features, QueueCreateInfo, QueueFlags,
+};
+use automancy_defs::vulkano::format::{Format, NumericType};
+use automancy_defs::vulkano::image::{ImageAccess, ImageUsage, SampleCount, SampleCount::Sample4};
+use automancy_defs::vulkano::instance::{Instance, InstanceCreateInfo};
+use automancy_defs::vulkano::memory::allocator::{
     AllocationCreateInfo, MemoryAllocator, MemoryUsage, StandardMemoryAllocator,
 };
-use vulkano::pipeline::graphics::depth_stencil::DepthStencilState;
-use vulkano::pipeline::graphics::input_assembly::{InputAssemblyState, PrimitiveTopology};
-use vulkano::pipeline::graphics::multisample::MultisampleState;
-use vulkano::pipeline::graphics::rasterization::RasterizationState;
-use vulkano::pipeline::graphics::vertex_input::Vertex;
-use vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
-use vulkano::pipeline::{GraphicsPipeline, Pipeline};
-use vulkano::render_pass::Subpass;
-use vulkano::swapchain::{
+use automancy_defs::vulkano::pipeline::graphics::depth_stencil::DepthStencilState;
+use automancy_defs::vulkano::pipeline::graphics::input_assembly::{
+    InputAssemblyState, PrimitiveTopology,
+};
+use automancy_defs::vulkano::pipeline::graphics::multisample::MultisampleState;
+use automancy_defs::vulkano::pipeline::graphics::rasterization::RasterizationState;
+use automancy_defs::vulkano::pipeline::graphics::vertex_input::Vertex;
+use automancy_defs::vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
+use automancy_defs::vulkano::pipeline::{GraphicsPipeline, Pipeline};
+use automancy_defs::vulkano::render_pass::Subpass;
+use automancy_defs::vulkano::swapchain::{
     Swapchain, SwapchainAcquireFuture, SwapchainCreateInfo, SwapchainCreationError,
     SwapchainPresentInfo,
 };
-use vulkano::sync::FlushError;
-use vulkano::{
+use automancy_defs::vulkano::sync::FlushError;
+use automancy_defs::vulkano::{
     buffer::BufferUsage,
     command_buffer::DrawIndexedIndirectCommand,
     device::{Device, Queue},
@@ -40,61 +48,15 @@ use vulkano::{
     sync::GpuFuture,
     VulkanLibrary,
 };
-use vulkano_win::create_surface_from_winit;
-
-use automancy_defs::cg::{Double, Float};
-use automancy_defs::id::Id;
-use automancy_defs::log;
-use automancy_defs::rendering::{GameUBO, GameVertex, LightInfo, OverlayUBO, RawInstanceData};
+use automancy_defs::vulkano_win::create_surface_from_winit;
 use automancy_defs::winit::event_loop::EventLoop;
 use automancy_defs::winit::window::{Icon, WindowBuilder};
 use automancy_defs::winit::{dpi::LogicalSize, window::Window};
+use automancy_defs::{log, shaders, vulkano_win};
 use automancy_resources::ResourceManager;
 
-mod game_vert_shader {
-    vulkano_shaders::shader! {
-        ty: "vertex",
-        path: "compile/shaders/game_vert.glsl"
-    }
-}
-
-mod game_frag_shader {
-    vulkano_shaders::shader! {
-        ty: "fragment",
-        path: "compile/shaders/game_frag.glsl"
-    }
-}
-
-mod gui_vert_shader {
-    vulkano_shaders::shader! {
-        ty: "vertex",
-        path: "compile/shaders/gui_vert.glsl"
-    }
-}
-
-mod gui_frag_shader {
-    vulkano_shaders::shader! {
-        ty: "fragment",
-        path: "compile/shaders/gui_frag.glsl"
-    }
-}
-
-mod overlay_vert_shader {
-    vulkano_shaders::shader! {
-        ty: "vertex",
-        path: "compile/shaders/overlay_vert.glsl"
-    }
-}
-
-mod overlay_frag_shader {
-    vulkano_shaders::shader! {
-        ty: "fragment",
-        path: "compile/shaders/overlay_frag.glsl"
-    }
-}
-
 fn create_render_pass(swapchain: Arc<Swapchain>, device: Arc<Device>) -> Arc<RenderPass> {
-    vulkano::ordered_passes_renderpass!(
+    automancy_defs::vulkano::ordered_passes_renderpass!(
         device,
         attachments: {
             color_resolve: {
@@ -131,8 +93,8 @@ fn create_render_pass(swapchain: Arc<Swapchain>, device: Arc<Device>) -> Arc<Ren
 }
 
 pub fn create_game_pipeline(device: Arc<Device>, subpass: &Subpass) -> Arc<GraphicsPipeline> {
-    let vs = game_vert_shader::load(device.clone()).unwrap();
-    let fs = game_frag_shader::load(device.clone()).unwrap();
+    let vs = shaders::game_vert_shader::load(device.clone()).unwrap();
+    let fs = shaders::game_frag_shader::load(device.clone()).unwrap();
 
     let pipeline = GraphicsPipeline::start()
         .vertex_shader(vs.entry_point("main").unwrap(), ())
@@ -152,8 +114,8 @@ pub fn create_game_pipeline(device: Arc<Device>, subpass: &Subpass) -> Arc<Graph
 }
 
 pub fn create_gui_pipeline(device: Arc<Device>, subpass: &Subpass) -> Arc<GraphicsPipeline> {
-    let vs = gui_vert_shader::load(device.clone()).unwrap();
-    let fs = gui_frag_shader::load(device.clone()).unwrap();
+    let vs = shaders::gui_vert_shader::load(device.clone()).unwrap();
+    let fs = shaders::gui_frag_shader::load(device.clone()).unwrap();
 
     let pipeline = GraphicsPipeline::start()
         .vertex_shader(vs.entry_point("main").unwrap(), ())
@@ -177,8 +139,8 @@ pub fn create_gui_pipeline(device: Arc<Device>, subpass: &Subpass) -> Arc<Graphi
 }
 
 pub fn create_overlay_pipeline(device: Arc<Device>, subpass: &Subpass) -> Arc<GraphicsPipeline> {
-    let vs = overlay_vert_shader::load(device.clone()).unwrap();
-    let fs = overlay_frag_shader::load(device.clone()).unwrap();
+    let vs = shaders::overlay_vert_shader::load(device.clone()).unwrap();
+    let fs = shaders::overlay_frag_shader::load(device.clone()).unwrap();
 
     let pipeline = GraphicsPipeline::start()
         .vertex_shader(vs.entry_point("main").unwrap(), ())
@@ -666,20 +628,6 @@ impl Gpu {
                 image.usage(),
             )
             .unwrap();
-        }
-    }
-
-    fn resize_image(
-        size: [u32; 2],
-        allocator: &impl MemoryAllocator,
-        image: &mut Arc<AttachmentImage>,
-        recreate_swapchain: &mut bool,
-    ) {
-        if size != image.dimensions().width_height() {
-            *recreate_swapchain = true;
-
-            *image = AttachmentImage::with_usage(allocator, size, image.format(), image.usage())
-                .unwrap();
         }
     }
 

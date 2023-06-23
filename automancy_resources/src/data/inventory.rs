@@ -1,9 +1,11 @@
+use serde::{Deserialize, Serialize};
+
+use automancy_defs::hashbrown::HashMap;
+use automancy_defs::id::Interner;
+
 use crate::data::item::{Item, ItemRaw};
 use crate::data::stack::ItemAmount;
 use crate::ResourceManager;
-use automancy_defs::hashbrown::HashMap;
-use automancy_defs::id::Interner;
-use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Default, Clone)]
 pub struct Inventory(pub HashMap<Item, ItemAmount>);

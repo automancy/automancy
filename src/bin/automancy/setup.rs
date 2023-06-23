@@ -1,26 +1,26 @@
 use std::fs;
 use std::sync::Arc;
 
+use futures::executor::block_on;
+use ractor::concurrency::JoinHandle;
+use ractor::{Actor, ActorRef};
+
 use automancy::camera::Camera;
+use automancy::game::{Game, GameMsg, TICK_INTERVAL};
+use automancy::gpu;
+use automancy::gpu::{Gpu, RenderAlloc};
+use automancy::map::MapInfo;
 use automancy_defs::coord::ChunkCoord;
 use automancy_defs::egui::Frame;
 use automancy_defs::flexstr::SharedStr;
 use automancy_defs::log;
+use automancy_defs::vulkano::device::DeviceExtensions;
 use automancy_defs::winit::event_loop::EventLoop;
 use automancy_defs::winit::window::{Icon, Window};
 use automancy_resources::kira::manager::backend::cpal::CpalBackend;
 use automancy_resources::kira::manager::{AudioManager, AudioManagerSettings};
 use automancy_resources::kira::track::{TrackBuilder, TrackHandle};
 use automancy_resources::{ResourceManager, RESOURCES_FOLDER};
-use futures::executor::block_on;
-use ractor::concurrency::JoinHandle;
-use ractor::{Actor, ActorRef};
-use vulkano::device::DeviceExtensions;
-
-use automancy::game::{Game, GameMsg, TICK_INTERVAL};
-use automancy::gpu;
-use automancy::gpu::{Gpu, RenderAlloc};
-use automancy::map::MapInfo;
 
 use crate::{gui, LOGO};
 

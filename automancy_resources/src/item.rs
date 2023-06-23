@@ -1,13 +1,16 @@
-use crate::data::item::{item_match, Item};
-use crate::{load_recursively, ResourceManager, JSON_EXT};
-use automancy_defs::hashbrown::HashMap;
-use automancy_defs::id::{Id, IdRaw};
-use automancy_defs::log;
-use serde::Deserialize;
 use std::ffi::OsStr;
 use std::fs::read_to_string;
 use std::path::Path;
 use std::sync::Arc;
+
+use serde::Deserialize;
+
+use automancy_defs::hashbrown::HashMap;
+use automancy_defs::id::{Id, IdRaw};
+use automancy_defs::log;
+
+use crate::data::item::{item_match, Item};
+use crate::{load_recursively, ResourceManager, JSON_EXT};
 
 #[derive(Clone, Debug, Deserialize)]
 struct ItemJson {

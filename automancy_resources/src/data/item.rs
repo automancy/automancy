@@ -1,7 +1,9 @@
+use serde::{Deserialize, Serialize};
+
+use automancy_defs::id::{Id, IdRaw, Interner};
+
 use crate::registry::Registry;
 use crate::ResourceManager;
-use automancy_defs::id::{Id, IdRaw, Interner};
-use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct ItemRaw(pub IdRaw);

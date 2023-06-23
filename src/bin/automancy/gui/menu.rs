@@ -1,17 +1,21 @@
-use crate::event::{shutdown_graceful, EventLoopStorage};
-use crate::gui::{default_frame, GuiState, PopupState};
-use crate::setup::GameSetup;
+use std::fs;
+
+use futures::executor::block_on;
+
 use automancy::game::GameMsg;
 use automancy::map::{Map, MapInfo};
 use automancy::renderer::Renderer;
 use automancy::VERSION;
-use automancy_defs::egui::{vec2, Align, Align2, RichText, ScrollArea, Window};
+use automancy_defs::egui::{vec2, Align, Align2, Button, RichText, ScrollArea, Window};
 use automancy_defs::egui_winit_vulkano::Gui;
+use automancy_defs::gui::HyperlinkWidget;
 use automancy_defs::log;
 use automancy_defs::winit::event_loop::ControlFlow;
 use automancy_resources::{format, unix_to_formatted_time};
-use futures::executor::block_on;
-use std::fs;
+
+use crate::event::{shutdown_graceful, EventLoopStorage};
+use crate::gui::{default_frame, GuiState, PopupState};
+use crate::setup::GameSetup;
 
 /// Draws the main menu.
 pub fn main_menu(
@@ -39,62 +43,57 @@ pub fn main_menu(
                             RichText::new(
                                 setup.resource_man.translates.gui
                                     [&setup.resource_man.registry.gui_ids.btn_play]
-                                    .to_string(),
+                                    .as_str(),
                             )
                             .heading(),
                         )
                         .clicked()
                     {
                         setup.refresh_maps();
-                        loop_store.gui_state = GuiState::MapLoad
+                        loop_store.switch_gui_state(GuiState::MapLoad)
                     };
                     if ui
                         .button(
                             RichText::new(
                                 setup.resource_man.translates.gui
                                     [&setup.resource_man.registry.gui_ids.btn_options]
-                                    .to_string(),
+                                    .as_str(),
                             )
                             .heading(),
                         )
                         .clicked()
                     {
-                        loop_store.gui_state = GuiState::Options
+                        loop_store.switch_gui_state(GuiState::Options)
                     };
-                    if ui
-                        .button(
+
+                    ui.add(HyperlinkWidget::new(
+                        Button::new(
                             RichText::new(
                                 setup.resource_man.translates.gui
                                     [&setup.resource_man.registry.gui_ids.btn_fedi]
-                                    .to_string(),
+                                    .as_str(),
                             )
                             .heading(),
-                        )
-                        .clicked()
-                    {
-                        webbrowser::open("https://gamedev.lgbt/@automancy")
-                            .expect("Failed to open web browser");
-                    };
-                    if ui
-                        .button(
+                        ),
+                        "https://gamedev.lgbt/@automancy",
+                    ));
+                    ui.add(HyperlinkWidget::new(
+                        Button::new(
                             RichText::new(
                                 setup.resource_man.translates.gui
                                     [&setup.resource_man.registry.gui_ids.btn_source]
-                                    .to_string(),
+                                    .as_str(),
                             )
                             .heading(),
-                        )
-                        .clicked()
-                    {
-                        webbrowser::open("https://github.com/sorcerers-class/automancy")
-                            .expect("Failed to open web browser");
-                    };
+                        ),
+                        "https://github.com/sorcerers-class/automancy",
+                    ));
                     if ui
                         .button(
                             RichText::new(
                                 setup.resource_man.translates.gui
                                     [&setup.resource_man.registry.gui_ids.btn_exit]
-                                    .to_string(),
+                                    .as_str(),
                             )
                             .heading(),
                         )
@@ -139,7 +138,7 @@ pub fn pause_menu(
                         )
                         .clicked()
                     {
-                        loop_store.gui_state = GuiState::Ingame
+                        loop_store.switch_gui_state(GuiState::Ingame)
                     };
                     if ui
                         .button(
@@ -152,7 +151,7 @@ pub fn pause_menu(
                         )
                         .clicked()
                     {
-                        loop_store.gui_state = GuiState::Options
+                        loop_store.switch_gui_state(GuiState::Options)
                     };
                     if ui
                         .button(
@@ -179,7 +178,7 @@ pub fn pause_menu(
                             ))
                             .unwrap();
                         renderer.reset_last_tiles_update();
-                        loop_store.gui_state = GuiState::MainMenu
+                        loop_store.switch_gui_state(GuiState::MainMenu)
                     };
                     ui.label(VERSION)
                 },
@@ -228,7 +227,7 @@ pub fn map_load_menu(
                                 .send_message(GameMsg::LoadMap(resource_man, map.map_name.clone()))
                                 .unwrap();
                             renderer.reset_last_tiles_update();
-                            loop_store.gui_state = GuiState::Ingame;
+                            loop_store.switch_gui_state(GuiState::Ingame);
                         }
                         if ui
                             .button(
@@ -277,7 +276,7 @@ pub fn map_load_menu(
                 )
                 .clicked()
             {
-                loop_store.gui_state = GuiState::MainMenu
+                loop_store.switch_gui_state(GuiState::MainMenu)
             }
         });
     });
@@ -358,7 +357,7 @@ pub fn map_create_menu(
             )
             .clicked()
         {
-            let name = Map::sanitize_name(loop_store.filter.clone());
+            let name = Map::sanitize_name(loop_store.filter.clone()); //TODO WHAT THE FUCK IS IT DOING
             setup
                 .game
                 .send_message(GameMsg::LoadMap(setup.resource_man.clone(), name))
@@ -366,7 +365,7 @@ pub fn map_create_menu(
             renderer.reset_last_tiles_update();
             loop_store.filter.clear();
             loop_store.popup_state = PopupState::None;
-            loop_store.gui_state = GuiState::Ingame
+            loop_store.switch_gui_state(GuiState::Ingame);
         }
         if ui
             .button(
@@ -383,7 +382,7 @@ pub fn map_create_menu(
 /// Draws the options menu. TODO
 pub fn options_menu(setup: &mut GameSetup, gui: &mut Gui, loop_store: &mut EventLoopStorage) {
     Window::new(
-        setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.options].to_string(),
+        setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.options].as_str(),
     )
     .resizable(false)
     .default_width(175.0)
@@ -394,11 +393,11 @@ pub fn options_menu(setup: &mut GameSetup, gui: &mut Gui, loop_store: &mut Event
         if ui
             .button(
                 setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.btn_confirm]
-                    .to_string(),
+                    .as_str(),
             )
             .clicked()
         {
-            loop_store.gui_state = GuiState::MainMenu
+            loop_store.return_gui_state();
         }
     });
 }

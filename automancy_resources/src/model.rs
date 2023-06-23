@@ -1,13 +1,15 @@
+use std::ffi::OsStr;
+use std::fs::{read_to_string, File};
+use std::io::BufReader;
+use std::path::Path;
+
+use serde::Deserialize;
+
 use automancy_defs::hashbrown::HashMap;
 use automancy_defs::id::IdRaw;
 use automancy_defs::ply_rs::parser::Parser;
 use automancy_defs::rendering::{Face, GameVertex, Model};
 use automancy_defs::{id, log};
-use serde::Deserialize;
-use std::ffi::OsStr;
-use std::fs::{read_to_string, File};
-use std::io::BufReader;
-use std::path::Path;
 
 use crate::{load_recursively, ResourceManager, JSON_EXT};
 
@@ -63,7 +65,7 @@ impl ResourceManager {
                         .read_payload_for_element(&mut read, element, &header)
                         .ok();
                 }
-                _ => (),
+                _ => {}
             }
         }
 

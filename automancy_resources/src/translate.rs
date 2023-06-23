@@ -1,12 +1,15 @@
-use crate::{ResourceManager, JSON_EXT};
+use std::ffi::OsStr;
+use std::fs::{read_dir, read_to_string};
+use std::path::Path;
+
+use serde::Deserialize;
+
 use automancy_defs::flexstr::{SharedStr, ToSharedStr};
 use automancy_defs::hashbrown::HashMap;
 use automancy_defs::id::{Id, IdRaw};
 use automancy_defs::log;
-use serde::Deserialize;
-use std::ffi::OsStr;
-use std::fs::{read_dir, read_to_string};
-use std::path::Path;
+
+use crate::{ResourceManager, JSON_EXT};
 
 #[derive(Debug, Default, Clone, Deserialize)]
 pub struct TranslateJson {

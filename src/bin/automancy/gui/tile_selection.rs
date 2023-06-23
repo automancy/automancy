@@ -1,10 +1,14 @@
-use crate::gui::default_frame;
-use crate::setup::GameSetup;
+use std::f32::consts::FRAC_PI_4;
+use std::sync::Arc;
+
+use futures::channel::mpsc;
+
 use automancy::gpu;
 use automancy::renderer::Renderer;
 use automancy::tile_entity::TileModifier;
 use automancy_defs::cg::{perspective, Matrix4, Vector3};
 use automancy_defs::cgmath::{point3, vec3};
+use automancy_defs::egui::scroll_area::ScrollBarVisibility;
 use automancy_defs::egui::{
     vec2, CursorIcon, Margin, PaintCallback, ScrollArea, Sense, TopBottomPanel, Ui,
 };
@@ -12,11 +16,11 @@ use automancy_defs::egui_winit_vulkano::{CallbackFn, Gui};
 use automancy_defs::hashbrown::HashMap;
 use automancy_defs::id::Id;
 use automancy_defs::rendering::{InstanceData, LightInfo};
-use futures::channel::mpsc;
-use std::f32::consts::FRAC_PI_4;
-use std::sync::Arc;
-use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
-use vulkano::memory::allocator::{AllocationCreateInfo, MemoryUsage};
+use automancy_defs::vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
+use automancy_defs::vulkano::memory::allocator::{AllocationCreateInfo, MemoryUsage};
+
+use crate::gui::default_frame;
+use crate::setup::GameSetup;
 
 /// Draws the tile selection.
 fn paint_tile_selection(
@@ -138,7 +142,7 @@ pub fn tile_selections(
             spacing.scroll_bar_outer_margin = 0.0;
 
             ScrollArea::horizontal()
-                .always_show_scroll(true)
+                .scroll_bar_visibility(ScrollBarVisibility::AlwaysVisible)
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
                         paint_tile_selection(

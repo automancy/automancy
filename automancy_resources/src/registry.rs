@@ -65,7 +65,7 @@ impl TileIds {
             merger,
             splitter,
             master_node,
-            node,
+            node
         }
     }
 }
@@ -92,7 +92,7 @@ impl DataIds {
             storage_type,
             amount,
             target,
-            link,
+            link
         }
     }
 }
@@ -179,7 +179,7 @@ impl GuiIds {
             btn_delete,
             btn_new_map,
 
-            time_fmt,
+            time_fmt
         }
     }
 }
@@ -196,7 +196,7 @@ pub struct ErrorIds {
 impl ErrorIds {
     pub fn new(interner: &mut Interner) -> Self {
         make_ids! {
-            test_error
+            test_error,
             invalid_map_data
         }
     }

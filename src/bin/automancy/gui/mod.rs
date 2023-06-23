@@ -1,8 +1,11 @@
 use std::sync::Arc;
 
+use fuse_rust::Fuse;
+
 use automancy::gpu;
 use automancy::gpu::Gpu;
 use automancy::map::MapInfo;
+use automancy::renderer::Renderer;
 use automancy_defs::cg::{DPoint2, Float};
 use automancy_defs::cgmath::MetricSpace;
 use automancy_defs::egui::epaint::Shadow;
@@ -15,18 +18,15 @@ use automancy_defs::egui::{
 use automancy_defs::egui_winit_vulkano::{CallbackFn, Gui, GuiConfig};
 use automancy_defs::id::Id;
 use automancy_defs::rendering::{GameVertex, InstanceData, LightInfo};
+use automancy_defs::vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
+use automancy_defs::vulkano::image::SampleCount::Sample4;
+use automancy_defs::vulkano::memory::allocator::{AllocationCreateInfo, MemoryUsage};
 use automancy_defs::winit::event_loop::EventLoop;
 use automancy_defs::{cgmath, colors};
 use automancy_resources::data::item::Item;
 use automancy_resources::ResourceManager;
-use fuse_rust::Fuse;
-use genmesh::{EmitTriangles, Quad};
-use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
-use vulkano::image::SampleCount::Sample4;
-use vulkano::memory::allocator::{AllocationCreateInfo, MemoryUsage};
 
 use crate::IOSEVKA_FONT;
-use automancy::renderer::Renderer;
 
 pub mod debug;
 pub mod error;
@@ -232,43 +232,38 @@ pub fn draw_item(
 }
 
 /// Produces a line shape.
-pub fn make_line(a: DPoint2, b: DPoint2, color: Rgba) -> Vec<GameVertex> {
+pub fn make_line(a: DPoint2, b: DPoint2, color: Rgba) -> [GameVertex; 6] {
     let v = b - a;
-    let l = a.distance(b) * 128.0;
+    let l = a.distance(b) * 256.0;
     let w = cgmath::vec2(-v.y / l, v.x / l);
 
     let a0 = (a + w).cast::<Float>().unwrap();
-    let a1 = (b + w).cast::<Float>().unwrap();
-    let b0 = (b - w).cast::<Float>().unwrap();
-    let b1 = (a - w).cast::<Float>().unwrap();
+    let a1 = (a - w).cast::<Float>().unwrap();
+    let b0 = (b + w).cast::<Float>().unwrap();
+    let b1 = (b - w).cast::<Float>().unwrap();
 
-    let mut line = vec![];
+    let a = GameVertex {
+        pos: [a0.x, a0.y, 0.0],
+        color: color.to_array(),
+        normal: [0.0, 0.0, 0.0],
+    };
+    let b = GameVertex {
+        pos: [b0.x, b0.y, 0.0],
+        color: color.to_array(),
+        normal: [0.0, 0.0, 0.0],
+    };
+    let c = GameVertex {
+        pos: [a1.x, a1.y, 0.0],
+        color: color.to_array(),
+        normal: [0.0, 0.0, 0.0],
+    };
+    let d = GameVertex {
+        pos: [b1.x, b1.y, 0.0],
+        color: color.to_array(),
+        normal: [0.0, 0.0, 0.0],
+    };
 
-    Quad::new(
-        GameVertex {
-            pos: [a0.x, a0.y, 0.0],
-            color: color.to_array(),
-            normal: [0.0, 0.0, 0.0],
-        },
-        GameVertex {
-            pos: [a1.x, a1.y, 0.0],
-            color: color.to_array(),
-            normal: [0.0, 0.0, 0.0],
-        },
-        GameVertex {
-            pos: [b0.x, b0.y, 0.0],
-            color: color.to_array(),
-            normal: [0.0, 0.0, 0.0],
-        },
-        GameVertex {
-            pos: [b1.x, b1.y, 0.0],
-            color: color.to_array(),
-            normal: [0.0, 0.0, 0.0],
-        },
-    )
-    .emit_triangles(|v| line.append(&mut vec![v.x, v.y, v.z]));
-
-    line
+    [a, b, c, b, c, d]
 }
 
 /// Draws a search bar.

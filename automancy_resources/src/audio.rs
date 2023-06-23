@@ -2,9 +2,10 @@ use std::ffi::OsStr;
 use std::fs::read_dir;
 use std::path::Path;
 
+use kira::sound::static_sound::{StaticSoundData, StaticSoundSettings};
+
 use automancy_defs::flexstr::ToSharedStr;
 use automancy_defs::log;
-use kira::sound::static_sound::{StaticSoundData, StaticSoundSettings};
 
 use crate::{ResourceManager, OGG_EXT};
 

@@ -1,9 +1,19 @@
 use std::error::Error;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+use fuse_rust::Fuse;
+use futures::channel::mpsc;
+use futures::executor::block_on;
+use tokio::runtime::Runtime;
 
 use automancy::camera::FAR;
 use automancy::game::{GameMsg, PlaceTileResponse};
+use automancy::input;
+use automancy::input::{actions, InputHandler};
+use automancy::renderer::Renderer;
+use automancy::tile_entity::{TileEntityMsg, TileModifier};
+use automancy::util::render::{hex_to_normalized, screen_to_normalized, screen_to_world};
 use automancy_defs::cg::{DPoint3, Double, Float, Matrix4};
 use automancy_defs::cgmath::{point2, vec3, EuclideanSpace};
 use automancy_defs::colors::WithAlpha;
@@ -17,20 +27,10 @@ use automancy_defs::winit::event_loop::ControlFlow;
 use automancy_defs::{colors, log};
 use automancy_resources::data::item::Item;
 use automancy_resources::data::Data;
-use fuse_rust::Fuse;
-use futures::channel::mpsc;
-use futures::executor::block_on;
-use tokio::runtime::Runtime;
 
 use crate::gui::{
     debug, error, make_line, menu, tile_config, tile_info, tile_selection, GuiState, PopupState,
 };
-use automancy::input;
-use automancy::input::{actions, InputHandler, KeyActions};
-use automancy::renderer::Renderer;
-use automancy::tile_entity::{TileEntityMsg, TileModifier};
-use automancy::util::render::{hex_to_normalized, screen_to_normalized, screen_to_world};
-
 use crate::setup::GameSetup;
 
 /// Stores information that lives for the entire lifetime of the session, and is not dropped at the end of one event cycle or handled elsewhere.
@@ -59,7 +59,8 @@ pub struct EventLoopStorage {
     /// the elapsed time between each frame
     pub elapsed: Duration,
 
-    pub gui_state: GuiState,
+    prev_gui_state: Option<GuiState>,
+    gui_state: GuiState,
     pub popup_state: PopupState,
     pub show_debugger: bool,
 }
@@ -79,9 +80,38 @@ impl Default for EventLoopStorage {
             last_frame_start: Instant::now(),
             elapsed: Default::default(),
 
+            prev_gui_state: None,
             gui_state: GuiState::MainMenu,
             popup_state: PopupState::None,
             show_debugger: false,
+        }
+    }
+}
+
+impl EventLoopStorage {
+    pub fn return_gui_state(&mut self) {
+        if let Some(prev) = self.prev_gui_state {
+            self.gui_state = prev;
+        }
+        self.prev_gui_state = None;
+    }
+
+    pub fn switch_gui_state(&mut self, new: GuiState) {
+        self.prev_gui_state = Some(self.gui_state);
+        self.gui_state = new;
+    }
+
+    pub fn switch_gui_state_when(
+        &mut self,
+        when: &'static dyn Fn(GuiState) -> bool,
+        new: GuiState,
+    ) -> bool {
+        if when(self.gui_state) {
+            self.switch_gui_state(new);
+
+            true
+        } else {
+            false
         }
     }
 }
@@ -185,12 +215,21 @@ pub fn on_event(
             }
         }
 
-        if loop_store.input_handler.key_pressed(&actions::PAUSE) {
-            // cancel one by one
-            if loop_store.selected_id.take().is_none() {
-                loop_store.linking_tile.take();
+        if loop_store.input_handler.key_pressed(&actions::ESCAPE) {
+            // one by one
+            if loop_store.selected_id.take().is_none() && loop_store.linking_tile.take().is_none() {
+                if loop_store.switch_gui_state_when(&|s| s == GuiState::Ingame, GuiState::Paused) {
+                    block_on(setup.game.call(
+                        |reply| GameMsg::SaveMap(setup.resource_man.clone(), reply),
+                        None,
+                    ))
+                    .unwrap();
+                } else {
+                    loop_store.switch_gui_state_when(&|s| s == GuiState::Paused, GuiState::Ingame);
+                }
             }
         }
+
         if loop_store.input_handler.main_pressed
             || (loop_store.input_handler.shift_held && loop_store.input_handler.main_held)
         {
@@ -342,18 +381,7 @@ pub fn on_event(
         let (selection_send, mut selection_recv) = mpsc::channel(1);
 
         gui.begin_frame();
-        if loop_store.input_handler.key_pressed(&actions::PAUSE) {
-            if loop_store.gui_state == GuiState::Ingame {
-                block_on(setup.game.call(
-                    |reply| GameMsg::SaveMap(setup.resource_man.clone(), reply),
-                    None,
-                ))
-                .unwrap();
-                loop_store.gui_state = GuiState::Paused;
-            } else if loop_store.gui_state == GuiState::Paused {
-                loop_store.gui_state = GuiState::Ingame;
-            }
-        }
+
         match loop_store.gui_state {
             GuiState::MainMenu => menu::main_menu(setup, gui, control_flow, loop_store),
             GuiState::MapLoad => {
@@ -421,7 +449,7 @@ pub fn on_event(
                     }) {
                         let time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
 
-                        let glow = (time.as_secs_f64() * 3.0).sin() / 3.0;
+                        let glow = (time.as_secs_f64() * 3.0).sin() / 3.0 - 1.0;
 
                         let instance = InstanceData {
                             model_matrix: Matrix4::from_translation(vec3(
@@ -451,7 +479,7 @@ pub fn on_event(
                         loop_store.input_handler.main_pos,
                     );
 
-                    extra_vertices.append(&mut make_line(a, b, colors::RED));
+                    extra_vertices.extend_from_slice(&make_line(a, b, colors::RED));
                 }
             }
         }
@@ -462,7 +490,7 @@ pub fn on_event(
                 menu::map_delete_confirmation(setup, gui, loop_store, map.clone());
             }
         }
-        if loop_store.input_handler.key_pressed(&input::actions::DEBUG) {
+        if loop_store.input_handler.key_pressed(&actions::DEBUG) {
             debug::debugger(
                 setup,
                 gui,

@@ -1,4 +1,4 @@
-pub static VERSION: &str = include_str!("../compile/version.txt");
+pub static VERSION: &str = include_str!("../version.txt");
 
 pub mod camera;
 pub mod game;

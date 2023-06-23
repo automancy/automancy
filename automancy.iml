@@ -3,8 +3,14 @@
   <component name="NewModuleRootManager" inherit-compiler-output="true">
     <exclude-output />
     <content url="file://$MODULE_DIR$">
+      <sourceFolder url="file://$MODULE_DIR$/automancy_defs/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/automancy_macros/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/automancy_resources/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/tests" isTestSource="true" />
+      <excludeFolder url="file://$MODULE_DIR$/automancy_defs/target" />
+      <excludeFolder url="file://$MODULE_DIR$/automancy_macros/target" />
+      <excludeFolder url="file://$MODULE_DIR$/automancy_resources/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />

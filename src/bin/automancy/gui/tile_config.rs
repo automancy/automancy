@@ -1,3 +1,6 @@
+use ractor::ActorRef;
+use tokio::runtime::Runtime;
+
 use automancy::game::GameMsg;
 use automancy::renderer::Renderer;
 use automancy::tile_entity::TileEntityMsg;
@@ -15,8 +18,6 @@ use automancy_defs::winit::dpi::PhysicalSize;
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::tile::Tile;
 use automancy_resources::ResourceManager;
-use ractor::ActorRef;
-use tokio::runtime::Runtime;
 
 use crate::event::EventLoopStorage;
 use crate::gui::{draw_item, make_line, searchable_id};
@@ -191,7 +192,7 @@ fn node(
                 );
                 let b = point2(x, y);
 
-                extra_vertices.append(&mut make_line(a, b, colors::RED));
+                extra_vertices.extend_from_slice(&make_line(a, b, colors::RED));
             }
         }
     }

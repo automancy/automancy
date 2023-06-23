@@ -1,18 +1,20 @@
+use std::collections::HashSet;
+use std::mem;
+
+use serde::{Deserialize, Serialize};
+
 use automancy_defs::cg::{DPoint2, DVector2, Double};
 use automancy_defs::cgmath::{point2, vec2};
-use automancy_defs::egui::Key;
 use automancy_defs::hashbrown::HashMap;
 use automancy_defs::winit::event::ElementState::{Pressed, Released};
 use automancy_defs::winit::event::{
     DeviceEvent, ElementState, KeyboardInput, ModifiersState, MouseButton, MouseScrollDelta,
     VirtualKeyCode, WindowEvent,
 };
-use lazy_static::lazy_static;
-use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub enum KeyActions {
-    PAUSE,
+    ESCAPE,
     UNDO,
     DEBUG,
 }
@@ -33,8 +35,8 @@ pub struct KeyAction {
 pub mod actions {
     use super::{KeyAction, KeyActions, PressTypes};
 
-    pub static PAUSE: KeyAction = KeyAction {
-        action: KeyActions::PAUSE,
+    pub static ESCAPE: KeyAction = KeyAction {
+        action: KeyActions::ESCAPE,
         press_type: PressTypes::ONESHOT,
     };
     pub static UNDO: KeyAction = KeyAction {
@@ -139,7 +141,7 @@ pub fn convert_input(
                 };
             }
             WindowEvent::KeyboardInput { input, .. } => window = KeyboardEvent { input: *input },
-            _ => (),
+            _ => {}
         }
     }
 
@@ -172,10 +174,10 @@ pub struct InputHandler {
     pub main_pressed: bool,
     pub alternate_pressed: bool,
 
-    pub keymap: HashMap<u32, KeyAction>,
-    pub keystates: HashMap<KeyAction, bool>,
+    pub key_map: HashMap<VirtualKeyCode, KeyAction>,
+    pub key_states: HashSet<KeyAction>,
 
-    pub previous: Option<VirtualKeyCode>,
+    to_clear: Vec<KeyAction>,
 }
 
 impl Default for InputHandler {
@@ -193,18 +195,14 @@ impl Default for InputHandler {
             main_pressed: false,
             alternate_pressed: false,
 
-            keymap: HashMap::from([
-                (VirtualKeyCode::Z as u32, actions::UNDO),
-                (VirtualKeyCode::Escape as u32, actions::PAUSE),
-                (VirtualKeyCode::F3 as u32, actions::DEBUG),
+            key_map: HashMap::from([
+                (VirtualKeyCode::Z, actions::UNDO),
+                (VirtualKeyCode::Escape, actions::ESCAPE),
+                (VirtualKeyCode::F3, actions::DEBUG),
             ]),
-            keystates: HashMap::from([
-                (actions::UNDO, false),
-                (actions::DEBUG, false),
-                (actions::PAUSE, false),
-            ]),
+            key_states: Default::default(),
 
-            previous: None,
+            to_clear: Default::default(),
         }
     }
 }
@@ -215,6 +213,10 @@ impl InputHandler {
         self.alternate_pressed = false;
         self.main_move = None;
         self.scroll = None;
+
+        mem::take(&mut self.to_clear).into_iter().for_each(|v| {
+            self.key_states.remove(&v);
+        });
     }
 
     pub fn update(&mut self, event: GameInputEvent) {
@@ -250,55 +252,60 @@ impl InputHandler {
                     self.control_held = true;
                 }
             }
-            GameWindowEvent::KeyboardEvent { input } => {
-                self.handle_key(input);
-                self.previous = input.virtual_keycode;
+            GameWindowEvent::KeyboardEvent {
+                input:
+                    KeyboardInput {
+                        state,
+                        virtual_keycode: Some(virtual_keycode),
+                        ..
+                    },
+            } => {
+                self.handle_key(state, virtual_keycode);
             }
-            GameWindowEvent::None => {}
+            _ => {}
         }
         if let GameDeviceEvent::MainMove { delta } = event.device {
             self.main_move = Some(delta);
         }
     }
 
-    pub fn handle_key(&mut self, input: KeyboardInput) {
-        println!("{:?} {:?}", self.keystates, &input);
-        let action = self.keymap.get(&(input.virtual_keycode.unwrap() as u32));
-        if action.is_none() {
-            return;
-        }
-        let action = action.unwrap();
+    pub fn handle_key(&mut self, state: ElementState, key: VirtualKeyCode) -> Option<()> {
+        let action = *self.key_map.get(&key)?;
+
         match action.press_type {
-            PressTypes::ONESHOT => match input.state {
+            PressTypes::ONESHOT => match state {
                 Pressed => {
-                    if input.virtual_keycode != self.previous {
-                        self.keystates.insert(*action, true);
+                    self.key_states.insert(action);
+                    self.to_clear.push(action);
+                }
+                Released => {
+                    self.key_states.remove(&action);
+                }
+            },
+            PressTypes::HOLD => match state {
+                Pressed => {
+                    self.key_states.insert(action);
+                }
+                Released => {
+                    self.key_states.remove(&action);
+                }
+            },
+            PressTypes::TOGGLE => match state {
+                Pressed => {
+                    if self.key_states.contains(&action) {
+                        self.key_states.remove(&action);
+                    } else {
+                        self.key_states.insert(action);
                     }
-                }
-                Released => {
-                    self.previous = None;
-                    self.keystates.insert(*action, false);
-                }
-            },
-            PressTypes::HOLD => match input.state {
-                Pressed => {
-                    self.keystates.insert(*action, true);
-                }
-                Released => {
-                    self.keystates.insert(*action, false);
-                }
-            },
-            PressTypes::TOGGLE => match input.state {
-                Pressed => {
-                    let curr = *self.keystates.get(action).unwrap();
-                    self.keystates.insert(*action, !curr);
                 }
                 Released => {}
             },
         }
+
+        Some(())
     }
 
     pub fn key_pressed(&self, action: &KeyAction) -> bool {
-        *self.keystates.get(action).unwrap()
+        self.key_states.contains(action)
     }
 }

@@ -1,12 +1,14 @@
-use crate::event::EventLoopStorage;
-use crate::gui::default_frame;
-use crate::setup::GameSetup;
+use ractor::ActorRef;
+use tokio::runtime::Runtime;
+
 use automancy::game::GameMsg;
 use automancy::renderer::Renderer;
 use automancy_defs::egui::{Margin, Window};
 use automancy_defs::egui_winit_vulkano::Gui;
-use ractor::ActorRef;
-use tokio::runtime::Runtime;
+
+use crate::event::EventLoopStorage;
+use crate::gui::default_frame;
+use crate::setup::GameSetup;
 
 /// Draws the debug menu (F3).
 pub fn debugger(
@@ -52,7 +54,7 @@ pub fn debugger(
     let tile_count = map.tiles;
 
     Window::new(
-        setup.resource_man.translates.gui[&resource_man.registry.gui_ids.debug_menu].to_string(),
+        setup.resource_man.translates.gui[&resource_man.registry.gui_ids.debug_menu].as_str(),
     )
     .resizable(false)
     .default_width(600.0)

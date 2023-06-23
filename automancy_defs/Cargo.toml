@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 log = "0.4"
 
-string-interner = "0.14.0"
+string-interner = { git = "https://github.com/sorcerers-class/string-interner" }
 hexagon-tiles = { git = "https://github.com/Mg138/hexagon-tiles" }
 hashbrown = { version = "0.14.0", features = ["serde", "rayon"] }
 bytemuck = "1.8.0"
@@ -19,9 +19,11 @@ cgmath = "0.18.0"
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 
+vulkano-shaders = "0.33.0"
+vulkano-win = "0.33.0"
 vulkano = "0.33.0"
 
 winit = "0.28.3"
 
-egui_winit_vulkano = "0.24.0"
-egui = "0.21.0"
+egui_winit_vulkano = { git = "https://github.com/sorcerers-class/egui_winit_vulkano" }
+egui = "0.22.0"

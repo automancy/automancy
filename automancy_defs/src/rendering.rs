@@ -1,4 +1,3 @@
-use crate::cg::{Float, Matrix4, Point3, Vector3};
 use bytemuck::{Pod, Zeroable};
 use cgmath::SquareMatrix;
 use egui::ecolor::{linear_f32_from_gamma_u8, linear_f32_from_linear_u8};
@@ -6,6 +5,8 @@ use hexagon_tiles::layout::{Layout, LAYOUT_ORIENTATION_POINTY};
 use hexagon_tiles::point::Point;
 use ply_rs::ply::{Property, PropertyAccess};
 use vulkano::pipeline::graphics::vertex_input::Vertex;
+
+use crate::cg::{Float, Matrix4, Point3, Vector3};
 
 pub const HEX_GRID_LAYOUT: Layout = Layout {
     orientation: LAYOUT_ORIENTATION_POINTY,

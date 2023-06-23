@@ -6,22 +6,24 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[workspace]
+members = [
+    "automancy_defs",
+    "automancy_macros",
+    "automancy_resources",
+]
+
 [[bin]]
 name = "automancy"
 
 [dependencies]
-automancy_resources = { path = "src/automancy_resources" }
-automancy_defs = { path = "src/automancy_defs" }
+automancy_resources = { path = "automancy_resources" }
+automancy_defs = { path = "automancy_defs" }
 
 env_logger = "0.10.0"
 
-webbrowser = "0.8.10"
-
 slice-group-by = "0.3.0"
-predicates = "3.0.2"
 fuse-rust = "0.3.1"
-genmesh = "0.6.2"
-uuid = { version = "1.2.2", features = ["v4"] }
 
 lazy_static = "1.4.0"
 rayon = "1.7.0"
@@ -34,10 +36,6 @@ zstd = "0.12.3"
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.7.4"
-
-vulkano-shaders = "0.33.0"
-vulkano-win = "0.33.0"
-vulkano = "0.33.0"
 
 async-trait = "0.1.68"
 futures = "0.3.28"
