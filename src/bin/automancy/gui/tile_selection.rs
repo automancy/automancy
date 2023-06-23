@@ -23,7 +23,7 @@ use crate::gui::default_frame;
 use crate::setup::GameSetup;
 
 /// Draws the tile selection.
-fn paint_tile_selection(
+fn draw_tile_selection(
     setup: &GameSetup,
     renderer: &Renderer,
     ui: &mut Ui,
@@ -65,14 +65,14 @@ fn paint_tile_selection(
                 selection_send.try_send(id).unwrap();
             }
 
-            let pos = point3(0.0, 1.0 * hover + 0.5, 3.0 - 0.5 * hover);
-            let matrix = perspective(FRAC_PI_4, 1.0, 0.01, 10.0)
-                * Matrix4::look_to_rh(pos, vec3(0.0, 0.5 * hover + 0.2, 1.0), Vector3::unit_y());
-
             let pipeline = renderer.gpu.gui_pipeline.clone();
             let vertex_buffer = renderer.gpu.alloc.vertex_buffer.clone();
             let index_buffer = renderer.gpu.alloc.index_buffer.clone();
             let resource_man = setup.resource_man.clone();
+
+            let pos = point3(0.0, 1.0 * hover + 0.5, 3.0 - 0.5 * hover);
+            let matrix = perspective(FRAC_PI_4, 1.0, 0.01, 10.0)
+                * Matrix4::look_to_rh(pos, vec3(0.0, 0.5 * hover + 0.2, 1.0), Vector3::unit_y());
 
             let callback = PaintCallback {
                 rect,
@@ -135,17 +135,15 @@ pub fn tile_selections(
         .resizable(false)
         .frame(default_frame().outer_margin(Margin::same(10.0)))
         .show(&gui.context(), |ui| {
-            let spacing = ui.spacing_mut();
-
-            spacing.interact_size.y = 70.0;
-            spacing.scroll_bar_width = 0.0;
-            spacing.scroll_bar_outer_margin = 0.0;
+            ui.spacing_mut().scroll_bar_outer_margin = 0.0;
 
             ScrollArea::horizontal()
-                .scroll_bar_visibility(ScrollBarVisibility::AlwaysVisible)
+                .scroll_bar_visibility(ScrollBarVisibility::AlwaysHidden)
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        paint_tile_selection(
+                        ui.set_height(70.0);
+
+                        draw_tile_selection(
                             setup,
                             renderer,
                             ui,

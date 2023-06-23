@@ -9,10 +9,9 @@ use automancy::camera::Camera;
 use automancy::game::{Game, GameMsg, TICK_INTERVAL};
 use automancy::gpu;
 use automancy::gpu::{Gpu, RenderAlloc};
-use automancy::map::MapInfo;
+use automancy::map::{MapInfo, MAIN_MENU, MAP_EXT, MAP_PATH};
 use automancy_defs::coord::ChunkCoord;
 use automancy_defs::egui::Frame;
-use automancy_defs::flexstr::SharedStr;
 use automancy_defs::log;
 use automancy_defs::vulkano::device::DeviceExtensions;
 use automancy_defs::winit::event_loop::EventLoop;
@@ -20,7 +19,7 @@ use automancy_defs::winit::window::{Icon, Window};
 use automancy_resources::kira::manager::backend::cpal::CpalBackend;
 use automancy_resources::kira::manager::{AudioManager, AudioManagerSettings};
 use automancy_resources::kira::track::{TrackBuilder, TrackHandle};
-use automancy_resources::{ResourceManager, RESOURCES_FOLDER};
+use automancy_resources::{ResourceManager, RESOURCES_PATH};
 
 use crate::{gui, LOGO};
 
@@ -105,19 +104,14 @@ impl GameSetup {
 
         log::info!("Renderer setup complete");
         // --- setup game ---
-        let map_name = SharedStr::from_static(".mainmenu"); // TODO DRY principle
-
-        let (game, game_handle) = Actor::spawn(
-            Some("game".to_string()),
-            Game,
-            (resource_man.clone(), map_name),
-        )
-        .await
-        .unwrap();
+        let (game, game_handle) =
+            Actor::spawn(Some("game".to_string()), Game, resource_man.clone())
+                .await
+                .unwrap();
 
         game.send_message(GameMsg::LoadMap(
             resource_man.clone(),
-            ".mainmenu".to_string(),
+            MAIN_MENU.to_string(),
         ))
         .unwrap();
 
@@ -150,12 +144,14 @@ impl GameSetup {
     }
     /// Refreshes the list of maps on the filesystem. Should be done every time the list of maps could have changed (on map creation/delete and on game load).
     pub fn refresh_maps(&mut self) {
-        self.maps = fs::read_dir("map")
+        drop(fs::create_dir_all(MAP_PATH));
+
+        self.maps = fs::read_dir(MAP_PATH)
             .unwrap()
             .filter_map(|f| f.ok())
             .map(|f| f.file_name().to_str().unwrap().to_string())
-            .filter(|f| f.ends_with(".bin"))
-            .map(|f| f.strip_suffix(".bin").unwrap().to_string())
+            .filter(|f| f.ends_with(MAP_EXT))
+            .map(|f| f.strip_suffix(MAP_EXT).unwrap().to_string())
             .filter(|f| !f.starts_with('.'))
             .map(|map| {
                 block_on(self.game.call(
@@ -191,7 +187,7 @@ fn get_icon() -> Icon {
 fn load_resources(track: TrackHandle) -> Arc<ResourceManager> {
     let mut resource_man = ResourceManager::new(track);
 
-    fs::read_dir(RESOURCES_FOLDER)
+    fs::read_dir(RESOURCES_PATH)
         .unwrap()
         .flatten()
         .map(|v| v.path())

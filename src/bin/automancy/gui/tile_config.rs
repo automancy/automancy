@@ -9,7 +9,7 @@ use automancy_defs::cg::{DPoint3, Double, Float};
 use automancy_defs::cgmath::point2;
 use automancy_defs::colors;
 use automancy_defs::coord::{TileCoord, TileHex};
-use automancy_defs::egui::{DragValue, Margin, Ui, Window};
+use automancy_defs::egui::{vec2, DragValue, Margin, Ui, Window};
 use automancy_defs::egui_winit_vulkano::Gui;
 use automancy_defs::hexagon_tiles::traits::HexDirection;
 use automancy_defs::id::Id;
@@ -20,7 +20,8 @@ use automancy_resources::tile::Tile;
 use automancy_resources::ResourceManager;
 
 use crate::event::EventLoopStorage;
-use crate::gui::{draw_item, make_line, searchable_id};
+use crate::gui::item::ItemStackGuiElement;
+use crate::gui::{make_line, searchable_id};
 use crate::setup::GameSetup;
 
 const MARGIN: Float = 8.0;
@@ -328,26 +329,21 @@ fn script(
         );
 
         ui.vertical(|ui| {
+            ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
+
             const SIZE: Float = 32.0;
 
             if let Some(script) = new_script.and_then(|id| setup.resource_man.registry.script(id)) {
                 if let Some(inputs) = &script.instructions.inputs {
-                    inputs.iter().for_each(|item_stack| {
+                    inputs.iter().for_each(|stack| {
                         ui.horizontal(|ui| {
                             ui.set_height(SIZE);
 
                             ui.label(" + ");
-                            draw_item(
-                                ui,
+                            ui.add(ItemStackGuiElement::new(
                                 setup.resource_man.clone(),
                                 renderer,
-                                item_stack.item,
-                                SIZE,
-                            );
-                            ui.label(format!(
-                                "{} ({})",
-                                setup.resource_man.item_name(&item_stack.item.id),
-                                item_stack.amount
+                                *stack,
                             ));
                         });
                     })
@@ -357,19 +353,10 @@ fn script(
                     ui.set_height(SIZE);
 
                     ui.label("=> ");
-                    draw_item(
-                        ui,
+                    ui.add(ItemStackGuiElement::new(
                         setup.resource_man.clone(),
                         renderer,
-                        script.instructions.output.item,
-                        SIZE,
-                    );
-                    ui.label(format!(
-                        "{} ({})",
-                        setup
-                            .resource_man
-                            .item_name(&script.instructions.output.item.id),
-                        script.instructions.output.amount
+                        script.instructions.output,
                     ));
                 });
             }

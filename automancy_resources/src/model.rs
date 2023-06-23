@@ -6,11 +6,12 @@ use std::path::Path;
 use serde::Deserialize;
 
 use automancy_defs::hashbrown::HashMap;
-use automancy_defs::id::IdRaw;
+use automancy_defs::id::{Id, IdRaw};
 use automancy_defs::ply_rs::parser::Parser;
 use automancy_defs::rendering::{Face, GameVertex, Model};
 use automancy_defs::{id, log};
 
+use crate::data::item::Item;
 use crate::{load_recursively, ResourceManager, JSON_EXT};
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -26,6 +27,14 @@ pub struct ModelJson {
 }
 
 impl ResourceManager {
+    pub fn get_item_model(&self, item: Item) -> Id {
+        if self.meshes.contains_key(&item.model) {
+            item.model
+        } else {
+            self.registry.model_ids.items_missing
+        }
+    }
+
     fn load_model(&mut self, file: &Path) -> Option<()> {
         log::info!("loading model at: {file:?}");
 

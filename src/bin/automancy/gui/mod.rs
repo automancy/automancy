@@ -1,35 +1,29 @@
-use std::sync::Arc;
-
 use fuse_rust::Fuse;
 
-use automancy::gpu;
 use automancy::gpu::Gpu;
 use automancy::map::MapInfo;
-use automancy::renderer::Renderer;
 use automancy_defs::cg::{DPoint2, Float};
 use automancy_defs::cgmath::MetricSpace;
 use automancy_defs::egui::epaint::Shadow;
 use automancy_defs::egui::style::{WidgetVisuals, Widgets};
 use automancy_defs::egui::FontFamily::{Monospace, Proportional};
 use automancy_defs::egui::{
-    vec2, Color32, FontData, FontDefinitions, FontId, Frame, PaintCallback, Rgba, Rounding,
-    ScrollArea, Stroke, Style, TextStyle, Ui, Visuals,
+    Color32, FontData, FontDefinitions, FontId, Frame, Rgba, Rounding, ScrollArea, Stroke, Style,
+    TextStyle, Ui, Visuals,
 };
-use automancy_defs::egui_winit_vulkano::{CallbackFn, Gui, GuiConfig};
+use automancy_defs::egui_winit_vulkano::{Gui, GuiConfig};
 use automancy_defs::id::Id;
-use automancy_defs::rendering::{GameVertex, InstanceData, LightInfo};
-use automancy_defs::vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
+use automancy_defs::rendering::GameVertex;
 use automancy_defs::vulkano::image::SampleCount::Sample4;
-use automancy_defs::vulkano::memory::allocator::{AllocationCreateInfo, MemoryUsage};
 use automancy_defs::winit::event_loop::EventLoop;
 use automancy_defs::{cgmath, colors};
-use automancy_resources::data::item::Item;
 use automancy_resources::ResourceManager;
 
 use crate::IOSEVKA_FONT;
 
 pub mod debug;
 pub mod error;
+pub mod item;
 pub mod menu;
 pub mod tile_config;
 pub mod tile_info;
@@ -168,67 +162,6 @@ pub fn default_frame() -> Frame {
             color: colors::DARK_GRAY.multiply(0.5).into(),
         })
         .rounding(Rounding::same(5.0))
-}
-
-/// Draws an Item's icon.
-pub fn draw_item(
-    ui: &mut Ui,
-    resource_man: Arc<ResourceManager>,
-    renderer: &Renderer,
-    item: Item,
-    size: Float,
-) {
-    let model = if resource_man.meshes.contains_key(&item.model) {
-        item.model
-    } else {
-        resource_man.registry.model_ids.items_missing
-    };
-
-    let (_, rect) = ui.allocate_space(vec2(size, size));
-
-    let pipeline = renderer.gpu.gui_pipeline.clone();
-    let vertex_buffer = renderer.gpu.alloc.vertex_buffer.clone();
-    let index_buffer = renderer.gpu.alloc.index_buffer.clone();
-
-    let callback = PaintCallback {
-        rect,
-        callback: Arc::new(CallbackFn::new(move |_info, context| {
-            let instance = (InstanceData::default().into(), model);
-
-            let light_info = Buffer::from_data(
-                &context.resources.memory_allocator,
-                BufferCreateInfo {
-                    usage: BufferUsage::VERTEX_BUFFER,
-                    ..Default::default()
-                },
-                AllocationCreateInfo {
-                    usage: MemoryUsage::Upload,
-                    ..Default::default()
-                },
-                LightInfo {
-                    light_pos: [0.0, 0.0, 2.0],
-                    light_color: [1.0; 4],
-                },
-            )
-            .unwrap();
-
-            if let Some((indirect_commands, instance_buffer)) = gpu::indirect_instance(
-                &context.resources.memory_allocator,
-                &resource_man,
-                &[instance],
-            ) {
-                context
-                    .builder
-                    .bind_pipeline_graphics(pipeline.clone())
-                    .bind_vertex_buffers(0, (vertex_buffer.clone(), instance_buffer, light_info))
-                    .bind_index_buffer(index_buffer.clone())
-                    .draw_indexed_indirect(indirect_commands)
-                    .unwrap();
-            }
-        })),
-    };
-
-    ui.painter().add(callback);
 }
 
 /// Produces a line shape.

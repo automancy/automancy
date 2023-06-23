@@ -4,8 +4,14 @@ use std::io::{BufReader, BufWriter};
 use std::iter::Iterator;
 use std::{
     collections::{HashMap, HashSet},
+    fs,
     path::PathBuf,
 };
+
+use lazy_static::lazy_static;
+use ractor::ActorRef;
+use serde::{Deserialize, Serialize};
+use zstd::{Decoder, Encoder};
 
 use automancy_defs::coord::TileCoord;
 use automancy_defs::id::{Id, Interner};
@@ -13,16 +19,14 @@ use automancy_defs::log;
 use automancy_resources::chrono::{Local, Utc};
 use automancy_resources::data::{DataMap, DataMapRaw};
 use automancy_resources::ResourceManager;
-use lazy_static::lazy_static;
-use ractor::ActorRef;
-use serde::{Deserialize, Serialize};
-use zstd::{Decoder, Encoder};
 
 use crate::game;
 use crate::game::GameMsg;
 use crate::tile_entity::{TileEntityMsg, TileModifier};
 
 pub const MAP_PATH: &str = "map";
+pub const MAP_EXT: &str = ".bin";
+pub const MAIN_MENU: &str = ".mainmenu";
 
 const MAP_BUFFER_SIZE: usize = 256 * 1024;
 
@@ -82,11 +86,11 @@ impl Map {
     }
     /// Gets the path to a map from its name.
     pub fn path(map_name: &str) -> PathBuf {
-        PathBuf::from(format!("{MAP_PATH}/{map_name}.bin"))
+        PathBuf::from(format!("{MAP_PATH}/{map_name}{MAP_EXT}"))
     }
     /// Saves a map to disk.
     pub async fn save(&self, interner: &Interner, tile_entities: &TileEntities) {
-        drop(std::fs::create_dir_all(MAP_PATH));
+        drop(fs::create_dir_all(MAP_PATH));
 
         let path = Self::path(&self.map_name);
 

@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 
 use automancy_defs::id::Id;
 use automancy_defs::log;
@@ -9,7 +9,7 @@ use crate::{format, ResourceManager};
 /// An ErrorManager contains a queue of errors to be displayed.
 #[derive(Default)]
 pub struct ErrorManager {
-    queue: Arc<Mutex<VecDeque<GameError>>>,
+    queue: Arc<RwLock<VecDeque<GameError>>>,
 }
 
 pub type GameError = (Id, Vec<String>);
@@ -35,27 +35,30 @@ impl ErrorManager {
     pub fn push(&self, error: GameError, resource_man: &ResourceManager) {
         log::error!("ERR: {}", error_to_key(&error, resource_man));
         self.queue
-            .lock()
+            .write()
             .expect("could not write error")
             .push_front(error);
+    }
+
+    /// Removes the top error off of the stack and returns it or None if the queue is empty.
+    pub fn pop(&self) -> Option<GameError> {
+        self.queue
+            .write()
+            .expect("could not write error")
+            .pop_front()
     }
 
     /// Copies the top error of the queue and returns it, or None if the queue is empty.
     pub fn peek(&self) -> Option<GameError> {
         self.queue
-            .lock()
+            .read()
             .expect("could not read error")
             .front()
             .cloned()
     }
 
-    /// Removes the top error off of the stack and returns it or None if the queue is empty.
-    pub fn pop(&self) -> Option<GameError> {
-        self.queue.lock().expect("could not read error").pop_front()
-    }
-
     /// Returns true if the queue contains errors, otherwise false.
     pub fn has_errors(&self) -> bool {
-        !self.queue.lock().unwrap().is_empty()
+        !self.queue.read().unwrap().is_empty()
     }
 }

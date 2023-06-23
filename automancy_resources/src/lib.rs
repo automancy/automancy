@@ -61,10 +61,11 @@ pub fn load_recursively(path: &Path, extension: &OsStr) -> Vec<PathBuf> {
         .collect()
 }
 
+pub static RESOURCES_PATH: &str = "resources";
+
 pub static JSON_EXT: &str = "json";
 pub static OGG_EXT: &str = "ogg";
 pub static PNG_EXT: &str = "png";
-pub static RESOURCES_FOLDER: &str = "resources";
 
 /// Represents a automancy_resources manager, which contains all resources (apart from maps) loaded from disk dynamically.
 pub struct ResourceManager {
@@ -88,7 +89,7 @@ pub struct ResourceManager {
 
 impl Debug for ResourceManager {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.write_str("<automancy_resources manager>")
+        f.write_str("<resource manager>")
     }
 }
 
@@ -97,8 +98,9 @@ impl ResourceManager {
         let mut interner = Interner::new();
         let none = id::NONE.to_id(&mut interner);
         let any = id_static("automancy", "#any").to_id(&mut interner);
-        let data_ids = DataIds::new(&mut interner); //TODO Registry::new
-        let item_ids = ModelIds::new(&mut interner);
+
+        let data_ids = DataIds::new(&mut interner);
+        let model_ids = ModelIds::new(&mut interner);
         let gui_ids = GuiIds::new(&mut interner);
         let tile_ids = TileIds::new(&mut interner);
         let err_ids = ErrorIds::new(&mut interner);
@@ -121,7 +123,7 @@ impl ResourceManager {
                 any,
 
                 data_ids,
-                model_ids: item_ids,
+                model_ids,
                 tile_ids,
                 gui_ids,
                 err_ids,

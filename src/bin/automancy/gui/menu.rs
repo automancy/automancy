@@ -3,7 +3,7 @@ use std::fs;
 use futures::executor::block_on;
 
 use automancy::game::GameMsg;
-use automancy::map::{Map, MapInfo};
+use automancy::map::{Map, MapInfo, MAIN_MENU, MAP_EXT};
 use automancy::renderer::Renderer;
 use automancy::VERSION;
 use automancy_defs::egui::{vec2, Align, Align2, Button, RichText, ScrollArea, Window};
@@ -174,7 +174,7 @@ pub fn pause_menu(
                             .game
                             .send_message(GameMsg::LoadMap(
                                 setup.resource_man.clone(),
-                                ".mainmenu".to_string(),
+                                MAIN_MENU.to_string(),
                             ))
                             .unwrap();
                         renderer.reset_last_tiles_update();
@@ -194,8 +194,7 @@ pub fn map_load_menu(
     renderer: &mut Renderer,
 ) {
     Window::new(
-        setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.load_map]
-            .to_string(),
+        setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.load_map].as_str(),
     )
     .resizable(false)
     .default_width(250.0)
@@ -218,7 +217,7 @@ pub fn map_load_menu(
                             .button(
                                 setup.resource_man.translates.gui
                                     [&setup.resource_man.registry.gui_ids.btn_load]
-                                    .to_string(),
+                                    .as_str(),
                             )
                             .clicked()
                         {
@@ -257,7 +256,7 @@ pub fn map_load_menu(
                     RichText::new(
                         setup.resource_man.translates.gui
                             [&setup.resource_man.registry.gui_ids.btn_new_map]
-                            .to_string(),
+                            .as_str(),
                     )
                     .heading(),
                 )
@@ -270,7 +269,7 @@ pub fn map_load_menu(
                     RichText::new(
                         setup.resource_man.translates.gui
                             [&setup.resource_man.registry.gui_ids.btn_cancel]
-                            .to_string(),
+                            .as_str(),
                     )
                     .heading(),
                 )
@@ -289,6 +288,7 @@ pub fn map_delete_confirmation(
     map: MapInfo,
 ) {
     let mut dirty = false;
+
     Window::new(
         setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.delete_map]
             .to_string(),
@@ -301,16 +301,16 @@ pub fn map_delete_confirmation(
         ui.label(
             setup.resource_man.translates.gui
                 [&setup.resource_man.registry.gui_ids.lbl_delete_map_confirm]
-                .to_string(),
+                .as_str(),
         );
         if ui
             .button(
                 setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.btn_confirm]
-                    .to_string(),
+                    .as_str(),
             )
             .clicked()
         {
-            fs::remove_file(format!("map/{}.run", map.map_name)).unwrap();
+            fs::remove_file(format!("map/{}{MAP_EXT}", map.map_name)).unwrap();
             dirty = true;
             loop_store.popup_state = PopupState::None;
             log::info!("Deleted map {}!", map.map_name);
@@ -325,6 +325,7 @@ pub fn map_delete_confirmation(
             loop_store.popup_state = PopupState::None
         }
     });
+
     if dirty {
         setup.refresh_maps();
     }
@@ -348,7 +349,7 @@ pub fn map_create_menu(
     .show(&gui.context(), |ui| {
         ui.horizontal(|ui| {
             ui.label("Name:");
-            ui.text_edit_singleline(&mut loop_store.filter);
+            ui.text_edit_singleline(&mut loop_store.map_name);
         });
         if ui
             .button(
@@ -357,13 +358,13 @@ pub fn map_create_menu(
             )
             .clicked()
         {
-            let name = Map::sanitize_name(loop_store.filter.clone()); //TODO WHAT THE FUCK IS IT DOING
+            let name = Map::sanitize_name(loop_store.map_name.clone());
             setup
                 .game
                 .send_message(GameMsg::LoadMap(setup.resource_man.clone(), name))
                 .unwrap();
             renderer.reset_last_tiles_update();
-            loop_store.filter.clear();
+            loop_store.map_name.clear();
             loop_store.popup_state = PopupState::None;
             loop_store.switch_gui_state(GuiState::Ingame);
         }

@@ -86,7 +86,6 @@
         "time_fmt": "%x at %r"
     },
     "error": {
-        "test_error": "automancy is early alpha software and is probably buggy af",
         "invalid_map_data": "Map {} was corrupted and could not be repaired! This session will instead be written to {}"
     }
 }

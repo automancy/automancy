@@ -4,11 +4,11 @@ use std::time::{Duration, Instant};
 
 use ractor::concurrency::MpscSender;
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort, SupervisionEvent};
+use rayon::prelude::*;
 
 use automancy_defs::cg::{Float, Matrix4};
 use automancy_defs::cgmath::vec3;
 use automancy_defs::coord::{TileCoord, TileHex, TileUnit};
-use automancy_defs::flexstr::SharedStr;
 use automancy_defs::hashbrown::HashMap;
 use automancy_defs::hexagon_tiles::layout::hex_to_pixel;
 use automancy_defs::hexagon_tiles::traits::HexDirection;
@@ -19,7 +19,6 @@ use automancy_resources::data::item::item_match;
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::script::Script;
 use automancy_resources::ResourceManager;
-use rayon::prelude::*;
 
 use crate::camera::FAR;
 use crate::game::GameMsg::*;
@@ -136,14 +135,14 @@ pub struct Game;
 impl Actor for Game {
     type Msg = GameMsg;
     type State = GameState;
-    type Arguments = (Arc<ResourceManager>, SharedStr);
+    type Arguments = Arc<ResourceManager>;
 
     async fn pre_start(
         &self,
         _myself: ActorRef<Self::Msg>,
         args: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
-        Ok(Self::State::new(args.0, args.1))
+        Ok(Self::State::new(args))
     }
 
     async fn handle(
@@ -565,14 +564,14 @@ pub fn tick(state: &mut GameState) {
 
 impl GameState {
     /// Creates a new game messaging/map system.
-    pub fn new(resource_man: Arc<ResourceManager>, map_name: SharedStr) -> Self {
+    pub fn new(resource_man: Arc<ResourceManager>) -> Self {
         Self {
             tick_count: 0,
 
             resource_man,
 
             tile_entities: Default::default(),
-            map: Map::new_empty(map_name.to_string()),
+            map: Map::new_empty("".to_string()),
 
             render_cache: Default::default(),
             stopped: false,

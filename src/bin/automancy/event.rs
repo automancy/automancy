@@ -40,6 +40,7 @@ pub struct EventLoopStorage {
     // TODO most of the following elements should be moved out of here...
     /// the filter for the scripts.
     pub filter: String,
+    pub map_name: String,
     /// the state of the input peripherals.
     pub input_handler: InputHandler,
     /// the tile states of the selected tiles.
@@ -70,6 +71,7 @@ impl Default for EventLoopStorage {
         Self {
             fuse: Default::default(),
             filter: "".to_string(),
+            map_name: "".to_string(),
             input_handler: Default::default(),
             selected_tile_modifiers: Default::default(),
             selected_id: None,

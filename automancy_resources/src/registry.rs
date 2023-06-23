@@ -187,8 +187,6 @@ impl GuiIds {
 /// Contains a list of errors that can be displayed.
 #[derive(Clone, Copy)]
 pub struct ErrorIds {
-    /// This error is displayed to test that the error manager is working. TODO this can probably be removed.
-    pub test_error: Id,
     /// This error is displayed when the map cannot be read.
     pub invalid_map_data: Id,
 }
@@ -196,7 +194,6 @@ pub struct ErrorIds {
 impl ErrorIds {
     pub fn new(interner: &mut Interner) -> Self {
         make_ids! {
-            test_error,
             invalid_map_data
         }
     }
