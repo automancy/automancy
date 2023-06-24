@@ -1,18 +1,21 @@
 use std::f32::consts::PI;
 use std::sync::Arc;
+use std::time::Instant;
 
 use ractor::rpc::{multi_call, CallResult};
 use ractor::ActorRef;
 use tokio::runtime::Runtime;
 
-use automancy_defs::cg::{deg, matrix, Float, Matrix4, Point3};
+use automancy_defs::cg::{deg, matrix, Double, Float, Matrix4, Point3};
 use automancy_defs::cgmath::{vec3, SquareMatrix};
 use automancy_defs::colors;
 use automancy_defs::colors::WithAlpha;
 use automancy_defs::coord::{ChunkCoord, TileCoord};
 use automancy_defs::egui_winit_vulkano::Gui;
 use automancy_defs::hashbrown::HashMap;
-use automancy_defs::hexagon_tiles::layout::hex_to_pixel;
+use automancy_defs::hexagon_tiles::fractional::FractionalHex;
+use automancy_defs::hexagon_tiles::layout::{frac_hex_to_pixel, hex_to_pixel};
+use automancy_defs::hexagon_tiles::traits::HexRound;
 use automancy_defs::id::Id;
 use automancy_defs::rendering::{
     GameUBO, GameVertex, InstanceData, LightInfo, OverlayUBO, RawInstanceData, DEFAULT_LIGHT_COLOR,
@@ -34,7 +37,7 @@ use automancy_resources::data::Data;
 use automancy_resources::ResourceManager;
 
 use crate::camera::FAR;
-use crate::game::{GameMsg, RenderInfo, RenderUnit, TickUnit};
+use crate::game::{GameMsg, RenderInfo, RenderUnit, TickUnit, ANIMATION_SPEED};
 use crate::gpu;
 use crate::gpu::Gpu;
 use crate::tile_entity::TileEntityMsg;
@@ -84,7 +87,7 @@ impl Renderer {
         camera_chunk_coord: ChunkCoord,
         game: ActorRef<GameMsg>,
         map_render_info: &RenderInfo,
-        gui_instances: Vec<(InstanceData, Id)>,
+        mut gui_instances: Vec<(InstanceData, Id)>,
         extra_vertices: Vec<GameVertex>,
         gui: &mut Gui,
     ) {
@@ -106,6 +109,34 @@ impl Renderer {
                 true
             }
         };
+
+        let transaction_record = runtime
+            .block_on(game.call(GameMsg::GetRecordedTransactions, None))
+            .unwrap()
+            .unwrap();
+        let now = Instant::now();
+
+        transaction_record.read().unwrap().iter().for_each(
+            |(instant, ((source_coord, source_id), (coord, id)), stack)| {
+                let duration = now.duration_since(*instant);
+                let t = duration.as_secs_f64() / ANIMATION_SPEED.as_secs_f64();
+                let a = FractionalHex::new(source_coord.q() as Double, source_coord.r() as Double);
+                let b = FractionalHex::new(coord.q() as Double, coord.r() as Double);
+                let lerp = a.lerp(b, t);
+                let point = frac_hex_to_pixel(HEX_GRID_LAYOUT, lerp);
+
+                let instance = InstanceData::default().with_model_matrix(
+                    Matrix4::from_translation(vec3(
+                        point.x as Float,
+                        point.y as Float,
+                        FAR as Float,
+                    )) * Matrix4::from_scale(0.5),
+                );
+                let id = resource_man.get_item_model(stack.item);
+
+                gui_instances.push((instance, id));
+            },
+        );
 
         let instances = {
             let none = self

@@ -1,15 +1,20 @@
-use crate::gui::default_frame;
-use crate::setup::GameSetup;
+use tokio::runtime::Runtime;
+
 use automancy::game::GameMsg;
+use automancy::renderer::Renderer;
 use automancy::tile_entity::TileEntityMsg;
 use automancy_defs::colors;
 use automancy_defs::egui::{vec2, Align, Align2, Margin, Window};
 use automancy_defs::egui_winit_vulkano::Gui;
+use automancy_resources::data::stack::ItemStack;
 use automancy_resources::data::Data;
-use tokio::runtime::Runtime;
+
+use crate::gui::item::ItemStackGuiElement;
+use crate::gui::{default_frame, ITEM_ICON_SIZE};
+use crate::setup::GameSetup;
 
 /// Draws the tile info GUI.
-pub fn tile_info(runtime: &Runtime, setup: &GameSetup, gui: &Gui) {
+pub fn tile_info(runtime: &Runtime, setup: &GameSetup, renderer: &Renderer, gui: &Gui) {
     Window::new(
         setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.tile_info]
             .to_string(),
@@ -48,13 +53,17 @@ pub fn tile_info(runtime: &Runtime, setup: &GameSetup, gui: &Gui) {
             if let Some(inventory) = data
                 .get(&setup.resource_man.registry.data_ids.buffer)
                 .and_then(Data::as_inventory)
+                .cloned()
             {
-                for (item, amount) in inventory.0.iter() {
-                    ui.label(format!(
-                        "{} - {}",
-                        setup.resource_man.item_name(&item.id),
-                        amount
-                    ));
+                for (item, amount) in inventory.0.into_iter() {
+                    ui.horizontal(|ui| {
+                        ui.set_height(ITEM_ICON_SIZE);
+                        ui.add(ItemStackGuiElement::new(
+                            setup.resource_man.clone(),
+                            renderer,
+                            ItemStack { item, amount },
+                        ));
+                    });
                 }
             }
             //ui.label(format!("State: {}", ask(sys, &game, )))

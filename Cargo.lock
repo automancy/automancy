@@ -140,6 +140,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "arraydeque"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d902e3d592a523def97af8f317b08ce16b7ab854c1985a0c671e6f15cebc236"
+
+[[package]]
 name = "arrayref"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -193,6 +199,7 @@ checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 name = "automancy"
 version = "0.1.0"
 dependencies = [
+ "arraydeque",
  "async-trait",
  "automancy_defs",
  "automancy_resources",
@@ -1149,7 +1156,7 @@ checksum = "fed44880c466736ef9a5c5b5facefb5ed0785676d0c02d612db14e54f0d84286"
 [[package]]
 name = "hexagon-tiles"
 version = "0.2.0"
-source = "git+https://github.com/Mg138/hexagon-tiles#6bc7d51f8518d5ed74a9c0dc16bb2921fba7dca9"
+source = "git+https://github.com/Mg138/hexagon-tiles#ee2397f32f7f34410a9f2a634c29c513f6bf2ef9"
 dependencies = [
  "float_eq",
  "num",

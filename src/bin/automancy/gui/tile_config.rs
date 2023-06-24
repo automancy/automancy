@@ -15,16 +15,15 @@ use automancy_defs::hexagon_tiles::traits::HexDirection;
 use automancy_defs::id::Id;
 use automancy_defs::rendering::GameVertex;
 use automancy_defs::winit::dpi::PhysicalSize;
+use automancy_resources::data::stack::ItemStack;
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::tile::Tile;
 use automancy_resources::ResourceManager;
 
 use crate::event::EventLoopStorage;
 use crate::gui::item::ItemStackGuiElement;
-use crate::gui::{make_line, searchable_id};
+use crate::gui::{make_line, searchable_id, ITEM_ICON_SIZE, MARGIN};
 use crate::setup::GameSetup;
-
-const MARGIN: Float = 8.0;
 
 /// Draws the direction selector.
 pub fn add_direction(ui: &mut Ui, target_coord: &mut Option<TileCoord>, n: usize) {
@@ -203,6 +202,7 @@ fn storage(
     ui: &mut Ui,
     setup: &GameSetup,
     loop_store: &mut EventLoopStorage,
+    renderer: &Renderer,
     data: &DataMap,
     tile_entity: ActorRef<TileEntityMsg>,
     tile_info: &Tile,
@@ -224,15 +224,6 @@ fn storage(
         .data
         .get(&setup.resource_man.registry.data_ids.storage_type)
     {
-        let storage_text = if let Some(item) = new_storage
-            .as_ref()
-            .and_then(|id| setup.resource_man.registry.item(*id))
-        {
-            setup.resource_man.item_name(&item.id).to_string()
-        } else {
-            setup.resource_man.translates.none.to_string()
-        };
-
         let items = setup
             .resource_man
             .get_items(*storage_type, &mut loop_store.tag_cache)
@@ -248,7 +239,27 @@ fn storage(
                 .as_str(),
         );
         ui.horizontal(|ui| {
-            ui.label(storage_text);
+            ui.set_height(ITEM_ICON_SIZE);
+
+            if let Some(stack) = current_storage
+                .and_then(|id| setup.resource_man.registry.item(id))
+                .cloned()
+                .and_then(|item| {
+                    data.get(&setup.resource_man.registry.data_ids.buffer)
+                        .and_then(Data::as_inventory)
+                        .and_then(|inventory| {
+                            inventory
+                                .try_get(item)
+                                .map(|amount| ItemStack { item, amount })
+                        })
+                })
+            {
+                ui.add(ItemStackGuiElement::new(
+                    setup.resource_man.clone(),
+                    renderer,
+                    stack,
+                ));
+            }
             ui.add(
                 DragValue::new(&mut new_amount)
                     .clamp_range(0..=65535)
@@ -303,8 +314,8 @@ fn storage(
 fn script(
     ui: &mut Ui,
     setup: &GameSetup,
-    renderer: &Renderer,
     loop_store: &mut EventLoopStorage,
+    renderer: &Renderer,
     data: &DataMap,
     tile_entity: ActorRef<TileEntityMsg>,
     tile_info: &Tile,
@@ -331,13 +342,11 @@ fn script(
         ui.vertical(|ui| {
             ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
 
-            const SIZE: Float = 32.0;
-
             if let Some(script) = new_script.and_then(|id| setup.resource_man.registry.script(id)) {
                 if let Some(inputs) = &script.instructions.inputs {
                     inputs.iter().for_each(|stack| {
                         ui.horizontal(|ui| {
-                            ui.set_height(SIZE);
+                            ui.set_height(ITEM_ICON_SIZE);
 
                             ui.label(" + ");
                             ui.add(ItemStackGuiElement::new(
@@ -350,7 +359,7 @@ fn script(
                 }
 
                 ui.horizontal(|ui| {
-                    ui.set_height(SIZE);
+                    ui.set_height(ITEM_ICON_SIZE);
 
                     ui.label("=> ");
                     ui.add(ItemStackGuiElement::new(
@@ -443,13 +452,21 @@ pub fn tile_config(
                 script(
                     ui,
                     setup,
-                    renderer,
                     loop_store,
+                    renderer,
                     &data,
                     tile_entity.clone(),
                     tile_info,
                 );
-                storage(ui, setup, loop_store, &data, tile_entity.clone(), tile_info);
+                storage(
+                    ui,
+                    setup,
+                    loop_store,
+                    renderer,
+                    &data,
+                    tile_entity.clone(),
+                    tile_info,
+                );
                 target(ui, setup, &data, tile_entity.clone(), id);
                 node(runtime, setup, config_open, extra_vertices, window_size, id);
                 master_node(ui, setup, loop_store, config_open, id);

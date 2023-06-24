@@ -1,7 +1,9 @@
+use std::collections::VecDeque;
 use std::mem;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
+use arraydeque::{ArrayDeque, Wrapping};
 use ractor::concurrency::MpscSender;
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort, SupervisionEvent};
 use rayon::prelude::*;
@@ -16,6 +18,7 @@ use automancy_defs::id::Id;
 use automancy_defs::log;
 use automancy_defs::rendering::{InstanceData, HEX_GRID_LAYOUT};
 use automancy_resources::data::item::item_match;
+use automancy_resources::data::stack::ItemStack;
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::script::Script;
 use automancy_resources::ResourceManager;
@@ -25,12 +28,12 @@ use crate::game::GameMsg::*;
 use crate::map::{Map, MapInfo, TileEntities};
 use crate::tile_entity::{TileEntity, TileEntityMsg, TileModifier};
 
-const UNDO_CACHE_SIZE: usize = 16;
-
 pub const TPS: u64 = 30;
 
 pub const TICK_INTERVAL: Duration = Duration::from_nanos(1_000_000_000 / TPS);
 pub const MAX_ALLOWED_TICK_INTERVAL: Duration = TICK_INTERVAL.saturating_mul(5);
+
+pub const ANIMATION_SPEED: Duration = Duration::from_nanos(1_000_000_000 / 2);
 
 pub type TickUnit = u16;
 
@@ -42,6 +45,7 @@ pub struct RenderUnit {
 }
 
 pub type RenderInfo = HashMap<TileCoord, RenderUnit>;
+pub type TransactionRecord = VecDeque<(Instant, ((TileCoord, Id), (TileCoord, Id)), ItemStack)>;
 
 #[derive(Debug)]
 pub struct GameState {
@@ -63,10 +67,10 @@ pub struct GameState {
     stopped: bool,
     /// the last time the tiles are updated
     last_tiles_update_time: TickUnit,
-    /// what to do to undo the last 16 user events
-    undo_steps: [Option<Vec<GameMsg>>; UNDO_CACHE_SIZE],
-    /// the current index of the undo steps
-    undo_steps_index: usize,
+    /// what to do to undo the last UNDO_CACHE_SIZE user events
+    undo_steps: ArrayDeque<Vec<GameMsg>, 16, Wrapping>,
+    /// records transactions to be drawn
+    transactions_record: Arc<RwLock<TransactionRecord>>,
 }
 
 /// Represents a message the game receives
@@ -120,6 +124,7 @@ pub enum GameMsg {
     SetData(Id, Data),
     RemoveData(Id),
     StopTicking,
+    GetRecordedTransactions(RpcReplyPort<Arc<RwLock<TransactionRecord>>>),
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -177,6 +182,9 @@ impl Actor for Game {
                 state.map = map;
                 state.tile_entities = tile_entities;
                 state.render_cache.clear();
+                state.transactions_record.write().unwrap().clear();
+                state.undo_steps.clear();
+
                 log::info!("Successfully loaded map {name}!");
                 return Ok(());
             }
@@ -295,16 +303,13 @@ impl Actor for Game {
                             let (id, tile_modifier) =
                                 old_tile.unwrap_or((state.resource_man.registry.none, 0));
 
-                            add_undo_step(
-                                state,
-                                vec![PlaceTile {
-                                    coord,
-                                    id,
-                                    tile_modifier,
-                                    record: false,
-                                    reply: None,
-                                }],
-                            );
+                            state.undo_steps.push_back(vec![PlaceTile {
+                                coord,
+                                id,
+                                tile_modifier,
+                                record: false,
+                                reply: None,
+                            }]);
                         }
 
                         state.last_tiles_update_time = state.tick_count;
@@ -327,6 +332,24 @@ impl Actor for Game {
                     }
                     ForwardMsgToTile(coord, msg) => {
                         if let Some(tile_entity) = state.tile_entities.get(&coord) {
+                            if state.tick_count % 5 == 0 {
+                                if let TileEntityMsg::Transaction {
+                                    stack,
+                                    source_id,
+                                    source_coord,
+                                    ..
+                                } = &msg
+                                {
+                                    if let Some((id, _)) = state.map.tiles.get(&coord) {
+                                        state.transactions_record.write().unwrap().push_back((
+                                            Instant::now(),
+                                            ((*source_coord, *source_id), (coord, *id)),
+                                            *stack,
+                                        ));
+                                    }
+                                }
+                            }
+
                             tile_entity.send_message(msg).unwrap();
                         }
                     }
@@ -368,7 +391,31 @@ impl Actor for Game {
                         state.stopped = true;
                     }
                     Undo => {
-                        undo_once(myself.clone(), state);
+                        if let Some(step) = state.undo_steps.pop_back() {
+                            for msg in step {
+                                myself.send_message(msg).unwrap();
+                            }
+                        }
+                    }
+                    GetRecordedTransactions(reply) => {
+                        let now = Instant::now();
+
+                        let to_remove = state
+                            .transactions_record
+                            .read()
+                            .unwrap()
+                            .iter()
+                            .take_while(|(instant, _, _)| {
+                                now.duration_since(*instant) >= ANIMATION_SPEED
+                            })
+                            .map(|_| ())
+                            .collect::<Vec<_>>();
+
+                        to_remove.into_iter().for_each(|_| {
+                            state.transactions_record.write().unwrap().pop_front();
+                        });
+
+                        reply.send(state.transactions_record.clone()).unwrap();
                     }
                     _ => {}
                 }
@@ -412,25 +459,6 @@ fn stop_tile(state: &mut GameState, coord: TileCoord) -> Option<(Id, TileModifie
     state.map.tiles.remove(&coord)
 }
 
-/// Undoes the last undo-able action with step stored in the undo steps array
-fn undo_once(game: ActorRef<GameMsg>, state: &mut GameState) {
-    if state.undo_steps.iter().all(Option::is_none) {
-        return;
-    }
-
-    if state.undo_steps_index == 0 {
-        state.undo_steps_index = UNDO_CACHE_SIZE - 1;
-    } else {
-        state.undo_steps_index -= 1;
-    }
-
-    if let Some(step) = mem::take(state.undo_steps.get_mut(state.undo_steps_index).unwrap()) {
-        for msg in step {
-            game.send_message(msg).unwrap();
-        }
-    }
-}
-
 /// Creates a new tile of given type at the given position, and with an initial state.
 pub async fn new_tile(
     game: ActorRef<GameMsg>,
@@ -471,17 +499,6 @@ async fn insert_new_tile(
     state.map.tiles.insert(coord, (id, tile_modifier));
 
     old
-}
-
-/// Adds one vector of undo steps to the undo steps array
-fn add_undo_step(state: &mut GameState, step: Vec<GameMsg>) {
-    state.undo_steps[state.undo_steps_index] = Some(step);
-
-    if state.undo_steps_index == UNDO_CACHE_SIZE - 1 {
-        state.undo_steps_index = 0;
-    } else {
-        state.undo_steps_index += 1;
-    }
 }
 
 fn render_info(state: &mut GameState, center: TileCoord, range: TileUnit) -> Arc<RenderInfo> {
@@ -577,7 +594,7 @@ impl GameState {
             stopped: false,
             last_tiles_update_time: 0,
             undo_steps: Default::default(),
-            undo_steps_index: 0,
+            transactions_record: Arc::new(Default::default()),
         }
     }
 }

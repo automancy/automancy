@@ -56,11 +56,10 @@ pub enum TileEntityMsg {
     },
     Transaction {
         resource_man: Arc<ResourceManager>,
-        tick_count: TickUnit,
-        item_stack: ItemStack,
+        stack: ItemStack,
         source_type: Option<Id>,
         source_id: Id,
-        direction: TileCoord,
+        source_coord: TileCoord,
         source: ActorRef<TileEntityMsg>,
     },
     TransactionResult {
@@ -259,17 +258,16 @@ impl Actor for TileEntity {
                         item_stack,
                     }) = self.machine_tick(state, &resource_man)
                     {
-                        send_to_tile_coord(
+                        send_to_tile(
                             self,
                             state,
                             target,
                             Transaction {
                                 resource_man: resource_man.clone(),
-                                tick_count,
-                                item_stack,
+                                stack: item_stack,
                                 source_type: tile_type,
                                 source_id: self.id,
-                                direction,
+                                source_coord: self.coord,
                                 source: myself,
                             },
                             &resource_man,
@@ -291,7 +289,7 @@ impl Actor for TileEntity {
                                 .cloned(),
                         )
                     {
-                        send_to_tile_coord(
+                        send_to_tile(
                             self,
                             state,
                             self.coord + link,
@@ -308,18 +306,17 @@ impl Actor for TileEntity {
             }
             Transaction {
                 resource_man,
-                tick_count,
-                item_stack,
-                source_type: _,
-                source_id: _,
-                direction,
+                stack,
+                source_type,
+                source_id,
+                source_coord,
                 source,
             } => {
                 if self.id == resource_man.registry.tile_ids.void {
                     source
                         .send_message(TransactionResult {
                             resource_man: resource_man.clone(),
-                            result: Ok(item_stack),
+                            result: Ok(stack),
                         })
                         .unwrap()
                 }
@@ -327,7 +324,7 @@ impl Actor for TileEntity {
                 let tile = resource_man.registry.tile(self.id).unwrap();
 
                 if tile.tile_type == Some(resource_man.registry.tile_ids.machine) {
-                    let result = TileEntity::machine_transaction(state, &resource_man, item_stack);
+                    let result = TileEntity::machine_transaction(state, &resource_man, stack);
 
                     source
                         .send_message(TransactionResult {
@@ -351,7 +348,7 @@ impl Actor for TileEntity {
                                 .cloned(),
                         )
                     {
-                        if item_stack.item == item {
+                        if stack.item == item {
                             let buffer = state
                                 .data
                                 .0
@@ -376,7 +373,7 @@ impl Actor for TileEntity {
                                 return Ok(());
                             }
 
-                            let inserting = item_stack.amount.at_most(amount - *stored);
+                            let inserting = stack.amount.at_most(amount - *stored);
                             *stored += inserting;
 
                             source
@@ -410,17 +407,16 @@ impl Actor for TileEntity {
                     {
                         let target_coord = self.coord + target;
 
-                        send_to_tile_coord(
+                        send_to_tile(
                             self,
                             state,
                             target_coord,
                             Transaction {
                                 resource_man: resource_man.clone(),
-                                tick_count,
-                                item_stack,
+                                stack,
                                 source_type: Some(resource_man.registry.tile_ids.transfer),
                                 source_id: self.id,
-                                direction: -target,
+                                source_coord: self.coord,
                                 source: source.clone(),
                             },
                             &resource_man,
@@ -442,6 +438,7 @@ impl Actor for TileEntity {
                         )),
                         _ => None,
                     } {
+                        let direction = source_coord - self.coord;
                         let (first, second) = if direction == a {
                             (b, c)
                         } else if direction == b {
@@ -454,17 +451,16 @@ impl Actor for TileEntity {
 
                         let target_coord = self.coord + target;
 
-                        send_to_tile_coord(
+                        send_to_tile(
                             self,
                             state,
                             target_coord,
                             Transaction {
                                 resource_man: resource_man.clone(),
-                                tick_count,
-                                item_stack,
+                                stack,
                                 source_type: Some(resource_man.registry.tile_ids.transfer),
                                 source_id: self.id,
-                                direction: -target,
+                                source_coord: self.coord,
                                 source,
                             },
                             &resource_man,
@@ -566,20 +562,19 @@ impl Actor for TileEntity {
                         let extracting = stored.min(amount);
 
                         if extracting > 0 {
-                            send_to_tile_coord(
+                            send_to_tile(
                                 self,
                                 state,
                                 coord,
                                 Transaction {
                                     resource_man: resource_man.clone(),
-                                    tick_count,
-                                    item_stack: ItemStack {
+                                    stack: ItemStack {
                                         item,
                                         amount: extracting,
                                     },
                                     source_type: tile_type,
                                     source_id: self.id,
-                                    direction,
+                                    source_coord: self.coord,
                                     source: myself,
                                 },
                                 &resource_man,
@@ -595,7 +590,7 @@ impl Actor for TileEntity {
                         .and_then(Data::as_coord)
                         .cloned()
                     {
-                        send_to_tile_coord(
+                        send_to_tile(
                             self,
                             state,
                             self.coord + target,
@@ -619,7 +614,7 @@ impl Actor for TileEntity {
     }
 }
 
-fn send_to_tile_coord(
+fn send_to_tile(
     myself: &TileEntity,
     state: &mut TileEntityState,
     coord: TileCoord,

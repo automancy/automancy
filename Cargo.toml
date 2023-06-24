@@ -23,6 +23,7 @@ automancy_defs = { path = "automancy_defs" }
 env_logger = "0.10.0"
 
 slice-group-by = "0.3.0"
+arraydeque = "0.5.1"
 fuse-rust = "0.3.1"
 
 lazy_static = "1.4.0"

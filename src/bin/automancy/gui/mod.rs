@@ -21,6 +21,9 @@ use automancy_resources::ResourceManager;
 
 use crate::IOSEVKA_FONT;
 
+const MARGIN: Float = 8.0;
+const ITEM_ICON_SIZE: Float = 32.0;
+
 pub mod debug;
 pub mod error;
 pub mod item;

@@ -256,14 +256,14 @@ pub fn on_event(
                         PlaceTileResponse::Placed => {
                             setup
                                 .audio_man
-                                .play(resource_man.audio["place"].clone())
+                                .play(resource_man.audio["tile_placement"].clone())
                                 .unwrap();
                         }
                         PlaceTileResponse::Removed => {
                             setup
                                 .audio_man
                                 .play(
-                                    resource_man.audio["click"]
+                                    resource_man.audio["tile_removal"]
                                         .clone()
                                         .with_modified_settings(|s| s.playback_rate(0.5)),
                                 )
@@ -406,7 +406,7 @@ pub fn on_event(
                 );
 
                 // tile_info
-                tile_info::tile_info(runtime, setup, gui);
+                tile_info::tile_info(runtime, setup, renderer, gui);
 
                 // tile_config
                 tile_config::tile_config(
