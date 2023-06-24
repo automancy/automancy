@@ -115,6 +115,7 @@ pub enum GameMsg {
     /// get the map
     TakeMap(RpcReplyPort<Map>),
     SaveMap(Arc<ResourceManager>, RpcReplyPort<()>),
+    MoveTiles(Vec<TileCoord>, TileCoord, bool),
     /// load a map
     LoadMap(Arc<ResourceManager>, String),
     GetMapInfo(RpcReplyPort<MapInfo>),
@@ -290,7 +291,7 @@ impl Actor for Game {
                                 reply.send(PlaceTileResponse::Removed).unwrap();
                             }
 
-                            stop_tile(state, coord)
+                            remove_tile(state, coord)
                         } else {
                             if let Some(reply) = reply {
                                 reply.send(PlaceTileResponse::Placed).unwrap();
@@ -313,8 +314,6 @@ impl Actor for Game {
                         }
 
                         state.last_tiles_update_time = state.tick_count;
-
-                        state.render_cache.clear();
                     }
                     GetTile(coord, reply) => {
                         reply.send(state.map.tiles.get(&coord).cloned()).unwrap();
@@ -417,6 +416,50 @@ impl Actor for Game {
 
                         reply.send(state.transactions_record.clone()).unwrap();
                     }
+                    MoveTiles(tiles, direction, record) => {
+                        let mut undo = vec![];
+
+                        for old_coord in tiles {
+                            if !state.map.tiles.contains_key(&old_coord) {
+                                continue;
+                            }
+
+                            let new_coord = old_coord + direction;
+
+                            let old_data = if let Some(entity) = state.tile_entities.get(&old_coord)
+                            {
+                                Some(
+                                    entity
+                                        .call(TileEntityMsg::GetData, None)
+                                        .await
+                                        .unwrap()
+                                        .unwrap(),
+                                )
+                            } else {
+                                None
+                            };
+                            let old = remove_tile(state, old_coord);
+
+                            if let Some((id, modifier)) = old {
+                                insert_new_tile(myself.clone(), state, new_coord, id, modifier)
+                                    .await;
+
+                                undo.push(new_coord);
+
+                                if let Some(data) = old_data {
+                                    state.tile_entities[&new_coord]
+                                        .send_message(TileEntityMsg::SetData(data))
+                                        .unwrap();
+                                }
+                            }
+                        }
+
+                        if record {
+                            state
+                                .undo_steps
+                                .push_back(vec![MoveTiles(undo, -direction, false)]);
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -450,7 +493,9 @@ impl Actor for Game {
 }
 
 /// Stops a tile and removes it from the game
-fn stop_tile(state: &mut GameState, coord: TileCoord) -> Option<(Id, TileModifier)> {
+fn remove_tile(state: &mut GameState, coord: TileCoord) -> Option<(Id, TileModifier)> {
+    state.render_cache.clear();
+
     if let Some(tile_entity) = state.tile_entities.get(&coord) {
         tile_entity.stop(Some("Removed from game".to_string()));
     }
@@ -491,7 +536,7 @@ async fn insert_new_tile(
     id: Id,
     tile_modifier: TileModifier,
 ) -> Option<(Id, TileModifier)> {
-    let old = stop_tile(state, coord);
+    let old = remove_tile(state, coord);
 
     let tile_entity = new_tile(game, coord, id, tile_modifier).await;
 

@@ -12,7 +12,7 @@ use automancy_defs::colors;
 use automancy_defs::colors::WithAlpha;
 use automancy_defs::coord::{ChunkCoord, TileCoord};
 use automancy_defs::egui_winit_vulkano::Gui;
-use automancy_defs::hashbrown::HashMap;
+use automancy_defs::hashbrown::{HashMap, HashSet};
 use automancy_defs::hexagon_tiles::fractional::FractionalHex;
 use automancy_defs::hexagon_tiles::layout::{frac_hex_to_pixel, hex_to_pixel};
 use automancy_defs::hexagon_tiles::traits::HexRound;
@@ -83,10 +83,10 @@ impl Renderer {
         runtime: &Runtime,
         resource_man: Arc<ResourceManager>,
         camera_pos: Point3,
-        camera_pointing_at: TileCoord,
         camera_chunk_coord: ChunkCoord,
         game: ActorRef<GameMsg>,
         map_render_info: &RenderInfo,
+        selected_tiles: &HashSet<TileCoord>,
         mut gui_instances: Vec<(InstanceData, Id)>,
         extra_vertices: Vec<GameVertex>,
         gui: &mut Gui,
@@ -254,8 +254,11 @@ impl Renderer {
                 }
             }
 
-            if let Some(RenderUnit { instance, .. }) = instances.get_mut(&camera_pointing_at) {
-                *instance = instance.with_color_offset(colors::ORANGE.with_alpha(0.5).to_array())
+            for selected in selected_tiles.iter() {
+                if let Some(RenderUnit { instance, .. }) = instances.get_mut(selected) {
+                    *instance =
+                        instance.with_color_offset(colors::ORANGE.with_alpha(0.5).to_array())
+                }
             }
 
             let mut map = HashMap::new();

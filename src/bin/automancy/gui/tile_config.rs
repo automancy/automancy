@@ -5,7 +5,7 @@ use automancy::game::GameMsg;
 use automancy::renderer::Renderer;
 use automancy::tile_entity::TileEntityMsg;
 use automancy::util::render::hex_to_normalized;
-use automancy_defs::cg::{DPoint3, Double, Float};
+use automancy_defs::cg::{DPoint3, Double};
 use automancy_defs::cgmath::point2;
 use automancy_defs::colors;
 use automancy_defs::coord::{TileCoord, TileHex};
@@ -91,7 +91,7 @@ fn target(
     if new_target_coord != current_target_coord {
         if let Some(target_coord) = new_target_coord {
             tile_entity
-                .send_message(TileEntityMsg::SetData(
+                .send_message(TileEntityMsg::SetDataValue(
                     setup.resource_man.registry.data_ids.target,
                     Data::Coord(target_coord),
                 ))
@@ -280,7 +280,7 @@ fn storage(
             &loop_store.fuse,
             items.as_slice(),
             &mut new_storage,
-            &mut loop_store.filter,
+            &mut loop_store.filter_input,
             &ResourceManager::item_name,
         );
     }
@@ -288,7 +288,7 @@ fn storage(
     if new_storage != current_storage {
         if let Some(storage) = new_storage {
             tile_entity
-                .send_message(TileEntityMsg::SetData(
+                .send_message(TileEntityMsg::SetDataValue(
                     setup.resource_man.registry.data_ids.storage,
                     Data::Id(storage),
                 ))
@@ -303,7 +303,7 @@ fn storage(
 
     if new_amount != current_amount {
         tile_entity
-            .send_message(TileEntityMsg::SetData(
+            .send_message(TileEntityMsg::SetDataValue(
                 setup.resource_man.registry.data_ids.amount,
                 Data::Amount(new_amount),
             ))
@@ -379,7 +379,7 @@ fn script(
             &loop_store.fuse,
             scripts.as_slice(),
             &mut new_script,
-            &mut loop_store.filter,
+            &mut loop_store.filter_input,
             &ResourceManager::script_name,
         );
     }
@@ -387,7 +387,7 @@ fn script(
     if new_script != current_script {
         if let Some(script) = new_script {
             tile_entity
-                .send_message(TileEntityMsg::SetData(
+                .send_message(TileEntityMsg::SetDataValue(
                     setup.resource_man.registry.data_ids.script,
                     Data::Id(script),
                 ))

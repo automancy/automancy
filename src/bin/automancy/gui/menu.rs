@@ -349,7 +349,7 @@ pub fn map_create_menu(
     .show(&gui.context(), |ui| {
         ui.horizontal(|ui| {
             ui.label("Name:");
-            ui.text_edit_singleline(&mut loop_store.map_name);
+            ui.text_edit_singleline(&mut loop_store.map_name_input);
         });
         if ui
             .button(
@@ -358,13 +358,13 @@ pub fn map_create_menu(
             )
             .clicked()
         {
-            let name = Map::sanitize_name(loop_store.map_name.clone());
+            let name = Map::sanitize_name(loop_store.map_name_input.clone());
             setup
                 .game
                 .send_message(GameMsg::LoadMap(setup.resource_man.clone(), name))
                 .unwrap();
             renderer.reset_last_tiles_update();
-            loop_store.map_name.clear();
+            loop_store.map_name_input.clear();
             loop_store.popup_state = PopupState::None;
             loop_store.switch_gui_state(GuiState::Ingame);
         }

@@ -188,7 +188,7 @@ impl Map {
 
                 data.0.into_iter().for_each(|(key, value)| {
                     tile_entity
-                        .send_message(TileEntityMsg::SetData(key, value))
+                        .send_message(TileEntityMsg::SetDataValue(key, value))
                         .unwrap();
                 });
 

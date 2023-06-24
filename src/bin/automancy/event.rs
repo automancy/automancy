@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::mem;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -19,7 +20,7 @@ use automancy_defs::cgmath::{point2, vec3, EuclideanSpace};
 use automancy_defs::colors::WithAlpha;
 use automancy_defs::coord::{ChunkCoord, TileCoord, CHUNK_SIZE_SQUARED};
 use automancy_defs::egui_winit_vulkano::Gui;
-use automancy_defs::hashbrown::HashMap;
+use automancy_defs::hashbrown::{HashMap, HashSet};
 use automancy_defs::id::Id;
 use automancy_defs::rendering::InstanceData;
 use automancy_defs::winit::event::{Event, WindowEvent};
@@ -39,8 +40,9 @@ pub struct EventLoopStorage {
     pub fuse: Fuse,
     // TODO most of the following elements should be moved out of here...
     /// the filter for the scripts.
-    pub filter: String,
-    pub map_name: String,
+    pub filter_input: String,
+    /// input for the map name
+    pub map_name_input: String,
     /// the state of the input peripherals.
     pub input_handler: InputHandler,
     /// the tile states of the selected tiles.
@@ -59,6 +61,10 @@ pub struct EventLoopStorage {
     pub last_frame_start: Instant,
     /// the elapsed time between each frame
     pub elapsed: Duration,
+    /// the currently selected tiles
+    pub selected_tiles: HashSet<TileCoord>,
+    /// the stored initial cursor position, for moving tiles
+    pub initial_cursor_position: Option<TileCoord>,
 
     prev_gui_state: Option<GuiState>,
     gui_state: GuiState,
@@ -70,8 +76,8 @@ impl Default for EventLoopStorage {
     fn default() -> Self {
         Self {
             fuse: Default::default(),
-            filter: "".to_string(),
-            map_name: "".to_string(),
+            filter_input: "".to_string(),
+            map_name_input: "".to_string(),
             input_handler: Default::default(),
             selected_tile_modifiers: Default::default(),
             selected_id: None,
@@ -81,6 +87,8 @@ impl Default for EventLoopStorage {
             linking_tile: None,
             last_frame_start: Instant::now(),
             elapsed: Default::default(),
+            selected_tiles: Default::default(),
+            initial_cursor_position: None,
 
             prev_gui_state: None,
             gui_state: GuiState::MainMenu,
@@ -201,11 +209,11 @@ pub fn on_event(
             .input_handler
             .update(input::convert_input(window_event, device_event));
 
-        let ignore_move = loop_store.selected_id.is_some();
+        let ignore_move = loop_store.selected_id.is_some() || loop_store.input_handler.control_held;
 
         setup
             .camera
-            .input_handler(&loop_store.input_handler, ignore_move);
+            .handle_input(&loop_store.input_handler, ignore_move);
 
         {
             let camera_chunk_coord: ChunkCoord = setup.camera.get_tile_coord().into();
@@ -262,11 +270,7 @@ pub fn on_event(
                         PlaceTileResponse::Removed => {
                             setup
                                 .audio_man
-                                .play(
-                                    resource_man.audio["tile_removal"]
-                                        .clone()
-                                        .with_modified_settings(|s| s.playback_rate(0.5)),
-                                )
+                                .play(resource_man.audio["tile_removal"].clone())
                                 .unwrap();
                         }
                         _ => {}
@@ -327,7 +331,7 @@ pub fn on_event(
                                 .unwrap();
                         } else {
                             tile_entity
-                                .send_message(TileEntityMsg::SetData(
+                                .send_message(TileEntityMsg::SetDataValue(
                                     resource_man.registry.data_ids.link,
                                     Data::Coord(linking_tile - setup.camera.pointing_at),
                                 ))
@@ -358,9 +362,40 @@ pub fn on_event(
                     .unwrap();
             } else if loop_store.config_open == Some(setup.camera.pointing_at) {
                 loop_store.config_open = None;
-                loop_store.filter.clear();
+                loop_store.filter_input.clear();
             } else {
                 loop_store.config_open = Some(setup.camera.pointing_at);
+            }
+        }
+
+        if !loop_store.input_handler.control_held {
+            loop_store.selected_tiles.clear();
+        }
+
+        if loop_store.input_handler.control_held {
+            if loop_store.input_handler.main_pressed {
+                loop_store.initial_cursor_position = Some(setup.camera.pointing_at);
+            }
+            if !loop_store.input_handler.main_held && loop_store.gui_state == GuiState::Ingame {
+                if let Some(start) = loop_store.initial_cursor_position {
+                    let direction = setup.camera.pointing_at - start;
+                    setup
+                        .game
+                        .send_message(GameMsg::MoveTiles(
+                            loop_store
+                                .selected_tiles
+                                .iter()
+                                .cloned()
+                                .collect::<Vec<_>>(),
+                            direction,
+                            true,
+                        ))
+                        .unwrap();
+                    for selected in mem::take(&mut loop_store.selected_tiles).into_iter() {
+                        loop_store.selected_tiles.insert(selected + direction);
+                    }
+                    loop_store.initial_cursor_position = None;
+                }
             }
         }
     }
@@ -492,6 +527,7 @@ pub fn on_event(
                 menu::map_delete_confirmation(setup, gui, loop_store, map.clone());
             }
         }
+
         if loop_store.input_handler.key_pressed(&actions::DEBUG) {
             debug::debugger(
                 setup,
@@ -502,9 +538,11 @@ pub fn on_event(
                 loop_store,
             );
         }
+
         if resource_man.error_man.has_errors() {
             error::error_popup(setup, gui);
         }
+
         let render_info = block_on(setup.game.call(
             |reply| GameMsg::RenderInfoRequest {
                 range: CHUNK_SIZE_SQUARED,
@@ -515,14 +553,18 @@ pub fn on_event(
         ))?
         .unwrap();
 
+        if !loop_store.input_handler.main_held {
+            loop_store.selected_tiles.insert(setup.camera.pointing_at);
+        }
+
         renderer.render(
             runtime,
             setup.resource_man.clone(),
             setup.camera.get_pos().cast().unwrap(),
-            setup.camera.pointing_at,
             setup.camera_chunk_coord,
             setup.game.clone(),
             &render_info,
+            &loop_store.selected_tiles,
             gui_instances,
             extra_vertices,
             gui,

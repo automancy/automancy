@@ -75,7 +75,8 @@ pub enum TileEntityMsg {
     AdjacentState {
         fulfilled: bool,
     },
-    SetData(Id, Data),
+    SetData(DataMap),
+    SetDataValue(Id, Data),
     RemoveData(Id),
     GetData(RpcReplyPort<DataMap>),
     GetDataValue(Id, RpcReplyPort<Option<Data>>),
@@ -95,7 +96,6 @@ pub enum TransactionError {
 
 struct MachineTickResult {
     pub target: TileCoord,
-    pub direction: TileCoord,
     pub item_stack: ItemStack,
 }
 
@@ -136,14 +136,12 @@ impl TileEntity {
 
                     return Some(MachineTickResult {
                         target: coord,
-                        direction: -target,
                         item_stack: script.instructions.output,
                     });
                 }
             } else {
                 return Some(MachineTickResult {
                     target: coord,
-                    direction: -target,
                     item_stack: script.instructions.output,
                 });
             }
@@ -252,11 +250,8 @@ impl Actor for TileEntity {
                         return Ok(());
                     }
 
-                    if let Some(MachineTickResult {
-                        target,
-                        direction,
-                        item_stack,
-                    }) = self.machine_tick(state, &resource_man)
+                    if let Some(MachineTickResult { target, item_stack }) =
+                        self.machine_tick(state, &resource_man)
                     {
                         send_to_tile(
                             self,
@@ -307,10 +302,9 @@ impl Actor for TileEntity {
             Transaction {
                 resource_man,
                 stack,
-                source_type,
-                source_id,
                 source_coord,
                 source,
+                ..
             } => {
                 if self.id == resource_man.registry.tile_ids.void {
                     source
@@ -513,7 +507,10 @@ impl Actor for TileEntity {
                     }
                 }
             }
-            SetData(key, value) => {
+            SetData(data) => {
+                state.data = data;
+            }
+            SetDataValue(key, value) => {
                 state.data.0.insert(key, value);
             }
             GetData(reply) => {
