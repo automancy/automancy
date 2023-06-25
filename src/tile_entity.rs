@@ -183,15 +183,16 @@ impl TileEntity {
                 }
 
                 let matched = matched.unwrap();
+                let size = matched.amount * 8;
 
                 let amount = buffer.get_mut(item_stack.item);
-                if *amount >= matched.amount {
+                if *amount >= size {
                     return Err(TransactionError::Full);
                 }
 
                 *amount += item_stack.amount;
-                if *amount > matched.amount {
-                    *amount = matched.amount;
+                if *amount > size {
+                    *amount = size;
                 }
 
                 return Ok(*matched);
