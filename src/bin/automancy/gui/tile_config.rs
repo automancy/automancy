@@ -5,8 +5,7 @@ use automancy::game::GameMsg;
 use automancy::renderer::Renderer;
 use automancy::tile_entity::TileEntityMsg;
 use automancy::util::render::hex_to_normalized;
-use automancy_defs::cg::{DPoint3, Double};
-use automancy_defs::cgmath::point2;
+use automancy_defs::cg::Double;
 use automancy_defs::colors;
 use automancy_defs::coord::{TileCoord, TileHex};
 use automancy_defs::egui::{vec2, DragValue, Margin, Ui, Window};
@@ -176,23 +175,21 @@ fn node(
                 .unwrap();
 
             if let Some(link) = result.as_ref().and_then(Data::as_coord) {
-                let DPoint3 { x, y, .. } = hex_to_normalized(
+                let (a, w0) = hex_to_normalized(
                     window_size.width as Double,
                     window_size.height as Double,
                     setup.camera.get_pos(),
                     config_open,
                 );
-                let a = point2(x, y);
 
-                let DPoint3 { x, y, .. } = hex_to_normalized(
+                let (b, w1) = hex_to_normalized(
                     window_size.width as Double,
                     window_size.height as Double,
                     setup.camera.get_pos(),
                     config_open + *link,
                 );
-                let b = point2(x, y);
 
-                extra_vertices.extend_from_slice(&make_line(a, b, colors::RED));
+                extra_vertices.extend_from_slice(&make_line(a, b, (w0 + w1) / 2.0, colors::RED));
             }
         }
     }

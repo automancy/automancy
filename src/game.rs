@@ -419,46 +419,35 @@ impl Actor for Game {
                     MoveTiles(tiles, direction, record) => {
                         let mut undo = vec![];
 
-                        for old_coord in tiles {
-                            if !state.map.tiles.contains_key(&old_coord) {
-                                continue;
-                            }
-
-                            let new_coord = old_coord + direction;
-
-                            let old_data = if let Some(entity) = state.tile_entities.get(&old_coord)
-                            {
-                                Some(
-                                    entity
-                                        .call(TileEntityMsg::GetData, None)
-                                        .await
-                                        .unwrap()
-                                        .unwrap(),
+                        tiles
+                            .into_iter()
+                            .flat_map(|coord| {
+                                Some(coord).zip(
+                                    state
+                                        .map
+                                        .tiles
+                                        .remove(&coord)
+                                        .zip(state.tile_entities.remove(&coord)),
                                 )
-                            } else {
-                                None
-                            };
-                            let old = remove_tile(state, old_coord);
+                            })
+                            .collect::<Vec<_>>()
+                            .into_iter()
+                            .for_each(|(coord, ((id, modifier), tile_entity))| {
+                                let new_coord = coord + direction;
 
-                            if let Some((id, modifier)) = old {
-                                insert_new_tile(myself.clone(), state, new_coord, id, modifier)
-                                    .await;
+                                state.map.tiles.insert(new_coord, (id, modifier));
+                                state.tile_entities.insert(new_coord, tile_entity);
 
                                 undo.push(new_coord);
-
-                                if let Some(data) = old_data {
-                                    state.tile_entities[&new_coord]
-                                        .send_message(TileEntityMsg::SetData(data))
-                                        .unwrap();
-                                }
-                            }
-                        }
+                            });
 
                         if record {
                             state
                                 .undo_steps
                                 .push_back(vec![MoveTiles(undo, -direction, false)]);
                         }
+
+                        state.render_cache.clear();
                     }
                     _ => {}
                 }

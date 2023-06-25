@@ -2,7 +2,7 @@ use fuse_rust::Fuse;
 
 use automancy::gpu::Gpu;
 use automancy::map::MapInfo;
-use automancy_defs::cg::{DPoint2, Float};
+use automancy_defs::cg::{DPoint2, Double, Float};
 use automancy_defs::cgmath::MetricSpace;
 use automancy_defs::egui::epaint::Shadow;
 use automancy_defs::egui::style::{WidgetVisuals, Widgets};
@@ -168,15 +168,16 @@ pub fn default_frame() -> Frame {
 }
 
 /// Produces a line shape.
-pub fn make_line(a: DPoint2, b: DPoint2, color: Rgba) -> [GameVertex; 6] {
+pub fn make_line(a: DPoint2, b: DPoint2, w: Double, color: Rgba) -> [GameVertex; 6] {
     let v = b - a;
-    let l = a.distance(b) * 256.0;
-    let w = cgmath::vec2(-v.y / l, v.x / l);
+    let l = a.distance(b) * 16.0;
+    let t = cgmath::vec2(-v.y / l, v.x / l);
+    let t = t / w;
 
-    let a0 = (a + w).cast::<Float>().unwrap();
-    let a1 = (a - w).cast::<Float>().unwrap();
-    let b0 = (b + w).cast::<Float>().unwrap();
-    let b1 = (b - w).cast::<Float>().unwrap();
+    let a0 = (a + t).cast::<Float>().unwrap();
+    let a1 = (a - t).cast::<Float>().unwrap();
+    let b0 = (b + t).cast::<Float>().unwrap();
+    let b1 = (b - t).cast::<Float>().unwrap();
 
     let a = GameVertex {
         pos: [a0.x, a0.y, 0.0],

@@ -1,4 +1,6 @@
-use crate::camera::FAR;
+use std::f64::consts::PI;
+use std::ops::{Div, Sub};
+
 use automancy_defs::cg::{matrix, DPoint2, DPoint3, Double};
 use automancy_defs::cgmath::{point2, point3, vec2, EuclideanSpace};
 use automancy_defs::coord::TileCoord;
@@ -6,8 +8,8 @@ use automancy_defs::hexagon_tiles::fractional::FractionalHex;
 use automancy_defs::hexagon_tiles::layout::{hex_to_pixel, pixel_to_hex};
 use automancy_defs::hexagon_tiles::point::{point, Point};
 use automancy_defs::rendering::HEX_GRID_LAYOUT;
-use std::f64::consts::PI;
-use std::ops::{Div, Sub};
+
+use crate::camera::FAR;
 
 /// Gets the hex position being pointed at.
 pub fn main_pos_to_hex(
@@ -63,7 +65,7 @@ pub fn hex_to_normalized(
     height: Double,
     camera_pos: DPoint3,
     hex: TileCoord,
-) -> DPoint3 {
+) -> (DPoint2, Double) {
     let Point { x, y } = hex_to_pixel(HEX_GRID_LAYOUT, hex.into());
 
     let aspect = width / height;
@@ -72,7 +74,8 @@ pub fn hex_to_normalized(
 
     let p = vec2(x, y);
     let p = matrix * p.extend(FAR).extend(1.0);
-    let p = p.truncate() / p.w;
+    let w = p.w;
+    let p = p.truncate() / w;
 
-    point3(p.x, p.y, p.z)
+    (point2(p.x, p.y), w)
 }

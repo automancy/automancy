@@ -1,3 +1,4 @@
+use std::mem;
 use std::sync::Arc;
 
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort};
@@ -78,6 +79,7 @@ pub enum TileEntityMsg {
     SetData(DataMap),
     SetDataValue(Id, Data),
     RemoveData(Id),
+    TakeData(RpcReplyPort<DataMap>),
     GetData(RpcReplyPort<DataMap>),
     GetDataValue(Id, RpcReplyPort<Option<Data>>),
     GetDataValueAndCoord(Id, RpcReplyPort<(TileCoord, Option<Data>)>),
@@ -512,6 +514,9 @@ impl Actor for TileEntity {
             }
             SetDataValue(key, value) => {
                 state.data.0.insert(key, value);
+            }
+            TakeData(reply) => {
+                reply.send(mem::take(&mut state.data)).unwrap();
             }
             GetData(reply) => {
                 reply.send(state.data.clone()).unwrap();

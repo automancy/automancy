@@ -8,11 +8,10 @@ use tokio::runtime::Runtime;
 
 use automancy_defs::cg::{deg, matrix, Double, Float, Matrix4, Point3};
 use automancy_defs::cgmath::{vec3, SquareMatrix};
-use automancy_defs::colors;
-use automancy_defs::colors::WithAlpha;
 use automancy_defs::coord::{ChunkCoord, TileCoord};
+use automancy_defs::egui::Rgba;
 use automancy_defs::egui_winit_vulkano::Gui;
-use automancy_defs::hashbrown::{HashMap, HashSet};
+use automancy_defs::hashbrown::HashMap;
 use automancy_defs::hexagon_tiles::fractional::FractionalHex;
 use automancy_defs::hexagon_tiles::layout::{frac_hex_to_pixel, hex_to_pixel};
 use automancy_defs::hexagon_tiles::traits::HexRound;
@@ -86,7 +85,7 @@ impl Renderer {
         camera_chunk_coord: ChunkCoord,
         game: ActorRef<GameMsg>,
         map_render_info: &RenderInfo,
-        selected_tiles: &HashSet<TileCoord>,
+        tile_tints: HashMap<TileCoord, Rgba>,
         mut gui_instances: Vec<(InstanceData, Id)>,
         extra_vertices: Vec<GameVertex>,
         gui: &mut Gui,
@@ -254,10 +253,9 @@ impl Renderer {
                 }
             }
 
-            for selected in selected_tiles.iter() {
-                if let Some(RenderUnit { instance, .. }) = instances.get_mut(selected) {
-                    *instance =
-                        instance.with_color_offset(colors::ORANGE.with_alpha(0.5).to_array())
+            for (coord, color) in tile_tints.into_iter() {
+                if let Some(RenderUnit { instance, .. }) = instances.get_mut(&coord) {
+                    *instance = instance.with_color_offset(color.to_array())
                 }
             }
 

@@ -1,6 +1,6 @@
 use std::fs;
 
-use futures::executor::block_on;
+use tokio::runtime::Runtime;
 
 use automancy::game::GameMsg;
 use automancy::map::{Map, MapInfo, MAIN_MENU, MAP_EXT};
@@ -110,6 +110,7 @@ pub fn main_menu(
 
 /// Draws the pause menu.
 pub fn pause_menu(
+    runtime: &Runtime,
     setup: &mut GameSetup,
     gui: &mut Gui,
     loop_store: &mut EventLoopStorage,
@@ -164,12 +165,12 @@ pub fn pause_menu(
                         )
                         .clicked()
                     {
-                        // block the current thread so the map can save to completion
-                        block_on(setup.game.call(
-                            |reply| GameMsg::SaveMap(setup.resource_man.clone(), reply),
-                            None,
-                        ))
-                        .unwrap();
+                        runtime
+                            .block_on(setup.game.call(
+                                |reply| GameMsg::SaveMap(setup.resource_man.clone(), reply),
+                                None,
+                            ))
+                            .unwrap();
                         setup
                             .game
                             .send_message(GameMsg::LoadMap(
