@@ -25,7 +25,7 @@ use crate::game::GameMsg;
 use crate::tile_entity::{TileEntityMsg, TileModifier};
 
 pub const MAP_PATH: &str = "map";
-pub const MAP_EXT: &str = ".bin";
+pub const MAP_EXT: &str = ".zst";
 pub const MAIN_MENU: &str = ".mainmenu";
 
 const MAP_BUFFER_SIZE: usize = 256 * 1024;
@@ -50,28 +50,25 @@ pub struct Map {
 #[derive(Debug, Clone)]
 pub struct MapInfo {
     pub map_name: String,
-    pub tiles: usize,
+    pub tiles: u64,
     pub data: usize,
     pub save_time: i64,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
-struct MapHeader(Vec<(Id, String)>);
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SerdeTile(Id, TileModifier, DataMapRaw);
 
 #[derive(Debug, Serialize, Deserialize)]
-struct SerdeMap {
+pub struct MapHeader {
     #[serde(default)]
-    pub header: MapHeader,
-    #[serde(default)]
-    pub serde_tiles: Vec<(TileCoord, SerdeTile)>,
+    pub tile_map: Vec<(Id, String)>,
     #[serde(default)]
     pub data: DataMapRaw,
     #[serde(default)]
+    pub tile_count: u64,
+    #[serde(default)]
     pub save_time: i64,
 }
-
-#[derive(Debug, Serialize, Deserialize)]
-struct SerdeTile(Id, TileModifier, DataMapRaw);
 
 impl Map {
     /// Creates a new empty map.
@@ -84,96 +81,103 @@ impl Map {
             save_time: Local::now().timestamp(),
         }
     }
+
     /// Gets the path to a map from its name.
     pub fn path(map_name: &str) -> PathBuf {
-        PathBuf::from(format!("{MAP_PATH}/{map_name}{MAP_EXT}"))
+        PathBuf::from(format!("{MAP_PATH}/{map_name}/"))
     }
-    /// Saves a map to disk.
-    pub async fn save(&self, interner: &Interner, tile_entities: &TileEntities) {
-        drop(fs::create_dir_all(MAP_PATH));
 
-        let path = Self::path(&self.map_name);
-
-        let file = File::create(path).unwrap();
-
-        let writer = BufWriter::with_capacity(MAP_BUFFER_SIZE, file);
-        let mut encoder = Encoder::new(writer, 0).unwrap();
-
-        let mut id_map = HashMap::new();
-        let mut serde_tiles = Vec::new();
-        for (coord, (id, tile_modifier)) in self.tiles.iter() {
-            if let Some(tile_entity) = tile_entities.get(coord) {
-                if !id_map.contains_key(id) {
-                    id_map.insert(*id, interner.resolve(*id).unwrap().to_string());
-                }
-
-                let data = tile_entity
-                    .call(TileEntityMsg::GetData, None)
-                    .await
-                    .unwrap()
-                    .unwrap();
-                let data = data.to_raw(interner);
-
-                // tile_entity.stop(None);
-
-                serde_tiles.push(Some((coord, SerdeTile(*id, *tile_modifier, data))));
-            } else {
-                serde_tiles.push(None);
-            }
-        }
-
-        let header = MapHeader(id_map.into_iter().collect());
-
-        let data = self.data.to_raw(interner);
-
-        let save_time = Utc::now().timestamp();
-
-        serde_json::to_writer(&mut encoder, &(header, serde_tiles, data, save_time)).unwrap();
-
-        encoder.do_finish().unwrap();
+    /// Gets the path to a map's header from its name.
+    pub fn header(map_name: &str) -> PathBuf {
+        Map::path(map_name).join(format!("header{MAP_EXT}"))
     }
-    /// Loads a map from disk.
-    pub async fn load(
-        game: ActorRef<GameMsg>,
-        resource_man: &ResourceManager,
-        map_name: String,
-    ) -> (Self, TileEntities) {
-        let path = Self::path(&map_name);
 
-        let file = if let Ok(file) = File::open(path) {
-            file
-        } else {
-            return (Map::new_empty(map_name), Default::default());
-        };
+    /// Gets the path to a map's tiles from its name.
+    pub fn tiles(map_name: &str) -> PathBuf {
+        Map::path(map_name).join(format!("tiles{MAP_EXT}"))
+    }
+
+    pub fn read_header(resource_man: &ResourceManager, map_name: &str) -> Option<MapHeader> {
+        let path = Self::header(map_name);
+
+        let file = File::open(path).ok()?;
 
         let reader = BufReader::with_capacity(MAP_BUFFER_SIZE, file);
         let decoder = Decoder::new(reader).unwrap();
 
-        let decoded_map: serde_json::Result<SerdeMap> = serde_json::from_reader(decoder);
+        let decoded: serde_json::Result<MapHeader> = serde_json::from_reader(decoder);
 
-        if decoded_map.is_err() {
-            log::error!("serde: {:?}", decoded_map.err());
+        match decoded {
+            Ok(v) => Some(v),
+            Err(e) => {
+                log::error!("serde: {e}");
 
-            let err_map_name = format!("{}-ERR-{}", map_name, Local::now().format("%y%m%d%H%M%S"));
+                let err_map_name =
+                    format!("{}-ERR-{}", map_name, Local::now().format("%y%m%d%H%M%S"));
 
-            resource_man.error_man.push(
-                (
-                    resource_man.registry.err_ids.invalid_map_data,
-                    vec![map_name, err_map_name.clone()],
-                ),
-                resource_man,
-            );
-            return (Map::new_empty(err_map_name), Default::default());
+                resource_man.error_man.push(
+                    (
+                        resource_man.registry.err_ids.invalid_map_data,
+                        vec![map_name.to_string(), err_map_name.clone()],
+                    ),
+                    &resource_man,
+                );
+
+                None
+            }
         }
-        let SerdeMap {
-            header,
-            serde_tiles,
-            data,
-            save_time,
-            ..
-        } = decoded_map.unwrap();
+    }
 
-        let id_reverse = header.0.into_iter().collect::<HashMap<_, _>>();
+    pub fn read_tiles(
+        resource_man: &ResourceManager,
+        map_name: &str,
+    ) -> Option<Vec<(TileCoord, SerdeTile)>> {
+        let path = Self::tiles(map_name);
+
+        let file = File::open(path).ok()?;
+
+        let reader = BufReader::with_capacity(MAP_BUFFER_SIZE, file);
+        let decoder = Decoder::new(reader).unwrap();
+
+        let decoded: serde_json::Result<Vec<(TileCoord, SerdeTile)>> =
+            serde_json::from_reader(decoder);
+
+        match decoded {
+            Ok(v) => Some(v),
+            Err(e) => {
+                log::error!("serde: {e}");
+
+                let err_map_name =
+                    format!("{}-ERR-{}", map_name, Local::now().format("%y%m%d%H%M%S"));
+
+                resource_man.error_man.push(
+                    (
+                        resource_man.registry.err_ids.invalid_map_data,
+                        vec![map_name.to_string(), err_map_name.clone()],
+                    ),
+                    &resource_man,
+                );
+
+                None
+            }
+        }
+    }
+
+    /// Loads a map from disk.
+    pub async fn load(
+        game: ActorRef<GameMsg>,
+        resource_man: &ResourceManager,
+        map_name: &str,
+    ) -> (Self, TileEntities) {
+        let Some(header) = Map::read_header(resource_man, map_name) else {
+            return (Map::new_empty(map_name.to_string()), Default::default());
+        };
+
+        let Some(serde_tiles) = Map::read_tiles(resource_man, map_name) else {
+            return (Map::new_empty(map_name.to_string()), Default::default());
+        };
+
+        let id_reverse = header.tile_map.into_iter().collect::<HashMap<_, _>>();
 
         let mut tiles = HashMap::new();
         let mut tile_entities = HashMap::new();
@@ -186,22 +190,24 @@ impl Map {
                 let tile_entity = game::new_tile(game.clone(), coord, id, tile_modifier).await;
                 let data = data.to_data(resource_man);
 
-                data.0.into_iter().for_each(|(key, value)| {
+                for (key, value) in data.0 {
                     tile_entity
                         .send_message(TileEntityMsg::SetDataValue(key, value))
                         .unwrap();
-                });
+                }
 
                 tiles.insert(coord, (id, tile_modifier));
                 tile_entities.insert(coord, tile_entity);
             }
         }
 
-        let data = data.to_data(resource_man);
+        let data = header.data.to_data(resource_man);
+
+        let save_time = header.save_time;
 
         (
             Self {
-                map_name,
+                map_name: map_name.to_string(),
 
                 tiles,
                 data,
@@ -211,6 +217,64 @@ impl Map {
             tile_entities,
         )
     }
+
+    /// Saves a map to disk.
+    pub async fn save(&self, interner: &Interner, tile_entities: &TileEntities) {
+        drop(fs::create_dir_all(Map::path(&self.map_name)));
+
+        let header = Self::header(&self.map_name);
+        let header = File::create(header).unwrap();
+
+        let header_writer = BufWriter::with_capacity(MAP_BUFFER_SIZE, header);
+        let mut header_encoder = Encoder::new(header_writer, 0).unwrap();
+
+        let tiles = Self::tiles(&self.map_name);
+        let tiles = File::create(tiles).unwrap();
+
+        let tiles_writer = BufWriter::with_capacity(MAP_BUFFER_SIZE, tiles);
+        let mut tiles_encoder = Encoder::new(tiles_writer, 0).unwrap();
+
+        let mut tile_map = HashMap::new();
+        let mut serde_tiles = Vec::new();
+
+        for (coord, (id, tile_modifier)) in self.tiles.iter() {
+            if let Some(tile_entity) = tile_entities.get(coord) {
+                if !tile_map.contains_key(id) {
+                    tile_map.insert(*id, interner.resolve(*id).unwrap().to_string());
+                }
+
+                let data = tile_entity
+                    .call(TileEntityMsg::GetData, None)
+                    .await
+                    .unwrap()
+                    .unwrap();
+                let data = data.to_raw(interner);
+
+                serde_tiles.push((coord, SerdeTile(*id, *tile_modifier, data)));
+            }
+        }
+
+        let tile_map = tile_map.into_iter().collect::<Vec<_>>();
+        let data = self.data.to_raw(interner);
+        let save_time = Utc::now().timestamp();
+
+        serde_json::to_writer(
+            &mut header_encoder,
+            &MapHeader {
+                tile_map,
+                data,
+                tile_count: serde_tiles.len() as u64,
+                save_time,
+            },
+        )
+        .unwrap();
+
+        serde_json::to_writer(&mut tiles_encoder, &serde_tiles).unwrap();
+
+        header_encoder.do_finish().unwrap();
+        tiles_encoder.do_finish().unwrap();
+    }
+
     /// Sanitizes the name to ensure that the map can be used without problems on all platforms. This includes removing leading/trailing whitespace and periods, replacing non-alphanumeric characters, and replacing Windows disallowed names.
     pub fn sanitize_name(name: String) -> String {
         if name.is_empty() {

@@ -2,22 +2,12 @@
     "id": "silver",
     "instructions": {
         "inputs": [
-            [
-                "water",
-                16
-            ],
-            [
-                "order",
-                8
-            ],
-            [
-                "gravel",
-                128
-            ]
+            ["water", 16],
+            ["order", 8],
+            ["gravel", 128]
         ],
         "output": [
-            "silver",
-            1
+            ["silver", 1]
         ]
     }
 }

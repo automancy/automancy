@@ -2,18 +2,11 @@
     "id": "glass",
     "instructions": {
         "inputs": [
-            [
-                "sand",
-                1
-            ],
-            [
-                "fire",
-                1
-            ]
+            ["sand", 1],
+            ["fire", 1]
         ],
         "output": [
-            "glass",
-            1
+            ["glass", 1]
         ]
     }
 }

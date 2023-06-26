@@ -2,8 +2,7 @@
     "id": "gravel",
     "instructions": {
         "output": [
-            "gravel",
-            4
+            ["gravel", 4]
         ]
     }
 }

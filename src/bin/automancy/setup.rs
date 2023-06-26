@@ -148,10 +148,8 @@ impl GameSetup {
 
         self.maps = fs::read_dir(MAP_PATH)
             .unwrap()
-            .filter_map(|f| f.ok())
+            .flatten()
             .map(|f| f.file_name().to_str().unwrap().to_string())
-            .filter(|f| f.ends_with(MAP_EXT))
-            .map(|f| f.strip_suffix(MAP_EXT).unwrap().to_string())
             .filter(|f| !f.starts_with('.'))
             .map(|map| {
                 block_on(self.game.call(

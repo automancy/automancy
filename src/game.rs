@@ -173,12 +173,11 @@ impl Actor for Game {
                 return Ok(());
             }
             LoadMap(resource_man, name) => {
-                state.tile_entities.values().for_each(|tile_entity| {
+                for tile_entity in state.tile_entities.values() {
                     tile_entity.stop(Some("Loading new map".to_string()));
-                });
+                }
 
-                let (map, tile_entities) =
-                    Map::load(myself.clone(), &resource_man, name.clone()).await;
+                let (map, tile_entities) = Map::load(myself.clone(), &resource_man, &name).await;
 
                 state.map = map;
                 state.tile_entities = tile_entities;
@@ -199,9 +198,10 @@ impl Actor for Game {
             }
             GetMapInfo(reply) => {
                 let map_name = state.map.map_name.clone();
-                let tiles = state.map.tiles.len();
+                let tiles = state.map.tiles.len() as u64;
                 let data = state.map.data.0.len();
                 let save_time = state.map.save_time;
+
                 reply
                     .send(MapInfo {
                         map_name,
@@ -210,19 +210,21 @@ impl Actor for Game {
                         save_time,
                     })
                     .unwrap();
+
                 return Ok(());
             }
-            GetUnloadedMapInfo(map, resource_man, reply) => {
-                let map = Map::load(myself.clone(), &resource_man, map).await.0;
-                reply
-                    .send(MapInfo {
-                        map_name: map.map_name.clone(),
-                        tiles: map.tiles.len(),
-                        data: map.data.0.len(),
-                        save_time: map.save_time,
-                    })
-                    .unwrap();
-                drop(map);
+            GetUnloadedMapInfo(map_name, resource_man, reply) => {
+                if let Some(map) = Map::read_header(&resource_man, &map_name) {
+                    reply
+                        .send(MapInfo {
+                            map_name,
+                            tiles: map.tile_count,
+                            data: map.data.0.len(),
+                            save_time: map.save_time,
+                        })
+                        .unwrap();
+                }
+
                 return Ok(());
             }
             GetDataMap(reply) => {
@@ -407,12 +409,11 @@ impl Actor for Game {
                             .take_while(|(instant, _, _)| {
                                 now.duration_since(*instant) >= ANIMATION_SPEED
                             })
-                            .map(|_| ())
-                            .collect::<Vec<_>>();
+                            .count();
 
-                        to_remove.into_iter().for_each(|_| {
+                        for _ in 0..to_remove {
                             state.transactions_record.write().unwrap().pop_front();
-                        });
+                        }
 
                         reply.send(state.transactions_record.clone()).unwrap();
                     }

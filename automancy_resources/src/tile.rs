@@ -11,9 +11,16 @@ use automancy_defs::log;
 use crate::data::{DataMap, DataMapRaw};
 use crate::{load_recursively, ResourceManager, JSON_EXT};
 
-#[derive(Debug, Clone, Copy, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct ModelAttributesJson {
+    pub auto_rotate: bool,
+    pub inactive_model: Option<IdRaw>,
+}
+
+#[derive(Debug, Clone, Copy)]
 pub struct ModelAttributes {
     pub auto_rotate: bool,
+    pub inactive_model: Option<Id>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -24,7 +31,7 @@ pub struct TileJson {
     #[serde(default)]
     pub data: DataMapRaw,
     #[serde(default)]
-    pub model_attributes: ModelAttributes,
+    pub model_attributes: ModelAttributesJson,
     pub targeted: Option<bool>,
 }
 
@@ -62,11 +69,19 @@ impl ResourceManager {
             .targeted
             .unwrap_or(tile_type == Some(self.registry.tile_ids.machine));
 
+        let model_attributes = ModelAttributes {
+            auto_rotate: tile.model_attributes.auto_rotate,
+            inactive_model: tile
+                .model_attributes
+                .inactive_model
+                .map(|v| v.to_id(&mut self.interner)),
+        };
+
         self.registry.tiles.insert(
             id,
             Tile {
                 tile_type,
-                model_attributes: tile.model_attributes,
+                model_attributes,
                 targeted,
                 models,
                 data,
@@ -78,11 +93,9 @@ impl ResourceManager {
     pub fn load_tiles(&mut self, dir: &Path) -> Option<()> {
         let tiles = dir.join("tiles");
 
-        load_recursively(&tiles, OsStr::new(JSON_EXT))
-            .into_iter()
-            .for_each(|file| {
-                self.load_tile(&file);
-            });
+        for file in load_recursively(&tiles, OsStr::new(JSON_EXT)) {
+            self.load_tile(&file);
+        }
 
         Some(())
     }

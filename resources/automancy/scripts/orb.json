@@ -2,14 +2,10 @@
     "id": "orb",
     "instructions": {
         "inputs": [
-            [
-                "glass",
-                256
-            ]
+            ["glass", 256]
         ],
         "output": [
-            "orb",
-            1
+            ["orb", 1]
         ]
     }
 }

@@ -91,11 +91,9 @@ impl ResourceManager {
     pub fn load_models(&mut self, dir: &Path) -> Option<()> {
         let models = dir.join("models");
 
-        load_recursively(&models, OsStr::new(JSON_EXT))
-            .into_iter()
-            .for_each(|file| {
-                self.load_model(&file);
-            });
+        for file in load_recursively(&models, OsStr::new(JSON_EXT)) {
+            self.load_model(&file);
+        }
 
         Some(())
     }

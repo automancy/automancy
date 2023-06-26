@@ -2,18 +2,11 @@
     "id": "sand",
     "instructions": {
         "inputs": [
-            [
-                "gravel",
-                2
-            ],
-            [
-                "chaos",
-                2
-            ]
+            ["gravel", 2],
+            ["chaos", 2]
         ],
         "output": [
-            "sand",
-            1
+            ["sand", 1]
         ]
     }
 }

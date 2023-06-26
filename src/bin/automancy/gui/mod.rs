@@ -240,8 +240,8 @@ pub fn searchable_id<'a>(
             ids.to_vec()
         };
 
-        ids.iter().for_each(|script| {
-            ui.radio_value(new_id, Some(*script), name(resource_man, script));
-        })
+        for id in ids {
+            ui.radio_value(new_id, Some(id), name(resource_man, &id));
+        }
     });
 }

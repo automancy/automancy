@@ -5,7 +5,8 @@
         "merger"
     ],
     "model_attributes": {
-        "auto_rotate": true
+        "auto_rotate": true,
+        "inactive_model": "merger_inactive"
     },
     "targeted": true
 }

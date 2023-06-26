@@ -341,7 +341,7 @@ fn script(
 
             if let Some(script) = new_script.and_then(|id| setup.resource_man.registry.script(id)) {
                 if let Some(inputs) = &script.instructions.inputs {
-                    inputs.iter().for_each(|stack| {
+                    for input in inputs {
                         ui.horizontal(|ui| {
                             ui.set_height(ITEM_ICON_SIZE);
 
@@ -349,22 +349,24 @@ fn script(
                             ui.add(ItemStackGuiElement::new(
                                 setup.resource_man.clone(),
                                 renderer,
-                                *stack,
+                                *input,
                             ));
                         });
-                    })
+                    }
                 }
 
-                ui.horizontal(|ui| {
-                    ui.set_height(ITEM_ICON_SIZE);
+                for output in &script.instructions.outputs {
+                    ui.horizontal(|ui| {
+                        ui.set_height(ITEM_ICON_SIZE);
 
-                    ui.label("=> ");
-                    ui.add(ItemStackGuiElement::new(
-                        setup.resource_man.clone(),
-                        renderer,
-                        script.instructions.output,
-                    ));
-                });
+                        ui.label("=> ");
+                        ui.add(ItemStackGuiElement::new(
+                            setup.resource_man.clone(),
+                            renderer,
+                            *output,
+                        ));
+                    });
+                }
             }
         });
 

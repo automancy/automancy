@@ -2,14 +2,10 @@
     "id": "coal_to_fire",
     "instructions": {
         "inputs": [
-            [
-                "coal",
-                1
-            ]
+            ["coal", 1]
         ],
         "output": [
-            "fire",
-            16
+            ["fire", 16]
         ]
     }
 }

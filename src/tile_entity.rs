@@ -98,7 +98,7 @@ pub enum TransactionError {
 
 struct MachineTickResult {
     pub target: TileCoord,
-    pub item_stack: ItemStack,
+    pub outputs: Vec<ItemStack>,
 }
 
 impl TileEntity {
@@ -138,13 +138,13 @@ impl TileEntity {
 
                     return Some(MachineTickResult {
                         target: coord,
-                        item_stack: script.instructions.output,
+                        outputs: script.instructions.outputs.clone(),
                     });
                 }
             } else {
                 return Some(MachineTickResult {
                     target: coord,
-                    item_stack: script.instructions.output,
+                    outputs: script.instructions.outputs.clone(),
                 });
             }
         }
@@ -253,23 +253,25 @@ impl Actor for TileEntity {
                         return Ok(());
                     }
 
-                    if let Some(MachineTickResult { target, item_stack }) =
+                    if let Some(MachineTickResult { target, outputs }) =
                         self.machine_tick(state, &resource_man)
                     {
-                        send_to_tile(
-                            self,
-                            state,
-                            target,
-                            Transaction {
-                                resource_man: resource_man.clone(),
-                                stack: item_stack,
-                                source_type: tile_type,
-                                source_id: self.id,
-                                source_coord: self.coord,
-                                source: myself,
-                            },
-                            &resource_man,
-                        );
+                        for stack in outputs {
+                            send_to_tile(
+                                self,
+                                state,
+                                target,
+                                Transaction {
+                                    resource_man: resource_man.clone(),
+                                    stack,
+                                    source_type: tile_type,
+                                    source_id: self.id,
+                                    source_coord: self.coord,
+                                    source: myself.clone(),
+                                },
+                                &resource_man,
+                            );
+                        }
                     }
                 }
 
@@ -486,16 +488,16 @@ impl Actor for TileEntity {
                                 .and_then(Data::as_inventory_mut)
                                 .unwrap();
 
-                            inputs.iter().for_each(|item_stack| {
-                                let stored = buffer.0.entry(item_stack.item).or_insert(0);
+                            for input in inputs {
+                                let stored = buffer.0.entry(input.item).or_insert(0);
 
-                                if *stored < item_stack.amount {
+                                if *stored < input.amount {
                                     log::error!("in transaction result: tile does not have enough input for the supposed output!");
                                     *stored = 0;
                                 } else {
-                                    *stored -= item_stack.amount
+                                    *stored -= input.amount
                                 }
-                            });
+                            }
                         }
                     }
 

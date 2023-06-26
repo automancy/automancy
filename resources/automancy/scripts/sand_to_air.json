@@ -2,14 +2,10 @@
     "id": "sand_to_air",
     "instructions": {
         "inputs": [
-            [
-                "sand",
-                1
-            ]
+            ["sand", 1]
         ],
         "output": [
-            "air",
-            8
+            ["air", 8]
         ]
     }
 }

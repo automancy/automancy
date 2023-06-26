@@ -93,10 +93,10 @@ impl ResourceManager {
             .flatten()
             .map(|v| v.path())
             .filter(|v| v.extension() == Some(OsStr::new(JSON_EXT)))
-            .for_each(|translate| {
+            .for_each(|file| {
                 // TODO language selection
-                if translate.file_stem() == Some(OsStr::new("en_US")) {
-                    self.load_translate(&translate);
+                if file.file_stem() == Some(OsStr::new("en_US")) {
+                    self.load_translate(&file);
                 }
             });
 

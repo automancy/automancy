@@ -2,8 +2,7 @@
     "id": "coal",
     "instructions": {
         "output": [
-            "coal",
-            8
+            ["coal", 8]
         ]
     }
 }

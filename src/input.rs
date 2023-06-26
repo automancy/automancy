@@ -214,9 +214,9 @@ impl InputHandler {
         self.main_move = None;
         self.scroll = None;
 
-        mem::take(&mut self.to_clear).into_iter().for_each(|v| {
+        for v in mem::take(&mut self.to_clear) {
             self.key_states.remove(&v);
-        });
+        }
     }
 
     pub fn update(&mut self, event: GameInputEvent) {

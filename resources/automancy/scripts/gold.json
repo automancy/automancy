@@ -2,18 +2,11 @@
     "id": "gold",
     "instructions": {
         "inputs": [
-            [
-                "water",
-                16
-            ],
-            [
-                "gravel",
-                256
-            ]
+            ["water", 16],
+            ["gravel", 256]
         ],
         "output": [
-            "gold",
-            1
+            ["gold", 1]
         ]
     }
 }

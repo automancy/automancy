@@ -23,7 +23,7 @@ impl ResourceManager {
                 log::info!("loading audio at {file:?}");
 
                 if let Ok(audio) = StaticSoundData::from_file(
-                    file.clone(),
+                    &file,
                     StaticSoundSettings::default().output_destination(&self.track),
                 ) {
                     self.audio.insert(

@@ -188,7 +188,7 @@ pub fn pause_menu(
 }
 
 /// Draws the map loading menu.
-pub fn map_load_menu(
+pub fn map_menu(
     setup: &mut GameSetup,
     gui: &mut Gui,
     loop_store: &mut EventLoopStorage,
@@ -198,13 +198,14 @@ pub fn map_load_menu(
         setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.load_map].as_str(),
     )
     .resizable(false)
-    .default_width(250.0)
+    .default_width(300.0)
     .anchor(Align2([Align::Center, Align::Center]), vec2(0.0, 0.0))
     .frame(default_frame().inner_margin(10.0))
     .show(&gui.context(), |ui| {
-        ScrollArea::vertical().max_height(225.0).show(ui, |ui| {
+        ScrollArea::vertical().max_height(600.0).show(ui, |ui| {
             let dirty = false;
-            setup.maps.iter().for_each(|map| {
+
+            for map in &setup.maps {
                 let resource_man = setup.resource_man.clone();
                 let time = unix_to_formatted_time(
                     map.save_time,
@@ -241,7 +242,8 @@ pub fn map_load_menu(
                         }
                     });
                 });
-            });
+            }
+
             if dirty {
                 setup.refresh_maps();
             }
@@ -311,7 +313,7 @@ pub fn map_delete_confirmation(
             )
             .clicked()
         {
-            fs::remove_file(format!("map/{}{MAP_EXT}", map.map_name)).unwrap();
+            fs::remove_dir_all(Map::path(&map.map_name)).unwrap();
             dirty = true;
             loop_store.popup_state = PopupState::None;
             log::info!("Deleted map {}!", map.map_name);

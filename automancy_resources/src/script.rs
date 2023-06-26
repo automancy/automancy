@@ -21,7 +21,7 @@ pub struct Script {
 #[derive(Debug, Clone)]
 pub struct Instructions {
     pub inputs: Option<Vec<ItemStack>>,
-    pub output: ItemStack,
+    pub outputs: Vec<ItemStack>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -34,7 +34,7 @@ pub struct ScriptJson {
 #[derive(Debug, Clone, Deserialize)]
 pub struct InstructionsJson {
     pub inputs: Option<Vec<(IdRaw, ItemAmount)>>,
-    pub output: (IdRaw, ItemAmount),
+    pub output: Vec<(IdRaw, ItemAmount)>,
 }
 
 impl ResourceManager {
@@ -59,13 +59,17 @@ impl ResourceManager {
                     })
                     .collect()
             }),
-            output: ItemStack {
-                item: *self
-                    .registry
-                    .item(script.instructions.output.0.to_id(&mut self.interner))
-                    .unwrap(),
-                amount: script.instructions.output.1,
-            },
+            outputs: script
+                .instructions
+                .output
+                .into_iter()
+                .flat_map(|(id, amount)| {
+                    self.registry
+                        .item(id.to_id(&mut self.interner))
+                        .cloned()
+                        .map(|item| ItemStack { item, amount })
+                })
+                .collect(),
         };
 
         let adjacent = script.adjacent.map(|id| id.to_id(&mut self.interner));
@@ -84,11 +88,9 @@ impl ResourceManager {
     pub fn load_scripts(&mut self, dir: &Path) -> Option<()> {
         let scripts = dir.join("scripts");
 
-        load_recursively(&scripts, OsStr::new(JSON_EXT))
-            .into_iter()
-            .for_each(|file| {
-                self.load_script(&file);
-            });
+        for file in load_recursively(&scripts, OsStr::new(JSON_EXT)) {
+            self.load_script(&file);
+        }
 
         Some(())
     }

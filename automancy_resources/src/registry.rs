@@ -99,13 +99,15 @@ impl DataIds {
 
 #[derive(Copy, Clone)]
 pub struct ModelIds {
+    pub missing: Id,
     pub items_missing: Id,
 }
 
 impl ModelIds {
     pub fn new(interner: &mut Interner) -> Self {
         make_ids! {
-            items_missing
+            missing,
+            items_missing,
         }
     }
 }

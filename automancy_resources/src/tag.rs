@@ -61,11 +61,9 @@ impl ResourceManager {
     pub fn load_tags(&mut self, dir: &Path) -> Option<()> {
         let tags = dir.join("tags");
 
-        load_recursively(&tags, OsStr::new(JSON_EXT))
-            .into_iter()
-            .for_each(|file| {
-                self.load_tag(&file);
-            });
+        for file in load_recursively(&tags, OsStr::new(JSON_EXT)) {
+            self.load_tag(&file);
+        }
 
         Some(())
     }

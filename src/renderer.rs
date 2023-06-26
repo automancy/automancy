@@ -30,8 +30,6 @@ use automancy_defs::vulkano::memory::allocator::{AllocationCreateInfo, MemoryUsa
 use automancy_defs::vulkano::pipeline::graphics::viewport::Scissor;
 use automancy_defs::vulkano::pipeline::{Pipeline, PipelineBindPoint};
 use automancy_defs::vulkano::swapchain::{acquire_next_image, AcquireError};
-use automancy_defs::vulkano::sync;
-use automancy_defs::vulkano::sync::GpuFuture;
 use automancy_resources::data::Data;
 use automancy_resources::ResourceManager;
 
@@ -51,7 +49,6 @@ pub struct Renderer {
 
     tile_targets: Vec<(TileCoord, Option<Data>)>,
     last_tiles_update: Option<TickUnit>,
-    previous_frame_end: Option<Box<dyn GpuFuture + Send + Sync>>,
 }
 
 impl Renderer {
@@ -60,8 +57,6 @@ impl Renderer {
     }
 
     pub fn new(resource_man: Arc<ResourceManager>, gpu: Gpu) -> Self {
-        let device = gpu.device.clone();
-
         Self {
             resource_man,
 
@@ -71,7 +66,6 @@ impl Renderer {
 
             tile_targets: Default::default(),
             last_tiles_update: None,
-            previous_frame_end: Some(sync::now(device).boxed_send_sync()),
         }
     }
 }
@@ -115,27 +109,24 @@ impl Renderer {
             .unwrap();
         let now = Instant::now();
 
-        transaction_record.read().unwrap().iter().for_each(
-            |(instant, ((source_coord, source_id), (coord, id)), stack)| {
-                let duration = now.duration_since(*instant);
-                let t = duration.as_secs_f64() / ANIMATION_SPEED.as_secs_f64();
-                let a = FractionalHex::new(source_coord.q() as Double, source_coord.r() as Double);
-                let b = FractionalHex::new(coord.q() as Double, coord.r() as Double);
-                let lerp = a.lerp(b, t);
-                let point = frac_hex_to_pixel(HEX_GRID_LAYOUT, lerp);
+        for (instant, ((source_coord, _source_id), (coord, _id)), stack) in
+            transaction_record.read().unwrap().iter()
+        {
+            let duration = now.duration_since(*instant);
+            let t = duration.as_secs_f64() / ANIMATION_SPEED.as_secs_f64();
+            let a = FractionalHex::new(source_coord.q() as Double, source_coord.r() as Double);
+            let b = FractionalHex::new(coord.q() as Double, coord.r() as Double);
+            let lerp = a.lerp(b, t);
+            let point = frac_hex_to_pixel(HEX_GRID_LAYOUT, lerp);
 
-                let instance = InstanceData::default().with_model_matrix(
-                    Matrix4::from_translation(vec3(
-                        point.x as Float,
-                        point.y as Float,
-                        FAR as Float,
-                    )) * Matrix4::from_scale(0.5),
-                );
-                let id = resource_man.get_item_model(stack.item);
+            let instance = InstanceData::default().with_model_matrix(
+                Matrix4::from_translation(vec3(point.x as Float, point.y as Float, FAR as Float))
+                    * Matrix4::from_scale(0.5),
+            );
+            let id = resource_man.get_item_model(stack.item);
 
-                gui_instances.push((instance, id));
-            },
-        );
+            gui_instances.push((instance, id));
+        }
 
         let instances = {
             let none = self
@@ -202,24 +193,36 @@ impl Renderer {
             }
 
             for (coord, target) in &self.tile_targets {
-                let theta: Float = if let Some(target) = target.as_ref().and_then(Data::as_coord) {
-                    match *target {
-                        TileCoord::RIGHT => -60.0,
-                        TileCoord::BOTTOM_RIGHT => -120.0,
-                        TileCoord::BOTTOM_LEFT => -180.0,
-                        TileCoord::LEFT => -240.0,
-                        TileCoord::TOP_LEFT => -300.0,
-                        _ => 0.0,
-                    }
-                } else {
-                    0.0
-                };
+                let theta: Option<Float> =
+                    if let Some(target) = target.as_ref().and_then(Data::as_coord) {
+                        match *target {
+                            TileCoord::TOP_RIGHT => Some(0.0),
+                            TileCoord::RIGHT => Some(-60.0),
+                            TileCoord::BOTTOM_RIGHT => Some(-120.0),
+                            TileCoord::BOTTOM_LEFT => Some(-180.0),
+                            TileCoord::LEFT => Some(-240.0),
+                            TileCoord::TOP_LEFT => Some(-300.0),
+                            _ => None,
+                        }
+                    } else {
+                        None
+                    };
 
-                if let Some(m) = instances
-                    .get_mut(coord)
-                    .map(|v| &mut v.instance.model_matrix)
-                {
-                    *m = *m * Matrix4::from_angle_z(deg(theta))
+                if let Some(instance) = instances.get_mut(coord) {
+                    if let Some(theta) = theta {
+                        let m = &mut instance.instance.model_matrix;
+
+                        *m = *m * Matrix4::from_angle_z(deg(theta))
+                    } else if let Some(inactive) = self
+                        .resource_man
+                        .registry
+                        .tile(instance.tile)
+                        .unwrap()
+                        .model_attributes
+                        .inactive_model
+                    {
+                        instance.model = inactive;
+                    }
                 }
             }
 
@@ -302,8 +305,6 @@ impl Renderer {
             return;
         }
 
-        self.previous_frame_end.as_mut().unwrap().cleanup_finished();
-
         self.gpu
             .resize_images(dimensions, &mut self.recreate_swapchain);
 
@@ -319,7 +320,7 @@ impl Renderer {
                     self.recreate_swapchain = true;
                     return;
                 }
-                Err(e) => panic!("failed to acquire next image: {e:?}"),
+                Err(e) => panic!("failed to acquire next image: {e}"),
             }
         };
         if suboptimal {
@@ -508,7 +509,6 @@ impl Renderer {
             image_num,
             acquire_future,
             command_buffer,
-            &mut self.previous_frame_end,
             &mut self.recreate_swapchain,
         );
     }

@@ -2,46 +2,18 @@
     "id": "philosophers_stone",
     "instructions": {
         "inputs": [
-            [
-                "fire",
-                256
-            ],
-            [
-                "water",
-                256
-            ],
-            [
-                "air",
-                256
-            ],
-            [
-                "earth",
-                256
-            ],
-            [
-                "order",
-                256
-            ],
-            [
-                "chaos",
-                256
-            ],
-            [
-                "gold",
-                16
-            ],
-            [
-                "silver",
-                16
-            ],
-            [
-                "orb",
-                1
-            ]
+            ["fire", 256],
+            ["water", 256],
+            ["air", 256],
+            ["earth", 256],
+            ["order", 256],
+            ["chaos", 256],
+            ["gold", 16],
+            ["silver", 16],
+            ["orb", 1]
         ],
         "output": [
-            "philosophers_stone",
-            1
+            ["philosophers_stone", 1]
         ]
     }
 }

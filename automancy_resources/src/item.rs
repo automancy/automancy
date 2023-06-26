@@ -38,11 +38,9 @@ impl ResourceManager {
     pub fn load_items(&mut self, dir: &Path) -> Option<()> {
         let items = dir.join("items");
 
-        load_recursively(&items, OsStr::new(JSON_EXT))
-            .into_iter()
-            .for_each(|file| {
-                self.load_item(&file);
-            });
+        for file in load_recursively(&items, OsStr::new(JSON_EXT)) {
+            self.load_item(&file);
+        }
 
         Some(())
     }
@@ -51,25 +49,26 @@ impl ResourceManager {
         if let Some(item) = self.registry.items.get(&id) {
             Arc::new(vec![*item])
         } else {
-            tag_cache.entry(id).or_insert_with(|| {
-                let items = self
-                    .ordered_items
-                    .iter()
-                    .filter(|v| item_match(&self.registry, **v, id))
-                    .flat_map(|v| self.registry.item(*v).cloned())
-                    .collect();
+            tag_cache
+                .entry(id)
+                .or_insert_with(|| {
+                    let items = self
+                        .ordered_items
+                        .iter()
+                        .filter(|v| item_match(&self.registry, **v, id))
+                        .flat_map(|v| self.registry.item(*v).cloned())
+                        .collect();
 
-                Arc::new(items)
-            });
-
-            tag_cache[&id].clone()
+                    Arc::new(items)
+                })
+                .clone()
         }
     }
 
     pub fn ordered_items(&mut self) {
         let mut ids = self.registry.items.keys().cloned().collect::<Vec<_>>();
 
-        ids.sort_unstable_by_key(|id| self.item_name(id));
+        ids.sort_by_key(|id| self.item_name(id));
 
         self.ordered_items = ids;
     }

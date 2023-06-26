@@ -397,7 +397,6 @@ pub fn on_event(
                     let cap = loop_store.selected_tiles.capacity();
                     for selected in
                         mem::replace(&mut loop_store.selected_tiles, HashSet::with_capacity(cap))
-                            .into_iter()
                     {
                         let dest = selected + direction;
 
@@ -438,7 +437,7 @@ pub fn on_event(
         match loop_store.gui_state {
             GuiState::MainMenu => menu::main_menu(setup, gui, control_flow, loop_store),
             GuiState::MapLoad => {
-                menu::map_load_menu(setup, gui, loop_store, renderer);
+                menu::map_menu(setup, gui, loop_store, renderer);
             }
             GuiState::Options => {
                 menu::options_menu(setup, gui, loop_store);
@@ -537,14 +536,14 @@ pub fn on_event(
         match &loop_store.popup_state {
             PopupState::None => {}
             PopupState::MapCreate => menu::map_create_menu(setup, gui, loop_store, renderer),
-            PopupState::MapDeleteConfirmation(map) => {
-                menu::map_delete_confirmation(setup, gui, loop_store, map.clone());
+            PopupState::MapDeleteConfirmation(map_info) => {
+                menu::map_delete_confirmation(setup, gui, loop_store, map_info.clone());
             }
         }
 
-        loop_store.selected_tiles.iter().for_each(|selected| {
+        for selected in &loop_store.selected_tiles {
             tile_tints.insert(*selected, colors::ORANGE.with_alpha(0.5));
-        });
+        }
 
         tile_tints.insert(setup.camera.pointing_at, colors::RED.with_alpha(0.2));
 
@@ -573,7 +572,7 @@ pub fn on_event(
                     colors::LIGHT_BLUE,
                 ));
 
-                for selected in loop_store.selected_tiles.iter() {
+                for selected in &loop_store.selected_tiles {
                     let dest = *selected + direction;
                     tile_tints.insert(dest, colors::LIGHT_BLUE.with_alpha(0.5));
                 }

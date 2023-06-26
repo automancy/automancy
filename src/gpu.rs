@@ -33,7 +33,7 @@ use automancy_defs::vulkano::pipeline::graphics::viewport::{Viewport, ViewportSt
 use automancy_defs::vulkano::pipeline::{GraphicsPipeline, Pipeline};
 use automancy_defs::vulkano::render_pass::Subpass;
 use automancy_defs::vulkano::swapchain::{
-    Swapchain, SwapchainAcquireFuture, SwapchainCreateInfo, SwapchainCreationError,
+    PresentMode, Swapchain, SwapchainAcquireFuture, SwapchainCreateInfo, SwapchainCreationError,
     SwapchainPresentInfo,
 };
 use automancy_defs::vulkano::sync::FlushError;
@@ -322,7 +322,9 @@ pub fn indirect_instance(
             .scan(0, |init, instances| {
                 let instance_count = instances.len() as u32;
 
-                let mesh = &resource_man.meshes[&instances[0].1];
+                let mesh = resource_man.meshes.get(&instances[0].1).unwrap_or_else(|| {
+                    &resource_man.meshes[&resource_man.registry.model_ids.missing]
+                });
 
                 let command = DrawIndexedIndirectCommand {
                     index_count: mesh.size,
@@ -426,6 +428,8 @@ impl RenderAlloc {
 
                 image_format,
                 image_extent: window_size_u32(window.as_ref()),
+
+                present_mode: PresentMode::Fifo,
 
                 image_usage: ImageUsage::COLOR_ATTACHMENT.union(ImageUsage::TRANSFER_DST),
                 ..Default::default()
@@ -659,12 +663,9 @@ impl Gpu {
         image_num: usize,
         acquire_future: SwapchainAcquireFuture,
         command_buffer: PrimaryAutoCommandBuffer,
-        previous_frame_end: &mut Option<Box<dyn GpuFuture + Send + Sync>>,
         recreate_swapchain: &mut bool,
     ) {
-        let future = previous_frame_end
-            .take()
-            .unwrap()
+        let future = sync::now(self.device.clone())
             .join(acquire_future)
             .then_execute(self.queue.clone(), command_buffer)
             .unwrap()
@@ -680,15 +681,12 @@ impl Gpu {
         match future {
             Ok(future) => {
                 future.wait(None).unwrap();
-                *previous_frame_end = Some(future.boxed_send_sync());
             }
             Err(FlushError::OutOfDate) => {
                 *recreate_swapchain = true;
-                *previous_frame_end = Some(sync::now(self.device.clone()).boxed_send_sync());
             }
             Err(e) => {
                 log::error!("failed to flush future: {:?}", e);
-                *previous_frame_end = Some(sync::now(self.device.clone()).boxed_send_sync());
             }
         }
     }
