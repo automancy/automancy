@@ -3,7 +3,7 @@ use std::fs;
 use tokio::runtime::Runtime;
 
 use automancy::game::GameMsg;
-use automancy::map::{Map, MapInfo, MAIN_MENU, MAP_EXT};
+use automancy::map::{Map, MapInfo, MAIN_MENU};
 use automancy::renderer::Renderer;
 use automancy::VERSION;
 use automancy_defs::egui::{vec2, Align, Align2, Button, RichText, ScrollArea, Window};

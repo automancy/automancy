@@ -9,7 +9,7 @@ use automancy::camera::Camera;
 use automancy::game::{Game, GameMsg, TICK_INTERVAL};
 use automancy::gpu;
 use automancy::gpu::{Gpu, RenderAlloc};
-use automancy::map::{MapInfo, MAIN_MENU, MAP_EXT, MAP_PATH};
+use automancy::map::{MapInfo, MAIN_MENU, MAP_PATH};
 use automancy_defs::coord::ChunkCoord;
 use automancy_defs::egui::Frame;
 use automancy_defs::log;
