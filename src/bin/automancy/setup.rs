@@ -9,6 +9,7 @@ use automancy::game::{Game, GameMsg, TICK_INTERVAL};
 use automancy::gpu;
 use automancy::gpu::{Gpu, RenderAlloc};
 use automancy::map::{Map, MapInfo, MAIN_MENU, MAP_PATH};
+use automancy_defs::cg::Double;
 use automancy_defs::coord::ChunkCoord;
 use automancy_defs::egui::Frame;
 use automancy_defs::vulkano::device::DeviceExtensions;
@@ -123,7 +124,9 @@ impl GameSetup {
         // last setup
         let frame = gui::default_frame();
 
-        let camera = Camera::default();
+        let size = window.inner_size();
+
+        let camera = Camera::new(size.width as Double, size.height as Double);
 
         let map_gui_id = egui::Id::new("map_gui");
 

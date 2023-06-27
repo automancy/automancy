@@ -429,7 +429,7 @@ impl RenderAlloc {
                 image_format,
                 image_extent: window_size_u32(window.as_ref()),
 
-                present_mode: PresentMode::Fifo,
+                present_mode: PresentMode::FifoRelaxed,
 
                 image_usage: ImageUsage::COLOR_ATTACHMENT.union(ImageUsage::TRANSFER_DST),
                 ..Default::default()

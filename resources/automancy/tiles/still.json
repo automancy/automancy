@@ -4,9 +4,6 @@
     "models": [
         "still"
     ],
-    "model_attributes": {
-        "auto_rotate": true
-    },
     "data": {
         "scripts": {
             "VecId": [

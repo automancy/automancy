@@ -3,7 +3,7 @@ use std::ops::{Div, Sub};
 
 use automancy_defs::cg::{matrix, DPoint2, DPoint3, Double};
 use automancy_defs::cgmath::{point2, point3, vec2, EuclideanSpace};
-use automancy_defs::coord::TileCoord;
+use automancy_defs::coord::{TileCoord, TileUnit};
 use automancy_defs::hexagon_tiles::fractional::FractionalHex;
 use automancy_defs::hexagon_tiles::layout::{hex_to_pixel, pixel_to_hex};
 use automancy_defs::hexagon_tiles::point::{point, Point};
@@ -12,6 +12,7 @@ use automancy_defs::rendering::HEX_GRID_LAYOUT;
 use crate::camera::FAR;
 
 /// Gets the hex position being pointed at.
+#[inline]
 pub fn main_pos_to_hex(
     width: Double,
     height: Double,
@@ -27,6 +28,7 @@ pub fn main_pos_to_hex(
 }
 
 /// Converts screen space coordinates into normalized coordinates.
+#[inline]
 pub fn screen_to_normalized(width: Double, height: Double, c: DPoint2) -> DPoint2 {
     let size = vec2(width, height) / 2.0;
 
@@ -38,6 +40,7 @@ pub fn screen_to_normalized(width: Double, height: Double, c: DPoint2) -> DPoint
 }
 
 /// Converts screen coordinates to world coordinates.
+#[inline]
 pub fn screen_to_world(width: Double, height: Double, c: DPoint2, camera_z: Double) -> DPoint3 {
     let c = screen_to_normalized(width, height, c);
 
@@ -45,6 +48,7 @@ pub fn screen_to_world(width: Double, height: Double, c: DPoint2, camera_z: Doub
 }
 
 /// Converts normalized screen coordinates to world coordinates.
+#[inline]
 pub fn normalized_to_world(width: Double, height: Double, p: DPoint2, z: Double) -> DPoint3 {
     let aspect = width / height;
 
@@ -60,6 +64,7 @@ pub fn normalized_to_world(width: Double, height: Double, p: DPoint2, z: Double)
 }
 
 /// Converts hex coordinates to normalized screen coordinates.
+#[inline]
 pub fn hex_to_normalized(
     width: Double,
     height: Double,
@@ -78,4 +83,13 @@ pub fn hex_to_normalized(
     let p = p.truncate() / w;
 
     (point2(p.x, p.y), w)
+}
+
+#[inline]
+pub fn is_in_culling_range(
+    center: TileCoord,
+    other: TileCoord,
+    culling_range: (TileUnit, TileUnit),
+) -> bool {
+    center.distance(other) < culling_range.0 && center.distance(other) < culling_range.1
 }

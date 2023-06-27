@@ -2,13 +2,13 @@ use std::f32::consts::PI;
 use std::sync::Arc;
 use std::time::Instant;
 
-use ractor::rpc::{multi_call, CallResult};
+use ractor::rpc::CallResult;
 use ractor::ActorRef;
 use tokio::runtime::Runtime;
 
 use automancy_defs::cg::{deg, matrix, Double, Float, Matrix4, Point3};
 use automancy_defs::cgmath::{vec3, SquareMatrix};
-use automancy_defs::coord::{ChunkCoord, TileCoord};
+use automancy_defs::coord::{TileCoord, TileUnit};
 use automancy_defs::egui::Rgba;
 use automancy_defs::egui_winit_vulkano::Gui;
 use automancy_defs::hashbrown::HashMap;
@@ -38,7 +38,7 @@ use crate::game::{GameMsg, RenderInfo, RenderUnit, TickUnit, ANIMATION_SPEED};
 use crate::gpu;
 use crate::gpu::Gpu;
 use crate::tile_entity::TileEntityMsg;
-use crate::util::actor::call_multi;
+use crate::util::actor::multi_call_iter;
 
 pub struct Renderer {
     resource_man: Arc<ResourceManager>,
@@ -47,7 +47,7 @@ pub struct Renderer {
 
     pub gpu: Gpu,
 
-    tile_targets: Vec<(TileCoord, Option<Data>)>,
+    tile_targets: HashMap<TileCoord, Data>,
     last_tiles_update: Option<TickUnit>,
 }
 
@@ -70,13 +70,30 @@ impl Renderer {
     }
 }
 
+fn get_angle_from_target(target: Option<&Data>) -> Option<Float> {
+    if let Some(target) = target.and_then(Data::as_coord) {
+        match *target {
+            TileCoord::TOP_RIGHT => Some(0.0),
+            TileCoord::RIGHT => Some(-60.0),
+            TileCoord::BOTTOM_RIGHT => Some(-120.0),
+            TileCoord::BOTTOM_LEFT => Some(-180.0),
+            TileCoord::LEFT => Some(-240.0),
+            TileCoord::TOP_LEFT => Some(-300.0),
+            _ => None,
+        }
+    } else {
+        None
+    }
+}
+
 impl Renderer {
     pub fn render(
         &mut self,
         runtime: &Runtime,
         resource_man: Arc<ResourceManager>,
         camera_pos: Point3,
-        camera_chunk_coord: ChunkCoord,
+        camera_coord: TileCoord,
+        culling_range: (TileUnit, TileUnit),
         game: ActorRef<GameMsg>,
         map_render_info: &RenderInfo,
         tile_tints: HashMap<TileCoord, Rgba>,
@@ -103,31 +120,6 @@ impl Renderer {
             }
         };
 
-        let transaction_record = runtime
-            .block_on(game.call(GameMsg::GetRecordedTransactions, None))
-            .unwrap()
-            .unwrap();
-        let now = Instant::now();
-
-        for (instant, ((source_coord, _source_id), (coord, _id)), stack) in
-            transaction_record.read().unwrap().iter()
-        {
-            let duration = now.duration_since(*instant);
-            let t = duration.as_secs_f64() / ANIMATION_SPEED.as_secs_f64();
-            let a = FractionalHex::new(source_coord.q() as Double, source_coord.r() as Double);
-            let b = FractionalHex::new(coord.q() as Double, coord.r() as Double);
-            let lerp = a.lerp(b, t);
-            let point = frac_hex_to_pixel(HEX_GRID_LAYOUT, lerp);
-
-            let instance = InstanceData::default().with_model_matrix(
-                Matrix4::from_translation(vec3(point.x as Float, point.y as Float, FAR as Float))
-                    * Matrix4::from_scale(0.5),
-            );
-            let id = resource_man.get_item_model(stack.item);
-
-            gui_instances.push((instance, id));
-        }
-
         let instances = {
             let none = self
                 .resource_man
@@ -139,76 +131,41 @@ impl Renderer {
             let mut instances = map_render_info.clone();
 
             if update {
-                let coords = instances
-                    .iter()
-                    .flat_map(|(coord, RenderUnit { tile, .. })| {
-                        if self
-                            .resource_man
-                            .registry
-                            .tile(*tile)
-                            .unwrap()
-                            .model_attributes
-                            .auto_rotate
-                        {
-                            Some(*coord)
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<Vec<_>>();
+                let tile_entities = runtime
+                    .block_on(game.call(
+                        |reply| GameMsg::GetTileEntities {
+                            center: camera_coord,
+                            culling_range,
+                            reply,
+                        },
+                        None,
+                    ))
+                    .unwrap()
+                    .unwrap();
 
-                let size = coords.len();
-                if size > 0 {
-                    let tile_entities = runtime
-                        .block_on(call_multi(
-                            &game,
-                            |reply| {
-                                coords
-                                    .into_iter()
-                                    .map(|coord| GameMsg::GetTileEntityMulti(coord, reply.clone()))
-                                    .collect::<Vec<_>>()
-                            },
-                            size,
-                        ))
-                        .unwrap();
-
-                    let tile_entities = tile_entities.into_iter().flatten().collect::<Vec<_>>();
-
-                    self.tile_targets = runtime
-                        .block_on(multi_call(
-                            tile_entities.as_slice(),
-                            |reply| {
-                                TileEntityMsg::GetDataValueAndCoord(
-                                    resource_man.registry.data_ids.target,
-                                    reply,
-                                )
-                            },
-                            None,
-                        ))
-                        .unwrap()
-                        .into_iter()
-                        .map(CallResult::unwrap)
-                        .collect();
-                }
+                self.tile_targets = runtime
+                    .block_on(multi_call_iter(
+                        tile_entities.values(),
+                        tile_entities.values().len(),
+                        |reply| {
+                            TileEntityMsg::GetDataValueWithCoord(
+                                resource_man.registry.data_ids.target,
+                                reply,
+                            )
+                        },
+                        None,
+                    ))
+                    .unwrap()
+                    .into_iter()
+                    .map(CallResult::unwrap)
+                    .flat_map(|(a, b)| Some(a).zip(b))
+                    .collect();
             }
 
             for (coord, target) in &self.tile_targets {
-                let theta: Option<Float> =
-                    if let Some(target) = target.as_ref().and_then(Data::as_coord) {
-                        match *target {
-                            TileCoord::TOP_RIGHT => Some(0.0),
-                            TileCoord::RIGHT => Some(-60.0),
-                            TileCoord::BOTTOM_RIGHT => Some(-120.0),
-                            TileCoord::BOTTOM_LEFT => Some(-180.0),
-                            TileCoord::LEFT => Some(-240.0),
-                            TileCoord::TOP_LEFT => Some(-300.0),
-                            _ => None,
-                        }
-                    } else {
-                        None
-                    };
-
                 if let Some(instance) = instances.get_mut(coord) {
+                    let theta = get_angle_from_target(Some(target));
+
                     if let Some(theta) = theta {
                         let m = &mut instance.instance.model_matrix;
 
@@ -226,33 +183,67 @@ impl Renderer {
                 }
             }
 
-            let a = [camera_chunk_coord];
-            let b = camera_chunk_coord.neighbors();
-            let c = camera_chunk_coord.diagonals();
+            let transaction_record = runtime
+                .block_on(game.call(GameMsg::GetRecordedTransactions, None))
+                .unwrap()
+                .unwrap();
+            let now = Instant::now();
 
-            let rendered_chunks = vec![a.as_slice(), b.as_slice(), c.as_slice()]
-                .into_iter()
-                .flatten()
-                .flat_map(ChunkCoord::iter);
+            for (instant, ((source_coord, _source_id), (coord, _id)), stack) in
+                transaction_record.read().unwrap().iter()
+            {
+                let duration = now.duration_since(*instant);
+                let t = duration.as_secs_f64() / ANIMATION_SPEED.as_secs_f64();
+                let a = FractionalHex::new(source_coord.q() as Double, source_coord.r() as Double);
+                let b = FractionalHex::new(coord.q() as Double, coord.r() as Double);
+                let lerp = a.lerp(b, t);
+                let point = frac_hex_to_pixel(HEX_GRID_LAYOUT, lerp);
 
-            for coord in rendered_chunks {
-                if !instances.contains_key(&coord) {
-                    let p = hex_to_pixel(HEX_GRID_LAYOUT, coord.into());
+                let instance = InstanceData::default().with_model_matrix(
+                    Matrix4::from_translation(vec3(
+                        point.x as Float,
+                        point.y as Float,
+                        FAR as Float,
+                    )) * Matrix4::from_scale(0.5)
+                        * Matrix4::from_angle_z(deg(get_angle_from_target(
+                            self.tile_targets.get(source_coord),
+                        )
+                        .map(|v| v + 60.0)
+                        .unwrap_or(0.0))),
+                );
+                let id = resource_man.get_item_model(stack.item);
 
-                    instances.insert(
-                        coord,
-                        RenderUnit {
-                            instance: InstanceData::default().with_model_matrix(
-                                Matrix4::from_translation(vec3(
-                                    p.x as Float,
-                                    p.y as Float,
-                                    FAR as Float,
-                                )),
-                            ),
-                            tile: none,
-                            model: none,
-                        },
-                    );
+                gui_instances.push((instance, id));
+            }
+
+            let q0 = camera_coord.q() - culling_range.0 / 2;
+            let q1 = camera_coord.q() + culling_range.0 / 2;
+
+            let r0 = camera_coord.r() - culling_range.1 / 2;
+            let r1 = camera_coord.r() + culling_range.1 / 2;
+
+            for q in q0..q1 {
+                for r in r0..r1 {
+                    let coord = TileCoord::new(q, r);
+
+                    if !instances.contains_key(&coord) {
+                        let p = hex_to_pixel(HEX_GRID_LAYOUT, coord.into());
+
+                        instances.insert(
+                            coord,
+                            RenderUnit {
+                                instance: InstanceData::default().with_model_matrix(
+                                    Matrix4::from_translation(vec3(
+                                        p.x as Float,
+                                        p.y as Float,
+                                        FAR as Float,
+                                    )),
+                                ),
+                                tile: none,
+                                model: none,
+                            },
+                        );
+                    }
                 }
             }
 

@@ -13,13 +13,11 @@ use crate::{load_recursively, ResourceManager, JSON_EXT};
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct ModelAttributesJson {
-    pub auto_rotate: bool,
     pub inactive_model: Option<IdRaw>,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct ModelAttributes {
-    pub auto_rotate: bool,
     pub inactive_model: Option<Id>,
 }
 
@@ -70,7 +68,6 @@ impl ResourceManager {
             .unwrap_or(tile_type == Some(self.registry.tile_ids.machine));
 
         let model_attributes = ModelAttributes {
-            auto_rotate: tile.model_attributes.auto_rotate,
             inactive_model: tile
                 .model_attributes
                 .inactive_model

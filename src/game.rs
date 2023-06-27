@@ -4,7 +4,6 @@ use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
 use arraydeque::{ArrayDeque, Wrapping};
-use ractor::concurrency::MpscSender;
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort, SupervisionEvent};
 use rayon::prelude::*;
 
@@ -27,6 +26,7 @@ use crate::camera::FAR;
 use crate::game::GameMsg::*;
 use crate::map::{Map, MapInfo, TileEntities};
 use crate::tile_entity::{TileEntity, TileEntityMsg, TileModifier};
+use crate::util::render::is_in_culling_range;
 
 pub const TPS: u64 = 30;
 
@@ -59,7 +59,7 @@ pub struct GameState {
     /// a count of all the ticks that have happened
     tick_count: TickUnit,
     /// render cache
-    render_cache: HashMap<(TileUnit, TileCoord), Arc<RenderInfo>>,
+    render_cache: HashMap<(TileCoord, (TileUnit, TileUnit)), Arc<RenderInfo>>,
     /// is the game stopped
     stopped: bool,
     /// the last time the tiles are updated
@@ -82,7 +82,7 @@ pub enum GameMsg {
     /// get rendering information
     RenderInfoRequest {
         center: TileCoord,
-        range: TileUnit,
+        culling_range: (TileUnit, TileUnit),
         reply: RpcReplyPort<Arc<RenderInfo>>,
     },
     /// place a tile at the given position
@@ -94,12 +94,6 @@ pub enum GameMsg {
         reply: Option<RpcReplyPort<PlaceTileResponse>>,
     },
     Undo,
-    /// get the tile at the given position
-    GetTile(TileCoord, RpcReplyPort<Option<(Id, TileModifier)>>),
-    /// get the tile entity at the given position
-    GetTileEntity(TileCoord, RpcReplyPort<Option<ActorRef<TileEntityMsg>>>),
-    /// get the tile entity at the given position
-    GetTileEntityMulti(TileCoord, MpscSender<Option<ActorRef<TileEntityMsg>>>),
     /// send a message to a tile entity
     ForwardMsgToTile(TileCoord, TileEntityMsg),
     /// checks for the adjacent tiles against the script
@@ -108,6 +102,17 @@ pub enum GameMsg {
         coord: TileCoord,
         self_coord: TileCoord,
     },
+    /// get the tile at the given position
+    GetTile(TileCoord, RpcReplyPort<Option<(Id, TileModifier)>>),
+    /// get the tile entity at the given position
+    GetTileEntity(TileCoord, RpcReplyPort<Option<ActorRef<TileEntityMsg>>>),
+    /// get all the tile entities
+    GetTileEntities {
+        center: TileCoord,
+        culling_range: (TileUnit, TileUnit),
+        reply: RpcReplyPort<TileEntities>,
+    },
+    /// take the tile entities
     TakeTileEntities(RpcReplyPort<TileEntities>),
     /// get the map
     TakeMap(RpcReplyPort<Map>),
@@ -237,10 +242,10 @@ impl Actor for Game {
                     }
                     RenderInfoRequest {
                         center,
-                        range,
+                        culling_range,
                         reply,
                     } => {
-                        let render_info = render_info(state, center, range);
+                        let render_info = render_info(state, center, culling_range);
 
                         reply.send(render_info).unwrap();
                     }
@@ -306,10 +311,22 @@ impl Actor for Game {
                             .send(state.tile_entities.get(&coord).cloned())
                             .unwrap();
                     }
-                    GetTileEntityMulti(coord, reply) => {
+                    GetTileEntities {
+                        center,
+                        culling_range,
+                        reply,
+                    } => {
                         reply
-                            .send(state.tile_entities.get(&coord).cloned())
-                            .await
+                            .send(
+                                state
+                                    .tile_entities
+                                    .iter()
+                                    .filter(|(coord, _)| {
+                                        is_in_culling_range(center, **coord, culling_range)
+                                    })
+                                    .map(|(coord, entity)| (*coord, entity.clone()))
+                                    .collect(),
+                            )
                             .unwrap();
                     }
                     ForwardMsgToTile(coord, msg) => {
@@ -517,8 +534,12 @@ async fn insert_new_tile(
     old
 }
 
-fn render_info(state: &mut GameState, center: TileCoord, range: TileUnit) -> Arc<RenderInfo> {
-    if let Some(info) = state.render_cache.get(&(range, center)) {
+fn render_info(
+    state: &mut GameState,
+    center: TileCoord,
+    culling_range: (TileUnit, TileUnit),
+) -> Arc<RenderInfo> {
+    if let Some(info) = state.render_cache.get(&(center, culling_range)) {
         return info.clone();
     }
 
@@ -526,7 +547,7 @@ fn render_info(state: &mut GameState, center: TileCoord, range: TileUnit) -> Arc
         .map
         .tiles
         .iter()
-        .filter(|(coord, _)| center.distance(**coord) <= range)
+        .filter(|(coord, _)| is_in_culling_range(center, **coord, culling_range))
         .flat_map(|(coord, (id, tile_modifier))| {
             state
                 .resource_man
@@ -560,7 +581,9 @@ fn render_info(state: &mut GameState, center: TileCoord, range: TileUnit) -> Arc
         state.render_cache.clear();
     }
 
-    state.render_cache.insert((range, center), info.clone());
+    state
+        .render_cache
+        .insert((center, culling_range), info.clone());
 
     info
 }

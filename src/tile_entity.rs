@@ -82,7 +82,7 @@ pub enum TileEntityMsg {
     TakeData(RpcReplyPort<DataMap>),
     GetData(RpcReplyPort<DataMap>),
     GetDataValue(Id, RpcReplyPort<Option<Data>>),
-    GetDataValueAndCoord(Id, RpcReplyPort<(TileCoord, Option<Data>)>),
+    GetDataValueWithCoord(Id, RpcReplyPort<(TileCoord, Option<Data>)>),
 }
 
 /// Represents the various types of errors a tile can run into.
@@ -527,7 +527,7 @@ impl Actor for TileEntity {
             GetDataValue(key, reply) => {
                 reply.send(state.data.get(&key).cloned()).unwrap();
             }
-            GetDataValueAndCoord(key, reply) => {
+            GetDataValueWithCoord(key, reply) => {
                 reply
                     .send((self.coord, state.data.get(&key).cloned()))
                     .unwrap();

@@ -18,7 +18,7 @@ use automancy::util::render::{hex_to_normalized, screen_to_normalized, screen_to
 use automancy_defs::cg::{Double, Float, Matrix4};
 use automancy_defs::cgmath::{point2, vec3, EuclideanSpace};
 use automancy_defs::colors::WithAlpha;
-use automancy_defs::coord::{ChunkCoord, TileCoord, CHUNK_SIZE_SQUARED};
+use automancy_defs::coord::{ChunkCoord, TileCoord};
 use automancy_defs::egui_winit_vulkano::Gui;
 use automancy_defs::hashbrown::{HashMap, HashSet};
 use automancy_defs::id::Id;
@@ -403,9 +403,17 @@ pub fn on_event(
                     }
 
                     loop_store.initial_cursor_position = None;
+                    setup
+                        .audio_man
+                        .play(resource_man.audio["click"].clone()) // TODO click2
+                        .unwrap();
                 }
             } else if loop_store.input_handler.alternate_pressed {
                 loop_store.initial_cursor_position = Some(setup.camera.pointing_at);
+                setup
+                    .audio_man
+                    .play(resource_man.audio["click"].clone())
+                    .unwrap();
             }
 
             if loop_store.initial_cursor_position.is_none() {
@@ -413,6 +421,7 @@ pub fn on_event(
             }
         } else {
             loop_store.selected_tiles.clear();
+            loop_store.initial_cursor_position = None;
         }
 
         if loop_store.input_handler.control_held
@@ -428,7 +437,11 @@ pub fn on_event(
 
         loop_store.last_frame_start = Instant::now();
 
-        setup.camera.update_pos(loop_store.elapsed);
+        setup.camera.update_pos(
+            loop_store.elapsed,
+            window_size.width as Double,
+            window_size.height as Double,
+        );
         setup.camera.update_pointing_at(
             loop_store.input_handler.main_pos,
             window_size.width as Double,
@@ -610,7 +623,7 @@ pub fn on_event(
         let render_info = runtime
             .block_on(setup.game.call(
                 |reply| GameMsg::RenderInfoRequest {
-                    range: CHUNK_SIZE_SQUARED,
+                    culling_range: setup.camera.culling_range,
                     center: setup.camera.get_tile_coord(),
                     reply,
                 },
@@ -622,7 +635,8 @@ pub fn on_event(
             runtime,
             setup.resource_man.clone(),
             setup.camera.get_pos().cast().unwrap(),
-            setup.camera_chunk_coord,
+            setup.camera.get_tile_coord(),
+            setup.camera.culling_range,
             setup.game.clone(),
             &render_info,
             tile_tints,
