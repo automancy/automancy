@@ -3,10 +3,12 @@ use std::fs;
 use tokio::runtime::Runtime;
 
 use automancy::game::GameMsg;
-use automancy::map::{Map, MapInfo, MAIN_MENU};
+use automancy::map::{Map, MAIN_MENU};
 use automancy::renderer::Renderer;
 use automancy::VERSION;
-use automancy_defs::egui::{vec2, Align, Align2, Button, RichText, ScrollArea, Window};
+use automancy_defs::egui::{
+    vec2, Align, Align2, Button, RichText, ScrollArea, TextEdit, TextStyle, Window,
+};
 use automancy_defs::egui_winit_vulkano::Gui;
 use automancy_defs::gui::HyperlinkWidget;
 use automancy_defs::log;
@@ -24,13 +26,12 @@ pub fn main_menu(
     control_flow: &mut ControlFlow,
     loop_store: &mut EventLoopStorage,
 ) {
-    Window::new("main_menu".to_string())
+    Window::new("main_menu")
         .resizable(false)
+        .title_bar(false)
         .default_width(175.0)
         .anchor(Align2([Align::Center, Align::Center]), vec2(0.0, 0.0))
         .frame(default_frame().inner_margin(10.0))
-        .movable(false)
-        .title_bar(false)
         .show(&gui.context(), |ui| {
             ui.with_layout(
                 ui.layout()
@@ -111,17 +112,17 @@ pub fn main_menu(
 /// Draws the pause menu.
 pub fn pause_menu(
     runtime: &Runtime,
-    setup: &mut GameSetup,
+    setup: &GameSetup,
     gui: &mut Gui,
     loop_store: &mut EventLoopStorage,
     renderer: &mut Renderer,
 ) {
-    Window::new("Game Paused".to_string())
+    Window::new("Game Paused")
         .resizable(false)
+        .collapsible(false)
         .default_width(175.0)
         .anchor(Align2([Align::Center, Align::Center]), vec2(0.0, 0.0))
         .frame(default_frame().inner_margin(10.0))
-        .movable(false)
         .show(&gui.context(), |ui| {
             ui.with_layout(
                 ui.layout()
@@ -133,7 +134,7 @@ pub fn pause_menu(
                             RichText::new(
                                 setup.resource_man.translates.gui
                                     [&setup.resource_man.registry.gui_ids.btn_unpause]
-                                    .to_string(),
+                                    .as_str(),
                             )
                             .heading(),
                         )
@@ -146,7 +147,7 @@ pub fn pause_menu(
                             RichText::new(
                                 setup.resource_man.translates.gui
                                     [&setup.resource_man.registry.gui_ids.btn_options]
-                                    .to_string(),
+                                    .as_str(),
                             )
                             .heading(),
                         )
@@ -159,7 +160,7 @@ pub fn pause_menu(
                             RichText::new(
                                 setup.resource_man.translates.gui
                                     [&setup.resource_man.registry.gui_ids.btn_exit]
-                                    .to_string(),
+                                    .as_str(),
                             )
                             .heading(),
                         )
@@ -198,23 +199,67 @@ pub fn map_menu(
         setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.load_map].as_str(),
     )
     .resizable(false)
-    .default_width(300.0)
+    .collapsible(false)
+    .default_width(600.0)
     .anchor(Align2([Align::Center, Align::Center]), vec2(0.0, 0.0))
     .frame(default_frame().inner_margin(10.0))
     .show(&gui.context(), |ui| {
-        ScrollArea::vertical().max_height(600.0).show(ui, |ui| {
-            let dirty = false;
+        ScrollArea::vertical().max_height(400.0).show(ui, |ui| {
+            let mut dirty = false;
 
-            for map in &setup.maps {
-                let resource_man = setup.resource_man.clone();
-                let time = unix_to_formatted_time(
-                    map.save_time,
-                    resource_man.translates.gui[&resource_man.registry.gui_ids.time_fmt].as_str(),
-                );
+            for (map_info, map_name) in &setup.maps {
                 ui.group(|ui| {
-                    ui.label(RichText::new(&map.map_name).heading());
+                    ui.scope(|ui| {
+                        ui.style_mut().override_text_style = Some(TextStyle::Heading);
+                        ui.set_width(300.0);
+
+                        if Some(map_name) == loop_store.map_name_renaming.as_ref() {
+                            if ui
+                                .add(
+                                    TextEdit::multiline(&mut loop_store.map_name_renaming_input)
+                                        .desired_rows(1),
+                                )
+                                .lost_focus()
+                            {
+                                loop_store.map_name_renaming_input = loop_store
+                                    .map_name_renaming_input
+                                    .chars()
+                                    .filter(|v| v.is_alphanumeric())
+                                    .collect();
+
+                                if let Ok(_) = fs::rename(
+                                    Map::path(&map_name),
+                                    Map::path(&loop_store.map_name_renaming_input),
+                                ) {
+                                    log::info!(
+                                        "Renamed map {map_name} to {}",
+                                        loop_store.map_name_renaming_input
+                                    );
+
+                                    dirty = true;
+                                } else {
+                                    loop_store.popup_state = PopupState::InvalidName;
+                                }
+
+                                loop_store.map_name_renaming = None;
+                                loop_store.map_name_renaming_input = "".to_string();
+                            }
+                        } else {
+                            if ui.selectable_label(false, map_name.as_str()).clicked() {
+                                loop_store.map_name_renaming = Some(map_name.clone());
+                                loop_store.map_name_renaming_input = map_name.clone();
+                            }
+                        }
+                    });
+
                     ui.horizontal(|ui| {
-                        ui.label(time);
+                        ui.label(unix_to_formatted_time(
+                            map_info.save_time,
+                            setup.resource_man.translates.gui
+                                [&setup.resource_man.registry.gui_ids.time_fmt]
+                                .as_str(),
+                        ));
+
                         if ui
                             .button(
                                 setup.resource_man.translates.gui
@@ -225,20 +270,27 @@ pub fn map_menu(
                         {
                             setup
                                 .game
-                                .send_message(GameMsg::LoadMap(resource_man, map.map_name.clone()))
+                                .send_message(GameMsg::LoadMap(
+                                    setup.resource_man.clone(),
+                                    map_name.clone(),
+                                ))
                                 .unwrap();
                             renderer.reset_last_tiles_update();
                             loop_store.switch_gui_state(GuiState::Ingame);
                         }
+
                         if ui
                             .button(
                                 setup.resource_man.translates.gui
                                     [&setup.resource_man.registry.gui_ids.btn_delete]
-                                    .to_string(),
+                                    .as_str(),
                             )
                             .clicked()
                         {
-                            loop_store.popup_state = PopupState::MapDeleteConfirmation(map.clone());
+                            loop_store.popup_state =
+                                PopupState::MapDeleteConfirmation(map_name.clone());
+
+                            dirty = true;
                         }
                     });
                 });
@@ -284,111 +336,13 @@ pub fn map_menu(
     });
 }
 
-pub fn map_delete_confirmation(
-    setup: &mut GameSetup,
-    gui: &mut Gui,
-    loop_store: &mut EventLoopStorage,
-    map: MapInfo,
-) {
-    let mut dirty = false;
-
-    Window::new(
-        setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.delete_map]
-            .to_string(),
-    )
-    .resizable(false)
-    .default_width(250.0)
-    .anchor(Align2([Align::Center, Align::Center]), vec2(0.0, 0.0))
-    .frame(default_frame().inner_margin(10.0))
-    .show(&gui.context(), |ui| {
-        ui.label(
-            setup.resource_man.translates.gui
-                [&setup.resource_man.registry.gui_ids.lbl_delete_map_confirm]
-                .as_str(),
-        );
-        if ui
-            .button(
-                setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.btn_confirm]
-                    .as_str(),
-            )
-            .clicked()
-        {
-            fs::remove_dir_all(Map::path(&map.map_name)).unwrap();
-            dirty = true;
-            loop_store.popup_state = PopupState::None;
-            log::info!("Deleted map {}!", map.map_name);
-        }
-        if ui
-            .button(
-                setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.btn_cancel]
-                    .to_string(),
-            )
-            .clicked()
-        {
-            loop_store.popup_state = PopupState::None
-        }
-    });
-
-    if dirty {
-        setup.refresh_maps();
-    }
-}
-
-/// Draws the map creation popup.
-pub fn map_create_menu(
-    setup: &mut GameSetup,
-    gui: &mut Gui,
-    loop_store: &mut EventLoopStorage,
-    renderer: &mut Renderer,
-) {
-    Window::new(
-        setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.create_map]
-            .to_string(),
-    )
-    .resizable(false)
-    .default_width(250.0)
-    .anchor(Align2([Align::Center, Align::Center]), vec2(0.0, 0.0))
-    .frame(default_frame().inner_margin(10.0))
-    .show(&gui.context(), |ui| {
-        ui.horizontal(|ui| {
-            ui.label("Name:");
-            ui.text_edit_singleline(&mut loop_store.map_name_input);
-        });
-        if ui
-            .button(
-                setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.btn_confirm]
-                    .to_string(),
-            )
-            .clicked()
-        {
-            let name = Map::sanitize_name(loop_store.map_name_input.clone());
-            setup
-                .game
-                .send_message(GameMsg::LoadMap(setup.resource_man.clone(), name))
-                .unwrap();
-            renderer.reset_last_tiles_update();
-            loop_store.map_name_input.clear();
-            loop_store.popup_state = PopupState::None;
-            loop_store.switch_gui_state(GuiState::Ingame);
-        }
-        if ui
-            .button(
-                setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.btn_cancel]
-                    .to_string(),
-            )
-            .clicked()
-        {
-            loop_store.popup_state = PopupState::None
-        }
-    });
-}
-
 /// Draws the options menu. TODO
-pub fn options_menu(setup: &mut GameSetup, gui: &mut Gui, loop_store: &mut EventLoopStorage) {
+pub fn options_menu(setup: &GameSetup, gui: &mut Gui, loop_store: &mut EventLoopStorage) {
     Window::new(
         setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.options].as_str(),
     )
     .resizable(false)
+    .collapsible(false)
     .default_width(175.0)
     .anchor(Align2([Align::Center, Align::Center]), vec2(0.0, 0.0))
     .frame(default_frame().inner_margin(10.0))

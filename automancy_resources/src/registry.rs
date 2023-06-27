@@ -7,7 +7,7 @@ use crate::script::Script;
 use crate::tag::Tag;
 use crate::tile::Tile;
 
-/// Represents the automancy_resources registry.
+/// Represents the resource registry.
 #[derive(Clone)]
 pub struct Registry {
     pub tiles: HashMap<Id, Tile>,
@@ -125,11 +125,13 @@ pub struct GuiIds {
     pub load_map: Id,
     pub delete_map: Id,
     pub create_map: Id,
+    pub invalid_name: Id,
     pub options: Id,
 
     pub lbl_amount: Id,
     pub lbl_link_destination: Id,
     pub lbl_maps_loaded: Id,
+    pub lbl_pick_another_name: Id,
     pub lbl_delete_map_confirm: Id,
 
     pub btn_confirm: Id,
@@ -161,11 +163,13 @@ impl GuiIds {
             load_map,
             delete_map,
             create_map,
+            invalid_name,
             options,
 
             lbl_amount,
             lbl_link_destination,
             lbl_maps_loaded,
+            lbl_pick_another_name,
             lbl_delete_map_confirm,
 
             btn_confirm,

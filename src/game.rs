@@ -49,18 +49,15 @@ pub type TransactionRecord = VecDeque<(Instant, ((TileCoord, Id), (TileCoord, Id
 
 #[derive(Debug)]
 pub struct GameState {
-    /// a count of all the ticks that have happened
-    tick_count: TickUnit,
-
-    /// the automancy_resources manager
+    /// the resource manager
     resource_man: Arc<ResourceManager>,
-
     /// the tile entities
     tile_entities: TileEntities,
-
     /// the map
     map: Map,
 
+    /// a count of all the ticks that have happened
+    tick_count: TickUnit,
     /// render cache
     render_cache: HashMap<(TileUnit, TileCoord), Arc<RenderInfo>>,
     /// is the game stopped
@@ -118,8 +115,7 @@ pub enum GameMsg {
     MoveTiles(Vec<TileCoord>, TileCoord, bool),
     /// load a map
     LoadMap(Arc<ResourceManager>, String),
-    GetMapInfo(RpcReplyPort<MapInfo>),
-    GetUnloadedMapInfo(String, Arc<ResourceManager>, RpcReplyPort<MapInfo>),
+    GetMapInfo(RpcReplyPort<(MapInfo, String)>),
     GetDataMap(RpcReplyPort<DataMap>),
     GetDataValue(Id, RpcReplyPort<Option<Data>>),
     SetData(Id, Data),
@@ -197,33 +193,18 @@ impl Actor for Game {
                 reply.send(()).unwrap();
             }
             GetMapInfo(reply) => {
-                let map_name = state.map.map_name.clone();
-                let tiles = state.map.tiles.len() as u64;
-                let data = state.map.data.0.len();
+                let tile_count = state.map.tiles.len() as u64;
                 let save_time = state.map.save_time;
 
                 reply
-                    .send(MapInfo {
-                        map_name,
-                        tiles,
-                        data,
-                        save_time,
-                    })
+                    .send((
+                        MapInfo {
+                            tile_count,
+                            save_time,
+                        },
+                        state.map.map_name.clone(),
+                    ))
                     .unwrap();
-
-                return Ok(());
-            }
-            GetUnloadedMapInfo(map_name, resource_man, reply) => {
-                if let Some(map) = Map::read_header(&resource_man, &map_name) {
-                    reply
-                        .send(MapInfo {
-                            map_name,
-                            tiles: map.tile_count,
-                            data: map.data.0.len(),
-                            save_time: map.save_time,
-                        })
-                        .unwrap();
-                }
 
                 return Ok(());
             }

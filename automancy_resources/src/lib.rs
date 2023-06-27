@@ -67,7 +67,7 @@ pub static JSON_EXT: &str = "json";
 pub static OGG_EXT: &str = "ogg";
 pub static PNG_EXT: &str = "png";
 
-/// Represents a automancy_resources manager, which contains all resources (apart from maps) loaded from disk dynamically.
+/// Represents a resource manager, which contains all resources (apart from maps) loaded from disk dynamically.
 pub struct ResourceManager {
     pub interner: Interner,
     pub track: TrackHandle,

@@ -1,7 +1,6 @@
 use fuse_rust::Fuse;
 
 use automancy::gpu::Gpu;
-use automancy::map::MapInfo;
 use automancy_defs::cg::{DPoint2, Double, Float};
 use automancy_defs::cgmath::MetricSpace;
 use automancy_defs::egui::epaint::Shadow;
@@ -28,6 +27,7 @@ pub mod debug;
 pub mod error;
 pub mod item;
 pub mod menu;
+pub mod popup;
 pub mod tile_config;
 pub mod tile_info;
 pub mod tile_selection;
@@ -43,11 +43,12 @@ pub enum GuiState {
 }
 
 /// The state of popups (which are on top of the main GUI), if any should be displayed.
-#[derive(Clone)]
+#[derive(Eq, PartialEq, Clone)]
 pub enum PopupState {
     None,
     MapCreate,
-    MapDeleteConfirmation(MapInfo),
+    MapDeleteConfirmation(String),
+    InvalidName,
 }
 
 /// Initialize the font families.

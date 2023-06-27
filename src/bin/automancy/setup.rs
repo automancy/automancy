@@ -1,7 +1,6 @@
 use std::fs;
 use std::sync::Arc;
 
-use futures::executor::block_on;
 use ractor::concurrency::JoinHandle;
 use ractor::{Actor, ActorRef};
 
@@ -9,13 +8,13 @@ use automancy::camera::Camera;
 use automancy::game::{Game, GameMsg, TICK_INTERVAL};
 use automancy::gpu;
 use automancy::gpu::{Gpu, RenderAlloc};
-use automancy::map::{MapInfo, MAIN_MENU, MAP_PATH};
+use automancy::map::{Map, MapInfo, MAIN_MENU, MAP_PATH};
 use automancy_defs::coord::ChunkCoord;
 use automancy_defs::egui::Frame;
-use automancy_defs::log;
 use automancy_defs::vulkano::device::DeviceExtensions;
 use automancy_defs::winit::event_loop::EventLoop;
 use automancy_defs::winit::window::{Icon, Window};
+use automancy_defs::{egui, log};
 use automancy_resources::kira::manager::backend::cpal::CpalBackend;
 use automancy_resources::kira::manager::{AudioManager, AudioManagerSettings};
 use automancy_resources::kira::track::{TrackBuilder, TrackHandle};
@@ -42,7 +41,9 @@ pub struct GameSetup {
     /// the window
     pub window: Arc<Window>,
     /// the list of available maps
-    pub maps: Vec<MapInfo>,
+    pub maps: Vec<(MapInfo, String)>,
+
+    pub map_gui_id: egui::Id,
 }
 
 impl GameSetup {
@@ -124,6 +125,8 @@ impl GameSetup {
 
         let camera = Camera::default();
 
+        let map_gui_id = egui::Id::new("map_gui");
+
         // --- event-loop ---
         (
             event_loop,
@@ -137,8 +140,9 @@ impl GameSetup {
                 camera,
                 camera_chunk_coord: camera.get_tile_coord().into(),
                 window,
-
                 maps: Vec::new(),
+
+                map_gui_id,
             },
         )
     }
@@ -151,23 +155,15 @@ impl GameSetup {
             .flatten()
             .map(|f| f.file_name().to_str().unwrap().to_string())
             .filter(|f| !f.starts_with('.'))
-            .map(|map| {
-                block_on(self.game.call(
-                    |reply| {
-                        GameMsg::GetUnloadedMapInfo(
-                            map.to_string(),
-                            self.resource_man.clone(),
-                            reply,
-                        )
-                    },
-                    None,
-                ))
-                .unwrap()
-                .unwrap()
+            .flat_map(|map| {
+                Map::read_header(&self.resource_man, &map)
+                    .map(|v| v.info)
+                    .zip(Some(map))
             })
-            .collect::<Vec<MapInfo>>();
-        self.maps.sort_by(|a, b| a.map_name.cmp(&b.map_name));
-        self.maps.sort_by(|a, b| a.save_time.cmp(&b.save_time));
+            .collect::<Vec<_>>();
+
+        self.maps.sort_by(|a, b| a.1.cmp(&b.1));
+        self.maps.sort_by(|a, b| a.0.save_time.cmp(&b.0.save_time));
         self.maps.reverse();
     }
 }

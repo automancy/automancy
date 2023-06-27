@@ -44,14 +44,12 @@ pub fn debugger(
     let audio = resource_man.audio.len();
     let meshes = resource_man.meshes.len();
 
-    let map = runtime
+    let (info, map_name) = runtime
         .block_on(game.call(GameMsg::GetMapInfo, Some(loop_store.elapsed)))
         .unwrap()
         .unwrap();
 
-    let map_name = map.map_name;
-    let data_size = map.data;
-    let tile_count = map.tiles;
+    let tile_count = info.tile_count;
 
     Window::new(
         setup.resource_man.translates.gui[&resource_man.registry.gui_ids.debug_menu].as_str(),
@@ -66,7 +64,7 @@ pub fn debugger(
             "ResourceMan: {reg_tiles}T {reg_items}I {tags}Ta {scripts}S {audio}A {meshes}M"
         ));
         ui.label(format!(
-            "Map \"{map_name}\" ({map_name}.run): {data_size}D {tile_count}T"
+            "Map \"{map_name}\" ({map_name}.run): {tile_count}T"
         ))
     });
 }

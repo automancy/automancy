@@ -47,11 +47,9 @@ pub struct Map {
 }
 
 /// Contains information about a map to be saved to disk.
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
 pub struct MapInfo {
-    pub map_name: String,
-    pub tiles: u64,
-    pub data: usize,
+    pub tile_count: u64,
     pub save_time: i64,
 }
 
@@ -65,9 +63,7 @@ pub struct MapHeader {
     #[serde(default)]
     pub data: DataMapRaw,
     #[serde(default)]
-    pub tile_count: u64,
-    #[serde(default)]
-    pub save_time: i64,
+    pub info: MapInfo,
 }
 
 impl Map {
@@ -203,7 +199,7 @@ impl Map {
 
         let data = header.data.to_data(resource_man);
 
-        let save_time = header.save_time;
+        let save_time = header.info.save_time;
 
         (
             Self {
@@ -256,6 +252,7 @@ impl Map {
 
         let tile_map = tile_map.into_iter().collect::<Vec<_>>();
         let data = self.data.to_raw(interner);
+        let tile_count = serde_tiles.len() as u64;
         let save_time = Utc::now().timestamp();
 
         serde_json::to_writer(
@@ -263,8 +260,10 @@ impl Map {
             &MapHeader {
                 tile_map,
                 data,
-                tile_count: serde_tiles.len() as u64,
-                save_time,
+                info: MapInfo {
+                    tile_count,
+                    save_time,
+                },
             },
         )
         .unwrap();
@@ -280,10 +279,9 @@ impl Map {
         if name.is_empty() {
             return "empty".to_string();
         }
-        let mut name = name;
-        name = name.trim().to_string();
-        name = name.trim_matches('.').to_string();
-        name = name.replace(|c: char| !c.is_alphanumeric(), "_");
+        let name = name.trim();
+        let name = name.trim_matches('.');
+        let name = name.replace(|c: char| !c.is_alphanumeric(), "_");
 
         if WIN_ILLEGAL_NAMES.contains(&name.to_ascii_uppercase().as_str()) {
             return format!("_{name}");

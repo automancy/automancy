@@ -61,15 +61,15 @@
         "error_popup": "Error",
         "debug_menu": "Debug",
         "load_map": "Load Map",
+        "invalid_name": "Invalid Name!",
         "delete_map": "Delete Map",
         "create_map": "Create Map",
         "options": "Options",
-
         "lbl_amount": "Amount: ",
         "lbl_link_destination": "(Right click to link Destination)",
         "lbl_maps_loaded": "{} maps loaded",
+        "lbl_pick_another_name": "Please pick another name.",
         "lbl_delete_map_confirm": "This will permanently delete this map. Are you sure?",
-
         "btn_confirm": "Ok",
         "btn_exit": "Quit",
         "btn_cancel": "Cancel",
