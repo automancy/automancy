@@ -4,6 +4,8 @@
 .fleet
 .vscode
 
+__pycache__
+
 map
 
 *.spv
