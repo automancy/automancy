@@ -6,9 +6,9 @@ run_svg() {
   out_path="$base.blend"
 
   #    vvvv doesn't exist or               vvv older than
-  #if [ ! -f "$out_path" ] || [ "$out_path" -ot "$path" ]; then
+  if [ ! -f "$out_path" ] || [ "$out_path" -ot "$path" ]; then
     blender --background --python export_svg.py -- "$path" "$out_path"
-  #fi
+  fi
 }
 
 run_blender() {
