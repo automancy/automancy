@@ -2,6 +2,8 @@ use std::f32::consts::FRAC_PI_4;
 use std::sync::Arc;
 
 use futures::channel::mpsc;
+use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
+use vulkano::memory::allocator::{AllocationCreateInfo, MemoryUsage};
 
 use automancy::gpu;
 use automancy::renderer::Renderer;
@@ -16,8 +18,6 @@ use automancy_defs::egui_winit_vulkano::{CallbackFn, Gui};
 use automancy_defs::hashbrown::HashMap;
 use automancy_defs::id::Id;
 use automancy_defs::rendering::{InstanceData, LightInfo};
-use automancy_defs::vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
-use automancy_defs::vulkano::memory::allocator::{AllocationCreateInfo, MemoryUsage};
 
 use crate::gui::default_frame;
 use crate::setup::GameSetup;

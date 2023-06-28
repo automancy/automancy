@@ -3,9 +3,9 @@ use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write};
 
 use serde::{Deserialize, Serialize};
+use winit::event::VirtualKeyCode;
 
 use automancy_defs::hashbrown::HashMap;
-use automancy_defs::winit::event::VirtualKeyCode;
 
 use crate::input::KeyActions;
 

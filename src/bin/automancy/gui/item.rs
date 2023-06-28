@@ -1,6 +1,8 @@
 use std::sync::{Arc, Mutex};
 
 use lazy_static::lazy_static;
+use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
+use vulkano::memory::allocator::{AllocationCreateInfo, MemoryUsage};
 
 use automancy::gpu;
 use automancy::renderer::Renderer;
@@ -10,8 +12,6 @@ use automancy_defs::egui_winit_vulkano::CallbackFn;
 use automancy_defs::hashbrown::HashMap;
 use automancy_defs::id::Id;
 use automancy_defs::rendering::{InstanceData, LightInfo};
-use automancy_defs::vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
-use automancy_defs::vulkano::memory::allocator::{AllocationCreateInfo, MemoryUsage};
 use automancy_resources::data::item::Item;
 use automancy_resources::data::stack::ItemStack;
 use automancy_resources::ResourceManager;

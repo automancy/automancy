@@ -2,15 +2,15 @@ use std::collections::HashSet;
 use std::mem;
 
 use serde::{Deserialize, Serialize};
+use winit::event::ElementState::{Pressed, Released};
+use winit::event::{
+    DeviceEvent, ElementState, KeyboardInput, ModifiersState, MouseButton, MouseScrollDelta,
+    VirtualKeyCode, WindowEvent,
+};
 
 use automancy_defs::cg::{DPoint2, DVector2, Double};
 use automancy_defs::cgmath::{point2, vec2};
 use automancy_defs::hashbrown::HashMap;
-use automancy_defs::winit::event::ElementState::{Pressed, Released};
-use automancy_defs::winit::event::{
-    DeviceEvent, ElementState, KeyboardInput, ModifiersState, MouseButton, MouseScrollDelta,
-    VirtualKeyCode, WindowEvent,
-};
 
 #[derive(Serialize, Deserialize, Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub enum KeyActions {

@@ -3,6 +3,9 @@ use std::sync::Arc;
 
 use ractor::concurrency::JoinHandle;
 use ractor::{Actor, ActorRef};
+use vulkano::device::DeviceExtensions;
+use winit::event_loop::EventLoop;
+use winit::window::{Icon, Window};
 
 use automancy::camera::Camera;
 use automancy::game::{Game, GameMsg, TICK_INTERVAL};
@@ -12,9 +15,6 @@ use automancy::map::{Map, MapInfo, MAIN_MENU, MAP_PATH};
 use automancy_defs::cg::Double;
 use automancy_defs::coord::ChunkCoord;
 use automancy_defs::egui::Frame;
-use automancy_defs::vulkano::device::DeviceExtensions;
-use automancy_defs::winit::event_loop::EventLoop;
-use automancy_defs::winit::window::{Icon, Window};
 use automancy_defs::{egui, log};
 use automancy_resources::kira::manager::backend::cpal::CpalBackend;
 use automancy_resources::kira::manager::{AudioManager, AudioManagerSettings};

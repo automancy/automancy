@@ -6,12 +6,12 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-automancy_macros = { path = "../automancy_macros" }
-automancy_defs = { path = "../automancy_defs" }
+automancy_macros = { workspace = true }
+automancy_defs = { workspace = true }
 
 walkdir = "2.3.3"
 chrono = "0.4.24"
 kira = "0.8.3"
 
-serde_json = "1.0"
-serde = { version = "1.0", features = ["derive"] }
+serde_json = { workspace = true }
+serde = { workspace = true }

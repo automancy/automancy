@@ -202,6 +202,7 @@ dependencies = [
  "arraydeque",
  "async-trait",
  "automancy_defs",
+ "automancy_macros",
  "automancy_resources",
  "env_logger",
  "fuse-rust",
@@ -217,6 +218,10 @@ dependencies = [
  "slice-group-by",
  "tokio",
  "toml",
+ "vulkano",
+ "vulkano-shaders",
+ "vulkano-win",
+ "winit",
  "zstd",
 ]
 
@@ -234,11 +239,9 @@ dependencies = [
  "log",
  "ply-rs",
  "serde",
- "serde_json",
  "string-interner",
  "vulkano",
  "vulkano-shaders",
- "vulkano-win",
  "winit",
 ]
 

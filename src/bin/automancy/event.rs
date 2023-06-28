@@ -7,6 +7,8 @@ use fuse_rust::Fuse;
 use futures::channel::mpsc;
 use futures::executor::block_on;
 use tokio::runtime::Runtime;
+use winit::event::{Event, WindowEvent};
+use winit::event_loop::ControlFlow;
 
 use automancy::camera::FAR;
 use automancy::game::{GameMsg, PlaceTileResponse};
@@ -23,8 +25,6 @@ use automancy_defs::egui_winit_vulkano::Gui;
 use automancy_defs::hashbrown::{HashMap, HashSet};
 use automancy_defs::id::Id;
 use automancy_defs::rendering::InstanceData;
-use automancy_defs::winit::event::{Event, WindowEvent};
-use automancy_defs::winit::event_loop::ControlFlow;
 use automancy_defs::{colors, log};
 use automancy_resources::data::item::Item;
 use automancy_resources::data::Data;

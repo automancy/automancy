@@ -8,6 +8,7 @@
       <sourceFolder url="file://$MODULE_DIR$/automancy_resources/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/automancy_svg_convert/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/automancy_defs/target" />
       <excludeFolder url="file://$MODULE_DIR$/automancy_macros/target" />
       <excludeFolder url="file://$MODULE_DIR$/automancy_resources/target" />

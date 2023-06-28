@@ -1,6 +1,7 @@
 use std::fs;
 
 use tokio::runtime::Runtime;
+use winit::event_loop::ControlFlow;
 
 use automancy::game::GameMsg;
 use automancy::map::{Map, MAIN_MENU};
@@ -12,7 +13,6 @@ use automancy_defs::egui::{
 use automancy_defs::egui_winit_vulkano::Gui;
 use automancy_defs::gui::HyperlinkWidget;
 use automancy_defs::log;
-use automancy_defs::winit::event_loop::ControlFlow;
 use automancy_resources::{format, unix_to_formatted_time};
 
 use crate::event::{shutdown_graceful, EventLoopStorage};

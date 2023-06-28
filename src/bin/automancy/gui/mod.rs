@@ -1,4 +1,6 @@
 use fuse_rust::Fuse;
+use vulkano::image::SampleCount::Sample4;
+use winit::event_loop::EventLoop;
 
 use automancy::gpu::Gpu;
 use automancy_defs::cg::{DPoint2, Double, Float};
@@ -13,8 +15,6 @@ use automancy_defs::egui::{
 use automancy_defs::egui_winit_vulkano::{Gui, GuiConfig};
 use automancy_defs::id::Id;
 use automancy_defs::rendering::GameVertex;
-use automancy_defs::vulkano::image::SampleCount::Sample4;
-use automancy_defs::winit::event_loop::EventLoop;
 use automancy_defs::{cgmath, colors};
 use automancy_resources::ResourceManager;
 

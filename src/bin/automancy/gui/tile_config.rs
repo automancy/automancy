@@ -1,5 +1,6 @@
 use ractor::ActorRef;
 use tokio::runtime::Runtime;
+use winit::dpi::PhysicalSize;
 
 use automancy::game::GameMsg;
 use automancy::renderer::Renderer;
@@ -13,7 +14,6 @@ use automancy_defs::egui_winit_vulkano::Gui;
 use automancy_defs::hexagon_tiles::traits::HexDirection;
 use automancy_defs::id::Id;
 use automancy_defs::rendering::GameVertex;
-use automancy_defs::winit::dpi::PhysicalSize;
 use automancy_resources::data::stack::ItemStack;
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::tile::Tile;
