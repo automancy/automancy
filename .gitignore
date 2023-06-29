@@ -8,8 +8,6 @@ __pycache__
 
 map
 
-*.spv
 *.blend1
-
-renderdoc.cap
+*.cap
 
