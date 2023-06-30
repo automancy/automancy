@@ -55,7 +55,7 @@ fn vs_main(
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let light_color = ubo.light_color * 0.15;
+    let light_color = ubo.light_color.rgb * 0.15;
     let light_dir = ubo.light_pos.xyz - in.model_pos;
     let light_distance = length(light_dir);
 
@@ -71,7 +71,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let specular_intensity = dot(norm, halfway);
     let specular = light_color * specular_intensity;
 
-    let color = vec4(0.5) + diffuse + specular;
+    var color = in.color;
+    color = vec4(color.rgb * (vec3(0.5) + diffuse + specular), color.a);
 
-    return color * in.color;
+    return color;
 }

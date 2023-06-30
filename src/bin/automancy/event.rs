@@ -530,7 +530,7 @@ pub fn on_event(
                         }) {
                             let time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
 
-                            let glow = (time.as_secs_f64() * 3.0).sin() / 3.0;
+                            let glow = (time.as_secs_f64() * 1.5).sin().abs() / 3.0;
 
                             let instance = InstanceData {
                                 model_matrix: matrix
