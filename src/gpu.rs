@@ -24,9 +24,7 @@ pub const GPU_BACKENDS: Backends = Backends::all();
 
 pub fn device_descriptor() -> DeviceDescriptor<'static> {
     DeviceDescriptor {
-        features: Features::INDIRECT_FIRST_INSTANCE
-            | Features::MULTI_DRAW_INDIRECT
-            | Features::DEPTH_CLIP_CONTROL,
+        features: Features::INDIRECT_FIRST_INSTANCE | Features::MULTI_DRAW_INDIRECT,
         // WebGL doesn't support all of wgpu's features, so if
         // we're building for the web we'll have to disable some.
         limits: if cfg!(target_arch = "wasm32") {
@@ -311,7 +309,6 @@ impl Gpu {
                 topology: PrimitiveTopology::TriangleList,
                 front_face: FrontFace::Ccw,
                 cull_mode: None,
-                unclipped_depth: true,
                 ..Default::default()
             },
             depth_stencil: Some(DepthStencilState {
@@ -394,7 +391,6 @@ impl Gpu {
                 topology: PrimitiveTopology::TriangleList,
                 front_face: FrontFace::Ccw,
                 cull_mode: None,
-                unclipped_depth: true,
                 ..Default::default()
             },
             depth_stencil: Some(DepthStencilState {
