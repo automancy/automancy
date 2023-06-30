@@ -6,7 +6,7 @@ Game's WIP.
 
 ---
 
-Tech used: Rust, Vulkan (via Vulkano), ractor, egui
+Tech used: Rust, wgpu, ractor, egui
 
 Lead dev(s): Madeline Sparkles, Mae Rosaline
 

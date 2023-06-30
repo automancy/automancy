@@ -1,11 +1,11 @@
 use std::mem;
 use std::sync::Arc;
 
+use egui::NumExt;
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort};
 use rand::{thread_rng, RngCore};
 
 use automancy_defs::coord::TileCoord;
-use automancy_defs::egui::NumExt;
 use automancy_defs::id::Id;
 use automancy_defs::log;
 use automancy_resources::data::item::item_match;

@@ -1,5 +1,8 @@
 use std::fs;
 
+use egui::{
+    vec2, Align, Align2, Button, Context, RichText, ScrollArea, TextEdit, TextStyle, Window,
+};
 use tokio::runtime::Runtime;
 use winit::event_loop::ControlFlow;
 
@@ -7,10 +10,6 @@ use automancy::game::GameMsg;
 use automancy::map::{Map, MAIN_MENU};
 use automancy::renderer::Renderer;
 use automancy::VERSION;
-use automancy_defs::egui::{
-    vec2, Align, Align2, Button, RichText, ScrollArea, TextEdit, TextStyle, Window,
-};
-use automancy_defs::egui_winit_vulkano::Gui;
 use automancy_defs::gui::HyperlinkWidget;
 use automancy_defs::log;
 use automancy_resources::{format, unix_to_formatted_time};
@@ -22,7 +21,7 @@ use crate::setup::GameSetup;
 /// Draws the main menu.
 pub fn main_menu(
     setup: &mut GameSetup,
-    gui: &mut Gui,
+    context: &Context,
     control_flow: &mut ControlFlow,
     loop_store: &mut EventLoopStorage,
 ) {
@@ -32,7 +31,7 @@ pub fn main_menu(
         .default_width(175.0)
         .anchor(Align2([Align::Center, Align::Center]), vec2(0.0, 0.0))
         .frame(default_frame().inner_margin(10.0))
-        .show(&gui.context(), |ui| {
+        .show(context, |ui| {
             ui.with_layout(
                 ui.layout()
                     .with_cross_align(Align::Center)
@@ -113,7 +112,7 @@ pub fn main_menu(
 pub fn pause_menu(
     runtime: &Runtime,
     setup: &GameSetup,
-    gui: &mut Gui,
+    context: &Context,
     loop_store: &mut EventLoopStorage,
     renderer: &mut Renderer,
 ) {
@@ -123,7 +122,7 @@ pub fn pause_menu(
         .default_width(175.0)
         .anchor(Align2([Align::Center, Align::Center]), vec2(0.0, 0.0))
         .frame(default_frame().inner_margin(10.0))
-        .show(&gui.context(), |ui| {
+        .show(context, |ui| {
             ui.with_layout(
                 ui.layout()
                     .with_cross_align(Align::Center)
@@ -191,7 +190,7 @@ pub fn pause_menu(
 /// Draws the map loading menu.
 pub fn map_menu(
     setup: &mut GameSetup,
-    gui: &mut Gui,
+    context: &Context,
     loop_store: &mut EventLoopStorage,
     renderer: &mut Renderer,
 ) {
@@ -203,7 +202,7 @@ pub fn map_menu(
     .default_width(600.0)
     .anchor(Align2([Align::Center, Align::Center]), vec2(0.0, 0.0))
     .frame(default_frame().inner_margin(10.0))
-    .show(&gui.context(), |ui| {
+    .show(context, |ui| {
         ScrollArea::vertical().max_height(400.0).show(ui, |ui| {
             let mut dirty = false;
 
@@ -227,10 +226,12 @@ pub fn map_menu(
                                     .filter(|v| v.is_alphanumeric())
                                     .collect();
 
-                                if let Ok(_) = fs::rename(
-                                    Map::path(&map_name),
+                                if fs::rename(
+                                    Map::path(map_name),
                                     Map::path(&loop_store.map_name_renaming_input),
-                                ) {
+                                )
+                                .is_ok()
+                                {
                                     log::info!(
                                         "Renamed map {map_name} to {}",
                                         loop_store.map_name_renaming_input
@@ -244,11 +245,9 @@ pub fn map_menu(
                                 loop_store.map_name_renaming = None;
                                 loop_store.map_name_renaming_input = "".to_string();
                             }
-                        } else {
-                            if ui.selectable_label(false, map_name.as_str()).clicked() {
-                                loop_store.map_name_renaming = Some(map_name.clone());
-                                loop_store.map_name_renaming_input = map_name.clone();
-                            }
+                        } else if ui.selectable_label(false, map_name.as_str()).clicked() {
+                            loop_store.map_name_renaming = Some(map_name.clone());
+                            loop_store.map_name_renaming_input = map_name.clone();
                         }
                     });
 
@@ -337,7 +336,7 @@ pub fn map_menu(
 }
 
 /// Draws the options menu. TODO
-pub fn options_menu(setup: &GameSetup, gui: &mut Gui, loop_store: &mut EventLoopStorage) {
+pub fn options_menu(setup: &GameSetup, context: &Context, loop_store: &mut EventLoopStorage) {
     Window::new(
         setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.options].as_str(),
     )
@@ -346,7 +345,7 @@ pub fn options_menu(setup: &GameSetup, gui: &mut Gui, loop_store: &mut EventLoop
     .default_width(175.0)
     .anchor(Align2([Align::Center, Align::Center]), vec2(0.0, 0.0))
     .frame(default_frame().inner_margin(10.0))
-    .show(&gui.context(), |ui| {
+    .show(context, |ui| {
         ui.label("Not yet implemented");
         if ui
             .button(

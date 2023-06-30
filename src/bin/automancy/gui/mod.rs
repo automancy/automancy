@@ -1,24 +1,13 @@
+use egui::epaint::Shadow;
+use egui::{Frame, Rgba, Rounding, ScrollArea, Ui};
 use fuse_rust::Fuse;
-use vulkano::image::SampleCount::Sample4;
-use winit::event_loop::EventLoop;
 
-use automancy::gpu::Gpu;
 use automancy_defs::cg::{DPoint2, Double, Float};
 use automancy_defs::cgmath::MetricSpace;
-use automancy_defs::egui::epaint::Shadow;
-use automancy_defs::egui::style::{WidgetVisuals, Widgets};
-use automancy_defs::egui::FontFamily::{Monospace, Proportional};
-use automancy_defs::egui::{
-    Color32, FontData, FontDefinitions, FontId, Frame, Rgba, Rounding, ScrollArea, Stroke, Style,
-    TextStyle, Ui, Visuals,
-};
-use automancy_defs::egui_winit_vulkano::{Gui, GuiConfig};
 use automancy_defs::id::Id;
-use automancy_defs::rendering::GameVertex;
+use automancy_defs::rendering::Vertex;
 use automancy_defs::{cgmath, colors};
 use automancy_resources::ResourceManager;
-
-use crate::IOSEVKA_FONT;
 
 const MARGIN: Float = 8.0;
 const ITEM_ICON_SIZE: Float = 32.0;
@@ -51,112 +40,6 @@ pub enum PopupState {
     InvalidName,
 }
 
-/// Initialize the font families.
-fn init_fonts(gui: &Gui) {
-    let mut fonts = FontDefinitions::default();
-    let iosevka = "iosevka";
-
-    fonts
-        .font_data
-        .insert(iosevka.to_owned(), FontData::from_static(IOSEVKA_FONT));
-
-    fonts
-        .families
-        .get_mut(&Proportional)
-        .unwrap()
-        .insert(0, iosevka.to_owned());
-    fonts
-        .families
-        .get_mut(&Monospace)
-        .unwrap()
-        .insert(0, iosevka.to_owned());
-
-    gui.context().set_fonts(fonts);
-}
-
-/// Initialize the GUI style.
-fn init_styles(gui: &Gui) {
-    gui.context().set_style(Style {
-        override_text_style: None,
-        override_font_id: None,
-        text_styles: [
-            (TextStyle::Small, FontId::new(9.0, Proportional)),
-            (TextStyle::Body, FontId::new(13.0, Proportional)),
-            (TextStyle::Button, FontId::new(13.0, Proportional)),
-            (TextStyle::Heading, FontId::new(19.0, Proportional)),
-            (TextStyle::Monospace, FontId::new(13.0, Monospace)),
-        ]
-        .into(),
-        wrap: None,
-        visuals: Visuals {
-            widgets: Widgets {
-                noninteractive: WidgetVisuals {
-                    weak_bg_fill: Color32::from_gray(248),
-                    bg_fill: Color32::from_gray(170),
-                    bg_stroke: Stroke::new(1.0, Color32::from_gray(160)), // separators, indentation lines
-                    fg_stroke: Stroke::new(1.0, Color32::from_gray(80)),  // normal text color
-                    rounding: Rounding::same(2.0),
-                    expansion: 0.0,
-                },
-                inactive: WidgetVisuals {
-                    weak_bg_fill: Color32::from_gray(200), // button background
-                    bg_fill: Color32::from_gray(200),      // checkbox background
-                    bg_stroke: Default::default(),
-                    fg_stroke: Stroke::new(1.0, Color32::from_gray(60)), // button text
-                    rounding: Rounding::same(2.0),
-                    expansion: 0.0,
-                },
-                hovered: WidgetVisuals {
-                    weak_bg_fill: Color32::from_gray(220),
-                    bg_fill: Color32::from_gray(190),
-                    bg_stroke: Stroke::new(1.0, Color32::from_gray(105)), // e.g. hover over window edge or button
-                    fg_stroke: Stroke::new(1.5, Color32::BLACK),
-                    rounding: Rounding::same(3.0),
-                    expansion: 1.0,
-                },
-                active: WidgetVisuals {
-                    weak_bg_fill: Color32::from_gray(165),
-                    bg_fill: Color32::from_gray(180),
-                    bg_stroke: Stroke::new(1.0, Color32::BLACK),
-                    fg_stroke: Stroke::new(2.0, Color32::BLACK),
-                    rounding: Rounding::same(2.0),
-                    expansion: 1.0,
-                },
-                open: WidgetVisuals {
-                    weak_bg_fill: Color32::from_gray(220),
-                    bg_fill: Color32::from_gray(210),
-                    bg_stroke: Stroke::new(1.0, Color32::from_gray(160)),
-                    fg_stroke: Stroke::new(1.0, Color32::BLACK),
-                    rounding: Rounding::same(2.0),
-                    expansion: 0.0,
-                },
-            },
-            ..Visuals::light()
-        },
-        ..Default::default()
-    });
-}
-
-/// Initializes the GUI.
-pub fn init_gui(event_loop: &EventLoop<()>, gpu: &Gpu) -> Gui {
-    let gui = Gui::new_with_subpass(
-        event_loop,
-        gpu.surface.clone(),
-        gpu.queue.clone(),
-        gpu.gui_subpass.clone(),
-        GuiConfig {
-            preferred_format: Some(gpu.alloc.swapchain.image_format()),
-            is_overlay: true,
-            samples: Sample4,
-        },
-    );
-
-    init_fonts(&gui);
-    init_styles(&gui);
-
-    gui
-}
-
 /// Creates a default frame.
 pub fn default_frame() -> Frame {
     Frame::none()
@@ -169,7 +52,7 @@ pub fn default_frame() -> Frame {
 }
 
 /// Produces a line shape.
-pub fn make_line(a: DPoint2, b: DPoint2, w: Double, color: Rgba) -> [GameVertex; 6] {
+pub fn make_line(a: DPoint2, b: DPoint2, w: Double, color: Rgba) -> [Vertex; 6] {
     let v = b - a;
     let l = a.distance(b) * 16.0;
     let t = cgmath::vec2(-v.y / l, v.x / l);
@@ -180,22 +63,22 @@ pub fn make_line(a: DPoint2, b: DPoint2, w: Double, color: Rgba) -> [GameVertex;
     let b0 = (b + t).cast::<Float>().unwrap();
     let b1 = (b - t).cast::<Float>().unwrap();
 
-    let a = GameVertex {
+    let a = Vertex {
         pos: [a0.x, a0.y, 0.0],
         color: color.to_array(),
         normal: [0.0, 0.0, 0.0],
     };
-    let b = GameVertex {
+    let b = Vertex {
         pos: [b0.x, b0.y, 0.0],
         color: color.to_array(),
         normal: [0.0, 0.0, 0.0],
     };
-    let c = GameVertex {
+    let c = Vertex {
         pos: [a1.x, a1.y, 0.0],
         color: color.to_array(),
         normal: [0.0, 0.0, 0.0],
     };
-    let d = GameVertex {
+    let d = Vertex {
         pos: [b1.x, b1.y, 0.0],
         color: color.to_array(),
         normal: [0.0, 0.0, 0.0],

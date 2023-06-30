@@ -14,12 +14,11 @@ use crate::camera::FAR;
 /// Gets the hex position being pointed at.
 #[inline]
 pub fn main_pos_to_hex(
-    width: Double,
-    height: Double,
+    (width, height): (Double, Double),
     camera_pos: DPoint3,
     main_pos: DPoint2,
 ) -> FractionalHex<Double> {
-    let p = screen_to_world(width, height, main_pos, camera_pos.z);
+    let p = screen_to_world((width, height), main_pos, camera_pos.z);
     let p = p + camera_pos.to_vec();
 
     let p = point(p.x, p.y);
@@ -29,7 +28,7 @@ pub fn main_pos_to_hex(
 
 /// Converts screen space coordinates into normalized coordinates.
 #[inline]
-pub fn screen_to_normalized(width: Double, height: Double, c: DPoint2) -> DPoint2 {
+pub fn screen_to_normalized((width, height): (Double, Double), c: DPoint2) -> DPoint2 {
     let size = vec2(width, height) / 2.0;
 
     let c = vec2(c.x, c.y);
@@ -41,15 +40,15 @@ pub fn screen_to_normalized(width: Double, height: Double, c: DPoint2) -> DPoint
 
 /// Converts screen coordinates to world coordinates.
 #[inline]
-pub fn screen_to_world(width: Double, height: Double, c: DPoint2, camera_z: Double) -> DPoint3 {
-    let c = screen_to_normalized(width, height, c);
+pub fn screen_to_world((width, height): (Double, Double), c: DPoint2, camera_z: Double) -> DPoint3 {
+    let c = screen_to_normalized((width, height), c);
 
-    normalized_to_world(width, height, c, camera_z)
+    normalized_to_world((width, height), c, camera_z)
 }
 
 /// Converts normalized screen coordinates to world coordinates.
 #[inline]
-pub fn normalized_to_world(width: Double, height: Double, p: DPoint2, z: Double) -> DPoint3 {
+pub fn normalized_to_world((width, height): (Double, Double), p: DPoint2, z: Double) -> DPoint3 {
     let aspect = width / height;
 
     let matrix = matrix(point3(0.0, 0.0, z), aspect, PI);
@@ -66,8 +65,7 @@ pub fn normalized_to_world(width: Double, height: Double, p: DPoint2, z: Double)
 /// Converts hex coordinates to normalized screen coordinates.
 #[inline]
 pub fn hex_to_normalized(
-    width: Double,
-    height: Double,
+    (width, height): (Double, Double),
     camera_pos: DPoint3,
     hex: TileCoord,
 ) -> (DPoint2, Double) {

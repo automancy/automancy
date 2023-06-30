@@ -1,26 +1,25 @@
+use egui::Context;
+use egui::{vec2, DragValue, Margin, Ui, Window};
 use ractor::ActorRef;
 use tokio::runtime::Runtime;
-use winit::dpi::PhysicalSize;
 
 use automancy::game::GameMsg;
-use automancy::renderer::Renderer;
+use automancy::renderer::GuiInstances;
 use automancy::tile_entity::TileEntityMsg;
 use automancy::util::render::hex_to_normalized;
 use automancy_defs::cg::Double;
 use automancy_defs::colors;
 use automancy_defs::coord::{TileCoord, TileHex};
-use automancy_defs::egui::{vec2, DragValue, Margin, Ui, Window};
-use automancy_defs::egui_winit_vulkano::Gui;
 use automancy_defs::hexagon_tiles::traits::HexDirection;
 use automancy_defs::id::Id;
-use automancy_defs::rendering::GameVertex;
+use automancy_defs::rendering::Vertex;
 use automancy_resources::data::stack::ItemStack;
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::tile::Tile;
 use automancy_resources::ResourceManager;
 
 use crate::event::EventLoopStorage;
-use crate::gui::item::ItemStackGuiElement;
+use crate::gui::item::draw_item;
 use crate::gui::{make_line, searchable_id, ITEM_ICON_SIZE, MARGIN};
 use crate::setup::GameSetup;
 
@@ -147,8 +146,8 @@ fn node(
     runtime: &Runtime,
     setup: &GameSetup,
     config_open: TileCoord,
-    extra_vertices: &mut Vec<GameVertex>,
-    window_size: PhysicalSize<u32>,
+    extra_vertices: &mut Vec<Vertex>,
+    (width, height): (Double, Double),
     id: Id,
 ) {
     if id == setup.resource_man.registry.tile_ids.node {
@@ -175,19 +174,11 @@ fn node(
                 .unwrap();
 
             if let Some(link) = result.as_ref().and_then(Data::as_coord) {
-                let (a, w0) = hex_to_normalized(
-                    window_size.width as Double,
-                    window_size.height as Double,
-                    setup.camera.get_pos(),
-                    config_open,
-                );
+                let (a, w0) =
+                    hex_to_normalized((width, height), setup.camera.get_pos(), config_open);
 
-                let (b, w1) = hex_to_normalized(
-                    window_size.width as Double,
-                    window_size.height as Double,
-                    setup.camera.get_pos(),
-                    config_open + *link,
-                );
+                let (b, w1) =
+                    hex_to_normalized((width, height), setup.camera.get_pos(), config_open + *link);
 
                 extra_vertices.extend_from_slice(&make_line(a, b, (w0 + w1) / 2.0, colors::RED));
             }
@@ -199,7 +190,7 @@ fn storage(
     ui: &mut Ui,
     setup: &GameSetup,
     loop_store: &mut EventLoopStorage,
-    renderer: &Renderer,
+    gui_instances: &mut GuiInstances,
     data: &DataMap,
     tile_entity: ActorRef<TileEntityMsg>,
     tile_info: &Tile,
@@ -251,11 +242,7 @@ fn storage(
                         })
                 })
             {
-                ui.add(ItemStackGuiElement::new(
-                    setup.resource_man.clone(),
-                    renderer,
-                    stack,
-                ));
+                draw_item(&setup.resource_man, ui, gui_instances, stack);
             }
             ui.add(
                 DragValue::new(&mut new_amount)
@@ -312,7 +299,7 @@ fn script(
     ui: &mut Ui,
     setup: &GameSetup,
     loop_store: &mut EventLoopStorage,
-    renderer: &Renderer,
+    gui_instances: &mut GuiInstances,
     data: &DataMap,
     tile_entity: ActorRef<TileEntityMsg>,
     tile_info: &Tile,
@@ -346,11 +333,7 @@ fn script(
                             ui.set_height(ITEM_ICON_SIZE);
 
                             ui.label(" + ");
-                            ui.add(ItemStackGuiElement::new(
-                                setup.resource_man.clone(),
-                                renderer,
-                                *input,
-                            ));
+                            draw_item(&setup.resource_man, ui, gui_instances, *input);
                         });
                     }
                 }
@@ -360,11 +343,7 @@ fn script(
                         ui.set_height(ITEM_ICON_SIZE);
 
                         ui.label("=> ");
-                        ui.add(ItemStackGuiElement::new(
-                            setup.resource_man.clone(),
-                            renderer,
-                            *output,
-                        ));
+                        draw_item(&setup.resource_man, ui, gui_instances, *output);
                     });
                 }
             }
@@ -405,9 +384,10 @@ pub fn tile_config(
     runtime: &Runtime,
     setup: &GameSetup,
     loop_store: &mut EventLoopStorage,
-    renderer: &Renderer,
-    gui: &Gui,
-    extra_vertices: &mut Vec<GameVertex>,
+    gui_instances: &mut GuiInstances,
+    context: &Context,
+    (width, height): (Double, Double),
+    extra_vertices: &mut Vec<Vertex>,
 ) {
     if let Some(config_open) = loop_store.config_open {
         let tile = runtime
@@ -442,17 +422,16 @@ pub fn tile_config(
             .auto_sized()
             .constrain(true)
             .frame(setup.frame.inner_margin(Margin::same(10.0)))
-            .show(&gui.context(), |ui| {
+            .show(context, |ui| {
                 ui.set_max_width(300.0);
 
-                let window_size = setup.window.inner_size();
                 let tile_info = setup.resource_man.registry.tile(id).unwrap();
 
                 script(
                     ui,
                     setup,
                     loop_store,
-                    renderer,
+                    gui_instances,
                     &data,
                     tile_entity.clone(),
                     tile_info,
@@ -461,13 +440,20 @@ pub fn tile_config(
                     ui,
                     setup,
                     loop_store,
-                    renderer,
+                    gui_instances,
                     &data,
                     tile_entity.clone(),
                     tile_info,
                 );
                 target(ui, setup, &data, tile_entity.clone(), id);
-                node(runtime, setup, config_open, extra_vertices, window_size, id);
+                node(
+                    runtime,
+                    setup,
+                    config_open,
+                    extra_vertices,
+                    (width, height),
+                    id,
+                );
                 master_node(ui, setup, loop_store, config_open, id);
 
                 ui.add_space(MARGIN);

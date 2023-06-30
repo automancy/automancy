@@ -1,20 +1,24 @@
+use egui::{vec2, Align, Align2, Context, Margin, Window};
 use tokio::runtime::Runtime;
 
 use automancy::game::GameMsg;
-use automancy::renderer::Renderer;
+use automancy::renderer::GuiInstances;
 use automancy::tile_entity::TileEntityMsg;
 use automancy_defs::colors;
-use automancy_defs::egui::{vec2, Align, Align2, Margin, Window};
-use automancy_defs::egui_winit_vulkano::Gui;
 use automancy_resources::data::stack::ItemStack;
 use automancy_resources::data::Data;
 
-use crate::gui::item::ItemStackGuiElement;
+use crate::gui::item::draw_item;
 use crate::gui::{default_frame, ITEM_ICON_SIZE};
 use crate::setup::GameSetup;
 
 /// Draws the tile info GUI.
-pub fn tile_info(runtime: &Runtime, setup: &GameSetup, renderer: &Renderer, gui: &Gui) {
+pub fn tile_info(
+    runtime: &Runtime,
+    setup: &GameSetup,
+    gui_instances: &mut GuiInstances,
+    context: &Context,
+) {
     Window::new(
         setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.tile_info]
             .to_string(),
@@ -23,7 +27,7 @@ pub fn tile_info(runtime: &Runtime, setup: &GameSetup, renderer: &Renderer, gui:
     .resizable(false)
     .default_width(300.0)
     .frame(default_frame().inner_margin(Margin::same(10.0)))
-    .show(&gui.context(), |ui| {
+    .show(context, |ui| {
         ui.colored_label(colors::DARK_GRAY, setup.camera.pointing_at.to_string());
 
         let tile_entity = runtime
@@ -58,11 +62,13 @@ pub fn tile_info(runtime: &Runtime, setup: &GameSetup, renderer: &Renderer, gui:
                 for (item, amount) in inventory.0.into_iter() {
                     ui.horizontal(|ui| {
                         ui.set_height(ITEM_ICON_SIZE);
-                        ui.add(ItemStackGuiElement::new(
-                            setup.resource_man.clone(),
-                            renderer,
+
+                        draw_item(
+                            &setup.resource_man,
+                            ui,
+                            gui_instances,
                             ItemStack { item, amount },
-                        ));
+                        )
                     });
                 }
             }

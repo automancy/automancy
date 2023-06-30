@@ -27,9 +27,9 @@ pub struct Camera {
 }
 
 /// Gets the culling range from the camera's position
-pub fn get_culling_range(width: Double, height: Double, z: Double) -> (TileUnit, TileUnit) {
-    let a = normalized_to_world(width, height, point2(-1.0, -1.0), z);
-    let b = normalized_to_world(width, height, point2(1.0, 1.0), z);
+pub fn get_culling_range((width, height): (Double, Double), z: Double) -> (TileUnit, TileUnit) {
+    let a = normalized_to_world((width, height), point2(-1.0, -1.0), z);
+    let b = normalized_to_world((width, height), point2(1.0, 1.0), z);
 
     let a = pixel_to_hex(HEX_GRID_LAYOUT, point(a.x, a.y));
     let b = pixel_to_hex(HEX_GRID_LAYOUT, point(b.x, b.y));
@@ -44,13 +44,13 @@ pub fn get_culling_range(width: Double, height: Double, z: Double) -> (TileUnit,
 }
 
 impl Camera {
-    pub fn new(width: Double, height: Double) -> Self {
+    pub fn new((width, height): (Double, Double)) -> Self {
         Self {
-            pos: point3(0.0, 0.0, FAR),
+            pos: point3(0.0, 0.0, 1.0),
             move_vel: vec2(0.0, 0.0),
             scroll_vel: 0.0,
 
-            culling_range: get_culling_range(width, height, Self::get_z(FAR)),
+            culling_range: get_culling_range((width, height), Self::get_z(1.0)),
             pointing_at: TileCoord::new(0, 0),
         }
     }
@@ -85,11 +85,11 @@ impl Camera {
     fn scroll(z: Double, vel: Double, ratio: Double) -> Double {
         let z = z + vel * ratio * 0.6;
 
-        clamp(z, FAR, 5.0)
+        clamp(z, 1.0, 5.0)
     }
 
     /// Updates the camera's position.
-    pub fn update_pos(&mut self, elapsed: Duration, width: Double, height: Double) {
+    pub fn update_pos(&mut self, elapsed: Duration, (width, height): (Double, Double)) {
         let ratio = elapsed.as_secs_f64() * 80.0;
 
         {
@@ -109,7 +109,7 @@ impl Camera {
             }
         }
 
-        self.culling_range = get_culling_range(width, height, self.get_pos().z);
+        self.culling_range = get_culling_range((width, height), self.get_pos().z);
     }
 }
 
@@ -131,8 +131,8 @@ impl Camera {
     }
 
     /// Sets the position the camera is centered on.
-    pub fn update_pointing_at(&mut self, main_pos: DPoint2, width: Double, height: Double) {
-        let p = main_pos_to_hex(width, height, self.get_pos(), main_pos);
+    pub fn update_pointing_at(&mut self, main_pos: DPoint2, (width, height): (Double, Double)) {
+        let p = main_pos_to_hex((width, height), self.get_pos(), main_pos);
 
         self.pointing_at = p.round().into();
     }

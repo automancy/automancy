@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::f32::consts::PI;
 use std::mem;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -7,21 +8,23 @@ use fuse_rust::Fuse;
 use futures::channel::mpsc;
 use futures::executor::block_on;
 use tokio::runtime::Runtime;
+use wgpu::SurfaceError;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::ControlFlow;
 
 use automancy::camera::FAR;
 use automancy::game::{GameMsg, PlaceTileResponse};
-use automancy::input;
+use automancy::gpu::{window_size_double, window_size_float};
 use automancy::input::{actions, InputHandler};
 use automancy::renderer::Renderer;
 use automancy::tile_entity::{TileEntityMsg, TileModifier};
 use automancy::util::render::{hex_to_normalized, screen_to_normalized, screen_to_world};
-use automancy_defs::cg::{Double, Float, Matrix4};
+use automancy::{gpu, input};
+use automancy_defs::cg::{matrix, Float, Matrix4};
 use automancy_defs::cgmath::{point2, vec3, EuclideanSpace};
 use automancy_defs::colors::WithAlpha;
 use automancy_defs::coord::{ChunkCoord, TileCoord};
-use automancy_defs::egui_winit_vulkano::Gui;
+use automancy_defs::gui::Gui;
 use automancy_defs::hashbrown::{HashMap, HashSet};
 use automancy_defs::id::Id;
 use automancy_defs::rendering::InstanceData;
@@ -164,8 +167,6 @@ pub fn on_event(
     event: Event<()>,
     control_flow: &mut ControlFlow,
 ) -> Result<(), Box<dyn Error>> {
-    let window_size = setup.window.inner_size();
-
     let mut window_event = None;
     let mut device_event = None;
 
@@ -182,13 +183,18 @@ pub fn on_event(
         }
 
         Event::WindowEvent { event, .. } => {
-            if !gui.update(event) {
+            if !gui.state.on_event(&gui.context, event).consumed {
                 window_event = Some(event);
             }
 
             match event {
-                WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => {
-                    renderer.recreate_swapchain = true;
+                WindowEvent::Resized(size) => {
+                    renderer.resized = true;
+                    renderer.size = *size;
+                }
+                WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                    renderer.resized = true;
+                    renderer.size = **new_inner_size;
                 }
                 _ => {}
             }
@@ -433,58 +439,63 @@ pub fn on_event(
 
     if event == Event::RedrawRequested(renderer.gpu.window.id()) {
         let mut gui_instances = vec![];
-        let mut extra_vertices = vec![];
+        let mut overlay = vec![];
 
         loop_store.last_frame_start = Instant::now();
 
-        setup.camera.update_pos(
-            loop_store.elapsed,
-            window_size.width as Double,
-            window_size.height as Double,
-        );
+        setup
+            .camera
+            .update_pos(loop_store.elapsed, window_size_double(&renderer.gpu.window));
         setup.camera.update_pointing_at(
             loop_store.input_handler.main_pos,
-            window_size.width as Double,
-            window_size.height as Double,
+            window_size_double(&renderer.gpu.window),
         );
+
+        let (width, height) = window_size_float(&renderer.gpu.window);
+        let aspect = width / height;
+        let matrix = matrix(setup.camera.get_pos().cast().unwrap(), aspect, PI);
 
         let (selection_send, mut selection_recv) = mpsc::channel(1);
 
-        gui.begin_frame();
+        gui.context
+            .begin_frame(gui.state.take_egui_input(&renderer.gpu.window));
 
         if loop_store.popup_state == PopupState::None {
             match loop_store.gui_state {
-                GuiState::MainMenu => menu::main_menu(setup, gui, control_flow, loop_store),
+                GuiState::MainMenu => {
+                    menu::main_menu(setup, &gui.context, control_flow, loop_store)
+                }
                 GuiState::MapLoad => {
-                    menu::map_menu(setup, gui, loop_store, renderer);
+                    menu::map_menu(setup, &gui.context, loop_store, renderer);
                 }
                 GuiState::Options => {
-                    menu::options_menu(setup, gui, loop_store);
+                    menu::options_menu(setup, &gui.context, loop_store);
                 }
                 GuiState::Paused => {
-                    menu::pause_menu(runtime, setup, gui, loop_store, renderer);
+                    menu::pause_menu(runtime, setup, &gui.context, loop_store, renderer);
                 }
                 GuiState::Ingame => {
                     // tile_selections
                     tile_selection::tile_selections(
                         setup,
-                        renderer,
-                        gui,
+                        &mut gui_instances,
+                        &gui.context,
                         &loop_store.selected_tile_modifiers,
                         selection_send,
                     );
 
                     // tile_info
-                    tile_info::tile_info(runtime, setup, renderer, gui);
+                    tile_info::tile_info(runtime, setup, &mut gui_instances, &gui.context);
 
                     // tile_config
                     tile_config::tile_config(
                         runtime,
                         setup,
                         loop_store,
-                        renderer,
-                        gui,
-                        &mut extra_vertices,
+                        &mut gui_instances,
+                        &gui.context,
+                        window_size_double(&renderer.gpu.window),
+                        &mut overlay,
                     );
 
                     if let Ok(Some(id)) = selection_recv.try_next() {
@@ -498,8 +509,7 @@ pub fn on_event(
                     }
 
                     let mouse_pos = screen_to_world(
-                        window_size.width as Double,
-                        window_size.height as Double,
+                        window_size_double(&renderer.gpu.window),
                         loop_store.input_handler.main_pos,
                         setup.camera.get_pos().z,
                     );
@@ -520,37 +530,41 @@ pub fn on_event(
                         }) {
                             let time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
 
-                            let glow = (time.as_secs_f64() * 3.0).sin() / 3.0 - 1.0;
+                            let glow = (time.as_secs_f64() * 3.0).sin() / 3.0;
 
                             let instance = InstanceData {
-                                model_matrix: Matrix4::from_translation(vec3(
-                                    mouse_pos.x as Float,
-                                    mouse_pos.y as Float,
-                                    FAR as Float,
-                                )),
+                                model_matrix: matrix
+                                    * Matrix4::from_translation(vec3(
+                                        mouse_pos.x as Float,
+                                        mouse_pos.y as Float,
+                                        FAR as Float,
+                                    )),
                                 color_offset: colors::TRANSPARENT
                                     .with_alpha(glow as Float)
                                     .to_array(),
                             };
 
-                            gui_instances.push((instance, model));
+                            gui_instances.push((
+                                instance,
+                                model,
+                                gpu::window_size_rect(&renderer.gpu.window),
+                                (1.0, 0.0),
+                            ));
                         }
                     }
 
                     if let Some(coord) = loop_store.linking_tile {
                         let (a, w) = hex_to_normalized(
-                            window_size.width as Double,
-                            window_size.height as Double,
+                            window_size_double(&renderer.gpu.window),
                             setup.camera.get_pos(),
                             coord,
                         );
                         let b = screen_to_normalized(
-                            window_size.width as Double,
-                            window_size.height as Double,
+                            window_size_double(&renderer.gpu.window),
                             loop_store.input_handler.main_pos,
                         );
 
-                        extra_vertices.extend_from_slice(&make_line(a, b, w, colors::RED));
+                        overlay.extend_from_slice(&make_line(a, b, w, colors::RED));
                     }
                 }
             }
@@ -579,24 +593,17 @@ pub fn on_event(
 
                 // TODO wrapper around hex_to_pixel
                 let (a, w0) = hex_to_normalized(
-                    window_size.width as Double,
-                    window_size.height as Double,
+                    window_size_double(&renderer.gpu.window),
                     setup.camera.get_pos(),
                     start,
                 );
                 let (b, w1) = hex_to_normalized(
-                    window_size.width as Double,
-                    window_size.height as Double,
+                    window_size_double(&renderer.gpu.window),
                     setup.camera.get_pos(),
                     setup.camera.pointing_at,
                 );
 
-                extra_vertices.extend_from_slice(&make_line(
-                    a,
-                    b,
-                    (w0 + w1) / 2.0,
-                    colors::LIGHT_BLUE,
-                ));
+                overlay.extend_from_slice(&make_line(a, b, (w0 + w1) / 2.0, colors::LIGHT_BLUE));
 
                 for selected in &loop_store.selected_tiles {
                     let dest = *selected + direction;
@@ -606,19 +613,10 @@ pub fn on_event(
         }
 
         if loop_store.input_handler.key_pressed(&actions::DEBUG) {
-            debug::debugger(
-                setup,
-                gui,
-                runtime,
-                setup.game.clone(),
-                renderer,
-                loop_store,
-            );
+            debug::debugger(setup, gui, runtime, setup.game.clone(), loop_store);
         }
 
-        if resource_man.error_man.has_errors() {
-            error::error_popup(setup, gui);
-        }
+        error::error_popup(setup, gui);
 
         let render_info = runtime
             .block_on(setup.game.call(
@@ -631,19 +629,25 @@ pub fn on_event(
             ))?
             .unwrap();
 
-        renderer.render(
+        match renderer.render(
             runtime,
             setup.resource_man.clone(),
             setup.camera.get_pos().cast().unwrap(),
             setup.camera.get_tile_coord(),
+            matrix,
             setup.camera.culling_range,
             setup.game.clone(),
             &render_info,
             tile_tints,
             gui_instances,
-            extra_vertices,
+            overlay,
             gui,
-        );
+        ) {
+            Ok(_) => {}
+            Err(SurfaceError::Lost) => renderer.gpu.resize(renderer.size),
+            Err(SurfaceError::OutOfMemory) => shutdown_graceful(setup, control_flow).unwrap(),
+            Err(e) => log::error!("{e:?}"),
+        }
         loop_store.elapsed = Instant::now().duration_since(loop_store.last_frame_start);
     }
     Ok(())

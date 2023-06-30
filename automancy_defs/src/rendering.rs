@@ -1,10 +1,12 @@
+use std::mem::size_of;
+
 use bytemuck::{Pod, Zeroable};
 use cgmath::SquareMatrix;
 use egui::ecolor::{linear_f32_from_gamma_u8, linear_f32_from_linear_u8};
 use hexagon_tiles::layout::{Layout, LAYOUT_ORIENTATION_POINTY};
 use hexagon_tiles::point::Point;
 use ply_rs::ply::{Property, PropertyAccess};
-use vulkano::pipeline::graphics::vertex_input::Vertex;
+use wgpu::{vertex_attr_array, BufferAddress, VertexAttribute, VertexBufferLayout, VertexStepMode};
 
 use crate::cg::{Float, Matrix4, Point3, Vector3};
 
@@ -21,17 +23,30 @@ pub type VertexColor = [Float; 4];
 pub type RawMat4 = [[Float; 4]; 4];
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, Default, Zeroable, Pod, Vertex)]
-pub struct GameVertex {
-    #[format(R32G32B32_SFLOAT)]
+#[derive(Debug, Clone, Copy, Default, Zeroable, Pod)]
+pub struct Vertex {
     pub pos: VertexPos,
-    #[format(R32G32B32A32_SFLOAT)]
     pub color: VertexColor,
-    #[format(R32G32B32_SFLOAT)]
     pub normal: VertexPos,
 }
 
-impl PropertyAccess for GameVertex {
+impl Vertex {
+    pub fn desc() -> VertexBufferLayout<'static> {
+        static ATTRIBUTES: &[VertexAttribute] = &vertex_attr_array![
+            0 => Float32x3,
+            1 => Float32x4,
+            2 => Float32x3,
+        ];
+
+        VertexBufferLayout {
+            array_stride: size_of::<Vertex>() as BufferAddress,
+            step_mode: VertexStepMode::Vertex,
+            attributes: ATTRIBUTES,
+        }
+    }
+}
+
+impl PropertyAccess for Vertex {
     fn new() -> Self {
         Self {
             pos: [0.0, 0.0, 0.0],
@@ -60,12 +75,28 @@ impl PropertyAccess for GameVertex {
 // instance
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Zeroable, Pod, Vertex)]
+#[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
 pub struct RawInstanceData {
-    #[format(R32G32B32A32_SFLOAT)]
     pub color_offset: VertexColor,
-    #[format(R32G32B32A32_SFLOAT)]
     pub model_matrix: RawMat4,
+}
+
+impl RawInstanceData {
+    pub fn desc() -> VertexBufferLayout<'static> {
+        static ATTRIBUTES: &[VertexAttribute] = &vertex_attr_array![
+            3 => Float32x4,
+            4 => Float32x4,
+            5 => Float32x4,
+            6 => Float32x4,
+            7 => Float32x4,
+        ];
+
+        VertexBufferLayout {
+            array_stride: size_of::<RawInstanceData>() as BufferAddress,
+            step_mode: VertexStepMode::Instance,
+            attributes: ATTRIBUTES,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -129,34 +160,41 @@ impl InstanceData {
     }
 }
 
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Zeroable, Pod, Vertex)]
-pub struct LightInfo {
-    #[format(R32G32B32_SFLOAT)]
-    pub light_pos: VertexPos,
-    #[format(R32G32B32A32_SFLOAT)]
-    pub light_color: VertexColor,
-}
-
 // UBO
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
-pub struct GameUBO {
-    pub matrix: RawMat4,
-    pub light: LightInfo,
-}
 
 pub static DEFAULT_LIGHT_COLOR: VertexColor = [0.9, 0.9, 0.9, 0.9];
 
-impl GameUBO {
-    pub fn new(matrix: Matrix4, camera_pos: Point3) -> Self {
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Zeroable, Pod)]
+pub struct GameUBO {
+    light_pos: [f32; 4],
+    light_color: VertexColor,
+    world: RawMat4,
+}
+
+static FIX_COORD: RawMat4 = [
+    [1.0, 0.0, 0.0, 0.0],
+    [0.0, -1.0, 0.0, 0.0],
+    [0.0, 0.0, 1.0, 0.0],
+    [0.0, 0.0, 0.0, 1.0],
+];
+
+impl Default for GameUBO {
+    fn default() -> Self {
         Self {
-            matrix: matrix.into(),
-            light: LightInfo {
-                light_pos: camera_pos.into(),
-                light_color: DEFAULT_LIGHT_COLOR,
-            },
+            light_pos: [0.0, 0.0, 8.0, 1.0],
+            light_color: DEFAULT_LIGHT_COLOR,
+            world: FIX_COORD,
+        }
+    }
+}
+
+impl GameUBO {
+    pub fn new(world: Matrix4, camera_pos: Point3) -> Self {
+        Self {
+            light_pos: [camera_pos.x, camera_pos.y, camera_pos.z, 1.0],
+            world: (Matrix4::from(FIX_COORD) * world).into(),
+            ..Default::default()
         }
     }
 }
@@ -164,16 +202,24 @@ impl GameUBO {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
 pub struct OverlayUBO {
-    pub matrix: RawMat4,
+    world: RawMat4,
+}
+
+impl OverlayUBO {
+    pub fn new(world: Matrix4) -> Self {
+        Self {
+            world: (Matrix4::from(FIX_COORD) * world).into(),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
 pub struct Face {
-    pub indices: Vec<u32>,
+    pub indices: Vec<u16>,
 }
 
 impl Face {
-    pub fn index_offset(mut self, offset: u32) -> Self {
+    pub fn index_offset(mut self, offset: u16) -> Self {
         self.indices.iter_mut().for_each(|v| *v += offset);
 
         self
@@ -188,7 +234,7 @@ impl PropertyAccess for Face {
     }
     fn set_property(&mut self, key: String, property: Property) {
         if let ("vertex_indices", Property::ListUInt(vec)) = (key.as_ref(), property) {
-            self.indices = vec;
+            self.indices = vec.into_iter().map(|v| v as u16).collect();
         }
     }
 }
@@ -196,13 +242,13 @@ impl PropertyAccess for Face {
 // model
 
 #[derive(Debug, Clone)]
-pub struct Model {
-    pub vertices: Vec<GameVertex>,
+pub struct Mesh {
+    pub vertices: Vec<Vertex>,
     pub faces: Vec<Face>,
 }
 
-impl Model {
-    pub fn new(vertices: Vec<GameVertex>, faces: Vec<Face>) -> Self {
+impl Mesh {
+    pub fn new(vertices: Vec<Vertex>, faces: Vec<Face>) -> Self {
         Self { vertices, faces }
     }
 }

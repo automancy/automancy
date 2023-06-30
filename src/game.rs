@@ -594,7 +594,7 @@ fn inner_tick(state: &mut GameState) {
             resource_man: state.resource_man.clone(),
             tick_count: state.tick_count,
         }) {
-            println!("{e}");
+            println!("{e:?}");
         }
     });
 

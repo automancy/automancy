@@ -67,8 +67,8 @@ pub fn perspective<N: BaseFloat>(fov_y: N, a: N, n: N, f: N) -> cgmath::Matrix4<
 }
 
 pub fn matrix<N: BaseFloat>(pos: cgmath::Point3<N>, aspect: N, pi: N) -> cgmath::Matrix4<N> {
-    let view = view(pos);
     let projection = projection(aspect, pi);
+    let view = view(pos);
 
     projection * view
 }
@@ -84,7 +84,7 @@ pub fn view<N: BaseFloat>(pos: cgmath::Point3<N>) -> cgmath::Matrix4<N> {
 pub fn projection<N: BaseFloat>(aspect: N, pi: N) -> cgmath::Matrix4<N> {
     let one = N::one();
     let two = one + one;
-    let ten = two + two + two + two + two;
+    let eight = two + two + two + two;
 
-    perspective(pi / two, aspect, one / ten.powi(2), ten.powi(4))
+    perspective(pi / two, aspect, one / eight.powi(2), eight.powi(4))
 }

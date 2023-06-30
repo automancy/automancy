@@ -15,10 +15,10 @@ use automancy_defs::flexstr::SharedStr;
 use automancy_defs::hashbrown::HashMap;
 use automancy_defs::id;
 use automancy_defs::id::{id_static, Id, Interner};
-use automancy_defs::rendering::{Face, GameVertex, Model};
+use automancy_defs::rendering::Mesh;
 
 use crate::error::ErrorManager;
-use crate::model::Mesh;
+use crate::model::IndexRange;
 use crate::registry::{DataIds, ErrorIds, GuiIds, ModelIds, Registry, TileIds};
 use crate::translate::Translate;
 
@@ -80,11 +80,9 @@ pub struct ResourceManager {
 
     pub translates: Translate,
     pub audio: HashMap<SharedStr, StaticSoundData>,
-    pub meshes: HashMap<Id, Mesh>,
 
-    pub all_vertices: Vec<GameVertex>,
-    pub raw_models: HashMap<Id, Model>,
-    pub faces: Vec<Face>,
+    pub index_ranges: HashMap<Id, IndexRange>,
+    pub meshes: HashMap<Id, Mesh>,
 }
 
 impl Debug for ResourceManager {
@@ -131,11 +129,9 @@ impl ResourceManager {
 
             translates: Default::default(),
             audio: Default::default(),
-            meshes: Default::default(),
 
-            all_vertices: Default::default(),
-            raw_models: Default::default(),
-            faces: Default::default(),
+            index_ranges: Default::default(),
+            meshes: Default::default(),
         }
     }
 }

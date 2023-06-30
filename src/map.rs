@@ -106,7 +106,7 @@ impl Map {
         match decoded {
             Ok(v) => Some(v),
             Err(e) => {
-                log::error!("serde: {e}");
+                log::error!("serde: {e:?}");
 
                 let err_map_name =
                     format!("{}-ERR-{}", map_name, Local::now().format("%y%m%d%H%M%S"));
@@ -114,9 +114,9 @@ impl Map {
                 resource_man.error_man.push(
                     (
                         resource_man.registry.err_ids.invalid_map_data,
-                        vec![map_name.to_string(), err_map_name.clone()],
+                        vec![map_name.to_string(), err_map_name],
                     ),
-                    &resource_man,
+                    resource_man,
                 );
 
                 None
@@ -141,7 +141,7 @@ impl Map {
         match decoded {
             Ok(v) => Some(v),
             Err(e) => {
-                log::error!("serde: {e}");
+                log::error!("serde: {e:?}");
 
                 let err_map_name =
                     format!("{}-ERR-{}", map_name, Local::now().format("%y%m%d%H%M%S"));
@@ -149,9 +149,9 @@ impl Map {
                 resource_man.error_man.push(
                     (
                         resource_man.registry.err_ids.invalid_map_data,
-                        vec![map_name.to_string(), err_map_name.clone()],
+                        vec![map_name.to_string(), err_map_name],
                     ),
-                    &resource_man,
+                    resource_man,
                 );
 
                 None

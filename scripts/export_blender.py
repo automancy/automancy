@@ -25,7 +25,7 @@ def main():
                 for idx in poly.loop_indices:
                     color_layer.data[idx].color = color
 
-    bpy.ops.export_mesh.ply(filepath=dst, use_uv_coords=False, use_ascii=True, axis_forward='-Y')
+    bpy.ops.export_mesh.ply(filepath=dst, use_uv_coords=False, use_ascii=True, axis_forward='-Y', axis_up='Z')
 
 
 if __name__ == "__main__":

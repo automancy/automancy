@@ -8,14 +8,14 @@ use serde::Deserialize;
 use automancy_defs::hashbrown::HashMap;
 use automancy_defs::id::{Id, IdRaw};
 use automancy_defs::ply_rs::parser::Parser;
-use automancy_defs::rendering::{Face, GameVertex, Model};
+use automancy_defs::rendering::{Face, Mesh, Vertex};
 use automancy_defs::{id, log};
 
 use crate::data::item::Item;
 use crate::{load_recursively, ResourceManager, JSON_EXT};
 
 #[derive(Debug, Default, Clone, Copy)]
-pub struct Mesh {
+pub struct IndexRange {
     pub offset: u32,
     pub size: u32,
 }
@@ -27,8 +27,16 @@ pub struct ModelJson {
 }
 
 impl ResourceManager {
+    pub fn get_model(&self, model: Id) -> Id {
+        if self.index_ranges.contains_key(&model) {
+            model
+        } else {
+            self.registry.model_ids.missing
+        }
+    }
+
     pub fn get_item_model(&self, item: Item) -> Id {
-        if self.meshes.contains_key(&item.model) {
+        if self.index_ranges.contains_key(&item.model) {
             item.model
         } else {
             self.registry.model_ids.items_missing
@@ -54,7 +62,7 @@ impl ResourceManager {
         let file = File::open(file).unwrap();
         let mut read = BufReader::new(file);
 
-        let vertex_parser = Parser::<GameVertex>::new();
+        let vertex_parser = Parser::<Vertex>::new();
         let face_parser = Parser::<Face>::new();
 
         let header = vertex_parser.read_header(&mut read).unwrap();
@@ -80,9 +88,9 @@ impl ResourceManager {
 
         let raw_model = vertices
             .zip(faces)
-            .map(|(vertices, faces)| Model::new(vertices, faces))?;
+            .map(|(vertices, faces)| Mesh::new(vertices, faces))?;
 
-        self.raw_models
+        self.meshes
             .insert(model.id.to_id(&mut self.interner), raw_model);
 
         Some(())
@@ -98,7 +106,7 @@ impl ResourceManager {
         Some(())
     }
 
-    pub fn compile_models(&mut self) {
+    pub fn compile_models(&mut self) -> (Vec<Vertex>, Vec<u16>) {
         let mut ids = self
             .registry
             .tiles
@@ -132,7 +140,7 @@ impl ResourceManager {
 
         // indices vertices
         let (vertices, raw_faces): (Vec<_>, Vec<_>) = self
-            .raw_models
+            .meshes
             .iter()
             .map(|(id, model)| (model.vertices.clone(), (id, model.faces.clone())))
             .unzip();
@@ -148,7 +156,7 @@ impl ResourceManager {
         drop(index_offsets.split_off(index_offsets.len() - 1));
         index_offsets.insert(0, 0);
 
-        let all_vertices = vertices.into_iter().flatten().collect::<Vec<_>>();
+        let vertices = vertices.into_iter().flatten().collect::<Vec<_>>();
 
         let mut offset_count = 0;
 
@@ -158,7 +166,7 @@ impl ResourceManager {
             .filter_map(|(i, (id, raw_faces))| {
                 let face = raw_faces
                     .into_iter()
-                    .map(|face| face.index_offset(index_offsets[i] as u32))
+                    .map(|face| face.index_offset(index_offsets[i] as u16))
                     .reduce(|mut a, mut b| {
                         a.indices.append(&mut b.indices);
 
@@ -170,21 +178,21 @@ impl ResourceManager {
             .map(|(id, face)| {
                 let size: u32 = face.indices.len() as u32;
 
-                let mesh = Mesh {
+                let range = IndexRange {
                     offset: offset_count,
                     size,
                 };
 
-                offset_count += mesh.size;
+                offset_count += range.size;
 
-                (face, (id, mesh))
+                (face, (id, range))
             })
             .unzip();
 
-        let meshes = HashMap::from_iter(meshes.into_iter());
+        let faces = faces.into_iter().flat_map(|face| face.indices).collect();
 
-        self.meshes = meshes;
-        self.all_vertices = all_vertices;
-        self.faces = faces;
+        self.index_ranges = HashMap::from_iter(meshes.into_iter());
+
+        (vertices, faces)
     }
 }

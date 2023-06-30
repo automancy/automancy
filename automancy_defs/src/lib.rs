@@ -1,7 +1,5 @@
 pub use bytemuck;
 pub use cgmath;
-pub use egui;
-pub use egui_winit_vulkano;
 pub use flexstr;
 pub use hashbrown;
 pub use hexagon_tiles;
@@ -16,3 +14,5 @@ pub mod gui;
 pub mod id;
 pub mod rendering;
 pub mod shaders;
+
+pub static IOSEVKA_FONT: &[u8] = include_bytes!("../fonts/iosevka-extended.ttf");

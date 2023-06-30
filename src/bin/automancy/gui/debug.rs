@@ -1,10 +1,9 @@
+use egui::{Margin, Window};
 use ractor::ActorRef;
 use tokio::runtime::Runtime;
 
 use automancy::game::GameMsg;
-use automancy::renderer::Renderer;
-use automancy_defs::egui::{Margin, Window};
-use automancy_defs::egui_winit_vulkano::Gui;
+use automancy_defs::gui::Gui;
 
 use crate::event::EventLoopStorage;
 use crate::gui::default_frame;
@@ -16,23 +15,9 @@ pub fn debugger(
     gui: &mut Gui,
     runtime: &Runtime,
     game: ActorRef<GameMsg>,
-    renderer: &Renderer,
     loop_store: &mut EventLoopStorage,
 ) {
     let resource_man = setup.resource_man.clone();
-    let device_name = renderer
-        .gpu
-        .alloc
-        .physical_device
-        .properties()
-        .device_name
-        .clone();
-    let api_version = renderer
-        .gpu
-        .surface
-        .instance()
-        .max_api_version()
-        .to_string();
 
     let fps = 1.0 / loop_store.elapsed.as_secs_f64();
 
@@ -57,9 +42,9 @@ pub fn debugger(
     .resizable(false)
     .default_width(600.0)
     .frame(default_frame().inner_margin(Margin::same(10.0)))
-    .show(&gui.context(), |ui| {
+    .show(&gui.context, |ui| {
         ui.label(format!("FPS: {fps:.1}"));
-        ui.label(format!("Device: {device_name} API {api_version}"));
+        //ui.label(format!("Device: {device_name} API {api_version}"));
         ui.label(format!(
             "ResourceMan: {reg_tiles}T {reg_items}I {tags}Ta {scripts}S {audio}A {meshes}M"
         ));

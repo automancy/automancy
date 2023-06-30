@@ -1,10 +1,11 @@
 use std::fs;
 
+use egui::{vec2, Align, Align2, Window};
+
 use automancy::game::GameMsg;
 use automancy::map::Map;
 use automancy::renderer::Renderer;
-use automancy_defs::egui::{vec2, Align, Align2, Window};
-use automancy_defs::egui_winit_vulkano::Gui;
+use automancy_defs::gui::Gui;
 use automancy_defs::log;
 
 use crate::event::EventLoopStorage;
@@ -21,7 +22,7 @@ pub fn invalid_name_popup(setup: &GameSetup, gui: &mut Gui, loop_store: &mut Eve
     .default_width(250.0)
     .anchor(Align2([Align::Center, Align::Center]), vec2(0.0, 0.0))
     .frame(default_frame().inner_margin(10.0))
-    .show(&gui.context(), |ui| {
+    .show(&gui.context, |ui| {
         ui.label(
             setup.resource_man.translates.gui
                 [&setup.resource_man.registry.gui_ids.lbl_pick_another_name]
@@ -55,7 +56,7 @@ pub fn map_delete_popup(
     .default_width(250.0)
     .anchor(Align2([Align::Center, Align::Center]), vec2(0.0, 0.0))
     .frame(default_frame().inner_margin(10.0))
-    .show(&gui.context(), |ui| {
+    .show(&gui.context, |ui| {
         ui.label(
             setup.resource_man.translates.gui
                 [&setup.resource_man.registry.gui_ids.lbl_delete_map_confirm]
@@ -104,7 +105,7 @@ pub fn map_create_popup(
     .default_width(250.0)
     .anchor(Align2([Align::Center, Align::Center]), vec2(0.0, 0.0))
     .frame(default_frame().inner_margin(10.0))
-    .show(&gui.context(), |ui| {
+    .show(&gui.context, |ui| {
         ui.horizontal(|ui| {
             ui.label("Name:");
             ui.text_edit_singleline(&mut loop_store.map_name_input);

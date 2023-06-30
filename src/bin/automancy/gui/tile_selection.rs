@@ -1,23 +1,16 @@
 use std::f32::consts::FRAC_PI_4;
-use std::sync::Arc;
 
+use egui::scroll_area::ScrollBarVisibility;
+use egui::{vec2, Context, CursorIcon, Margin, ScrollArea, Sense, TopBottomPanel, Ui};
 use futures::channel::mpsc;
-use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
-use vulkano::memory::allocator::{AllocationCreateInfo, MemoryUsage};
 
-use automancy::gpu;
-use automancy::renderer::Renderer;
+use automancy::renderer::GuiInstances;
 use automancy::tile_entity::TileModifier;
 use automancy_defs::cg::{perspective, Matrix4, Vector3};
 use automancy_defs::cgmath::{point3, vec3};
-use automancy_defs::egui::scroll_area::ScrollBarVisibility;
-use automancy_defs::egui::{
-    vec2, CursorIcon, Margin, PaintCallback, ScrollArea, Sense, TopBottomPanel, Ui,
-};
-use automancy_defs::egui_winit_vulkano::{CallbackFn, Gui};
 use automancy_defs::hashbrown::HashMap;
 use automancy_defs::id::Id;
-use automancy_defs::rendering::{InstanceData, LightInfo};
+use automancy_defs::rendering::InstanceData;
 
 use crate::gui::default_frame;
 use crate::setup::GameSetup;
@@ -25,7 +18,7 @@ use crate::setup::GameSetup;
 /// Draws the tile selection.
 fn draw_tile_selection(
     setup: &GameSetup,
-    renderer: &Renderer,
+    gui_instances: &mut GuiInstances,
     ui: &mut Ui,
     selected_tile_modifiers: &HashMap<Id, TileModifier>,
     mut selection_send: mpsc::Sender<Id>,
@@ -65,68 +58,24 @@ fn draw_tile_selection(
                 selection_send.try_send(id).unwrap();
             }
 
-            let pipeline = renderer.gpu.gui_pipeline.clone();
-            let vertex_buffer = renderer.gpu.alloc.vertex_buffer.clone();
-            let index_buffer = renderer.gpu.alloc.index_buffer.clone();
-            let resource_man = setup.resource_man.clone();
-
             let pos = point3(0.0, 1.0 * hover + 0.5, 3.0 - 0.5 * hover);
             let matrix = perspective(FRAC_PI_4, 1.0, 0.01, 10.0)
                 * Matrix4::look_to_rh(pos, vec3(0.0, 0.5 * hover + 0.2, 1.0), Vector3::unit_y());
 
-            let callback = PaintCallback {
+            gui_instances.push((
+                InstanceData::default().with_model_matrix(matrix),
+                model,
                 rect,
-                callback: Arc::new(CallbackFn::new(move |_info, context| {
-                    let instance = (
-                        InstanceData::default().with_model_matrix(matrix).into(),
-                        model,
-                    );
-
-                    let light_info = Buffer::from_data(
-                        &context.resources.memory_allocator,
-                        BufferCreateInfo {
-                            usage: BufferUsage::VERTEX_BUFFER,
-                            ..Default::default()
-                        },
-                        AllocationCreateInfo {
-                            usage: MemoryUsage::Upload,
-                            ..Default::default()
-                        },
-                        LightInfo {
-                            light_pos: [0.0, 0.0, 12.0],
-                            light_color: [1.0; 4],
-                        },
-                    )
-                    .unwrap();
-
-                    if let Some((indirect_commands, instance_buffer)) = gpu::indirect_instance(
-                        &context.resources.memory_allocator,
-                        &resource_man,
-                        &[instance],
-                    ) {
-                        context
-                            .builder
-                            .bind_pipeline_graphics(pipeline.clone())
-                            .bind_vertex_buffers(
-                                0,
-                                (vertex_buffer.clone(), instance_buffer, light_info),
-                            )
-                            .bind_index_buffer(index_buffer.clone())
-                            .draw_indexed_indirect(indirect_commands)
-                            .unwrap();
-                    }
-                })),
-            };
-
-            ui.painter().add(callback);
+                (1.0, 0.0),
+            ));
         });
 }
 
 /// Creates the tile selection GUI.
 pub fn tile_selections(
     setup: &GameSetup,
-    renderer: &Renderer,
-    gui: &Gui,
+    gui_instances: &mut GuiInstances,
+    context: &Context,
     selected_tile_modifiers: &HashMap<Id, TileModifier>,
     selection_send: mpsc::Sender<Id>,
 ) {
@@ -134,7 +83,7 @@ pub fn tile_selections(
         .show_separator_line(false)
         .resizable(false)
         .frame(default_frame().outer_margin(Margin::same(10.0)))
-        .show(&gui.context(), |ui| {
+        .show(context, |ui| {
             ui.spacing_mut().scroll_bar_outer_margin = 0.0;
 
             ScrollArea::horizontal()
@@ -145,7 +94,7 @@ pub fn tile_selections(
 
                         draw_tile_selection(
                             setup,
-                            renderer,
+                            gui_instances,
                             ui,
                             selected_tile_modifiers,
                             selection_send,
