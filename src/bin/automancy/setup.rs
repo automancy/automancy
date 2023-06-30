@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::fs;
 use std::sync::Arc;
 
@@ -42,18 +43,15 @@ pub struct GameSetup {
 
 impl GameSetup {
     /// Initializes the game, filling all the necessary fields as well as returns the loaded vertices and indices.
-    pub async fn setup(window: &Window) -> (Self, Vec<Vertex>, Vec<u16>) {
+    pub async fn setup(window: &Window) -> Result<(Self, Vec<Vertex>, Vec<u16>), Box<dyn Error>> {
         // --- resources & data ---
         log::info!("initializing audio backend...");
-        let mut audio_man =
-            AudioManager::<CpalBackend>::new(AudioManagerSettings::default()).unwrap();
-        let track = audio_man
-            .add_sub_track({
-                let builder = TrackBuilder::new();
+        let mut audio_man = AudioManager::<CpalBackend>::new(AudioManagerSettings::default())?;
+        let track = audio_man.add_sub_track({
+            let builder = TrackBuilder::new();
 
-                builder
-            })
-            .unwrap();
+            builder
+        })?;
         log::info!("audio backend initialized");
 
         log::info!("loading resources...");
@@ -64,15 +62,12 @@ impl GameSetup {
         log::info!("creating game...");
 
         let (game, game_handle) =
-            Actor::spawn(Some("game".to_string()), Game, resource_man.clone())
-                .await
-                .unwrap();
+            Actor::spawn(Some("game".to_string()), Game, resource_man.clone()).await?;
 
         game.send_message(GameMsg::LoadMap(
             resource_man.clone(),
             MAIN_MENU.to_string(),
-        ))
-        .unwrap();
+        ))?;
 
         game.send_interval(TICK_INTERVAL, || GameMsg::Tick);
 
@@ -86,7 +81,7 @@ impl GameSetup {
         let camera = Camera::new(window_size_double(window));
 
         // --- event-loop ---
-        (
+        Ok((
             GameSetup {
                 audio_man,
                 resource_man,
@@ -99,7 +94,7 @@ impl GameSetup {
             },
             vertices,
             indices,
-        )
+        ))
     }
     /// Refreshes the list of maps on the filesystem. Should be done every time the list of maps could have changed (on map creation/delete and on game load).
     pub fn refresh_maps(&mut self) {

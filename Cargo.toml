@@ -62,6 +62,8 @@ lazy_static = { workspace = true }
 
 automancy_resources = { path = "automancy_resources" }
 
+expect-dialog = "1.0.1"
+
 env_logger = "0.10.0"
 
 slice-group-by = "0.3.0"
