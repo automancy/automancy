@@ -336,7 +336,7 @@ pub fn map_menu(
 }
 
 /// Draws the options menu. TODO
-pub fn options_menu(setup: &GameSetup, context: &Context, loop_store: &mut EventLoopStorage) {
+pub fn options_menu(setup: &mut GameSetup, context: &Context, loop_store: &mut EventLoopStorage) {
     Window::new(
         setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.options].as_str(),
     )
@@ -354,6 +354,15 @@ pub fn options_menu(setup: &GameSetup, context: &Context, loop_store: &mut Event
             )
             .clicked()
         {
+            if setup.options.save().is_err() {
+                setup.resource_man.error_man.push(
+                    (
+                        setup.resource_man.registry.err_ids.unwritable_options,
+                        vec![],
+                    ),
+                    &setup.resource_man,
+                );
+            }
             loop_store.return_gui_state();
         }
     });

@@ -195,12 +195,15 @@ impl GuiIds {
 pub struct ErrorIds {
     /// This error is displayed when the map cannot be read.
     pub invalid_map_data: Id,
+    /// This error is displayed when the options cannot be written.
+    pub unwritable_options: Id,
 }
 
 impl ErrorIds {
     pub fn new(interner: &mut Interner) -> Self {
         make_ids! {
-            invalid_map_data
+            invalid_map_data,
+            unwritable_options
         }
     }
 }

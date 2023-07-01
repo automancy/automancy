@@ -1,4 +1,5 @@
 use env_logger::Env;
+use expect_dialog::ExpectDialog;
 use futures::executor::block_on;
 use tokio::runtime::Runtime;
 use winit::event_loop::EventLoop;
@@ -24,7 +25,7 @@ fn get_icon() -> Icon {
     let width = image.width();
     let height = image.height();
 
-    Icon::from_rgba(image.into_flat_samples().samples, width, height).unwrap()
+    Icon::from_rgba(image.into_flat_samples().samples, width, height).unwrap() // unwrap ok
 }
 
 fn main() {
@@ -39,10 +40,12 @@ fn main() {
         .with_title("automancy")
         .with_window_icon(Some(get_icon()))
         .build(&event_loop)
-        .expect("could not build window");
+        .expect_dialog("Failed to open window!");
 
     // --- setup ---
-    let (mut setup, vertices, indices) = runtime.block_on(GameSetup::setup(&window));
+    let (mut setup, vertices, indices) = runtime
+        .block_on(GameSetup::setup(&window))
+        .expect_dialog("Critical failure in game setup!");
 
     // --- render ---
     log::info!("setting up rendering...");

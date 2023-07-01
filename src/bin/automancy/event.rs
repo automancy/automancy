@@ -51,8 +51,6 @@ pub struct EventLoopStorage {
     pub map_name_renaming: Option<String>,
     /// input for map renaming
     pub map_name_renaming_input: String,
-    /// the state of the input peripherals.
-    pub input_handler: InputHandler,
     /// the tile states of the selected tiles.
     pub selected_tile_modifiers: HashMap<Id, TileModifier>,
     /// the currently selected tile.
@@ -88,7 +86,6 @@ impl Default for EventLoopStorage {
             map_name_input: "".to_string(),
             map_name_renaming: None,
             map_name_renaming_input: "".to_string(),
-            input_handler: Default::default(),
             selected_tile_modifiers: Default::default(),
             selected_id: None,
             already_placed_at: None,
@@ -216,16 +213,14 @@ pub fn on_event(
     }
 
     if window_event.is_some() || device_event.is_some() {
-        loop_store.input_handler.reset();
-        loop_store
+        setup.input_handler.reset();
+        setup
             .input_handler
             .update(input::convert_input(window_event, device_event));
 
         let ignore_move = loop_store.selected_id.is_some();
 
-        setup
-            .camera
-            .handle_input(&loop_store.input_handler, ignore_move);
+        setup.camera.handle_input(&setup.input_handler, ignore_move);
 
         {
             let camera_chunk_coord: ChunkCoord = setup.camera.get_tile_coord().into();
@@ -237,7 +232,7 @@ pub fn on_event(
             }
         }
 
-        if loop_store.input_handler.key_pressed(&actions::ESCAPE) {
+        if setup.input_handler.key_pressed(&actions::ESCAPE) {
             // one by one
             if loop_store.selected_id.take().is_none() && loop_store.linking_tile.take().is_none() {
                 if loop_store.switch_gui_state_when(&|s| s == GuiState::Ingame, GuiState::Paused) {
@@ -253,8 +248,8 @@ pub fn on_event(
             }
         }
 
-        if loop_store.input_handler.main_pressed
-            || (loop_store.input_handler.shift_held && loop_store.input_handler.main_held)
+        if setup.input_handler.main_pressed
+            || (setup.input_handler.shift_held && setup.input_handler.main_held)
         {
             if let Some(id) = loop_store.selected_id {
                 if loop_store.already_placed_at != Some(setup.camera.pointing_at) {
@@ -294,7 +289,7 @@ pub fn on_event(
             }
         }
 
-        if !loop_store.input_handler.control_held && loop_store.input_handler.alternate_pressed {
+        if !setup.input_handler.control_held && setup.input_handler.alternate_pressed {
             if let Some(linking_tile) = loop_store.linking_tile {
                 let tile = runtime
                     .block_on(setup.game.call(
@@ -381,9 +376,9 @@ pub fn on_event(
             }
         }
 
-        if loop_store.input_handler.control_held && loop_store.gui_state == GuiState::Ingame {
+        if setup.input_handler.control_held && loop_store.gui_state == GuiState::Ingame {
             if let Some(start) = loop_store.initial_cursor_position {
-                if loop_store.input_handler.alternate_pressed {
+                if setup.input_handler.alternate_pressed {
                     let direction = setup.camera.pointing_at - start;
 
                     setup
@@ -414,7 +409,7 @@ pub fn on_event(
                         .play(resource_man.audio["click"].clone()) // TODO click2
                         .unwrap();
                 }
-            } else if loop_store.input_handler.alternate_pressed {
+            } else if setup.input_handler.alternate_pressed {
                 loop_store.initial_cursor_position = Some(setup.camera.pointing_at);
                 setup
                     .audio_man
@@ -430,9 +425,7 @@ pub fn on_event(
             loop_store.initial_cursor_position = None;
         }
 
-        if loop_store.input_handler.control_held
-            && loop_store.input_handler.key_pressed(&actions::UNDO)
-        {
+        if setup.input_handler.control_held && setup.input_handler.key_pressed(&actions::UNDO) {
             setup.game.send_message(GameMsg::Undo).unwrap();
         }
     }
@@ -447,7 +440,7 @@ pub fn on_event(
             .camera
             .update_pos(loop_store.elapsed, window_size_double(&renderer.gpu.window));
         setup.camera.update_pointing_at(
-            loop_store.input_handler.main_pos,
+            setup.input_handler.main_pos,
             window_size_double(&renderer.gpu.window),
         );
 
@@ -510,7 +503,7 @@ pub fn on_event(
 
                     let mouse_pos = screen_to_world(
                         window_size_double(&renderer.gpu.window),
-                        loop_store.input_handler.main_pos,
+                        setup.input_handler.main_pos,
                         setup.camera.get_pos().z,
                     );
                     let mouse_pos = point2(mouse_pos.x, mouse_pos.y);
@@ -561,7 +554,7 @@ pub fn on_event(
                         );
                         let b = screen_to_normalized(
                             window_size_double(&renderer.gpu.window),
-                            loop_store.input_handler.main_pos,
+                            setup.input_handler.main_pos,
                         );
 
                         overlay.extend_from_slice(&make_line(a, b, w, colors::RED));
@@ -587,7 +580,7 @@ pub fn on_event(
             tile_tints.insert(*selected, colors::ORANGE.with_alpha(0.5));
         }
 
-        if loop_store.input_handler.control_held {
+        if setup.input_handler.control_held {
             if let Some(start) = loop_store.initial_cursor_position {
                 let direction = setup.camera.pointing_at - start;
 
@@ -612,7 +605,7 @@ pub fn on_event(
             }
         }
 
-        if loop_store.input_handler.key_pressed(&actions::DEBUG) {
+        if setup.input_handler.key_pressed(&actions::DEBUG) {
             debug::debugger(setup, gui, runtime, setup.game.clone(), loop_store);
         }
 
