@@ -176,7 +176,7 @@ pub struct InputHandler {
     pub alternate_pressed: bool,
 
     pub key_map: HashMap<VirtualKeyCode, KeyAction>,
-    pub key_states: HashSet<KeyAction>,
+    pub key_states: HashSet<KeyActions>,
 
     to_clear: Vec<KeyAction>,
 }
@@ -218,7 +218,7 @@ impl InputHandler {
         self.scroll = None;
 
         for v in mem::take(&mut self.to_clear) {
-            self.key_states.remove(&v);
+            self.key_states.remove(&v.action);
         }
     }
 
@@ -278,27 +278,27 @@ impl InputHandler {
         match action.press_type {
             PressTypes::ONESHOT => match state {
                 Pressed => {
-                    self.key_states.insert(action);
+                    self.key_states.insert(action.action);
                     self.to_clear.push(action);
                 }
                 Released => {
-                    self.key_states.remove(&action);
+                    self.key_states.remove(&action.action);
                 }
             },
             PressTypes::HOLD => match state {
                 Pressed => {
-                    self.key_states.insert(action);
+                    self.key_states.insert(action.action);
                 }
                 Released => {
-                    self.key_states.remove(&action);
+                    self.key_states.remove(&action.action);
                 }
             },
             PressTypes::TOGGLE => match state {
                 Pressed => {
-                    if self.key_states.contains(&action) {
-                        self.key_states.remove(&action);
+                    if self.key_states.contains(&action.action) {
+                        self.key_states.remove(&action.action);
                     } else {
-                        self.key_states.insert(action);
+                        self.key_states.insert(action.action);
                     }
                 }
                 Released => {}
@@ -308,7 +308,7 @@ impl InputHandler {
         Some(())
     }
 
-    pub fn key_pressed(&self, action: &KeyAction) -> bool {
+    pub fn key_pressed(&self, action: &KeyActions) -> bool {
         self.key_states.contains(action)
     }
 }

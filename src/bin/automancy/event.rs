@@ -15,7 +15,7 @@ use winit::event_loop::ControlFlow;
 use automancy::camera::FAR;
 use automancy::game::{GameMsg, PlaceTileResponse};
 use automancy::gpu::{window_size_double, window_size_float};
-use automancy::input::{actions, InputHandler};
+use automancy::input::{actions, InputHandler, KeyActions};
 use automancy::renderer::Renderer;
 use automancy::tile_entity::{TileEntityMsg, TileModifier};
 use automancy::util::render::{hex_to_normalized, screen_to_normalized, screen_to_world};
@@ -232,7 +232,7 @@ pub fn on_event(
             }
         }
 
-        if setup.input_handler.key_pressed(&actions::ESCAPE) {
+        if setup.input_handler.key_pressed(&KeyActions::ESCAPE) {
             // one by one
             if loop_store.selected_id.take().is_none() && loop_store.linking_tile.take().is_none() {
                 if loop_store.switch_gui_state_when(&|s| s == GuiState::Ingame, GuiState::Paused) {
@@ -425,7 +425,7 @@ pub fn on_event(
             loop_store.initial_cursor_position = None;
         }
 
-        if setup.input_handler.control_held && setup.input_handler.key_pressed(&actions::UNDO) {
+        if setup.input_handler.control_held && setup.input_handler.key_pressed(&KeyActions::UNDO) {
             setup.game.send_message(GameMsg::Undo).unwrap();
         }
     }
@@ -605,7 +605,7 @@ pub fn on_event(
             }
         }
 
-        if setup.input_handler.key_pressed(&actions::DEBUG) {
+        if setup.input_handler.key_pressed(&KeyActions::DEBUG) {
             debug::debugger(setup, gui, runtime, setup.game.clone(), loop_store);
         }
 
