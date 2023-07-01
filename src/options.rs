@@ -1,27 +1,33 @@
+use lazy_static::lazy_static;
 use std::error::Error;
-use std::fs::File;
-use std::io::{BufReader, BufWriter, Read, Write};
+use std::fs::{File, OpenOptions};
+use std::io::{BufReader, BufWriter, ErrorKind, Read, Write};
 
 use serde::{Deserialize, Serialize};
 use winit::event::VirtualKeyCode;
 
 use automancy_defs::hashbrown::HashMap;
+use automancy_defs::log;
 
-use crate::input::KeyActions;
+use crate::input::{actions, KeyAction, KeyActions};
 
 #[derive(Serialize, Deserialize)]
 pub struct Options {
-    pub keymap: HashMap<u32, KeyActions>,
+    pub vsync: bool,
+    pub keymap: HashMap<VirtualKeyCode, KeyAction>,
 }
-
+lazy_static! {
+    pub static ref DEFAULT_KEYMAP: HashMap<VirtualKeyCode, KeyAction> = HashMap::from([
+        (VirtualKeyCode::Z, actions::UNDO),
+        (VirtualKeyCode::Escape, actions::ESCAPE),
+        (VirtualKeyCode::F3, actions::DEBUG),
+    ]);
+}
 impl Default for Options {
     fn default() -> Self {
         Self {
-            keymap: HashMap::from([
-                (VirtualKeyCode::Z as u32, KeyActions::UNDO),
-                (VirtualKeyCode::Escape as u32, KeyActions::ESCAPE),
-                (VirtualKeyCode::F3 as u32, KeyActions::DEBUG),
-            ]),
+            vsync: false,
+            keymap: DEFAULT_KEYMAP.clone(),
         }
     }
 }
@@ -30,16 +36,26 @@ static OPTIONS_PATH: &str = "options.toml";
 
 impl Options {
     pub fn load() -> Result<Self, Box<dyn Error>> {
-        let file = File::open(OPTIONS_PATH)?;
+        log::info!("Loading options...");
+        let file = OpenOptions::new()
+            .write(true)
+            .read(true)
+            .create(true)
+            .open(OPTIONS_PATH)?;
         let mut body = String::new();
         BufReader::new(file).read_to_string(&mut body)?;
-        Ok(toml::de::from_str(body.as_str())?)
+        let mut this: Self = toml::de::from_str(body.clone().as_str()).unwrap_or_default();
+        if this.keymap.len() != DEFAULT_KEYMAP.len() {
+            this.keymap = DEFAULT_KEYMAP.clone();
+        }
+        this.save()?;
+        Ok(this)
     }
     pub fn save(&mut self) -> Result<(), Box<dyn Error>> {
-        let file = File::open(OPTIONS_PATH)?;
+        let mut file = File::create(OPTIONS_PATH)?;
         let body = toml::ser::to_string_pretty(self)?;
-        let mut buffer = BufWriter::new(file);
-        write!(&mut buffer, "{body}")?;
+        write!(&mut file, "{body}")?;
+        log::info!("Saved options!");
         Ok(())
     }
 }

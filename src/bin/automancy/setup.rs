@@ -10,7 +10,9 @@ use winit::window::Window;
 use automancy::camera::Camera;
 use automancy::game::{Game, GameMsg, TICK_INTERVAL};
 use automancy::gpu::window_size_double;
+use automancy::input::InputHandler;
 use automancy::map::{Map, MapInfo, MAIN_MENU, MAP_PATH};
+use automancy::options::Options;
 use automancy_defs::coord::ChunkCoord;
 use automancy_defs::log;
 use automancy_defs::rendering::Vertex;
@@ -39,6 +41,10 @@ pub struct GameSetup {
     pub camera_chunk_coord: ChunkCoord,
     /// the list of available maps
     pub maps: Vec<(MapInfo, String)>,
+    /// the state of the input peripherals.
+    pub input_handler: InputHandler,
+    /// the game options
+    pub options: Options,
 }
 
 impl GameSetup {
@@ -72,7 +78,9 @@ impl GameSetup {
         game.send_interval(TICK_INTERVAL, || GameMsg::Tick);
 
         log::info!("game created.");
-
+        log::info!("loading settings...");
+        let options = Options::load()?;
+        log::info!("loaded options.");
         log::info!("loading completed!");
 
         // --- last setup ---
@@ -91,6 +99,8 @@ impl GameSetup {
                 camera,
                 camera_chunk_coord: camera.get_tile_coord().into(),
                 maps: Vec::new(),
+                input_handler: InputHandler::new(options.keymap.clone()),
+                options,
             },
             vertices,
             indices,

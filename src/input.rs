@@ -8,6 +8,7 @@ use winit::event::{
     VirtualKeyCode, WindowEvent,
 };
 
+use crate::options::DEFAULT_KEYMAP;
 use automancy_defs::cg::{DPoint2, DVector2, Double};
 use automancy_defs::cgmath::{point2, vec2};
 use automancy_defs::hashbrown::HashMap;
@@ -19,14 +20,14 @@ pub enum KeyActions {
     DEBUG,
 }
 
-#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum PressTypes {
     ONESHOT, // returns true when the key is pressed once and will not press again until released
     HOLD,    // returns true whenever the key is down
     TOGGLE,  // pressing the key will either toggle it on or off
 }
 
-#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct KeyAction {
     pub action: KeyActions,
     pub press_type: PressTypes,
@@ -195,11 +196,7 @@ impl Default for InputHandler {
             main_pressed: false,
             alternate_pressed: false,
 
-            key_map: HashMap::from([
-                (VirtualKeyCode::Z, actions::UNDO),
-                (VirtualKeyCode::Escape, actions::ESCAPE),
-                (VirtualKeyCode::F3, actions::DEBUG),
-            ]),
+            key_map: DEFAULT_KEYMAP.clone(),
             key_states: Default::default(),
 
             to_clear: Default::default(),
@@ -208,6 +205,12 @@ impl Default for InputHandler {
 }
 
 impl InputHandler {
+    pub fn new(key_map: HashMap<VirtualKeyCode, KeyAction>) -> Self {
+        Self {
+            key_map,
+            ..Default::default()
+        }
+    }
     pub fn reset(&mut self) {
         self.main_pressed = false;
         self.alternate_pressed = false;

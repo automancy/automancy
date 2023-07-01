@@ -86,6 +86,7 @@
         "time_fmt": "%x at %r"
     },
     "error": {
-        "invalid_map_data": "Map {} was corrupted and could not be repaired! This session will instead be written to {}"
+        "invalid_map_data": "Map {} was corrupted and could not be repaired! This session will instead be written to {}",
+        "unwritable_options": "Could not write the options.toml file! Your changes will NOT be saved."
     }
 }
