@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use egui::{pos2, Rect, Rgba};
+use egui::{Rect, Rgba};
 use egui_wgpu::renderer::ScreenDescriptor;
 use ractor::rpc::CallResult;
 use ractor::ActorRef;
@@ -95,7 +95,7 @@ impl Renderer {
         game: ActorRef<GameMsg>,
         map_render_info: &RenderInfo,
         tile_tints: HashMap<TileCoord, Rgba>,
-        mut gui_instances: GuiInstances,
+        gui_instances: GuiInstances,
         overlay: Vec<Vertex>,
         gui: &mut Gui,
     ) -> Result<(), SurfaceError> {
@@ -232,13 +232,13 @@ impl Renderer {
             map.into_values().flatten().collect::<Vec<_>>()
         };
 
+        let mut extra_instances = vec![];
+
         let transaction_record = runtime
             .block_on(game.call(GameMsg::GetRecordedTransactions, None))
             .unwrap()
             .unwrap();
         let now = Instant::now();
-
-        let (width, height) = gpu::window_size_float(&self.gpu.window);
 
         for (instant, ((source_coord, _source_id), (coord, _id)), stack) in
             transaction_record.read().unwrap().iter()
@@ -251,12 +251,7 @@ impl Renderer {
             let point = frac_hex_to_pixel(HEX_GRID_LAYOUT, lerp);
 
             let instance = InstanceData::default().with_model_matrix(
-                matrix
-                    * Matrix4::from_translation(vec3(
-                        point.x as Float,
-                        point.y as Float,
-                        FAR as Float,
-                    ))
+                Matrix4::from_translation(vec3(point.x as Float, point.y as Float, FAR as Float))
                     * Matrix4::from_scale(0.5)
                     * Matrix4::from_angle_z(deg(get_angle_from_target(
                         self.tile_targets.get(source_coord),
@@ -266,12 +261,7 @@ impl Renderer {
             );
             let id = resource_man.get_item_model(stack.item);
 
-            gui_instances.push((
-                instance,
-                id,
-                Rect::from([pos2(0.0, 0.0), pos2(width, height)]),
-                (0.0, 1.0),
-            ));
+            extra_instances.push((instance.into(), id));
         }
 
         self.inner_render(
@@ -279,6 +269,7 @@ impl Renderer {
             matrix,
             camera_pos,
             &instances,
+            &extra_instances,
             gui_instances,
             overlay,
             gui,
@@ -291,6 +282,7 @@ impl Renderer {
         matrix: Matrix4,
         camera_pos: Point3,
         instances: &[(RawInstanceData, Id)],
+        extra_instances: &[(RawInstanceData, Id)],
         gui_instances: GuiInstances,
         overlay: Vec<Vertex>,
         gui: &mut Gui,
@@ -305,9 +297,6 @@ impl Renderer {
         }
 
         let output = self.gpu.surface.get_current_texture()?;
-        let view = output
-            .texture
-            .create_view(&TextureViewDescriptor::default());
 
         let mut encoder = self
             .gpu
@@ -320,8 +309,8 @@ impl Renderer {
             let mut game_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Game Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.multisample_surface_texture.1,
-                    resolve_target: Some(&view),
+                    view: &self.gpu.multisampled_texture.1,
+                    resolve_target: Some(&self.gpu.game_texture.1),
                     ops: Operations {
                         load: LoadOp::Clear(Color::BLACK),
                         store: true,
@@ -371,6 +360,81 @@ impl Renderer {
             }
         }
 
+        {
+            let mut extra_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some("Game Render Pass"),
+                color_attachments: &[Some(RenderPassColorAttachment {
+                    view: &self.gpu.multisampled_texture.1,
+                    resolve_target: Some(&self.gpu.game_texture.1),
+                    ops: Operations {
+                        load: LoadOp::Load,
+                        store: true,
+                    },
+                })],
+                depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
+                    view: &self.gpu.game_depth_texture.1,
+                    depth_ops: Some(Operations {
+                        load: LoadOp::Clear(0.0),
+                        store: true,
+                    }),
+                    stencil_ops: None,
+                }),
+            });
+
+            self.gpu.queue.write_buffer(
+                &self.gpu.extra_uniform_buffer,
+                0,
+                bytemuck::cast_slice(&[GameUBO::new(matrix, camera_pos)]),
+            );
+
+            let count = gpu::indirect_instance(
+                &self.gpu.device,
+                &self.gpu.queue,
+                &self.resource_man,
+                extra_instances,
+                &mut self.gpu.extra_instance_buffer,
+                &mut self.gpu.extra_indirect_buffer,
+            );
+
+            if count > 0 {
+                extra_pass.set_viewport(
+                    0.0,
+                    0.0,
+                    self.size.width as Float,
+                    self.size.height as Float,
+                    1.0,
+                    0.0,
+                );
+                extra_pass.set_pipeline(&self.gpu.game_pipeline);
+                extra_pass.set_bind_group(0, &self.gpu.game_bind_group, &[]);
+                extra_pass.set_vertex_buffer(0, self.gpu.vertex_buffer.slice(..));
+                extra_pass.set_vertex_buffer(1, self.gpu.extra_instance_buffer.slice(..));
+                extra_pass.set_index_buffer(self.gpu.index_buffer.slice(..), IndexFormat::Uint16);
+
+                extra_pass.multi_draw_indexed_indirect(&self.gpu.extra_indirect_buffer, 0, count);
+            }
+        }
+
+        {
+            let mut effects_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some("Effects Render Pass"),
+                color_attachments: &[Some(RenderPassColorAttachment {
+                    view: &self.gpu.processed_game_texture.1,
+                    resolve_target: None,
+                    ops: Operations {
+                        load: LoadOp::Load,
+                        store: true,
+                    },
+                })],
+                depth_stencil_attachment: None,
+            });
+
+            effects_pass.set_pipeline(&self.gpu.effects_pipeline);
+            effects_pass.set_bind_group(0, &self.gpu.effects_bind_group, &[]);
+
+            effects_pass.draw(0..3, 0..1);
+        }
+
         let user_commands = {
             let egui_out = gui.context.end_frame();
             let egui_primitives = gui.context.tessellate(egui_out.shapes);
@@ -398,14 +462,21 @@ impl Renderer {
                 let mut egui_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                     label: Some("Egui Render Pass"),
                     color_attachments: &[Some(RenderPassColorAttachment {
-                        view: &self.gpu.multisample_surface_texture.1,
-                        resolve_target: Some(&view),
+                        view: &self.gpu.multisampled_texture.1,
+                        resolve_target: Some(&self.gpu.egui_texture.1),
                         ops: Operations {
-                            load: LoadOp::Load,
+                            load: LoadOp::Clear(Color::TRANSPARENT),
                             store: true,
                         },
                     })],
-                    depth_stencil_attachment: None,
+                    depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
+                        view: &self.gpu.gui_depth_texture.1,
+                        depth_ops: Some(Operations {
+                            load: LoadOp::Clear(0.0),
+                            store: true,
+                        }),
+                        stencil_ops: None,
+                    }),
                 });
 
                 gui.renderer
@@ -419,21 +490,21 @@ impl Renderer {
             user_commands
         };
 
-        if !gui_instances.is_empty() {
+        {
             let mut gui_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Gui Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.multisample_surface_texture.1,
-                    resolve_target: Some(&view),
+                    view: &self.gpu.multisampled_texture.1,
+                    resolve_target: Some(&self.gpu.gui_texture.1),
                     ops: Operations {
-                        load: LoadOp::Load,
+                        load: LoadOp::Clear(Color::TRANSPARENT),
                         store: true,
                     },
                 })],
                 depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
                     view: &self.gpu.gui_depth_texture.1,
                     depth_ops: Some(Operations {
-                        load: LoadOp::Clear(0.0),
+                        load: LoadOp::Load,
                         store: true,
                     }),
                     stencil_ops: None,
@@ -492,8 +563,8 @@ impl Renderer {
             let mut overlay_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Overlay Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.multisample_surface_texture.1,
-                    resolve_target: Some(&view),
+                    view: &self.gpu.multisampled_texture.1,
+                    resolve_target: Some(&self.gpu.gui_texture.1),
                     ops: Operations {
                         load: LoadOp::Load,
                         store: true,
@@ -521,7 +592,31 @@ impl Renderer {
             overlay_pass.set_bind_group(0, &self.gpu.overlay_bind_group, &[]);
             overlay_pass.set_vertex_buffer(0, self.gpu.overlay_vertex_buffer.slice(..));
 
-            overlay_pass.draw(0..vertex_count, 0..1)
+            overlay_pass.draw(0..vertex_count, 0..1);
+        }
+
+        {
+            let view = output
+                .texture
+                .create_view(&TextureViewDescriptor::default());
+
+            let mut combine_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some("Combine Render Pass"),
+                color_attachments: &[Some(RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: Operations {
+                        load: LoadOp::Load,
+                        store: true,
+                    },
+                })],
+                depth_stencil_attachment: None,
+            });
+
+            combine_pass.set_pipeline(&self.gpu.combine_pipeline);
+            combine_pass.set_bind_group(0, &self.gpu.combine_bind_group, &[]);
+
+            combine_pass.draw(0..3, 0..1)
         }
 
         self.gpu

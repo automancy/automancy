@@ -15,7 +15,6 @@ use automancy_defs::rendering::InstanceData;
 use crate::gui::default_frame;
 use crate::setup::GameSetup;
 
-// TODO use a callback
 /// Draws the tile selection.
 fn draw_tile_selection(
     setup: &GameSetup,
