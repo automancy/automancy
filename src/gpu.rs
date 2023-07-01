@@ -50,6 +50,9 @@ pub const GAME_DEPTH_TEXTURE: Option<&str> = Some("Game Depth Texture");
 pub const GAME_INDIRECT_BUFFER: Option<&str> = Some("Game Indirect Buffer");
 pub const GAME_INSTANCE_BUFFER: Option<&str> = Some("Game Instance Buffer");
 
+pub const EXTRA_INDIRECT_BUFFER: Option<&str> = Some("Extra Indirect Buffer");
+pub const EXTRA_INSTANCE_BUFFER: Option<&str> = Some("Extra Instance Buffer");
+
 pub const GUI_DEPTH_TEXTURE: Option<&str> = Some("Gui Depth Texture");
 pub const GUI_INSTANCE_BUFFER: Option<&str> = Some("Gui Instance Buffer");
 
@@ -247,6 +250,10 @@ pub struct Gpu {
     pub game_uniform_buffer: Buffer,
     pub game_bind_group: BindGroup,
     pub game_pipeline: RenderPipeline,
+
+    pub extra_instance_buffer: Buffer,
+    pub extra_indirect_buffer: Buffer,
+    pub extra_uniform_buffer: Buffer,
 
     pub effects_bind_group_layout: BindGroupLayout,
     pub effects_bind_group: BindGroup,
@@ -807,6 +814,22 @@ impl Gpu {
             usage: BufferUsages::INDIRECT | BufferUsages::COPY_DST,
         });
 
+        let extra_instance_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: EXTRA_INSTANCE_BUFFER,
+            contents: &[],
+            usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
+        });
+        let extra_indirect_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: EXTRA_INDIRECT_BUFFER,
+            contents: &[],
+            usage: BufferUsages::INDIRECT | BufferUsages::COPY_DST,
+        });
+        let extra_uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Extra Uniform Buffer"),
+            contents: bytemuck::cast_slice(&[GameUBO::default()]),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+
         let gui_depth_texture = create_depth_texture(&device, &config, GUI_DEPTH_TEXTURE);
         let gui_instance_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: GUI_INSTANCE_BUFFER,
@@ -942,6 +965,10 @@ impl Gpu {
             game_uniform_buffer,
             game_bind_group,
             game_pipeline,
+
+            extra_instance_buffer,
+            extra_indirect_buffer,
+            extra_uniform_buffer,
 
             effects_bind_group_layout,
             effects_bind_group,
