@@ -1,6 +1,6 @@
 use std::error::Error;
 use std::fs;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use egui::Frame;
 use ractor::concurrency::JoinHandle;
@@ -9,7 +9,6 @@ use winit::window::Window;
 
 use automancy::camera::Camera;
 use automancy::game::{Game, GameMsg, TICK_INTERVAL};
-use automancy::gpu::window_size_double;
 use automancy::input::InputHandler;
 use automancy::map::{Map, MapInfo, MAIN_MENU, MAP_PATH};
 use automancy::options::Options;
@@ -33,10 +32,12 @@ pub struct GameSetup {
     pub game: ActorRef<GameMsg>,
     /// the game's async handle, for graceful shutdown
     pub game_handle: Option<JoinHandle<()>>,
+    /// async handle for things updating on interval e.g. camera, for graceful shutdown
+    pub update_handle: Option<JoinHandle<()>>,
     /// the egui frame
     pub frame: Frame,
     /// the camera
-    pub camera: Camera,
+    pub camera: Arc<Mutex<Camera>>,
     /// the last camera position, in chunk coord
     pub camera_chunk_coord: ChunkCoord,
     /// the list of available maps
@@ -49,7 +50,10 @@ pub struct GameSetup {
 
 impl GameSetup {
     /// Initializes the game, filling all the necessary fields as well as returns the loaded vertices and indices.
-    pub async fn setup(window: &Window) -> Result<(Self, Vec<Vertex>, Vec<u16>), Box<dyn Error>> {
+    pub async fn setup(
+        _window: &Window,
+        camera: Arc<Mutex<Camera>>,
+    ) -> Result<(Self, Vec<Vertex>, Vec<u16>), Box<dyn Error>> {
         // --- resources & data ---
         log::info!("initializing audio backend...");
         let mut audio_man = AudioManager::<CpalBackend>::new(AudioManagerSettings::default())?;
@@ -78,15 +82,17 @@ impl GameSetup {
         game.send_interval(TICK_INTERVAL, || GameMsg::Tick);
 
         log::info!("game created.");
-        log::info!("loading settings...");
+
+        log::info!("loading options...");
         let options = Options::load()?;
         log::info!("loaded options.");
+
         log::info!("loading completed!");
 
         // --- last setup ---
         let frame = gui::default_frame();
 
-        let camera = Camera::new(window_size_double(window));
+        let camera_coord = camera.lock().unwrap().get_tile_coord();
 
         // --- event-loop ---
         Ok((
@@ -95,9 +101,10 @@ impl GameSetup {
                 resource_man,
                 game,
                 game_handle: Some(game_handle),
+                update_handle: None,
                 frame,
                 camera,
-                camera_chunk_coord: camera.get_tile_coord().into(),
+                camera_chunk_coord: camera_coord.into(),
                 maps: Vec::new(),
                 input_handler: InputHandler::new(options.keymap.clone()),
                 options,

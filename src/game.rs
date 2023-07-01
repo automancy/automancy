@@ -28,8 +28,12 @@ use crate::map::{Map, MapInfo, TileEntities};
 use crate::tile_entity::{TileEntity, TileEntityMsg, TileModifier};
 use crate::util::render::is_in_culling_range;
 
-pub const TPS: u64 = 30;
+/// Miscellaneous updates per second -- e.g. Camera Position.
+pub const UPS: u64 = 60;
+pub const UPDATE_INTERVAL: Duration = Duration::from_nanos(1_000_000_000 / UPS);
 
+/// Game ticks per second
+pub const TPS: u64 = 30;
 pub const TICK_INTERVAL: Duration = Duration::from_nanos(1_000_000_000 / TPS);
 pub const MAX_ALLOWED_TICK_INTERVAL: Duration = TICK_INTERVAL.saturating_mul(5);
 

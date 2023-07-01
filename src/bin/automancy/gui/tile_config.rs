@@ -3,6 +3,7 @@ use egui::{vec2, DragValue, Margin, Ui, Window};
 use ractor::ActorRef;
 use tokio::runtime::Runtime;
 
+use automancy::camera::Camera;
 use automancy::game::GameMsg;
 use automancy::renderer::GuiInstances;
 use automancy::tile_entity::TileEntityMsg;
@@ -145,6 +146,7 @@ fn master_node(
 fn node(
     runtime: &Runtime,
     setup: &GameSetup,
+    camera: &Camera,
     config_open: TileCoord,
     extra_vertices: &mut Vec<Vertex>,
     (width, height): (Double, Double),
@@ -174,11 +176,10 @@ fn node(
                 .unwrap();
 
             if let Some(link) = result.as_ref().and_then(Data::as_coord) {
-                let (a, w0) =
-                    hex_to_normalized((width, height), setup.camera.get_pos(), config_open);
+                let (a, w0) = hex_to_normalized((width, height), camera.get_pos(), config_open);
 
                 let (b, w1) =
-                    hex_to_normalized((width, height), setup.camera.get_pos(), config_open + *link);
+                    hex_to_normalized((width, height), camera.get_pos(), config_open + *link);
 
                 extra_vertices.extend_from_slice(&make_line(a, b, (w0 + w1) / 2.0, colors::RED));
             }
@@ -383,6 +384,7 @@ fn script(
 pub fn tile_config(
     runtime: &Runtime,
     setup: &GameSetup,
+    camera: &Camera,
     loop_store: &mut EventLoopStorage,
     gui_instances: &mut GuiInstances,
     context: &Context,
@@ -449,6 +451,7 @@ pub fn tile_config(
                 node(
                     runtime,
                     setup,
+                    camera,
                     config_open,
                     extra_vertices,
                     (width, height),

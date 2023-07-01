@@ -1,6 +1,7 @@
 use egui::{vec2, Align, Align2, Context, Margin, Window};
 use tokio::runtime::Runtime;
 
+use automancy::camera::Camera;
 use automancy::game::GameMsg;
 use automancy::renderer::GuiInstances;
 use automancy::tile_entity::TileEntityMsg;
@@ -16,6 +17,7 @@ use crate::setup::GameSetup;
 pub fn tile_info(
     runtime: &Runtime,
     setup: &GameSetup,
+    camera: &Camera,
     gui_instances: &mut GuiInstances,
     context: &Context,
 ) {
@@ -28,21 +30,22 @@ pub fn tile_info(
     .default_width(300.0)
     .frame(default_frame().inner_margin(Margin::same(10.0)))
     .show(context, |ui| {
-        ui.colored_label(colors::DARK_GRAY, setup.camera.pointing_at.to_string());
+        ui.colored_label(colors::DARK_GRAY, camera.pointing_at.to_string());
 
         let tile_entity = runtime
             .block_on(setup.game.call(
-                |reply| GameMsg::GetTileEntity(setup.camera.pointing_at, reply),
+                |reply| GameMsg::GetTileEntity(camera.pointing_at, reply),
                 None,
             ))
             .unwrap()
             .unwrap();
 
         let tile = runtime
-            .block_on(setup.game.call(
-                |reply| GameMsg::GetTile(setup.camera.pointing_at, reply),
-                None,
-            ))
+            .block_on(
+                setup
+                    .game
+                    .call(|reply| GameMsg::GetTile(camera.pointing_at, reply), None),
+            )
             .unwrap()
             .unwrap();
 

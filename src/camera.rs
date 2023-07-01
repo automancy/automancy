@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use num::{clamp, Zero};
 
 use automancy_defs::cg::{DPoint2, DPoint3, DVector2, Double};
@@ -82,20 +80,18 @@ impl Camera {
     }
 
     /// Scroll the camera to a new position.
-    fn scroll(z: Double, vel: Double, ratio: Double) -> Double {
-        let z = z + vel * ratio * 0.6;
+    fn scroll(z: Double, vel: Double) -> Double {
+        let z = z + vel * 0.6;
 
         clamp(z, 1.0, 5.0)
     }
 
     /// Updates the camera's position.
-    pub fn update_pos(&mut self, elapsed: Duration, (width, height): (Double, Double)) {
-        let ratio = elapsed.as_secs_f64() * 80.0;
-
+    pub fn update_pos(&mut self, (width, height): (Double, Double)) {
         {
             if !self.move_vel.is_zero() {
-                self.pos.x += self.move_vel.x * ratio;
-                self.pos.y += self.move_vel.y * ratio;
+                self.pos.x += self.move_vel.x;
+                self.pos.y += self.move_vel.y;
 
                 self.move_vel *= 0.9;
             }
@@ -103,7 +99,7 @@ impl Camera {
 
         {
             if !self.scroll_vel.is_zero() {
-                self.pos.z = Self::scroll(self.pos.z, self.scroll_vel, ratio);
+                self.pos.z = Self::scroll(self.pos.z, self.scroll_vel);
 
                 self.scroll_vel *= 0.6;
             }
