@@ -8,10 +8,11 @@ use winit::event::{
     VirtualKeyCode, WindowEvent,
 };
 
-use crate::options::DEFAULT_KEYMAP;
-use automancy_defs::cg::{DPoint2, DVector2, Double};
 use automancy_defs::cgmath::{point2, vec2};
 use automancy_defs::hashbrown::HashMap;
+use automancy_defs::math::{DPoint2, DVector2, Double};
+
+use crate::options::DEFAULT_KEYMAP;
 
 #[derive(Serialize, Deserialize, Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub enum KeyActions {
@@ -52,61 +53,47 @@ pub mod actions {
 
 /// The various controls of the game.
 #[derive(Debug, Copy, Clone)]
-pub enum GameWindowEvent {
-    /// no keys pressed
+pub enum GameInputEvent {
     None,
-    /// mouse cursor moved
     MainPos { pos: DPoint2 },
-    /// mouse 1 pressed
-    MainPressed,
-    /// mouse 1 released
-    MainReleased,
-    /// mouse 2 pressed
-    AlternatePressed,
-    /// mouse 2 released
-    AlternateReleased,
-    /// mouse wheel scrolled
-    MouseWheel { delta: DVector2 },
-    /// modifier key pressed
-    ModifierChanged { modifier: ModifiersState },
-    /// keyboard event
-    KeyboardEvent { input: KeyboardInput },
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum GameDeviceEvent {
-    None,
     MainMove { delta: DVector2 },
+    MouseWheel { delta: DVector2 },
+    MainPressed,
+    MainReleased,
+    AlternatePressed,
+    AlternateReleased,
+    TertiaryPressed,
+    TertiaryReleased,
     ExitPressed,
     ExitReleased,
-}
-
-#[derive(Debug, Copy, Clone)]
-pub struct GameInputEvent {
-    pub window: GameWindowEvent,
-    pub device: GameDeviceEvent,
+    ModifierChanged { modifier: ModifiersState },
+    KeyboardEvent { input: KeyboardInput },
 }
 
 pub fn convert_input(
     window_event: Option<&WindowEvent>,
     device_event: Option<&DeviceEvent>,
+    (width, height): (Double, Double),
+    sensitivity: Double,
 ) -> GameInputEvent {
-    let mut window = GameWindowEvent::None;
-    let mut device = GameDeviceEvent::None;
+    let mut result = GameInputEvent::None;
 
     if let Some(event) = window_event {
-        use GameWindowEvent::*;
+        use GameInputEvent::*;
 
         match event {
             WindowEvent::MouseWheel { delta, .. } => {
-                window = match delta {
-                    MouseScrollDelta::LineDelta(x, y) => {
-                        let delta = vec2(*x as Double, *y as Double);
+                result = match delta {
+                    MouseScrollDelta::PixelDelta(delta) => {
+                        let delta = vec2(
+                            delta.x / width * sensitivity,
+                            delta.y / height * sensitivity,
+                        );
 
                         MouseWheel { delta }
                     }
-                    MouseScrollDelta::PixelDelta(delta) => {
-                        let delta = vec2(delta.x, delta.y);
+                    MouseScrollDelta::LineDelta(x, y) => {
+                        let delta = vec2(*x as Double * sensitivity, *y as Double * sensitivity);
 
                         MouseWheel { delta }
                     }
@@ -115,14 +102,14 @@ pub fn convert_input(
             WindowEvent::MouseInput { state, button, .. } => {
                 match button {
                     MouseButton::Left => {
-                        window = if state == &Pressed {
+                        result = if state == &Pressed {
                             MainPressed
                         } else {
                             MainReleased
                         };
                     }
                     MouseButton::Right => {
-                        window = if state == &Pressed {
+                        result = if state == &Pressed {
                             AlternatePressed
                         } else {
                             AlternateReleased
@@ -132,33 +119,31 @@ pub fn convert_input(
                 };
             }
             WindowEvent::ModifiersChanged(modifier) => {
-                window = ModifierChanged {
+                result = ModifierChanged {
                     modifier: *modifier,
                 };
             }
             WindowEvent::CursorMoved { position, .. } => {
-                window = MainPos {
-                    pos: point2(position.x, position.y),
-                };
+                let pos = point2(position.x, position.y);
+
+                result = MainPos { pos };
             }
-            WindowEvent::KeyboardInput { input, .. } => window = KeyboardEvent { input: *input },
+            WindowEvent::KeyboardInput { input, .. } => result = KeyboardEvent { input: *input },
             _ => {}
         }
     }
 
     if let Some(event) = device_event {
-        use GameDeviceEvent::*;
+        use GameInputEvent::*;
 
         if let DeviceEvent::MouseMotion { delta } = event {
-            let (x, y) = delta;
+            let delta = vec2(delta.0 * sensitivity, -delta.1 * sensitivity);
 
-            let delta = vec2(*x, -*y);
-
-            device = MainMove { delta };
+            result = MainMove { delta };
         }
     }
 
-    GameInputEvent { window, device }
+    result
 }
 
 #[derive(Debug, Clone)]
@@ -168,12 +153,15 @@ pub struct InputHandler {
     pub main_move: Option<DVector2>,
 
     pub main_held: bool,
-    pub control_held: bool,
     pub alternate_held: bool,
+    pub tertiary_held: bool,
+
+    pub control_held: bool,
     pub shift_held: bool,
 
     pub main_pressed: bool,
     pub alternate_pressed: bool,
+    pub tertiary_pressed: bool,
 
     pub key_map: HashMap<VirtualKeyCode, KeyAction>,
     pub key_states: HashSet<KeyActions>,
@@ -189,12 +177,15 @@ impl Default for InputHandler {
             main_move: None,
 
             main_held: false,
-            control_held: false,
             alternate_held: false,
+            tertiary_held: false,
+
+            control_held: false,
             shift_held: false,
 
             main_pressed: false,
             alternate_pressed: false,
+            tertiary_pressed: false,
 
             key_map: DEFAULT_KEYMAP.clone(),
             key_states: Default::default(),
@@ -214,6 +205,8 @@ impl InputHandler {
     pub fn reset(&mut self) {
         self.main_pressed = false;
         self.alternate_pressed = false;
+        self.tertiary_pressed = false;
+
         self.main_move = None;
         self.scroll = None;
 
@@ -223,28 +216,38 @@ impl InputHandler {
     }
 
     pub fn update(&mut self, event: GameInputEvent) {
-        match event.window {
-            GameWindowEvent::MainPos { pos } => {
+        match event {
+            GameInputEvent::MainPos { pos } => {
                 self.main_pos = pos;
             }
-            GameWindowEvent::MainPressed => {
+            GameInputEvent::MainMove { delta } => {
+                self.main_move = Some(delta);
+            }
+            GameInputEvent::MouseWheel { delta } => {
+                self.scroll = Some(delta);
+            }
+            GameInputEvent::MainPressed => {
                 self.main_pressed = true;
                 self.main_held = true;
             }
-            GameWindowEvent::MainReleased => {
+            GameInputEvent::MainReleased => {
                 self.main_held = false;
             }
-            GameWindowEvent::AlternatePressed => {
+            GameInputEvent::AlternatePressed => {
                 self.alternate_pressed = true;
                 self.alternate_held = true;
             }
-            GameWindowEvent::AlternateReleased => {
+            GameInputEvent::AlternateReleased => {
                 self.alternate_held = false;
             }
-            GameWindowEvent::MouseWheel { delta } => {
-                self.scroll = Some(delta);
+            GameInputEvent::TertiaryPressed => {
+                self.tertiary_pressed = true;
+                self.tertiary_held = true;
             }
-            GameWindowEvent::ModifierChanged { modifier } => {
+            GameInputEvent::TertiaryReleased => {
+                self.tertiary_held = false;
+            }
+            GameInputEvent::ModifierChanged { modifier } => {
                 self.shift_held = false;
                 self.control_held = false;
 
@@ -255,7 +258,7 @@ impl InputHandler {
                     self.control_held = true;
                 }
             }
-            GameWindowEvent::KeyboardEvent {
+            GameInputEvent::KeyboardEvent {
                 input:
                     KeyboardInput {
                         state,
@@ -266,9 +269,6 @@ impl InputHandler {
                 self.handle_key(state, virtual_keycode);
             }
             _ => {}
-        }
-        if let GameDeviceEvent::MainMove { delta } = event.device {
-            self.main_move = Some(delta);
         }
     }
 

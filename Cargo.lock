@@ -1398,7 +1398,7 @@ checksum = "fed44880c466736ef9a5c5b5facefb5ed0785676d0c02d612db14e54f0d84286"
 [[package]]
 name = "hexagon-tiles"
 version = "0.2.0"
-source = "git+https://github.com/Mg138/hexagon-tiles#ee2397f32f7f34410a9f2a634c29c513f6bf2ef9"
+source = "git+https://github.com/sorcerers-class/hexagon-tiles#ee2397f32f7f34410a9f2a634c29c513f6bf2ef9"
 dependencies = [
  "float_eq",
  "num",

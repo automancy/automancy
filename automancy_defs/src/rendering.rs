@@ -3,18 +3,10 @@ use std::mem::size_of;
 use bytemuck::{Pod, Zeroable};
 use cgmath::SquareMatrix;
 use egui::ecolor::{linear_f32_from_gamma_u8, linear_f32_from_linear_u8};
-use hexagon_tiles::layout::{Layout, LAYOUT_ORIENTATION_POINTY};
-use hexagon_tiles::point::Point;
 use ply_rs::ply::{Property, PropertyAccess};
 use wgpu::{vertex_attr_array, BufferAddress, VertexAttribute, VertexBufferLayout, VertexStepMode};
 
-use crate::cg::{Float, Matrix4, Point3, Vector3};
-
-pub const HEX_GRID_LAYOUT: Layout = Layout {
-    orientation: LAYOUT_ORIENTATION_POINTY,
-    size: Point { x: 1.0, y: 1.0 },
-    origin: Point { x: 0.0, y: 0.0 },
-};
+use crate::math::{Float, Matrix4, Point3, Vector3};
 
 // vertex
 

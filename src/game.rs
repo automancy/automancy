@@ -7,26 +7,23 @@ use arraydeque::{ArrayDeque, Wrapping};
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort, SupervisionEvent};
 use rayon::prelude::*;
 
-use automancy_defs::cg::{Float, Matrix4};
 use automancy_defs::cgmath::vec3;
 use automancy_defs::coord::{TileCoord, TileHex, TileUnit};
 use automancy_defs::hashbrown::HashMap;
-use automancy_defs::hexagon_tiles::layout::hex_to_pixel;
 use automancy_defs::hexagon_tiles::traits::HexDirection;
 use automancy_defs::id::Id;
-use automancy_defs::log;
-use automancy_defs::rendering::{InstanceData, HEX_GRID_LAYOUT};
+use automancy_defs::math::{Float, Matrix4, FAR};
+use automancy_defs::rendering::InstanceData;
+use automancy_defs::{log, math};
 use automancy_resources::data::item::item_match;
 use automancy_resources::data::stack::ItemStack;
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::script::Script;
 use automancy_resources::ResourceManager;
 
-use crate::camera::FAR;
 use crate::game::GameMsg::*;
 use crate::map::{Map, MapInfo, TileEntities};
 use crate::tile_entity::{TileEntity, TileEntityMsg, TileModifier};
-use crate::util::render::is_in_culling_range;
 
 /// Miscellaneous updates per second -- e.g. Camera Position.
 pub const UPS: u64 = 60;
@@ -326,7 +323,7 @@ impl Actor for Game {
                                     .tile_entities
                                     .iter()
                                     .filter(|(coord, _)| {
-                                        is_in_culling_range(center, **coord, culling_range)
+                                        math::is_in_culling_range(center, **coord, culling_range)
                                     })
                                     .map(|(coord, entity)| (*coord, entity.clone()))
                                     .collect(),
@@ -551,7 +548,7 @@ fn render_info(
         .map
         .tiles
         .iter()
-        .filter(|(coord, _)| is_in_culling_range(center, **coord, culling_range))
+        .filter(|(coord, _)| math::is_in_culling_range(center, **coord, culling_range))
         .flat_map(|(coord, (id, tile_modifier))| {
             state
                 .resource_man
@@ -559,7 +556,7 @@ fn render_info(
                 .tile(*id)
                 .and_then(|r| r.models.get(*tile_modifier as usize).cloned())
                 .map(|model| {
-                    let p = hex_to_pixel(HEX_GRID_LAYOUT, (*coord).into());
+                    let p = math::hex_to_pixel((*coord).into());
 
                     (
                         *coord,

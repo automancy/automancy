@@ -1,11 +1,10 @@
 use std::error::Error;
 use std::fs;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use egui::Frame;
 use ractor::concurrency::JoinHandle;
 use ractor::{Actor, ActorRef};
-use winit::window::Window;
 
 use automancy::camera::Camera;
 use automancy::game::{Game, GameMsg, TICK_INTERVAL};
@@ -32,12 +31,10 @@ pub struct GameSetup {
     pub game: ActorRef<GameMsg>,
     /// the game's async handle, for graceful shutdown
     pub game_handle: Option<JoinHandle<()>>,
-    /// async handle for things updating on interval e.g. camera, for graceful shutdown
-    pub update_handle: Option<JoinHandle<()>>,
     /// the egui frame
     pub frame: Frame,
     /// the camera
-    pub camera: Arc<Mutex<Camera>>,
+    pub camera: Camera,
     /// the last camera position, in chunk coord
     pub camera_chunk_coord: ChunkCoord,
     /// the list of available maps
@@ -50,10 +47,7 @@ pub struct GameSetup {
 
 impl GameSetup {
     /// Initializes the game, filling all the necessary fields as well as returns the loaded vertices and indices.
-    pub async fn setup(
-        _window: &Window,
-        camera: Arc<Mutex<Camera>>,
-    ) -> Result<(Self, Vec<Vertex>, Vec<u16>), Box<dyn Error>> {
+    pub async fn setup(camera: Camera) -> Result<(Self, Vec<Vertex>, Vec<u16>), Box<dyn Error>> {
         // --- resources & data ---
         log::info!("initializing audio backend...");
         let mut audio_man = AudioManager::<CpalBackend>::new(AudioManagerSettings::default())?;
@@ -92,7 +86,7 @@ impl GameSetup {
         // --- last setup ---
         let frame = gui::default_frame();
 
-        let camera_coord = camera.lock().unwrap().get_tile_coord();
+        let camera_coord = camera.get_tile_coord();
 
         // --- event-loop ---
         Ok((
@@ -101,7 +95,6 @@ impl GameSetup {
                 resource_man,
                 game,
                 game_handle: Some(game_handle),
-                update_handle: None,
                 frame,
                 camera,
                 camera_chunk_coord: camera_coord.into(),

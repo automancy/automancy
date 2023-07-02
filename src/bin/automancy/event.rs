@@ -12,23 +12,20 @@ use wgpu::SurfaceError;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::ControlFlow;
 
-use automancy::camera::FAR;
 use automancy::game::{GameMsg, PlaceTileResponse};
-use automancy::gpu::{window_size_double, window_size_float};
+use automancy::input;
 use automancy::input::KeyActions;
 use automancy::renderer::Renderer;
 use automancy::tile_entity::{TileEntityMsg, TileModifier};
-use automancy::util::render::{hex_to_normalized, screen_to_normalized, screen_to_world};
-use automancy::{gpu, input};
-use automancy_defs::cg::{matrix, Float, Matrix4};
 use automancy_defs::cgmath::{point2, vec3, EuclideanSpace};
 use automancy_defs::colors::WithAlpha;
 use automancy_defs::coord::{ChunkCoord, TileCoord};
 use automancy_defs::gui::Gui;
 use automancy_defs::hashbrown::{HashMap, HashSet};
 use automancy_defs::id::Id;
+use automancy_defs::math::{Float, Matrix4, FAR};
 use automancy_defs::rendering::InstanceData;
-use automancy_defs::{colors, log};
+use automancy_defs::{colors, log, math, window};
 use automancy_resources::data::item::Item;
 use automancy_resources::data::Data;
 
@@ -64,7 +61,7 @@ pub struct EventLoopStorage {
     /// tile currently linking
     pub linking_tile: Option<TileCoord>,
     /// the last frame's starting time
-    pub last_frame_start: Instant,
+    pub frame_start: Instant,
     /// the elapsed time between each frame
     pub elapsed: Duration,
     /// the currently selected tiles
@@ -92,7 +89,7 @@ impl Default for EventLoopStorage {
             config_open: None,
             tag_cache: Default::default(),
             linking_tile: None,
-            last_frame_start: Instant::now(),
+            frame_start: Instant::now(),
             elapsed: Default::default(),
             selected_tiles: Default::default(),
             initial_cursor_position: None,
@@ -148,7 +145,6 @@ pub fn shutdown_graceful(
     setup.game.stop(Some("Game closed".to_string()));
 
     block_on(setup.game_handle.take().unwrap())?;
-    setup.update_handle.take().unwrap().abort();
 
     control_flow.set_exit();
 
@@ -213,21 +209,21 @@ pub fn on_event(
         return Ok(());
     }
 
-    let camera = setup.camera.clone();
-    let mut camera = camera.lock().unwrap();
-
     if window_event.is_some() || device_event.is_some() {
         setup.input_handler.reset();
-        setup
-            .input_handler
-            .update(input::convert_input(window_event, device_event));
+        setup.input_handler.update(input::convert_input(
+            window_event,
+            device_event,
+            window::window_size_double(&renderer.gpu.window),
+            1.0, //TODO sensitivity option
+        ));
 
         let ignore_move = loop_store.selected_id.is_some();
 
-        camera.handle_input(&setup.input_handler, ignore_move);
+        setup.camera.handle_input(&setup.input_handler, ignore_move);
 
         {
-            let camera_chunk_coord: ChunkCoord = camera.get_tile_coord().into();
+            let camera_chunk_coord: ChunkCoord = setup.camera.get_tile_coord().into();
 
             if setup.camera_chunk_coord != camera_chunk_coord {
                 setup.camera_chunk_coord = camera_chunk_coord;
@@ -256,11 +252,11 @@ pub fn on_event(
             || (setup.input_handler.shift_held && setup.input_handler.main_held)
         {
             if let Some(id) = loop_store.selected_id {
-                if loop_store.already_placed_at != Some(camera.pointing_at) {
+                if loop_store.already_placed_at != Some(setup.camera.pointing_at) {
                     let response = runtime
                         .block_on(setup.game.call(
                             |reply| GameMsg::PlaceTile {
-                                coord: camera.pointing_at,
+                                coord: setup.camera.pointing_at,
                                 id,
                                 tile_modifier:
                                     *loop_store.selected_tile_modifiers.get(&id).unwrap_or(&0),
@@ -288,7 +284,7 @@ pub fn on_event(
                         _ => {}
                     }
 
-                    loop_store.already_placed_at = Some(camera.pointing_at)
+                    loop_store.already_placed_at = Some(setup.camera.pointing_at)
                 }
             }
         }
@@ -296,17 +292,16 @@ pub fn on_event(
         if !setup.input_handler.control_held && setup.input_handler.alternate_pressed {
             if let Some(linking_tile) = loop_store.linking_tile {
                 let tile = runtime
-                    .block_on(
-                        setup
-                            .game
-                            .call(|reply| GameMsg::GetTile(camera.pointing_at, reply), None),
-                    )
+                    .block_on(setup.game.call(
+                        |reply| GameMsg::GetTile(setup.camera.pointing_at, reply),
+                        None,
+                    ))
                     .unwrap()
                     .unwrap();
 
                 let tile_entity = runtime
                     .block_on(setup.game.call(
-                        |reply| GameMsg::GetTileEntity(camera.pointing_at, reply),
+                        |reply| GameMsg::GetTileEntity(setup.camera.pointing_at, reply),
                         None,
                     ))
                     .unwrap()
@@ -346,7 +341,7 @@ pub fn on_event(
                             tile_entity
                                 .send_message(TileEntityMsg::SetDataValue(
                                     resource_man.registry.data_ids.link,
-                                    Data::Coord(linking_tile - camera.pointing_at),
+                                    Data::Coord(linking_tile - setup.camera.pointing_at),
                                 ))
                                 .unwrap();
 
@@ -373,18 +368,18 @@ pub fn on_event(
                     .audio_man
                     .play(resource_man.audio["click"].clone())
                     .unwrap();
-            } else if loop_store.config_open == Some(camera.pointing_at) {
+            } else if loop_store.config_open == Some(setup.camera.pointing_at) {
                 loop_store.config_open = None;
                 loop_store.filter_input.clear();
             } else {
-                loop_store.config_open = Some(camera.pointing_at);
+                loop_store.config_open = Some(setup.camera.pointing_at);
             }
         }
 
         if setup.input_handler.control_held && loop_store.gui_state == GuiState::Ingame {
             if let Some(start) = loop_store.initial_cursor_position {
-                if setup.input_handler.alternate_pressed {
-                    let direction = camera.pointing_at - start;
+                if setup.input_handler.tertiary_pressed {
+                    let direction = setup.camera.pointing_at - start;
 
                     setup
                         .game
@@ -414,8 +409,8 @@ pub fn on_event(
                         .play(resource_man.audio["click"].clone()) // TODO click2
                         .unwrap();
                 }
-            } else if setup.input_handler.alternate_pressed {
-                loop_store.initial_cursor_position = Some(camera.pointing_at);
+            } else if setup.input_handler.tertiary_pressed {
+                loop_store.initial_cursor_position = Some(setup.camera.pointing_at);
                 setup
                     .audio_man
                     .play(resource_man.audio["click"].clone())
@@ -423,7 +418,7 @@ pub fn on_event(
             }
 
             if loop_store.initial_cursor_position.is_none() {
-                loop_store.selected_tiles.insert(camera.pointing_at);
+                loop_store.selected_tiles.insert(setup.camera.pointing_at);
             }
         } else {
             loop_store.selected_tiles.clear();
@@ -436,19 +431,24 @@ pub fn on_event(
     }
 
     if event == Event::RedrawRequested(renderer.gpu.window.id()) {
+        loop_store.frame_start = Instant::now();
+
         let mut gui_instances = vec![];
         let mut overlay = vec![];
 
-        loop_store.last_frame_start = Instant::now();
-
-        camera.update_pointing_at(
+        setup.camera.update_pointing_at(
             setup.input_handler.main_pos,
-            window_size_double(&renderer.gpu.window),
+            window::window_size_double(&renderer.gpu.window),
         );
 
-        let (width, height) = window_size_float(&renderer.gpu.window);
+        setup.camera.update_pos(
+            window::window_size_double(&renderer.gpu.window),
+            loop_store.elapsed.as_secs_f64(),
+        );
+
+        let (width, height) = window::window_size_float(&renderer.gpu.window);
         let aspect = width / height;
-        let matrix = matrix(camera.get_pos().cast().unwrap(), aspect, PI);
+        let matrix = math::matrix(setup.camera.get_pos().cast().unwrap(), aspect, PI);
 
         let (selection_send, mut selection_recv) = mpsc::channel(1);
 
@@ -480,17 +480,16 @@ pub fn on_event(
                     );
 
                     // tile_info
-                    tile_info::tile_info(runtime, setup, &camera, &mut gui_instances, &gui.context);
+                    tile_info::tile_info(runtime, setup, &mut gui_instances, &gui.context);
 
                     // tile_config
                     tile_config::tile_config(
                         runtime,
                         setup,
-                        &camera,
                         loop_store,
                         &mut gui_instances,
                         &gui.context,
-                        window_size_double(&renderer.gpu.window),
+                        window::window_size_double(&renderer.gpu.window),
                         &mut overlay,
                     );
 
@@ -504,13 +503,13 @@ pub fn on_event(
                         }
                     }
 
-                    let mouse_pos = screen_to_world(
-                        window_size_double(&renderer.gpu.window),
+                    let mouse_pos = math::screen_to_world(
+                        window::window_size_double(&renderer.gpu.window),
                         setup.input_handler.main_pos,
-                        camera.get_pos().z,
+                        setup.camera.get_pos().z,
                     );
                     let mouse_pos = point2(mouse_pos.x, mouse_pos.y);
-                    let mouse_pos = mouse_pos + camera.get_pos().to_vec().truncate();
+                    let mouse_pos = mouse_pos + setup.camera.get_pos().to_vec().truncate();
 
                     if let Some(id) = loop_store.selected_id {
                         if let Some(model) = resource_man.registry.tile(id).and_then(|v| {
@@ -543,20 +542,20 @@ pub fn on_event(
                             gui_instances.push((
                                 instance,
                                 model,
-                                gpu::window_size_rect(&renderer.gpu.window),
+                                window::window_size_rect(&renderer.gpu.window),
                                 (1.0, 0.0),
                             ));
                         }
                     }
 
                     if let Some(coord) = loop_store.linking_tile {
-                        let (a, w) = hex_to_normalized(
-                            window_size_double(&renderer.gpu.window),
-                            camera.get_pos(),
+                        let (a, w) = math::hex_to_normalized(
+                            window::window_size_double(&renderer.gpu.window),
+                            setup.camera.get_pos(),
                             coord,
                         );
-                        let b = screen_to_normalized(
-                            window_size_double(&renderer.gpu.window),
+                        let b = math::screen_to_normalized(
+                            window::window_size_double(&renderer.gpu.window),
                             setup.input_handler.main_pos,
                         );
 
@@ -577,7 +576,7 @@ pub fn on_event(
             }
         }
 
-        tile_tints.insert(camera.pointing_at, colors::RED.with_alpha(0.2));
+        tile_tints.insert(setup.camera.pointing_at, colors::RED.with_alpha(0.2));
 
         for selected in &loop_store.selected_tiles {
             tile_tints.insert(*selected, colors::ORANGE.with_alpha(0.5));
@@ -585,18 +584,17 @@ pub fn on_event(
 
         if setup.input_handler.control_held {
             if let Some(start) = loop_store.initial_cursor_position {
-                let direction = camera.pointing_at - start;
+                let direction = setup.camera.pointing_at - start;
 
-                // TODO wrapper around hex_to_pixel
-                let (a, w0) = hex_to_normalized(
-                    window_size_double(&renderer.gpu.window),
-                    camera.get_pos(),
+                let (a, w0) = math::hex_to_normalized(
+                    window::window_size_double(&renderer.gpu.window),
+                    setup.camera.get_pos(),
                     start,
                 );
-                let (b, w1) = hex_to_normalized(
-                    window_size_double(&renderer.gpu.window),
-                    camera.get_pos(),
-                    camera.pointing_at,
+                let (b, w1) = math::hex_to_normalized(
+                    window::window_size_double(&renderer.gpu.window),
+                    setup.camera.get_pos(),
+                    setup.camera.pointing_at,
                 );
 
                 overlay.extend_from_slice(&make_line(a, b, (w0 + w1) / 2.0, colors::LIGHT_BLUE));
@@ -617,8 +615,8 @@ pub fn on_event(
         let render_info = runtime
             .block_on(setup.game.call(
                 |reply| GameMsg::RenderInfoRequest {
-                    culling_range: camera.culling_range,
-                    center: camera.get_tile_coord(),
+                    culling_range: setup.camera.culling_range,
+                    center: setup.camera.get_tile_coord(),
                     reply,
                 },
                 None,
@@ -628,10 +626,10 @@ pub fn on_event(
         match renderer.render(
             runtime,
             setup.resource_man.clone(),
-            camera.get_pos().cast().unwrap(),
-            camera.get_tile_coord(),
+            setup.camera.get_pos().cast().unwrap(),
+            setup.camera.get_tile_coord(),
             matrix,
-            camera.culling_range,
+            setup.camera.culling_range,
             setup.game.clone(),
             &render_info,
             tile_tints,
@@ -644,7 +642,8 @@ pub fn on_event(
             Err(SurfaceError::OutOfMemory) => shutdown_graceful(setup, control_flow).unwrap(),
             Err(e) => log::error!("{e:?}"),
         }
-        loop_store.elapsed = Instant::now().duration_since(loop_store.last_frame_start);
+
+        loop_store.elapsed = Instant::now().duration_since(loop_store.frame_start);
     }
     Ok(())
 }

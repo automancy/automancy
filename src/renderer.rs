@@ -12,23 +12,19 @@ use wgpu::{
 };
 use winit::dpi::PhysicalSize;
 
-use automancy_defs::bytemuck;
-use automancy_defs::cg::{deg, Double, Float, Matrix4, Point3};
 use automancy_defs::cgmath::{vec3, SquareMatrix};
 use automancy_defs::coord::{TileCoord, TileUnit};
 use automancy_defs::gui::Gui;
 use automancy_defs::hashbrown::HashMap;
 use automancy_defs::hexagon_tiles::fractional::FractionalHex;
-use automancy_defs::hexagon_tiles::layout::{frac_hex_to_pixel, hex_to_pixel};
 use automancy_defs::hexagon_tiles::traits::HexRound;
 use automancy_defs::id::Id;
-use automancy_defs::rendering::{
-    GameUBO, InstanceData, OverlayUBO, RawInstanceData, Vertex, HEX_GRID_LAYOUT,
-};
+use automancy_defs::math::{deg, Double, Float, Matrix4, Point3, FAR};
+use automancy_defs::rendering::{GameUBO, InstanceData, OverlayUBO, RawInstanceData, Vertex};
+use automancy_defs::{bytemuck, math};
 use automancy_resources::data::Data;
 use automancy_resources::ResourceManager;
 
-use crate::camera::FAR;
 use crate::game::{GameMsg, RenderInfo, RenderUnit, TickUnit, ANIMATION_SPEED};
 use crate::gpu;
 use crate::gpu::{Gpu, GUI_INSTANCE_BUFFER, OVERLAY_VERTEX_BUFFER};
@@ -192,7 +188,7 @@ impl Renderer {
                     let coord = TileCoord::new(q, r);
 
                     if !instances.contains_key(&coord) {
-                        let p = hex_to_pixel(HEX_GRID_LAYOUT, coord.into());
+                        let p = math::hex_to_pixel(coord.into());
 
                         instances.insert(
                             coord,
@@ -248,7 +244,7 @@ impl Renderer {
             let a = FractionalHex::new(source_coord.q() as Double, source_coord.r() as Double);
             let b = FractionalHex::new(coord.q() as Double, coord.r() as Double);
             let lerp = a.lerp(b, t);
-            let point = frac_hex_to_pixel(HEX_GRID_LAYOUT, lerp);
+            let point = math::frac_hex_to_pixel(lerp);
 
             let instance = InstanceData::default().with_model_matrix(
                 Matrix4::from_translation(vec3(point.x as Float, point.y as Float, FAR as Float))

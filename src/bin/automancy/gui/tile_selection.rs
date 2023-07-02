@@ -6,10 +6,11 @@ use futures::channel::mpsc;
 
 use automancy::renderer::GuiInstances;
 use automancy::tile_entity::TileModifier;
-use automancy_defs::cg::{perspective, Matrix4, Vector3};
 use automancy_defs::cgmath::{point3, vec3};
 use automancy_defs::hashbrown::HashMap;
 use automancy_defs::id::Id;
+use automancy_defs::math;
+use automancy_defs::math::{Matrix4, Vector3};
 use automancy_defs::rendering::InstanceData;
 
 use crate::gui::default_frame;
@@ -59,7 +60,7 @@ fn draw_tile_selection(
             }
 
             let pos = point3(0.0, 1.0 * hover + 0.5, 3.0 - 0.5 * hover);
-            let matrix = perspective(FRAC_PI_4, 1.0, 0.01, 10.0)
+            let matrix = math::perspective(FRAC_PI_4, 1.0, 0.01, 10.0)
                 * Matrix4::look_to_rh(pos, vec3(0.0, 0.5 * hover + 0.2, 1.0), Vector3::unit_y());
 
             gui_instances.push((

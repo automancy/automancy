@@ -1,20 +1,15 @@
-use std::sync::{Arc, Mutex};
-
 use env_logger::Env;
 use expect_dialog::ExpectDialog;
 use futures::executor::block_on;
 use tokio::runtime::Runtime;
-use tokio::time::interval;
 use winit::event_loop::EventLoop;
 use winit::window::{Icon, WindowBuilder};
 
 use automancy::camera::Camera;
-use automancy::game::UPDATE_INTERVAL;
-use automancy::gpu;
 use automancy::gpu::{Gpu, DEPTH_FORMAT};
 use automancy::renderer::Renderer;
 use automancy_defs::gui::init_gui;
-use automancy_defs::log;
+use automancy_defs::{log, window};
 
 use crate::event::{on_event, EventLoopStorage};
 use crate::setup::GameSetup;
@@ -48,11 +43,11 @@ fn main() {
         .build(&event_loop)
         .expect_dialog("Failed to open window!");
 
-    let camera = Arc::new(Mutex::new(Camera::new(gpu::window_size_double(&window))));
+    let camera = Camera::new(window::window_size_double(&window));
 
     // --- setup ---
     let (mut setup, vertices, indices) = runtime
-        .block_on(GameSetup::setup(&window, camera.clone()))
+        .block_on(GameSetup::setup(camera))
         .expect_dialog("Critical failure in game setup!");
 
     // --- render ---
@@ -71,26 +66,6 @@ fn main() {
     let mut renderer = Renderer::new(setup.resource_man.clone(), gpu);
 
     let mut storage = EventLoopStorage::default();
-
-    let update_handle = {
-        let camera = camera;
-        let window = renderer.gpu.window.clone();
-
-        runtime.spawn(async move {
-            let mut interval = interval(UPDATE_INTERVAL);
-
-            loop {
-                camera
-                    .lock()
-                    .unwrap()
-                    .update_pos(gpu::window_size_double(&window));
-
-                interval.tick().await;
-            }
-        })
-    };
-
-    setup.update_handle = Some(update_handle);
 
     event_loop.run(move |event, _, control_flow| {
         let _ = on_event(

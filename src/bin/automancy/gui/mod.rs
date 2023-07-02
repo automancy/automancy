@@ -2,9 +2,9 @@ use egui::epaint::Shadow;
 use egui::{Frame, Rgba, Rounding, ScrollArea, Ui};
 use fuse_rust::Fuse;
 
-use automancy_defs::cg::{DPoint2, Double, Float};
 use automancy_defs::cgmath::MetricSpace;
 use automancy_defs::id::Id;
+use automancy_defs::math::{DPoint2, Double, Float};
 use automancy_defs::rendering::Vertex;
 use automancy_defs::{cgmath, colors};
 use automancy_resources::ResourceManager;

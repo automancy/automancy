@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use egui::{pos2, Rect};
 use slice_group_by::GroupBy;
 use wgpu::util::{BufferInitDescriptor, DeviceExt, DrawIndexedIndirect};
 use wgpu::{
@@ -18,7 +17,6 @@ use wgpu::{
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
-use automancy_defs::cg::{Double, Float};
 use automancy_defs::id::Id;
 use automancy_defs::rendering::{GameUBO, OverlayUBO, RawInstanceData, Vertex};
 use automancy_defs::{bytemuck, shaders};
@@ -59,27 +57,6 @@ pub const GUI_DEPTH_TEXTURE: Option<&str> = Some("Gui Depth Texture");
 pub const GUI_INSTANCE_BUFFER: Option<&str> = Some("Gui Instance Buffer");
 
 pub const OVERLAY_VERTEX_BUFFER: Option<&str> = Some("Overlay Vertex Buffer");
-
-// TODO use these!
-// TODO move to window::
-
-pub fn window_size_rect(window: &Window) -> Rect {
-    let (width, height) = window_size_float(window);
-
-    Rect::from_min_max(pos2(0.0, 0.0), pos2(width, height))
-}
-
-pub fn window_size_double(window: &Window) -> (Double, Double) {
-    window.inner_size().cast::<Double>().into()
-}
-
-pub fn window_size_float(window: &Window) -> (Float, Float) {
-    window.inner_size().cast::<Float>().into()
-}
-
-pub fn window_size_u32(window: &Window) -> (u32, u32) {
-    window.inner_size().into()
-}
 
 pub fn indirect_instance(
     device: &Device,
