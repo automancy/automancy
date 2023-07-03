@@ -1,6 +1,6 @@
 use automancy_defs::hashbrown::HashMap;
-use automancy_defs::id::{id_static, Id, Interner};
-use automancy_macros::make_ids;
+use automancy_defs::id::Id;
+use automancy_macros::IdReg;
 
 use crate::data::item::Item;
 use crate::script::Script;
@@ -43,7 +43,7 @@ impl Registry {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, IdReg)]
 pub struct TileIds {
     pub machine: Id,
     pub transfer: Id,
@@ -55,22 +55,7 @@ pub struct TileIds {
     pub node: Id,
 }
 
-impl TileIds {
-    pub fn new(interner: &mut Interner) -> Self {
-        make_ids! {
-            machine,
-            transfer,
-            void,
-            storage,
-            merger,
-            splitter,
-            master_node,
-            node
-        }
-    }
-}
-
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, IdReg)]
 pub struct DataIds {
     pub script: Id,
     pub scripts: Id,
@@ -82,38 +67,16 @@ pub struct DataIds {
     pub link: Id,
 }
 
-impl DataIds {
-    pub fn new(interner: &mut Interner) -> Self {
-        make_ids! {
-            script,
-            scripts,
-            buffer,
-            storage,
-            storage_type,
-            amount,
-            target,
-            link
-        }
-    }
-}
-
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, IdReg)]
 pub struct ModelIds {
+    #[namespace(core)]
     pub missing: Id,
+    #[namespace(core)]
     pub items_missing: Id,
 }
 
-impl ModelIds {
-    pub fn new(interner: &mut Interner) -> Self {
-        make_ids! {
-            missing,
-            items_missing,
-        }
-    }
-}
-
 /// The list of GUI translation keys.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, IdReg)]
 pub struct GuiIds {
     pub tile_config: Id,
     pub tile_info: Id,
@@ -150,60 +113,11 @@ pub struct GuiIds {
     pub time_fmt: Id,
 }
 
-impl GuiIds {
-    pub fn new(interner: &mut Interner) -> Self {
-        make_ids! {
-            tile_config,
-            tile_info,
-            tile_config_script,
-            tile_config_storage,
-            tile_config_target,
-            error_popup,
-            debug_menu,
-            load_map,
-            delete_map,
-            create_map,
-            invalid_name,
-            options,
-
-            lbl_amount,
-            lbl_link_destination,
-            lbl_maps_loaded,
-            lbl_pick_another_name,
-            lbl_delete_map_confirm,
-
-            btn_confirm,
-            btn_exit,
-            btn_cancel,
-            btn_link_network,
-            btn_play,
-            btn_options,
-            btn_fedi,
-            btn_source,
-            btn_unpause,
-            btn_load,
-            btn_delete,
-            btn_new_map,
-
-            time_fmt
-        }
-    }
-}
-
 /// Contains a list of errors that can be displayed.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, IdReg)]
 pub struct ErrorIds {
     /// This error is displayed when the map cannot be read.
     pub invalid_map_data: Id,
     /// This error is displayed when the options cannot be written.
     pub unwritable_options: Id,
-}
-
-impl ErrorIds {
-    pub fn new(interner: &mut Interner) -> Self {
-        make_ids! {
-            invalid_map_data,
-            unwritable_options
-        }
-    }
 }

@@ -9,3 +9,7 @@ edition = "2021"
 proc_macro = true
 
 [dependencies]
+automancy_defs = { workspace = true }
+
+syn = "2.0.18"
+proc-macro2 = "1.0.60"

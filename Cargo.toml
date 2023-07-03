@@ -83,3 +83,5 @@ async-trait = "0.1.68"
 futures = "0.3.28"
 ractor = "0.8"
 tokio = { version = "1", features = ["full"] }
+
+dyon = "0.48.1"
