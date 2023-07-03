@@ -525,7 +525,7 @@ pub fn on_event(
                         }) {
                             let time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
 
-                            let glow = (time.as_secs_f64() * 1.5).sin().abs() / 3.0;
+                            let glow = (time.as_secs_f64() * 1.2).sin().abs() / 4.0;
 
                             let instance = InstanceData {
                                 model_matrix: matrix
@@ -543,7 +543,6 @@ pub fn on_event(
                                 instance,
                                 model,
                                 window::window_size_rect(&renderer.gpu.window),
-                                (1.0, 0.0),
                             ));
                         }
                     }

@@ -555,6 +555,7 @@ fn render_info(
                 .registry
                 .tile(*id)
                 .and_then(|r| r.models.get(*tile_modifier as usize).cloned())
+                .map(|id| state.resource_man.get_model(id))
                 .map(|model| {
                     let p = math::hex_to_pixel((*coord).into());
 

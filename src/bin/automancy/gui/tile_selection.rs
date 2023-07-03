@@ -38,7 +38,8 @@ fn draw_tile_selection(
                 .unwrap()
                 .models
                 .get(*selected_tile_modifiers.get(id).unwrap_or(&0) as usize)
-                .map(|model| (*id, *model))
+                .map(|id| setup.resource_man.get_model(*id))
+                .map(|model| (*id, model))
         })
         .for_each(|(id, model)| {
             let (rect, response) = ui.allocate_exact_size(vec2(size, size), Sense::click());
@@ -67,7 +68,6 @@ fn draw_tile_selection(
                 InstanceData::default().with_model_matrix(matrix),
                 model,
                 rect,
-                (1.0, 0.0),
             ));
         });
 }

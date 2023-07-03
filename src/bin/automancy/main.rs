@@ -6,7 +6,7 @@ use winit::event_loop::EventLoop;
 use winit::window::{Icon, WindowBuilder};
 
 use automancy::camera::Camera;
-use automancy::gpu::{Gpu, DEPTH_FORMAT};
+use automancy::gpu::Gpu;
 use automancy::renderer::Renderer;
 use automancy_defs::gui::init_gui;
 use automancy_defs::{log, window};
@@ -58,7 +58,7 @@ fn main() {
     // --- gui ---
     log::info!("setting up gui...");
     let mut gui = init_gui(
-        egui_wgpu::Renderer::new(&gpu.device, gpu.config.format, Some(DEPTH_FORMAT), 4),
+        egui_wgpu::Renderer::new(&gpu.device, gpu.config.format, None, 1),
         &gpu.window,
     );
     log::info!("gui set up.");

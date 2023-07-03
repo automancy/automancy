@@ -92,7 +92,7 @@ pub fn indirect_instance(
         .scan(0, |init, ids| {
             let instance_count = ids.len() as u32;
 
-            let index_range = resource_man.index_ranges[&resource_man.get_model(ids[0])];
+            let index_range = resource_man.index_ranges[&ids[0]];
 
             let command = DrawIndexedIndirect {
                 base_index: index_range.offset,
@@ -148,23 +148,18 @@ pub fn create_or_write_buffer(
 
 pub fn create_surface_texture(
     device: &Device,
-    config: &SurfaceConfiguration,
+    format: TextureFormat,
+    size: Extent3d,
     label: Option<&str>,
     sample_count: u32,
 ) -> (Texture, TextureView) {
-    let size = Extent3d {
-        width: config.width,
-        height: config.height,
-        depth_or_array_layers: 1,
-    };
-
     let texture = device.create_texture(&TextureDescriptor {
         label,
         size,
         mip_level_count: 1,
         sample_count,
         dimension: TextureDimension::D2,
-        format: config.format,
+        format,
         usage: TextureUsages::RENDER_ATTACHMENT
             | TextureUsages::TEXTURE_BINDING
             | TextureUsages::COPY_SRC,
@@ -176,24 +171,20 @@ pub fn create_surface_texture(
     (texture, view)
 }
 
-pub fn create_depth_texture(
+pub fn create_texture(
     device: &Device,
-    config: &SurfaceConfiguration,
+    format: TextureFormat,
+    size: Extent3d,
     label: Option<&str>,
+    sample_count: u32,
 ) -> (Texture, TextureView) {
-    let size = Extent3d {
-        width: config.width,
-        height: config.height,
-        depth_or_array_layers: 1,
-    };
-
     let texture = device.create_texture(&TextureDescriptor {
         label,
         size,
         mip_level_count: 1,
-        sample_count: 4,
+        sample_count,
         dimension: TextureDimension::D2,
-        format: DEPTH_FORMAT,
+        format,
         usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
         view_formats: &[],
     });
@@ -201,6 +192,14 @@ pub fn create_depth_texture(
     let view = texture.create_view(&TextureViewDescriptor::default());
 
     (texture, view)
+}
+
+fn extent3d(config: &SurfaceConfiguration) -> Extent3d {
+    Extent3d {
+        width: config.width,
+        height: config.height,
+        depth_or_array_layers: 1,
+    }
 }
 
 fn game_setup(
@@ -288,13 +287,13 @@ fn game_setup(
 fn make_effects_bind_group(
     device: &Device,
     bind_group_layout: &BindGroupLayout,
-    game_texture: &TextureView,
+    surface_texture: &TextureView,
 ) -> BindGroup {
     device.create_bind_group(&BindGroupDescriptor {
         layout: bind_group_layout,
         entries: &[BindGroupEntry {
             binding: 0,
-            resource: BindingResource::TextureView(game_texture),
+            resource: BindingResource::TextureView(surface_texture),
         }],
         label: Some("effects_bind_group"),
     })
@@ -607,16 +606,23 @@ pub struct Gpu {
     pub vertex_buffer: Buffer,
     pub index_buffer: Buffer,
 
-    pub multisampled_texture: (Texture, TextureView),
+    pub multisampled_texture0: (Texture, TextureView),
+    pub multisampled_texture1: (Texture, TextureView),
+
     pub game_texture: (Texture, TextureView),
+    pub game_depth_texture: (Texture, TextureView),
     pub processed_game_texture: (Texture, TextureView),
     pub processed_game_sampler: Sampler,
+
     pub gui_texture: (Texture, TextureView),
     pub gui_sampler: Sampler,
+    pub gui_depth_texture: (Texture, TextureView),
+    pub processed_gui_texture: (Texture, TextureView),
+    pub processed_gui_sampler: Sampler,
+
     pub egui_texture: (Texture, TextureView),
     pub egui_sampler: Sampler,
 
-    pub game_depth_texture: (Texture, TextureView),
     pub game_instance_buffer: Buffer,
     pub game_indirect_buffer: Buffer,
     pub game_uniform_buffer: Buffer,
@@ -628,10 +634,10 @@ pub struct Gpu {
     pub extra_uniform_buffer: Buffer,
 
     pub effects_bind_group_layout: BindGroupLayout,
-    pub effects_bind_group: BindGroup,
+    pub game_effects_bind_group: BindGroup,
+    pub gui_effects_bind_group: BindGroup,
     pub effects_pipeline: RenderPipeline,
 
-    pub gui_depth_texture: (Texture, TextureView),
     pub gui_instance_buffer: Buffer,
     pub gui_uniform_buffer: Buffer,
     pub gui_bind_group: BindGroup,
@@ -669,24 +675,81 @@ impl Gpu {
         self.config.width = size.width;
         self.config.height = size.height;
 
-        self.multisampled_texture =
-            create_surface_texture(&self.device, &self.config, MULTISAMPLED_TEXTURE, 4);
+        self.multisampled_texture0 = create_surface_texture(
+            &self.device,
+            self.config.format,
+            extent3d(&self.config),
+            MULTISAMPLED_TEXTURE,
+            4,
+        );
+        self.multisampled_texture1 = create_surface_texture(
+            &self.device,
+            self.config.format,
+            extent3d(&self.config),
+            MULTISAMPLED_TEXTURE,
+            4,
+        );
 
-        self.game_texture = create_surface_texture(&self.device, &self.config, GAME_TEXTURE, 1);
-        self.processed_game_texture =
-            create_surface_texture(&self.device, &self.config, PROCESSED_GAME_TEXTURE, 1);
-        self.gui_texture = create_surface_texture(&self.device, &self.config, GUI_TEXTURE, 1);
-        self.egui_texture = create_surface_texture(&self.device, &self.config, EGUI_TEXTURE, 1);
+        self.game_texture = create_surface_texture(
+            &self.device,
+            self.config.format,
+            extent3d(&self.config),
+            GAME_TEXTURE,
+            1,
+        );
+        self.game_depth_texture = create_texture(
+            &self.device,
+            DEPTH_FORMAT,
+            extent3d(&self.config),
+            GAME_DEPTH_TEXTURE,
+            4,
+        );
+        self.processed_game_texture = create_surface_texture(
+            &self.device,
+            self.config.format,
+            extent3d(&self.config),
+            PROCESSED_GAME_TEXTURE,
+            1,
+        );
 
-        self.game_depth_texture =
-            create_depth_texture(&self.device, &self.config, GAME_DEPTH_TEXTURE);
-        self.gui_depth_texture =
-            create_depth_texture(&self.device, &self.config, GUI_DEPTH_TEXTURE);
+        self.gui_texture = create_surface_texture(
+            &self.device,
+            self.config.format,
+            extent3d(&self.config),
+            GUI_TEXTURE,
+            1,
+        );
+        self.gui_depth_texture = create_texture(
+            &self.device,
+            DEPTH_FORMAT,
+            extent3d(&self.config),
+            GUI_DEPTH_TEXTURE,
+            4,
+        );
+        self.processed_gui_texture = create_surface_texture(
+            &self.device,
+            self.config.format,
+            extent3d(&self.config),
+            GUI_TEXTURE,
+            1,
+        );
+        self.egui_texture = create_surface_texture(
+            &self.device,
+            self.config.format,
+            extent3d(&self.config),
+            EGUI_TEXTURE,
+            1,
+        );
 
-        self.effects_bind_group = make_effects_bind_group(
+        self.game_effects_bind_group = make_effects_bind_group(
             &self.device,
             &self.effects_bind_group_layout,
             &self.game_texture.1,
+        );
+        self.gui_effects_bind_group = make_effects_bind_group(
+            &self.device,
+            &self.effects_bind_group_layout,
+            &self.gui_texture.1,
         );
 
         self.combine_bind_group = make_combine_bind_group(
@@ -694,8 +757,8 @@ impl Gpu {
             &self.combine_bind_group_layout,
             &self.processed_game_texture.1,
             &self.processed_game_sampler,
-            &self.gui_texture.1,
-            &self.gui_sampler,
+            &self.processed_gui_texture.1,
+            &self.processed_gui_sampler,
             &self.egui_texture.1,
             &self.egui_sampler,
         );
@@ -757,6 +820,16 @@ impl Gpu {
 
         surface.configure(&device, &config);
 
+        let sampler_desc = SamplerDescriptor {
+            address_mode_u: AddressMode::ClampToEdge,
+            address_mode_v: AddressMode::ClampToEdge,
+            address_mode_w: AddressMode::ClampToEdge,
+            mag_filter: FilterMode::Linear,
+            min_filter: FilterMode::Linear,
+            mipmap_filter: FilterMode::Nearest,
+            ..Default::default()
+        };
+
         let vertex_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Vertex Buffer"),
             contents: bytemuck::cast_slice(vertices.as_slice()),
@@ -769,42 +842,57 @@ impl Gpu {
             usage: BufferUsages::INDEX,
         });
 
-        let multisampled_texture =
-            create_surface_texture(&device, &config, MULTISAMPLED_TEXTURE, 4);
-        let game_texture = create_surface_texture(&device, &config, GAME_TEXTURE, 1);
-        let processed_game_texture =
-            create_surface_texture(&device, &config, PROCESSED_GAME_TEXTURE, 1);
-        let processed_game_sampler = device.create_sampler(&SamplerDescriptor {
-            address_mode_u: AddressMode::ClampToEdge,
-            address_mode_v: AddressMode::ClampToEdge,
-            address_mode_w: AddressMode::ClampToEdge,
-            mag_filter: FilterMode::Linear,
-            min_filter: FilterMode::Nearest,
-            mipmap_filter: FilterMode::Nearest,
-            ..Default::default()
-        });
-        let gui_texture = create_surface_texture(&device, &config, GUI_TEXTURE, 1);
-        let gui_sampler = device.create_sampler(&SamplerDescriptor {
-            address_mode_u: AddressMode::ClampToEdge,
-            address_mode_v: AddressMode::ClampToEdge,
-            address_mode_w: AddressMode::ClampToEdge,
-            mag_filter: FilterMode::Linear,
-            min_filter: FilterMode::Nearest,
-            mipmap_filter: FilterMode::Nearest,
-            ..Default::default()
-        });
-        let egui_texture = create_surface_texture(&device, &config, EGUI_TEXTURE, 1);
-        let egui_sampler = device.create_sampler(&SamplerDescriptor {
-            address_mode_u: AddressMode::ClampToEdge,
-            address_mode_v: AddressMode::ClampToEdge,
-            address_mode_w: AddressMode::ClampToEdge,
-            mag_filter: FilterMode::Linear,
-            min_filter: FilterMode::Nearest,
-            mipmap_filter: FilterMode::Nearest,
-            ..Default::default()
-        });
+        let multisampled_texture0 = create_surface_texture(
+            &device,
+            config.format,
+            extent3d(&config),
+            MULTISAMPLED_TEXTURE,
+            4,
+        );
+        let multisampled_texture1 = create_surface_texture(
+            &device,
+            config.format,
+            extent3d(&config),
+            MULTISAMPLED_TEXTURE,
+            4,
+        );
 
-        let game_depth_texture = create_depth_texture(&device, &config, GAME_DEPTH_TEXTURE);
+        let game_texture =
+            create_surface_texture(&device, config.format, extent3d(&config), GAME_TEXTURE, 1);
+        let game_depth_texture = create_texture(
+            &device,
+            DEPTH_FORMAT,
+            extent3d(&config),
+            GAME_DEPTH_TEXTURE,
+            4,
+        );
+        let processed_game_texture = create_surface_texture(
+            &device,
+            config.format,
+            extent3d(&config),
+            PROCESSED_GAME_TEXTURE,
+            1,
+        );
+        let processed_game_sampler = device.create_sampler(&sampler_desc);
+
+        let gui_texture =
+            create_surface_texture(&device, config.format, extent3d(&config), GUI_TEXTURE, 1);
+        let gui_sampler = device.create_sampler(&sampler_desc);
+        let gui_depth_texture = create_texture(
+            &device,
+            DEPTH_FORMAT,
+            extent3d(&config),
+            GUI_DEPTH_TEXTURE,
+            4,
+        );
+        let processed_gui_texture =
+            create_surface_texture(&device, config.format, extent3d(&config), GUI_TEXTURE, 1);
+        let processed_gui_sampler = device.create_sampler(&sampler_desc);
+
+        let egui_texture =
+            create_surface_texture(&device, config.format, extent3d(&config), EGUI_TEXTURE, 1);
+        let egui_sampler = device.create_sampler(&sampler_desc);
+
         let game_instance_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: GAME_INSTANCE_BUFFER,
             contents: &[],
@@ -832,7 +920,6 @@ impl Gpu {
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
 
-        let gui_depth_texture = create_depth_texture(&device, &config, GUI_DEPTH_TEXTURE);
         let gui_instance_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: GUI_INSTANCE_BUFFER,
             contents: &[],
@@ -862,8 +949,10 @@ impl Gpu {
                 label: Some("effects_bind_group_layout"),
             });
 
-        let effects_bind_group =
+        let game_effects_bind_group =
             make_effects_bind_group(&device, &effects_bind_group_layout, &game_texture.1);
+        let gui_effects_bind_group =
+            make_effects_bind_group(&device, &effects_bind_group_layout, &gui_texture.1);
 
         let effects_pipeline = effects_setup(&device, &config, &effects_bind_group_layout);
 
@@ -932,8 +1021,8 @@ impl Gpu {
             &combine_bind_group_layout,
             &processed_game_texture.1,
             &processed_game_sampler,
-            &gui_texture.1,
-            &gui_sampler,
+            &processed_gui_texture.1,
+            &processed_gui_sampler,
             &egui_texture.1,
             &egui_sampler,
         );
@@ -953,16 +1042,23 @@ impl Gpu {
             vertex_buffer,
             index_buffer,
 
-            multisampled_texture,
+            multisampled_texture0,
+            multisampled_texture1,
+
             game_texture,
+            game_depth_texture,
             processed_game_texture,
             processed_game_sampler,
+
             gui_texture,
             gui_sampler,
+            gui_depth_texture,
+            processed_gui_texture,
+            processed_gui_sampler,
+
             egui_texture,
             egui_sampler,
 
-            game_depth_texture,
             game_instance_buffer,
             game_indirect_buffer,
             game_uniform_buffer,
@@ -974,10 +1070,10 @@ impl Gpu {
             extra_uniform_buffer,
 
             effects_bind_group_layout,
-            effects_bind_group,
+            game_effects_bind_group,
+            gui_effects_bind_group,
             effects_pipeline,
 
-            gui_depth_texture,
             gui_instance_buffer,
             gui_uniform_buffer,
             gui_bind_group,

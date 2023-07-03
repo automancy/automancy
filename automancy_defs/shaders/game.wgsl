@@ -57,7 +57,6 @@ fn vs_main(
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let light_color = ubo.light_color.rgb * 0.15;
     let light_dir = ubo.light_pos.xyz - in.model_pos;
-    let light_distance = length(light_dir);
 
     let norm = normalize(in.normal);
     let reflected = -reflect(normalize(light_dir), norm);

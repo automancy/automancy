@@ -174,7 +174,7 @@ static FIX_COORD: RawMat4 = [
 impl Default for GameUBO {
     fn default() -> Self {
         Self {
-            light_pos: [0.0, 0.0, 8.0, 1.0],
+            light_pos: [0.0, 0.0, 12.0, 1.0],
             light_color: DEFAULT_LIGHT_COLOR,
             world: FIX_COORD,
         }

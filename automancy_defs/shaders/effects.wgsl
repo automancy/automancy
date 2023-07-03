@@ -62,7 +62,7 @@ fn sobel(tex: vec2<i32>) -> vec3<f32> {
 
     let g = sqrt(pow(gx, 2.0) + pow(gy, 2.0));
 
-    return vec3(0.4) * smoothstep(0.3, 0.6, g);
+    return vec3(1.0) * smoothstep(0.3, 0.8, g);
 }
 
 @fragment
