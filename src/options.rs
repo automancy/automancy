@@ -15,6 +15,7 @@ use crate::input::{actions, KeyAction};
 #[derive(Serialize, Deserialize)]
 pub struct Options {
     pub graphics: GraphicsOptions,
+    pub audio: AudioOptions,
     pub keymap: HashMap<VirtualKeyCode, KeyAction>,
 }
 lazy_static! {
@@ -29,6 +30,7 @@ impl Default for Options {
     fn default() -> Self {
         Self {
             graphics: Default::default(),
+            audio: Default::default(),
             keymap: DEFAULT_KEYMAP.clone(),
         }
     }
@@ -61,7 +63,7 @@ impl Options {
     pub fn save(&mut self) -> Result<(), Box<dyn Error>> {
         let mut file = File::create(OPTIONS_PATH)?;
 
-        let body = toml::ser::to_string_pretty(self)?;
+        let body = toml::ser::to_string(self)?;
         write!(&mut file, "{body}")?;
 
         log::info!("Saved options!");
@@ -93,4 +95,9 @@ impl Default for GraphicsOptions {
             aa: AALevel::MSAA,
         }
     }
+}
+#[derive(Serialize, Deserialize, Default)]
+pub struct AudioOptions {
+    pub sfx_volume: f64,
+    pub music_volume: f64,
 }

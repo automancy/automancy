@@ -88,8 +88,7 @@ fn main() {
         renderer
             .gpu
             .set_vsync(setup.options.graphics.fps_limit == 0.0);
-        setup.options.graphics.fullscreen =
-            setup.input_handler.key_pressed(&KeyActions::FULLSCREEN);
+        setup.options.graphics.fullscreen = setup.input_handler.key_active(&KeyActions::FULLSCREEN);
         if setup.options.graphics.fullscreen {
             renderer
                 .gpu

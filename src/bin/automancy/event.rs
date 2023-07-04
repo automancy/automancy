@@ -232,7 +232,7 @@ pub fn on_event(
             }
         }
 
-        if setup.input_handler.key_pressed(&KeyActions::ESCAPE) {
+        if setup.input_handler.key_active(&KeyActions::ESCAPE) {
             // one by one
             if loop_store.selected_id.take().is_none() && loop_store.linking_tile.take().is_none() {
                 if loop_store.switch_gui_state_when(&|s| s == GuiState::Ingame, GuiState::Paused) {
@@ -425,7 +425,7 @@ pub fn on_event(
             loop_store.initial_cursor_position = None;
         }
 
-        if setup.input_handler.control_held && setup.input_handler.key_pressed(&KeyActions::UNDO) {
+        if setup.input_handler.control_held && setup.input_handler.key_active(&KeyActions::UNDO) {
             setup.game.send_message(GameMsg::Undo).unwrap();
         }
     }
@@ -596,7 +596,7 @@ pub fn on_event(
             }
         }
 
-        if setup.input_handler.key_pressed(&KeyActions::DEBUG) {
+        if setup.input_handler.key_active(&KeyActions::DEBUG) {
             debug::debugger(setup, gui, runtime, setup.game.clone(), loop_store);
         }
 
