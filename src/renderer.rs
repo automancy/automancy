@@ -77,7 +77,7 @@ fn get_angle_from_target(target: Option<&Data>) -> Option<Float> {
     }
 }
 
-pub type GuiInstances = Vec<(InstanceData, Id, Rect, Option<Rect>)>;
+pub type GuiInstances = Vec<(InstanceData, Id, Option<Rect>, Option<Rect>)>;
 
 impl Renderer {
     pub fn render(
@@ -434,7 +434,7 @@ impl Renderer {
             effects_pass.set_pipeline(&self.gpu.effects_pipeline);
             effects_pass.set_bind_group(0, &self.gpu.game_effects_bind_group, &[]);
 
-            effects_pass.draw(0..3, 0..1);
+            effects_pass.draw(0..4, 0..1);
         }
 
         let user_commands = {
@@ -508,8 +508,8 @@ impl Renderer {
 
             let (instances, draws): (Vec<_>, Vec<_>) = gui_instances
                 .into_iter()
-                .map(|(instance, id, rect, scissor)| {
-                    (RawInstanceData::from(instance), (id, rect, scissor))
+                .map(|(instance, id, viewport, scissor)| {
+                    (RawInstanceData::from(instance), (id, viewport, scissor))
                 })
                 .unzip();
 
@@ -535,17 +535,28 @@ impl Renderer {
 
             let factor = gui.context.pixels_per_point();
 
-            for (idx, (id, rect, scissor)) in draws.into_iter().enumerate() {
+            for (idx, (id, viewport, scissor)) in draws.into_iter().enumerate() {
                 let idx = idx as u32;
 
-                gui_pass.set_viewport(
-                    rect.left() * factor,
-                    rect.top() * factor,
-                    rect.width() * factor,
-                    rect.height() * factor,
-                    1.0,
-                    0.0,
-                );
+                if let Some(viewport) = viewport {
+                    gui_pass.set_viewport(
+                        viewport.left() * factor,
+                        viewport.top() * factor,
+                        viewport.width() * factor,
+                        viewport.height() * factor,
+                        1.0,
+                        0.0,
+                    );
+                } else {
+                    gui_pass.set_viewport(
+                        0.0,
+                        0.0,
+                        self.size.width as Float,
+                        self.size.height as Float,
+                        1.0,
+                        0.0,
+                    );
+                }
 
                 if let Some(scissor) = scissor {
                     gui_pass.set_scissor_rect(
@@ -554,6 +565,8 @@ impl Renderer {
                         (scissor.width() * factor) as u32,
                         (scissor.height() * factor) as u32,
                     );
+                } else {
+                    gui_pass.set_scissor_rect(0, 0, self.size.width, self.size.height);
                 }
 
                 let index_range = resource_man.index_ranges[&id];

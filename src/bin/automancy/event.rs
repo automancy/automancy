@@ -534,12 +534,7 @@ pub fn on_event(
                                 light_pos: setup.camera.get_pos().cast().unwrap(),
                             };
 
-                            gui_instances.push((
-                                instance,
-                                model,
-                                window::window_size_rect(&renderer.gpu.window),
-                                None,
-                            ));
+                            gui_instances.push((instance, model, None, None));
                         }
                     }
 

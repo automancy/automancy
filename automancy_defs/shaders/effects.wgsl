@@ -27,7 +27,7 @@ fn vs_main(
     return out;
 }
 
-fn sobel(tex: vec2<i32>) -> vec3<f32> {
+fn sobel(tex: vec2<i32>, size: vec2<i32>) -> f32 {
     let sx = mat3x3<f32>(
         1.0,  2.0,  1.0,
         0.0,  0.0,  0.0,
@@ -40,21 +40,19 @@ fn sobel(tex: vec2<i32>) -> vec3<f32> {
         1.0, 0.0, -1.0
     );
 
-    var m = mat3x3<f32>();
+    var m = mat3x3<f32>(
+        1.0, 1.0, 1.0,
+        1.0, 1.0, 1.0,
+        1.0, 1.0, 1.0
+    );
 
     for (var i = 0; i < 3; i++) {
         for (var j = 0; j < 3; j++) {
-            let s0 = textureLoad(frame, tex + vec2(i - 2, j - 2) + vec2( 0,  0), 0).rgb;
-            let s1 = textureLoad(frame, tex + vec2(i - 2, j - 2) + vec2(-1, -1), 0).rgb;
-            let s2 = textureLoad(frame, tex + vec2(i - 2, j - 2) + vec2(-1,  1), 0).rgb;
-            let s3 = textureLoad(frame, tex + vec2(i - 2, j - 2) + vec2( 1,  1), 0).rgb;
-            let s4 = textureLoad(frame, tex + vec2(i - 2, j - 2) + vec2( 1, -1), 0).rgb;
+            let t = tex + vec2(i - 2, j - 2);
 
-            let m0 = (s1 + s3) / 2.0;
-            let m1 = (s2 + s4) / 2.0;
-            let m2 = (m0 + m1) / 2.0;
+            let s = textureLoad(frame, clamp(vec2(0), t, size), 0).rgb;
 
-            m[i][j] = length((s0 + m2) / 2.0);
+            m[i][j] = length(s);
         }
     }
     let gx = dot(sx[0], m[0]) + dot(sx[1], m[1]) + dot(sx[2], m[2]);
@@ -62,17 +60,19 @@ fn sobel(tex: vec2<i32>) -> vec3<f32> {
 
     let g = sqrt(pow(gx, 2.0) + pow(gy, 2.0));
 
-    return vec3(1.0) * smoothstep(0.3, 0.8, g);
+    return smoothstep(0.5, 1.0, g);
 }
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let dim = vec2<f32>(textureDimensions(frame));
     let tex = vec2<i32>(in.uv * dim);
+    let size = vec2<i32>(dim);
 
     var color = textureLoad(frame, tex, 0);
+    let s = sobel(tex, size);
 
-    color += color * vec4(sobel(tex), 0.0);
+    color += color * vec4(vec3(s), 0.0);
 
     return color;
 }

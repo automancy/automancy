@@ -1,7 +1,7 @@
 use std::f32::consts::FRAC_PI_4;
 
 use egui::scroll_area::ScrollBarVisibility;
-use egui::{vec2, Context, CursorIcon, Margin, ScrollArea, Sense, TopBottomPanel, Ui};
+use egui::{vec2, Context, CursorIcon, Margin, ScrollArea, Sense, TopBottomPanel, Ui, Vec2};
 use futures::channel::mpsc;
 
 use automancy::renderer::GuiInstances;
@@ -10,7 +10,7 @@ use automancy_defs::cgmath::{point3, vec3};
 use automancy_defs::hashbrown::HashMap;
 use automancy_defs::id::Id;
 use automancy_defs::math;
-use automancy_defs::math::{Matrix4, Vector3};
+use automancy_defs::math::{Float, Matrix4, Vector3};
 use automancy_defs::rendering::InstanceData;
 
 use crate::gui::default_frame;
@@ -70,8 +70,8 @@ fn draw_tile_selection(
                     .with_model_matrix(matrix)
                     .with_light_pos(point3(0.0, 3.0, 4.0)),
                 model,
-                rect,
-                Some(ui.clip_rect()),
+                Some(rect),
+                Some(ui.clip_rect().shrink2(Vec2::new(2.0, 0.0))),
             ));
         });
 }
