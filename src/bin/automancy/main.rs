@@ -52,7 +52,13 @@ fn main() {
 
     // --- render ---
     log::info!("setting up rendering...");
-    let gpu = block_on(Gpu::new(window, vertices, indices, setup.options.vsync));
+    let gpu = block_on(Gpu::new(
+        window,
+        &setup.resource_man,
+        vertices,
+        indices,
+        setup.options.vsync,
+    ));
     log::info!("render setup.");
 
     // --- gui ---

@@ -10,7 +10,7 @@ use automancy_defs::cgmath::{point3, vec3};
 use automancy_defs::hashbrown::HashMap;
 use automancy_defs::id::Id;
 use automancy_defs::math;
-use automancy_defs::math::{Float, Matrix4, Vector3};
+use automancy_defs::math::{Matrix4, Vector3};
 use automancy_defs::rendering::InstanceData;
 
 use crate::gui::default_frame;

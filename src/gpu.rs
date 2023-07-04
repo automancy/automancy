@@ -10,16 +10,17 @@ use wgpu::{
     FragmentState, FrontFace, Instance, InstanceDescriptor, Limits, MultisampleState,
     PipelineLayoutDescriptor, PowerPreference, PresentMode, PrimitiveState, PrimitiveTopology,
     Queue, RenderPipeline, RenderPipelineDescriptor, RequestAdapterOptions, Sampler,
-    SamplerBindingType, SamplerDescriptor, ShaderStages, Surface, SurfaceConfiguration, Texture,
-    TextureDescriptor, TextureDimension, TextureFormat, TextureSampleType, TextureUsages,
-    TextureView, TextureViewDescriptor, TextureViewDimension, VertexState,
+    SamplerBindingType, SamplerDescriptor, ShaderModule, ShaderModuleDescriptor, ShaderSource,
+    ShaderStages, Surface, SurfaceConfiguration, Texture, TextureDescriptor, TextureDimension,
+    TextureFormat, TextureSampleType, TextureUsages, TextureView, TextureViewDescriptor,
+    TextureViewDimension, VertexState,
 };
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
+use automancy_defs::bytemuck;
 use automancy_defs::id::Id;
 use automancy_defs::rendering::{GameUBO, OverlayUBO, RawInstanceData, Vertex};
-use automancy_defs::{bytemuck, shaders};
 use automancy_resources::ResourceManager;
 
 pub const GPU_BACKENDS: Backends = Backends::all();
@@ -36,6 +37,34 @@ pub fn device_descriptor() -> DeviceDescriptor<'static> {
         },
         label: None,
     }
+}
+
+fn game_shader(device: &Device, resource_man: &ResourceManager) -> ShaderModule {
+    device.create_shader_module(ShaderModuleDescriptor {
+        label: Some("Game Shader"),
+        source: ShaderSource::Wgsl(resource_man.shaders["game"].as_str().into()),
+    })
+}
+
+fn effects_shader(device: &Device, resource_man: &ResourceManager) -> ShaderModule {
+    device.create_shader_module(ShaderModuleDescriptor {
+        label: Some("Effects Shader"),
+        source: ShaderSource::Wgsl(resource_man.shaders["effects"].as_str().into()),
+    })
+}
+
+fn overlay_shader(device: &Device, resource_man: &ResourceManager) -> ShaderModule {
+    device.create_shader_module(ShaderModuleDescriptor {
+        label: Some("Overlay Shader"),
+        source: ShaderSource::Wgsl(resource_man.shaders["overlay"].as_str().into()),
+    })
+}
+
+fn combine_shader(device: &Device, resource_man: &ResourceManager) -> ShaderModule {
+    device.create_shader_module(ShaderModuleDescriptor {
+        label: Some("Combine Shader"),
+        source: ShaderSource::Wgsl(resource_man.shaders["combine"].as_str().into()),
+    })
 }
 
 pub const DEPTH_FORMAT: TextureFormat = TextureFormat::Depth32Float;
@@ -205,9 +234,8 @@ fn extent3d(config: &SurfaceConfiguration) -> Extent3d {
 fn game_setup(
     device: &Device,
     config: &SurfaceConfiguration,
+    shader: &ShaderModule,
 ) -> (Buffer, BindGroup, RenderPipeline) {
-    let shader = shaders::game_shader(device);
-
     let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
         label: Some("Game Uniform Buffer"),
         contents: bytemuck::cast_slice(&[GameUBO::default()]),
@@ -247,12 +275,12 @@ fn game_setup(
         label: Some("Game Render Pipeline"),
         layout: Some(&pipeline_layout),
         vertex: VertexState {
-            module: &shader,
+            module: shader,
             entry_point: "vs_main",
             buffers: &[Vertex::desc(), RawInstanceData::desc()],
         },
         fragment: Some(FragmentState {
-            module: &shader,
+            module: shader,
             entry_point: "fs_main",
             targets: &[Some(ColorTargetState {
                 format: config.format,
@@ -302,10 +330,9 @@ fn make_effects_bind_group(
 fn effects_setup(
     device: &Device,
     config: &SurfaceConfiguration,
+    shader: &ShaderModule,
     bind_group_layout: &BindGroupLayout,
 ) -> RenderPipeline {
-    let shader = shaders::effects_shader(device);
-
     let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
         label: Some("Effects Render Pipeline Layout"),
         bind_group_layouts: &[bind_group_layout],
@@ -316,12 +343,12 @@ fn effects_setup(
         label: Some("Effects Render Pipeline"),
         layout: Some(&pipeline_layout),
         vertex: VertexState {
-            module: &shader,
+            module: shader,
             entry_point: "vs_main",
             buffers: &[],
         },
         fragment: Some(FragmentState {
-            module: &shader,
+            module: shader,
             entry_point: "fs_main",
             targets: &[Some(ColorTargetState {
                 format: config.format,
@@ -350,9 +377,8 @@ fn effects_setup(
 fn gui_setup(
     device: &Device,
     config: &SurfaceConfiguration,
+    shader: &ShaderModule,
 ) -> (Buffer, BindGroup, RenderPipeline) {
-    let shader = shaders::game_shader(device);
-
     let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
         label: Some("Gui Uniform Buffer"),
         contents: bytemuck::cast_slice(&[GameUBO::default()]),
@@ -392,12 +418,12 @@ fn gui_setup(
         label: Some("Gui Render Pipeline"),
         layout: Some(&pipeline_layout),
         vertex: VertexState {
-            module: &shader,
+            module: shader,
             entry_point: "vs_main",
             buffers: &[Vertex::desc(), RawInstanceData::desc()],
         },
         fragment: Some(FragmentState {
-            module: &shader,
+            module: shader,
             entry_point: "fs_main",
             targets: &[Some(ColorTargetState {
                 format: config.format,
@@ -432,9 +458,8 @@ fn gui_setup(
 fn overlay_setup(
     device: &Device,
     config: &SurfaceConfiguration,
+    shader: &ShaderModule,
 ) -> (Buffer, BindGroup, RenderPipeline) {
-    let shader = shaders::overlay_shader(device);
-
     let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
         label: Some("Overlay Uniform Buffer"),
         contents: bytemuck::cast_slice(&[OverlayUBO::default()]),
@@ -474,12 +499,12 @@ fn overlay_setup(
         label: Some("Overlay Render Pipeline"),
         layout: Some(&pipeline_layout),
         vertex: VertexState {
-            module: &shader,
+            module: shader,
             entry_point: "vs_main",
             buffers: &[Vertex::desc()],
         },
         fragment: Some(FragmentState {
-            module: &shader,
+            module: shader,
             entry_point: "fs_main",
             targets: &[Some(ColorTargetState {
                 format: config.format,
@@ -549,10 +574,9 @@ fn make_combine_bind_group(
 fn combine_setup(
     device: &Device,
     config: &SurfaceConfiguration,
+    shader: &ShaderModule,
     bind_group_layout: &BindGroupLayout,
 ) -> RenderPipeline {
-    let shader = shaders::combine_shader(device);
-
     let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
         label: Some("Combine Render Pipeline Layout"),
         bind_group_layouts: &[bind_group_layout],
@@ -563,12 +587,12 @@ fn combine_setup(
         label: Some("Combine Render Pipeline"),
         layout: Some(&pipeline_layout),
         vertex: VertexState {
-            module: &shader,
+            module: shader,
             entry_point: "vs_main",
             buffers: &[],
         },
         fragment: Some(FragmentState {
-            module: &shader,
+            module: shader,
             entry_point: "fs_main",
             targets: &[Some(ColorTargetState {
                 format: config.format,
@@ -768,6 +792,7 @@ impl Gpu {
 
     pub async fn new(
         window: Window,
+        resource_man: &ResourceManager,
         vertices: Vec<Vertex>,
         indices: Vec<u16>,
         vsync: bool,
@@ -932,7 +957,8 @@ impl Gpu {
             usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
         });
 
-        let (game_uniform_buffer, game_bind_group, game_pipeline) = game_setup(&device, &config);
+        let (game_uniform_buffer, game_bind_group, game_pipeline) =
+            game_setup(&device, &config, &game_shader(&device, resource_man));
 
         let effects_bind_group_layout =
             device.create_bind_group_layout(&BindGroupLayoutDescriptor {
@@ -954,12 +980,18 @@ impl Gpu {
         let gui_effects_bind_group =
             make_effects_bind_group(&device, &effects_bind_group_layout, &gui_texture.1);
 
-        let effects_pipeline = effects_setup(&device, &config, &effects_bind_group_layout);
+        let effects_pipeline = effects_setup(
+            &device,
+            &config,
+            &effects_shader(&device, resource_man),
+            &effects_bind_group_layout,
+        );
 
-        let (gui_uniform_buffer, gui_bind_group, gui_pipeline) = gui_setup(&device, &config);
+        let (gui_uniform_buffer, gui_bind_group, gui_pipeline) =
+            gui_setup(&device, &config, &game_shader(&device, resource_man));
 
         let (overlay_uniform_buffer, overlay_bind_group, overlay_pipeline) =
-            overlay_setup(&device, &config);
+            overlay_setup(&device, &config, &overlay_shader(&device, resource_man));
 
         let combine_bind_group_layout =
             device.create_bind_group_layout(&BindGroupLayoutDescriptor {
@@ -1027,7 +1059,12 @@ impl Gpu {
             &egui_sampler,
         );
 
-        let combine_pipeline = combine_setup(&device, &config, &combine_bind_group_layout);
+        let combine_pipeline = combine_setup(
+            &device,
+            &config,
+            &combine_shader(&device, resource_man),
+            &combine_bind_group_layout,
+        );
 
         Self {
             vsync,

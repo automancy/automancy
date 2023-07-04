@@ -424,7 +424,7 @@ impl Renderer {
                     view: &self.gpu.processed_game_texture.1,
                     resolve_target: None,
                     ops: Operations {
-                        load: LoadOp::Load,
+                        load: LoadOp::Clear(Color::BLACK),
                         store: true,
                     },
                 })],
@@ -584,7 +584,7 @@ impl Renderer {
                     view: &self.gpu.processed_gui_texture.1,
                     resolve_target: None,
                     ops: Operations {
-                        load: LoadOp::Load,
+                        load: LoadOp::Clear(Color::BLACK),
                         store: true,
                     },
                 })],
@@ -644,7 +644,7 @@ impl Renderer {
                     view: &view,
                     resolve_target: None,
                     ops: Operations {
-                        load: LoadOp::Load,
+                        load: LoadOp::Clear(Color::BLACK),
                         store: true,
                     },
                 })],

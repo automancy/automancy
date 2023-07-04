@@ -29,6 +29,7 @@ pub mod item;
 pub mod model;
 pub mod registry;
 pub mod script;
+pub mod shader;
 pub mod tag;
 pub mod tile;
 pub mod translate;
@@ -64,23 +65,26 @@ pub fn load_recursively(path: &Path, extension: &OsStr) -> Vec<PathBuf> {
 pub static RESOURCES_PATH: &str = "resources";
 
 pub static JSON_EXT: &str = "json";
-pub static OGG_EXT: &str = "ogg";
-pub static PNG_EXT: &str = "png";
+pub static AUDIO_EXT: &str = "ogg";
+pub static SHADER_EXT: &str = "wgsl";
+pub static IMAGE_EXT: &str = "png";
+
+/// TODO set of suffixes
 
 /// Represents a resource manager, which contains all resources (apart from maps) loaded from disk dynamically.
 pub struct ResourceManager {
     pub interner: Interner,
     pub track: TrackHandle,
-
     pub error_man: ErrorManager,
-    pub ordered_tiles: Vec<Id>,
-    pub ordered_items: Vec<Id>,
 
     pub registry: Registry,
 
     pub translates: Translate,
     pub audio: HashMap<SharedStr, StaticSoundData>,
+    pub shaders: HashMap<SharedStr, String>,
 
+    pub ordered_tiles: Vec<Id>,
+    pub ordered_items: Vec<Id>,
     pub index_ranges: HashMap<Id, IndexRange>,
     pub meshes: HashMap<Id, Mesh>,
 }
@@ -106,10 +110,7 @@ impl ResourceManager {
         Self {
             interner,
             track,
-
             error_man: Default::default(),
-            ordered_tiles: vec![],
-            ordered_items: vec![],
 
             registry: Registry {
                 tiles: Default::default(),
@@ -129,7 +130,10 @@ impl ResourceManager {
 
             translates: Default::default(),
             audio: Default::default(),
+            shaders: Default::default(),
 
+            ordered_tiles: vec![],
+            ordered_items: vec![],
             index_ranges: Default::default(),
             meshes: Default::default(),
         }

@@ -13,7 +13,6 @@ pub mod gui;
 pub mod id;
 pub mod math;
 pub mod rendering;
-pub mod shaders;
 pub mod window;
 
 pub static IOSEVKA_FONT: &[u8] = include_bytes!("../fonts/iosevka-extended.ttf");
