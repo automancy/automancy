@@ -1,6 +1,6 @@
 use egui::Rgba;
 
-use crate::cg::Float;
+use crate::math::Float;
 
 macro_rules! hex_color {
     ($s:literal) => {{

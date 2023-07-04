@@ -8,7 +8,7 @@ use serde::de::{SeqAccess, Visitor};
 use serde::ser::SerializeTuple;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::cg::Double;
+use crate::math::Double;
 
 /// The type of number that will be stored in a tile's coordinates. Should probably be a signed integer.
 pub type TileUnit = i32;

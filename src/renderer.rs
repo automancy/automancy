@@ -12,23 +12,19 @@ use wgpu::{
 };
 use winit::dpi::PhysicalSize;
 
-use automancy_defs::bytemuck;
-use automancy_defs::cg::{deg, Double, Float, Matrix4, Point3};
 use automancy_defs::cgmath::{vec3, SquareMatrix};
 use automancy_defs::coord::{TileCoord, TileUnit};
 use automancy_defs::gui::Gui;
 use automancy_defs::hashbrown::HashMap;
 use automancy_defs::hexagon_tiles::fractional::FractionalHex;
-use automancy_defs::hexagon_tiles::layout::{frac_hex_to_pixel, hex_to_pixel};
 use automancy_defs::hexagon_tiles::traits::HexRound;
 use automancy_defs::id::Id;
-use automancy_defs::rendering::{
-    GameUBO, InstanceData, OverlayUBO, RawInstanceData, Vertex, HEX_GRID_LAYOUT,
-};
+use automancy_defs::math::{deg, Double, Float, Matrix4, Point3, FAR};
+use automancy_defs::rendering::{GameUBO, InstanceData, OverlayUBO, RawInstanceData, Vertex};
+use automancy_defs::{bytemuck, math};
 use automancy_resources::data::Data;
 use automancy_resources::ResourceManager;
 
-use crate::camera::FAR;
 use crate::game::{GameMsg, RenderInfo, RenderUnit, TickUnit, ANIMATION_SPEED};
 use crate::gpu;
 use crate::gpu::{Gpu, GUI_INSTANCE_BUFFER, OVERLAY_VERTEX_BUFFER};
@@ -81,7 +77,7 @@ fn get_angle_from_target(target: Option<&Data>) -> Option<Float> {
     }
 }
 
-pub type GuiInstances = Vec<(InstanceData, Id, Rect, (Float, Float))>;
+pub type GuiInstances = Vec<(InstanceData, Id, Rect)>;
 
 impl Renderer {
     pub fn render(
@@ -192,7 +188,7 @@ impl Renderer {
                     let coord = TileCoord::new(q, r);
 
                     if !instances.contains_key(&coord) {
-                        let p = hex_to_pixel(HEX_GRID_LAYOUT, coord.into());
+                        let p = math::hex_to_pixel(coord.into());
 
                         instances.insert(
                             coord,
@@ -248,7 +244,7 @@ impl Renderer {
             let a = FractionalHex::new(source_coord.q() as Double, source_coord.r() as Double);
             let b = FractionalHex::new(coord.q() as Double, coord.r() as Double);
             let lerp = a.lerp(b, t);
-            let point = frac_hex_to_pixel(HEX_GRID_LAYOUT, lerp);
+            let point = math::frac_hex_to_pixel(lerp);
 
             let instance = InstanceData::default().with_model_matrix(
                 Matrix4::from_translation(vec3(point.x as Float, point.y as Float, FAR as Float))
@@ -309,7 +305,7 @@ impl Renderer {
             let mut game_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Game Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.multisampled_texture.1,
+                    view: &self.gpu.multisampled_texture0.1,
                     resolve_target: Some(&self.gpu.game_texture.1),
                     ops: Operations {
                         load: LoadOp::Clear(Color::BLACK),
@@ -364,7 +360,7 @@ impl Renderer {
             let mut extra_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Game Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.multisampled_texture.1,
+                    view: &self.gpu.multisampled_texture0.1,
                     resolve_target: Some(&self.gpu.game_texture.1),
                     ops: Operations {
                         load: LoadOp::Load,
@@ -430,7 +426,7 @@ impl Renderer {
             });
 
             effects_pass.set_pipeline(&self.gpu.effects_pipeline);
-            effects_pass.set_bind_group(0, &self.gpu.effects_bind_group, &[]);
+            effects_pass.set_bind_group(0, &self.gpu.game_effects_bind_group, &[]);
 
             effects_pass.draw(0..3, 0..1);
         }
@@ -462,21 +458,14 @@ impl Renderer {
                 let mut egui_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                     label: Some("Egui Render Pass"),
                     color_attachments: &[Some(RenderPassColorAttachment {
-                        view: &self.gpu.multisampled_texture.1,
-                        resolve_target: Some(&self.gpu.egui_texture.1),
+                        view: &self.gpu.egui_texture.1,
+                        resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Clear(Color::TRANSPARENT),
                             store: true,
                         },
                     })],
-                    depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                        view: &self.gpu.gui_depth_texture.1,
-                        depth_ops: Some(Operations {
-                            load: LoadOp::Clear(0.0),
-                            store: true,
-                        }),
-                        stencil_ops: None,
-                    }),
+                    depth_stencil_attachment: None,
                 });
 
                 gui.renderer
@@ -494,7 +483,7 @@ impl Renderer {
             let mut gui_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Gui Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.multisampled_texture.1,
+                    view: &self.gpu.multisampled_texture0.1,
                     resolve_target: Some(&self.gpu.gui_texture.1),
                     ops: Operations {
                         load: LoadOp::Clear(Color::TRANSPARENT),
@@ -504,7 +493,7 @@ impl Renderer {
                 depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
                     view: &self.gpu.gui_depth_texture.1,
                     depth_ops: Some(Operations {
-                        load: LoadOp::Load,
+                        load: LoadOp::Clear(0.0),
                         store: true,
                     }),
                     stencil_ops: None,
@@ -513,9 +502,7 @@ impl Renderer {
 
             let (instances, draws): (Vec<_>, Vec<_>) = gui_instances
                 .into_iter()
-                .map(|(instance, id, rect, depth)| {
-                    (RawInstanceData::from(instance), (id, rect, depth))
-                })
+                .map(|(instance, id, rect)| (RawInstanceData::from(instance), (id, rect)))
                 .unzip();
 
             self.gpu.queue.write_buffer(
@@ -538,7 +525,7 @@ impl Renderer {
             gui_pass.set_vertex_buffer(1, self.gpu.gui_instance_buffer.slice(..));
             gui_pass.set_index_buffer(self.gpu.index_buffer.slice(..), IndexFormat::Uint16);
 
-            for (idx, (id, rect, depth)) in draws.into_iter().enumerate() {
+            for (idx, (id, rect)) in draws.into_iter().enumerate() {
                 let idx = idx as u32;
 
                 gui_pass.set_viewport(
@@ -546,24 +533,43 @@ impl Renderer {
                     rect.top(),
                     rect.width(),
                     rect.height(),
-                    depth.0,
-                    depth.1,
+                    1.0,
+                    0.0,
                 );
 
-                let index_range = resource_man.index_ranges.get(&id).unwrap_or_else(|| {
-                    &resource_man.index_ranges[&resource_man.registry.model_ids.missing]
-                });
+                let index_range = resource_man.index_ranges[&id];
+
                 let a = index_range.offset;
                 let b = a + index_range.size;
                 gui_pass.draw_indexed(a..b, 0, idx..(idx + 1));
             }
         }
 
+        {
+            let mut effects_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some("Effects Render Pass"),
+                color_attachments: &[Some(RenderPassColorAttachment {
+                    view: &self.gpu.processed_gui_texture.1,
+                    resolve_target: None,
+                    ops: Operations {
+                        load: LoadOp::Load,
+                        store: true,
+                    },
+                })],
+                depth_stencil_attachment: None,
+            });
+
+            effects_pass.set_pipeline(&self.gpu.effects_pipeline);
+            effects_pass.set_bind_group(0, &self.gpu.gui_effects_bind_group, &[]);
+
+            effects_pass.draw(0..3, 0..1);
+        }
+
         if !overlay.is_empty() {
             let mut overlay_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Overlay Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.multisampled_texture.1,
+                    view: &self.gpu.multisampled_texture0.1,
                     resolve_target: Some(&self.gpu.gui_texture.1),
                     ops: Operations {
                         load: LoadOp::Load,

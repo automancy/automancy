@@ -12,23 +12,20 @@ use wgpu::SurfaceError;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::ControlFlow;
 
-use automancy::camera::FAR;
 use automancy::game::{GameMsg, PlaceTileResponse};
-use automancy::gpu::{window_size_double, window_size_float};
-use automancy::input::{actions, InputHandler, KeyActions};
+use automancy::input;
+use automancy::input::KeyActions;
 use automancy::renderer::Renderer;
 use automancy::tile_entity::{TileEntityMsg, TileModifier};
-use automancy::util::render::{hex_to_normalized, screen_to_normalized, screen_to_world};
-use automancy::{gpu, input};
-use automancy_defs::cg::{matrix, Float, Matrix4};
 use automancy_defs::cgmath::{point2, vec3, EuclideanSpace};
 use automancy_defs::colors::WithAlpha;
 use automancy_defs::coord::{ChunkCoord, TileCoord};
 use automancy_defs::gui::Gui;
 use automancy_defs::hashbrown::{HashMap, HashSet};
 use automancy_defs::id::Id;
+use automancy_defs::math::{Float, Matrix4, FAR};
 use automancy_defs::rendering::InstanceData;
-use automancy_defs::{colors, log};
+use automancy_defs::{colors, log, math, window};
 use automancy_resources::data::item::Item;
 use automancy_resources::data::Data;
 
@@ -63,8 +60,8 @@ pub struct EventLoopStorage {
     pub tag_cache: HashMap<Id, Arc<Vec<Item>>>,
     /// tile currently linking
     pub linking_tile: Option<TileCoord>,
-    /// the last camera position, in chunk coord
-    pub last_frame_start: Instant,
+    /// the last frame's starting time
+    pub frame_start: Instant,
     /// the elapsed time between each frame
     pub elapsed: Duration,
     /// the currently selected tiles
@@ -92,7 +89,7 @@ impl Default for EventLoopStorage {
             config_open: None,
             tag_cache: Default::default(),
             linking_tile: None,
-            last_frame_start: Instant::now(),
+            frame_start: Instant::now(),
             elapsed: Default::default(),
             selected_tiles: Default::default(),
             initial_cursor_position: None,
@@ -214,9 +211,12 @@ pub fn on_event(
 
     if window_event.is_some() || device_event.is_some() {
         setup.input_handler.reset();
-        setup
-            .input_handler
-            .update(input::convert_input(window_event, device_event));
+        setup.input_handler.update(input::convert_input(
+            window_event,
+            device_event,
+            window::window_size_double(&renderer.gpu.window),
+            1.0, //TODO sensitivity option
+        ));
 
         let ignore_move = loop_store.selected_id.is_some();
 
@@ -378,7 +378,7 @@ pub fn on_event(
 
         if setup.input_handler.control_held && loop_store.gui_state == GuiState::Ingame {
             if let Some(start) = loop_store.initial_cursor_position {
-                if setup.input_handler.alternate_pressed {
+                if setup.input_handler.tertiary_pressed {
                     let direction = setup.camera.pointing_at - start;
 
                     setup
@@ -409,7 +409,7 @@ pub fn on_event(
                         .play(resource_man.audio["click"].clone()) // TODO click2
                         .unwrap();
                 }
-            } else if setup.input_handler.alternate_pressed {
+            } else if setup.input_handler.tertiary_pressed {
                 loop_store.initial_cursor_position = Some(setup.camera.pointing_at);
                 setup
                     .audio_man
@@ -431,22 +431,24 @@ pub fn on_event(
     }
 
     if event == Event::RedrawRequested(renderer.gpu.window.id()) {
+        loop_store.frame_start = Instant::now();
+
         let mut gui_instances = vec![];
         let mut overlay = vec![];
 
-        loop_store.last_frame_start = Instant::now();
-
-        setup
-            .camera
-            .update_pos(loop_store.elapsed, window_size_double(&renderer.gpu.window));
         setup.camera.update_pointing_at(
             setup.input_handler.main_pos,
-            window_size_double(&renderer.gpu.window),
+            window::window_size_double(&renderer.gpu.window),
         );
 
-        let (width, height) = window_size_float(&renderer.gpu.window);
+        setup.camera.update_pos(
+            window::window_size_double(&renderer.gpu.window),
+            loop_store.elapsed.as_secs_f64(),
+        );
+
+        let (width, height) = window::window_size_float(&renderer.gpu.window);
         let aspect = width / height;
-        let matrix = matrix(setup.camera.get_pos().cast().unwrap(), aspect, PI);
+        let matrix = math::matrix(setup.camera.get_pos().cast().unwrap(), aspect, PI);
 
         let (selection_send, mut selection_recv) = mpsc::channel(1);
 
@@ -487,7 +489,7 @@ pub fn on_event(
                         loop_store,
                         &mut gui_instances,
                         &gui.context,
-                        window_size_double(&renderer.gpu.window),
+                        window::window_size_double(&renderer.gpu.window),
                         &mut overlay,
                     );
 
@@ -501,8 +503,8 @@ pub fn on_event(
                         }
                     }
 
-                    let mouse_pos = screen_to_world(
-                        window_size_double(&renderer.gpu.window),
+                    let mouse_pos = math::screen_to_world(
+                        window::window_size_double(&renderer.gpu.window),
                         setup.input_handler.main_pos,
                         setup.camera.get_pos().z,
                     );
@@ -523,7 +525,7 @@ pub fn on_event(
                         }) {
                             let time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
 
-                            let glow = (time.as_secs_f64() * 1.5).sin().abs() / 3.0;
+                            let glow = (time.as_secs_f64() * 1.2).sin().abs() / 4.0;
 
                             let instance = InstanceData {
                                 model_matrix: matrix
@@ -540,20 +542,19 @@ pub fn on_event(
                             gui_instances.push((
                                 instance,
                                 model,
-                                gpu::window_size_rect(&renderer.gpu.window),
-                                (1.0, 0.0),
+                                window::window_size_rect(&renderer.gpu.window),
                             ));
                         }
                     }
 
                     if let Some(coord) = loop_store.linking_tile {
-                        let (a, w) = hex_to_normalized(
-                            window_size_double(&renderer.gpu.window),
+                        let (a, w) = math::hex_to_normalized(
+                            window::window_size_double(&renderer.gpu.window),
                             setup.camera.get_pos(),
                             coord,
                         );
-                        let b = screen_to_normalized(
-                            window_size_double(&renderer.gpu.window),
+                        let b = math::screen_to_normalized(
+                            window::window_size_double(&renderer.gpu.window),
                             setup.input_handler.main_pos,
                         );
 
@@ -584,14 +585,13 @@ pub fn on_event(
             if let Some(start) = loop_store.initial_cursor_position {
                 let direction = setup.camera.pointing_at - start;
 
-                // TODO wrapper around hex_to_pixel
-                let (a, w0) = hex_to_normalized(
-                    window_size_double(&renderer.gpu.window),
+                let (a, w0) = math::hex_to_normalized(
+                    window::window_size_double(&renderer.gpu.window),
                     setup.camera.get_pos(),
                     start,
                 );
-                let (b, w1) = hex_to_normalized(
-                    window_size_double(&renderer.gpu.window),
+                let (b, w1) = math::hex_to_normalized(
+                    window::window_size_double(&renderer.gpu.window),
                     setup.camera.get_pos(),
                     setup.camera.pointing_at,
                 );
@@ -641,7 +641,8 @@ pub fn on_event(
             Err(SurfaceError::OutOfMemory) => shutdown_graceful(setup, control_flow).unwrap(),
             Err(e) => log::error!("{e:?}"),
         }
-        loop_store.elapsed = Instant::now().duration_since(loop_store.last_frame_start);
+
+        loop_store.elapsed = Instant::now().duration_since(loop_store.frame_start);
     }
     Ok(())
 }

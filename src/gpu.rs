@@ -1,4 +1,5 @@
-use egui::{pos2, Rect};
+use std::sync::Arc;
+
 use slice_group_by::GroupBy;
 use wgpu::util::{BufferInitDescriptor, DeviceExt, DrawIndexedIndirect};
 use wgpu::{
@@ -7,16 +8,15 @@ use wgpu::{
     Buffer, BufferAddress, BufferBindingType, BufferUsages, ColorTargetState, ColorWrites,
     CompareFunction, DepthStencilState, Device, DeviceDescriptor, Extent3d, Features, FilterMode,
     FragmentState, FrontFace, Instance, InstanceDescriptor, Limits, MultisampleState,
-    PipelineLayoutDescriptor, PowerPreference, PrimitiveState, PrimitiveTopology, Queue,
-    RenderPipeline, RenderPipelineDescriptor, RequestAdapterOptions, Sampler, SamplerBindingType,
-    SamplerDescriptor, ShaderStages, Surface, SurfaceConfiguration, Texture, TextureDescriptor,
-    TextureDimension, TextureFormat, TextureSampleType, TextureUsages, TextureView,
-    TextureViewDescriptor, TextureViewDimension, VertexState,
+    PipelineLayoutDescriptor, PowerPreference, PresentMode, PrimitiveState, PrimitiveTopology,
+    Queue, RenderPipeline, RenderPipelineDescriptor, RequestAdapterOptions, Sampler,
+    SamplerBindingType, SamplerDescriptor, ShaderStages, Surface, SurfaceConfiguration, Texture,
+    TextureDescriptor, TextureDimension, TextureFormat, TextureSampleType, TextureUsages,
+    TextureView, TextureViewDescriptor, TextureViewDimension, VertexState,
 };
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
-use automancy_defs::cg::{Double, Float};
 use automancy_defs::id::Id;
 use automancy_defs::rendering::{GameUBO, OverlayUBO, RawInstanceData, Vertex};
 use automancy_defs::{bytemuck, shaders};
@@ -58,27 +58,6 @@ pub const GUI_INSTANCE_BUFFER: Option<&str> = Some("Gui Instance Buffer");
 
 pub const OVERLAY_VERTEX_BUFFER: Option<&str> = Some("Overlay Vertex Buffer");
 
-// TODO use these!
-// TODO move to window::
-
-pub fn window_size_rect(window: &Window) -> Rect {
-    let (width, height) = window_size_float(window);
-
-    Rect::from_min_max(pos2(0.0, 0.0), pos2(width, height))
-}
-
-pub fn window_size_double(window: &Window) -> (Double, Double) {
-    window.inner_size().cast::<Double>().into()
-}
-
-pub fn window_size_float(window: &Window) -> (Float, Float) {
-    window.inner_size().cast::<Float>().into()
-}
-
-pub fn window_size_u32(window: &Window) -> (u32, u32) {
-    window.inner_size().into()
-}
-
 pub fn indirect_instance(
     device: &Device,
     queue: &Queue,
@@ -113,7 +92,7 @@ pub fn indirect_instance(
         .scan(0, |init, ids| {
             let instance_count = ids.len() as u32;
 
-            let index_range = resource_man.index_ranges[&resource_man.get_model(ids[0])];
+            let index_range = resource_man.index_ranges[&ids[0]];
 
             let command = DrawIndexedIndirect {
                 base_index: index_range.offset,
@@ -169,23 +148,18 @@ pub fn create_or_write_buffer(
 
 pub fn create_surface_texture(
     device: &Device,
-    config: &SurfaceConfiguration,
+    format: TextureFormat,
+    size: Extent3d,
     label: Option<&str>,
     sample_count: u32,
 ) -> (Texture, TextureView) {
-    let size = Extent3d {
-        width: config.width,
-        height: config.height,
-        depth_or_array_layers: 1,
-    };
-
     let texture = device.create_texture(&TextureDescriptor {
         label,
         size,
         mip_level_count: 1,
         sample_count,
         dimension: TextureDimension::D2,
-        format: config.format,
+        format,
         usage: TextureUsages::RENDER_ATTACHMENT
             | TextureUsages::TEXTURE_BINDING
             | TextureUsages::COPY_SRC,
@@ -197,24 +171,20 @@ pub fn create_surface_texture(
     (texture, view)
 }
 
-pub fn create_depth_texture(
+pub fn create_texture(
     device: &Device,
-    config: &SurfaceConfiguration,
+    format: TextureFormat,
+    size: Extent3d,
     label: Option<&str>,
+    sample_count: u32,
 ) -> (Texture, TextureView) {
-    let size = Extent3d {
-        width: config.width,
-        height: config.height,
-        depth_or_array_layers: 1,
-    };
-
     let texture = device.create_texture(&TextureDescriptor {
         label,
         size,
         mip_level_count: 1,
-        sample_count: 4,
+        sample_count,
         dimension: TextureDimension::D2,
-        format: DEPTH_FORMAT,
+        format,
         usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
         view_formats: &[],
     });
@@ -224,27 +194,435 @@ pub fn create_depth_texture(
     (texture, view)
 }
 
+fn extent3d(config: &SurfaceConfiguration) -> Extent3d {
+    Extent3d {
+        width: config.width,
+        height: config.height,
+        depth_or_array_layers: 1,
+    }
+}
+
+fn game_setup(
+    device: &Device,
+    config: &SurfaceConfiguration,
+) -> (Buffer, BindGroup, RenderPipeline) {
+    let shader = shaders::game_shader(device);
+
+    let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
+        label: Some("Game Uniform Buffer"),
+        contents: bytemuck::cast_slice(&[GameUBO::default()]),
+        usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+    });
+
+    let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+        entries: &[BindGroupLayoutEntry {
+            binding: 0,
+            visibility: ShaderStages::VERTEX_FRAGMENT,
+            ty: BindingType::Buffer {
+                ty: BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        }],
+        label: Some("game_bind_group_layout"),
+    });
+
+    let bind_group = device.create_bind_group(&BindGroupDescriptor {
+        layout: &bind_group_layout,
+        entries: &[BindGroupEntry {
+            binding: 0,
+            resource: uniform_buffer.as_entire_binding(),
+        }],
+        label: Some("game_bind_group"),
+    });
+
+    let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+        label: Some("Game Render Pipeline Layout"),
+        bind_group_layouts: &[&bind_group_layout],
+        push_constant_ranges: &[],
+    });
+
+    let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+        label: Some("Game Render Pipeline"),
+        layout: Some(&pipeline_layout),
+        vertex: VertexState {
+            module: &shader,
+            entry_point: "vs_main",
+            buffers: &[Vertex::desc(), RawInstanceData::desc()],
+        },
+        fragment: Some(FragmentState {
+            module: &shader,
+            entry_point: "fs_main",
+            targets: &[Some(ColorTargetState {
+                format: config.format,
+                blend: Some(BlendState::REPLACE),
+                write_mask: ColorWrites::ALL,
+            })],
+        }),
+        primitive: PrimitiveState {
+            topology: PrimitiveTopology::TriangleList,
+            front_face: FrontFace::Ccw,
+            cull_mode: None,
+            ..Default::default()
+        },
+        depth_stencil: Some(DepthStencilState {
+            format: DEPTH_FORMAT,
+            depth_write_enabled: true,
+            depth_compare: CompareFunction::GreaterEqual,
+            stencil: Default::default(),
+            bias: Default::default(),
+        }),
+        multisample: MultisampleState {
+            count: 4,
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        },
+        multiview: None,
+    });
+
+    (uniform_buffer, bind_group, pipeline)
+}
+
+fn make_effects_bind_group(
+    device: &Device,
+    bind_group_layout: &BindGroupLayout,
+    surface_texture: &TextureView,
+) -> BindGroup {
+    device.create_bind_group(&BindGroupDescriptor {
+        layout: bind_group_layout,
+        entries: &[BindGroupEntry {
+            binding: 0,
+            resource: BindingResource::TextureView(surface_texture),
+        }],
+        label: Some("effects_bind_group"),
+    })
+}
+
+fn effects_setup(
+    device: &Device,
+    config: &SurfaceConfiguration,
+    bind_group_layout: &BindGroupLayout,
+) -> RenderPipeline {
+    let shader = shaders::effects_shader(device);
+
+    let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+        label: Some("Effects Render Pipeline Layout"),
+        bind_group_layouts: &[bind_group_layout],
+        push_constant_ranges: &[],
+    });
+
+    let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+        label: Some("Effects Render Pipeline"),
+        layout: Some(&pipeline_layout),
+        vertex: VertexState {
+            module: &shader,
+            entry_point: "vs_main",
+            buffers: &[],
+        },
+        fragment: Some(FragmentState {
+            module: &shader,
+            entry_point: "fs_main",
+            targets: &[Some(ColorTargetState {
+                format: config.format,
+                blend: Some(BlendState::REPLACE),
+                write_mask: ColorWrites::ALL,
+            })],
+        }),
+        primitive: PrimitiveState {
+            topology: PrimitiveTopology::TriangleList,
+            front_face: FrontFace::Ccw,
+            cull_mode: None,
+            ..Default::default()
+        },
+        depth_stencil: None,
+        multisample: MultisampleState {
+            count: 1,
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        },
+        multiview: None,
+    });
+
+    pipeline
+}
+
+fn gui_setup(
+    device: &Device,
+    config: &SurfaceConfiguration,
+) -> (Buffer, BindGroup, RenderPipeline) {
+    let shader = shaders::game_shader(device);
+
+    let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
+        label: Some("Gui Uniform Buffer"),
+        contents: bytemuck::cast_slice(&[GameUBO::default()]),
+        usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+    });
+
+    let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+        entries: &[BindGroupLayoutEntry {
+            binding: 0,
+            visibility: ShaderStages::VERTEX_FRAGMENT,
+            ty: BindingType::Buffer {
+                ty: BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        }],
+        label: Some("gui_bind_group_layout"),
+    });
+
+    let bind_group = device.create_bind_group(&BindGroupDescriptor {
+        layout: &bind_group_layout,
+        entries: &[BindGroupEntry {
+            binding: 0,
+            resource: uniform_buffer.as_entire_binding(),
+        }],
+        label: Some("gui_bind_group"),
+    });
+
+    let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+        label: Some("Gui Render Pipeline Layout"),
+        bind_group_layouts: &[&bind_group_layout],
+        push_constant_ranges: &[],
+    });
+
+    let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+        label: Some("Gui Render Pipeline"),
+        layout: Some(&pipeline_layout),
+        vertex: VertexState {
+            module: &shader,
+            entry_point: "vs_main",
+            buffers: &[Vertex::desc(), RawInstanceData::desc()],
+        },
+        fragment: Some(FragmentState {
+            module: &shader,
+            entry_point: "fs_main",
+            targets: &[Some(ColorTargetState {
+                format: config.format,
+                blend: Some(BlendState::REPLACE),
+                write_mask: ColorWrites::ALL,
+            })],
+        }),
+        primitive: PrimitiveState {
+            topology: PrimitiveTopology::TriangleList,
+            front_face: FrontFace::Ccw,
+            cull_mode: None,
+            ..Default::default()
+        },
+        depth_stencil: Some(DepthStencilState {
+            format: DEPTH_FORMAT,
+            depth_write_enabled: true,
+            depth_compare: CompareFunction::GreaterEqual,
+            stencil: Default::default(),
+            bias: Default::default(),
+        }),
+        multisample: MultisampleState {
+            count: 4,
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        },
+        multiview: None,
+    });
+
+    (uniform_buffer, bind_group, pipeline)
+}
+
+fn overlay_setup(
+    device: &Device,
+    config: &SurfaceConfiguration,
+) -> (Buffer, BindGroup, RenderPipeline) {
+    let shader = shaders::overlay_shader(device);
+
+    let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
+        label: Some("Overlay Uniform Buffer"),
+        contents: bytemuck::cast_slice(&[OverlayUBO::default()]),
+        usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+    });
+
+    let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+        entries: &[BindGroupLayoutEntry {
+            binding: 0,
+            visibility: ShaderStages::VERTEX,
+            ty: BindingType::Buffer {
+                ty: BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        }],
+        label: Some("overlay_bind_group_layout"),
+    });
+
+    let bind_group = device.create_bind_group(&BindGroupDescriptor {
+        layout: &bind_group_layout,
+        entries: &[BindGroupEntry {
+            binding: 0,
+            resource: uniform_buffer.as_entire_binding(),
+        }],
+        label: Some("overlay_bind_group"),
+    });
+
+    let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+        label: Some("Overlay Render Pipeline Layout"),
+        bind_group_layouts: &[&bind_group_layout],
+        push_constant_ranges: &[],
+    });
+
+    let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+        label: Some("Overlay Render Pipeline"),
+        layout: Some(&pipeline_layout),
+        vertex: VertexState {
+            module: &shader,
+            entry_point: "vs_main",
+            buffers: &[Vertex::desc()],
+        },
+        fragment: Some(FragmentState {
+            module: &shader,
+            entry_point: "fs_main",
+            targets: &[Some(ColorTargetState {
+                format: config.format,
+                blend: Some(BlendState::REPLACE),
+                write_mask: ColorWrites::ALL,
+            })],
+        }),
+        primitive: PrimitiveState {
+            topology: PrimitiveTopology::TriangleList,
+            front_face: FrontFace::Ccw,
+            ..Default::default()
+        },
+        depth_stencil: None,
+        multisample: MultisampleState {
+            count: 4,
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        },
+        multiview: None,
+    });
+
+    (uniform_buffer, bind_group, pipeline)
+}
+
+fn make_combine_bind_group(
+    device: &Device,
+    bind_group_layout: &BindGroupLayout,
+    processed_game_texture: &TextureView,
+    processed_game_sampler: &Sampler,
+    gui_texture: &TextureView,
+    gui_sampler: &Sampler,
+    egui_texture: &TextureView,
+    egui_sampler: &Sampler,
+) -> BindGroup {
+    device.create_bind_group(&BindGroupDescriptor {
+        layout: bind_group_layout,
+        entries: &[
+            BindGroupEntry {
+                binding: 0,
+                resource: BindingResource::TextureView(processed_game_texture),
+            },
+            BindGroupEntry {
+                binding: 1,
+                resource: BindingResource::Sampler(processed_game_sampler),
+            },
+            BindGroupEntry {
+                binding: 2,
+                resource: BindingResource::TextureView(gui_texture),
+            },
+            BindGroupEntry {
+                binding: 3,
+                resource: BindingResource::Sampler(gui_sampler),
+            },
+            BindGroupEntry {
+                binding: 4,
+                resource: BindingResource::TextureView(egui_texture),
+            },
+            BindGroupEntry {
+                binding: 5,
+                resource: BindingResource::Sampler(egui_sampler),
+            },
+        ],
+        label: Some("combine_bind_group"),
+    })
+}
+
+fn combine_setup(
+    device: &Device,
+    config: &SurfaceConfiguration,
+    bind_group_layout: &BindGroupLayout,
+) -> RenderPipeline {
+    let shader = shaders::combine_shader(device);
+
+    let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+        label: Some("Combine Render Pipeline Layout"),
+        bind_group_layouts: &[bind_group_layout],
+        push_constant_ranges: &[],
+    });
+
+    let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+        label: Some("Combine Render Pipeline"),
+        layout: Some(&pipeline_layout),
+        vertex: VertexState {
+            module: &shader,
+            entry_point: "vs_main",
+            buffers: &[],
+        },
+        fragment: Some(FragmentState {
+            module: &shader,
+            entry_point: "fs_main",
+            targets: &[Some(ColorTargetState {
+                format: config.format,
+                blend: Some(BlendState::REPLACE),
+                write_mask: ColorWrites::ALL,
+            })],
+        }),
+        primitive: PrimitiveState {
+            topology: PrimitiveTopology::TriangleList,
+            front_face: FrontFace::Ccw,
+            ..Default::default()
+        },
+        depth_stencil: None,
+        multisample: MultisampleState {
+            count: 1,
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        },
+        multiview: None,
+    });
+
+    pipeline
+}
+
 pub struct Gpu {
+    vsync: bool,
+
     pub instance: Instance,
     pub device: Device,
     pub queue: Queue,
     pub surface: Surface,
     pub config: SurfaceConfiguration,
-    pub window: Window,
+    pub window: Arc<Window>,
 
     pub vertex_buffer: Buffer,
     pub index_buffer: Buffer,
 
-    pub multisampled_texture: (Texture, TextureView),
+    pub multisampled_texture0: (Texture, TextureView),
+    pub multisampled_texture1: (Texture, TextureView),
+
     pub game_texture: (Texture, TextureView),
+    pub game_depth_texture: (Texture, TextureView),
     pub processed_game_texture: (Texture, TextureView),
     pub processed_game_sampler: Sampler,
+
     pub gui_texture: (Texture, TextureView),
     pub gui_sampler: Sampler,
+    pub gui_depth_texture: (Texture, TextureView),
+    pub processed_gui_texture: (Texture, TextureView),
+    pub processed_gui_sampler: Sampler,
+
     pub egui_texture: (Texture, TextureView),
     pub egui_sampler: Sampler,
 
-    pub game_depth_texture: (Texture, TextureView),
     pub game_instance_buffer: Buffer,
     pub game_indirect_buffer: Buffer,
     pub game_uniform_buffer: Buffer,
@@ -256,10 +634,10 @@ pub struct Gpu {
     pub extra_uniform_buffer: Buffer,
 
     pub effects_bind_group_layout: BindGroupLayout,
-    pub effects_bind_group: BindGroup,
+    pub game_effects_bind_group: BindGroup,
+    pub gui_effects_bind_group: BindGroup,
     pub effects_pipeline: RenderPipeline,
 
-    pub gui_depth_texture: (Texture, TextureView),
     pub gui_instance_buffer: Buffer,
     pub gui_uniform_buffer: Buffer,
     pub gui_bind_group: BindGroup,
@@ -276,428 +654,111 @@ pub struct Gpu {
 }
 
 impl Gpu {
-    fn game_setup(
-        device: &Device,
-        config: &SurfaceConfiguration,
-    ) -> (Buffer, BindGroup, RenderPipeline) {
-        let shader = shaders::game_shader(device);
-
-        let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Game Uniform Buffer"),
-            contents: bytemuck::cast_slice(&[GameUBO::default()]),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
-
-        let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            entries: &[BindGroupLayoutEntry {
-                binding: 0,
-                visibility: ShaderStages::VERTEX_FRAGMENT,
-                ty: BindingType::Buffer {
-                    ty: BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-            label: Some("game_bind_group_layout"),
-        });
-
-        let bind_group = device.create_bind_group(&BindGroupDescriptor {
-            layout: &bind_group_layout,
-            entries: &[BindGroupEntry {
-                binding: 0,
-                resource: uniform_buffer.as_entire_binding(),
-            }],
-            label: Some("game_bind_group"),
-        });
-
-        let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
-            label: Some("Game Render Pipeline Layout"),
-            bind_group_layouts: &[&bind_group_layout],
-            push_constant_ranges: &[],
-        });
-
-        let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
-            label: Some("Game Render Pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: VertexState {
-                module: &shader,
-                entry_point: "vs_main",
-                buffers: &[Vertex::desc(), RawInstanceData::desc()],
-            },
-            fragment: Some(FragmentState {
-                module: &shader,
-                entry_point: "fs_main",
-                targets: &[Some(ColorTargetState {
-                    format: config.format,
-                    blend: Some(BlendState::REPLACE),
-                    write_mask: ColorWrites::ALL,
-                })],
-            }),
-            primitive: PrimitiveState {
-                topology: PrimitiveTopology::TriangleList,
-                front_face: FrontFace::Ccw,
-                cull_mode: None,
-                ..Default::default()
-            },
-            depth_stencil: Some(DepthStencilState {
-                format: DEPTH_FORMAT,
-                depth_write_enabled: true,
-                depth_compare: CompareFunction::GreaterEqual,
-                stencil: Default::default(),
-                bias: Default::default(),
-            }),
-            multisample: MultisampleState {
-                count: 4,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            multiview: None,
-        });
-
-        (uniform_buffer, bind_group, pipeline)
+    fn pick_present_mode(vsync: bool) -> PresentMode {
+        if vsync {
+            PresentMode::AutoVsync
+        } else {
+            PresentMode::AutoNoVsync
+        }
     }
 
-    fn make_effects_bind_group(
-        device: &Device,
-        bind_group_layout: &BindGroupLayout,
-        game_texture: &TextureView,
-    ) -> BindGroup {
-        device.create_bind_group(&BindGroupDescriptor {
-            layout: bind_group_layout,
-            entries: &[BindGroupEntry {
-                binding: 0,
-                resource: BindingResource::TextureView(game_texture),
-            }],
-            label: Some("effects_bind_group"),
-        })
-    }
+    pub fn set_vsync(&mut self, vsync: bool) {
+        if self.vsync != vsync {
+            self.vsync = vsync;
+            self.config.present_mode = Self::pick_present_mode(vsync);
 
-    fn effects_setup(
-        device: &Device,
-        config: &SurfaceConfiguration,
-        bind_group_layout: &BindGroupLayout,
-    ) -> RenderPipeline {
-        let shader = shaders::effects_shader(device);
-
-        let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
-            label: Some("Effects Render Pipeline Layout"),
-            bind_group_layouts: &[bind_group_layout],
-            push_constant_ranges: &[],
-        });
-
-        let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
-            label: Some("Effects Render Pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: VertexState {
-                module: &shader,
-                entry_point: "vs_main",
-                buffers: &[],
-            },
-            fragment: Some(FragmentState {
-                module: &shader,
-                entry_point: "fs_main",
-                targets: &[Some(ColorTargetState {
-                    format: config.format,
-                    blend: Some(BlendState::REPLACE),
-                    write_mask: ColorWrites::ALL,
-                })],
-            }),
-            primitive: PrimitiveState {
-                topology: PrimitiveTopology::TriangleList,
-                front_face: FrontFace::Ccw,
-                cull_mode: None,
-                ..Default::default()
-            },
-            depth_stencil: None,
-            multisample: MultisampleState {
-                count: 1,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            multiview: None,
-        });
-
-        pipeline
-    }
-
-    fn gui_setup(
-        device: &Device,
-        config: &SurfaceConfiguration,
-    ) -> (Buffer, BindGroup, RenderPipeline) {
-        let shader = shaders::game_shader(device);
-
-        let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Gui Uniform Buffer"),
-            contents: bytemuck::cast_slice(&[GameUBO::default()]),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
-
-        let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            entries: &[BindGroupLayoutEntry {
-                binding: 0,
-                visibility: ShaderStages::VERTEX_FRAGMENT,
-                ty: BindingType::Buffer {
-                    ty: BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-            label: Some("gui_bind_group_layout"),
-        });
-
-        let bind_group = device.create_bind_group(&BindGroupDescriptor {
-            layout: &bind_group_layout,
-            entries: &[BindGroupEntry {
-                binding: 0,
-                resource: uniform_buffer.as_entire_binding(),
-            }],
-            label: Some("gui_bind_group"),
-        });
-
-        let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
-            label: Some("Gui Render Pipeline Layout"),
-            bind_group_layouts: &[&bind_group_layout],
-            push_constant_ranges: &[],
-        });
-
-        let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
-            label: Some("Gui Render Pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: VertexState {
-                module: &shader,
-                entry_point: "vs_main",
-                buffers: &[Vertex::desc(), RawInstanceData::desc()],
-            },
-            fragment: Some(FragmentState {
-                module: &shader,
-                entry_point: "fs_main",
-                targets: &[Some(ColorTargetState {
-                    format: config.format,
-                    blend: Some(BlendState::REPLACE),
-                    write_mask: ColorWrites::ALL,
-                })],
-            }),
-            primitive: PrimitiveState {
-                topology: PrimitiveTopology::TriangleList,
-                front_face: FrontFace::Ccw,
-                cull_mode: None,
-                ..Default::default()
-            },
-            depth_stencil: Some(DepthStencilState {
-                format: DEPTH_FORMAT,
-                depth_write_enabled: true,
-                depth_compare: CompareFunction::GreaterEqual,
-                stencil: Default::default(),
-                bias: Default::default(),
-            }),
-            multisample: MultisampleState {
-                count: 4,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            multiview: None,
-        });
-
-        (uniform_buffer, bind_group, pipeline)
-    }
-
-    fn overlay_setup(
-        device: &Device,
-        config: &SurfaceConfiguration,
-    ) -> (Buffer, BindGroup, RenderPipeline) {
-        let shader = shaders::overlay_shader(device);
-
-        let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Overlay Uniform Buffer"),
-            contents: bytemuck::cast_slice(&[OverlayUBO::default()]),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
-
-        let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            entries: &[BindGroupLayoutEntry {
-                binding: 0,
-                visibility: ShaderStages::VERTEX,
-                ty: BindingType::Buffer {
-                    ty: BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-            label: Some("overlay_bind_group_layout"),
-        });
-
-        let bind_group = device.create_bind_group(&BindGroupDescriptor {
-            layout: &bind_group_layout,
-            entries: &[BindGroupEntry {
-                binding: 0,
-                resource: uniform_buffer.as_entire_binding(),
-            }],
-            label: Some("overlay_bind_group"),
-        });
-
-        let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
-            label: Some("Overlay Render Pipeline Layout"),
-            bind_group_layouts: &[&bind_group_layout],
-            push_constant_ranges: &[],
-        });
-
-        let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
-            label: Some("Overlay Render Pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: VertexState {
-                module: &shader,
-                entry_point: "vs_main",
-                buffers: &[Vertex::desc()],
-            },
-            fragment: Some(FragmentState {
-                module: &shader,
-                entry_point: "fs_main",
-                targets: &[Some(ColorTargetState {
-                    format: config.format,
-                    blend: Some(BlendState::REPLACE),
-                    write_mask: ColorWrites::ALL,
-                })],
-            }),
-            primitive: PrimitiveState {
-                topology: PrimitiveTopology::TriangleList,
-                front_face: FrontFace::Ccw,
-                ..Default::default()
-            },
-            depth_stencil: None,
-            multisample: MultisampleState {
-                count: 4,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            multiview: None,
-        });
-
-        (uniform_buffer, bind_group, pipeline)
-    }
-
-    fn make_combine_bind_group(
-        device: &Device,
-        bind_group_layout: &BindGroupLayout,
-        processed_game_texture: &TextureView,
-        processed_game_sampler: &Sampler,
-        gui_texture: &TextureView,
-        gui_sampler: &Sampler,
-        egui_texture: &TextureView,
-        egui_sampler: &Sampler,
-    ) -> BindGroup {
-        device.create_bind_group(&BindGroupDescriptor {
-            layout: bind_group_layout,
-            entries: &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: BindingResource::TextureView(processed_game_texture),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: BindingResource::Sampler(processed_game_sampler),
-                },
-                BindGroupEntry {
-                    binding: 2,
-                    resource: BindingResource::TextureView(gui_texture),
-                },
-                BindGroupEntry {
-                    binding: 3,
-                    resource: BindingResource::Sampler(gui_sampler),
-                },
-                BindGroupEntry {
-                    binding: 4,
-                    resource: BindingResource::TextureView(egui_texture),
-                },
-                BindGroupEntry {
-                    binding: 5,
-                    resource: BindingResource::Sampler(egui_sampler),
-                },
-            ],
-            label: Some("combine_bind_group"),
-        })
-    }
-
-    fn combine_setup(
-        device: &Device,
-        config: &SurfaceConfiguration,
-        bind_group_layout: &BindGroupLayout,
-    ) -> RenderPipeline {
-        let shader = shaders::combine_shader(device);
-
-        let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
-            label: Some("Combine Render Pipeline Layout"),
-            bind_group_layouts: &[bind_group_layout],
-            push_constant_ranges: &[],
-        });
-
-        let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
-            label: Some("Combine Render Pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: VertexState {
-                module: &shader,
-                entry_point: "vs_main",
-                buffers: &[],
-            },
-            fragment: Some(FragmentState {
-                module: &shader,
-                entry_point: "fs_main",
-                targets: &[Some(ColorTargetState {
-                    format: config.format,
-                    blend: Some(BlendState::REPLACE),
-                    write_mask: ColorWrites::ALL,
-                })],
-            }),
-            primitive: PrimitiveState {
-                topology: PrimitiveTopology::TriangleList,
-                front_face: FrontFace::Ccw,
-                ..Default::default()
-            },
-            depth_stencil: None,
-            multisample: MultisampleState {
-                count: 1,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            multiview: None,
-        });
-
-        pipeline
+            self.surface.configure(&self.device, &self.config);
+        }
     }
 
     pub fn resize(&mut self, size: PhysicalSize<u32>) {
         self.config.width = size.width;
         self.config.height = size.height;
 
-        self.multisampled_texture =
-            create_surface_texture(&self.device, &self.config, MULTISAMPLED_TEXTURE, 4);
+        self.multisampled_texture0 = create_surface_texture(
+            &self.device,
+            self.config.format,
+            extent3d(&self.config),
+            MULTISAMPLED_TEXTURE,
+            4,
+        );
+        self.multisampled_texture1 = create_surface_texture(
+            &self.device,
+            self.config.format,
+            extent3d(&self.config),
+            MULTISAMPLED_TEXTURE,
+            4,
+        );
 
-        self.game_texture = create_surface_texture(&self.device, &self.config, GAME_TEXTURE, 1);
-        self.processed_game_texture =
-            create_surface_texture(&self.device, &self.config, PROCESSED_GAME_TEXTURE, 1);
-        self.gui_texture = create_surface_texture(&self.device, &self.config, GUI_TEXTURE, 1);
-        self.egui_texture = create_surface_texture(&self.device, &self.config, EGUI_TEXTURE, 1);
+        self.game_texture = create_surface_texture(
+            &self.device,
+            self.config.format,
+            extent3d(&self.config),
+            GAME_TEXTURE,
+            1,
+        );
+        self.game_depth_texture = create_texture(
+            &self.device,
+            DEPTH_FORMAT,
+            extent3d(&self.config),
+            GAME_DEPTH_TEXTURE,
+            4,
+        );
+        self.processed_game_texture = create_surface_texture(
+            &self.device,
+            self.config.format,
+            extent3d(&self.config),
+            PROCESSED_GAME_TEXTURE,
+            1,
+        );
 
-        self.game_depth_texture =
-            create_depth_texture(&self.device, &self.config, GAME_DEPTH_TEXTURE);
-        self.gui_depth_texture =
-            create_depth_texture(&self.device, &self.config, GUI_DEPTH_TEXTURE);
+        self.gui_texture = create_surface_texture(
+            &self.device,
+            self.config.format,
+            extent3d(&self.config),
+            GUI_TEXTURE,
+            1,
+        );
+        self.gui_depth_texture = create_texture(
+            &self.device,
+            DEPTH_FORMAT,
+            extent3d(&self.config),
+            GUI_DEPTH_TEXTURE,
+            4,
+        );
+        self.processed_gui_texture = create_surface_texture(
+            &self.device,
+            self.config.format,
+            extent3d(&self.config),
+            GUI_TEXTURE,
+            1,
+        );
+        self.egui_texture = create_surface_texture(
+            &self.device,
+            self.config.format,
+            extent3d(&self.config),
+            EGUI_TEXTURE,
+            1,
+        );
 
-        self.effects_bind_group = Self::make_effects_bind_group(
+        self.game_effects_bind_group = make_effects_bind_group(
             &self.device,
             &self.effects_bind_group_layout,
             &self.game_texture.1,
         );
+        self.gui_effects_bind_group = make_effects_bind_group(
+            &self.device,
+            &self.effects_bind_group_layout,
+            &self.gui_texture.1,
+        );
 
-        self.combine_bind_group = Self::make_combine_bind_group(
+        self.combine_bind_group = make_combine_bind_group(
             &self.device,
             &self.combine_bind_group_layout,
             &self.processed_game_texture.1,
             &self.processed_game_sampler,
-            &self.gui_texture.1,
-            &self.gui_sampler,
+            &self.processed_gui_texture.1,
+            &self.processed_gui_sampler,
             &self.egui_texture.1,
             &self.egui_sampler,
         );
@@ -705,7 +766,12 @@ impl Gpu {
         self.surface.configure(&self.device, &self.config);
     }
 
-    pub async fn new(window: Window, vertices: Vec<Vertex>, indices: Vec<u16>) -> Self {
+    pub async fn new(
+        window: Window,
+        vertices: Vec<Vertex>,
+        indices: Vec<u16>,
+        vsync: bool,
+    ) -> Self {
         // The instance is a handle to our GPU
         // Backends::all => Vulkan + Metal + DX12 + Browser WebGPU
         let instance = Instance::new(InstanceDescriptor {
@@ -747,12 +813,22 @@ impl Gpu {
             format: surface_format,
             width: size.width,
             height: size.height,
-            present_mode: surface_caps.present_modes[0],
+            present_mode: Self::pick_present_mode(vsync),
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
         };
 
         surface.configure(&device, &config);
+
+        let sampler_desc = SamplerDescriptor {
+            address_mode_u: AddressMode::ClampToEdge,
+            address_mode_v: AddressMode::ClampToEdge,
+            address_mode_w: AddressMode::ClampToEdge,
+            mag_filter: FilterMode::Linear,
+            min_filter: FilterMode::Linear,
+            mipmap_filter: FilterMode::Nearest,
+            ..Default::default()
+        };
 
         let vertex_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Vertex Buffer"),
@@ -766,42 +842,57 @@ impl Gpu {
             usage: BufferUsages::INDEX,
         });
 
-        let multisampled_texture =
-            create_surface_texture(&device, &config, MULTISAMPLED_TEXTURE, 4);
-        let game_texture = create_surface_texture(&device, &config, GAME_TEXTURE, 1);
-        let processed_game_texture =
-            create_surface_texture(&device, &config, PROCESSED_GAME_TEXTURE, 1);
-        let processed_game_sampler = device.create_sampler(&SamplerDescriptor {
-            address_mode_u: AddressMode::ClampToEdge,
-            address_mode_v: AddressMode::ClampToEdge,
-            address_mode_w: AddressMode::ClampToEdge,
-            mag_filter: FilterMode::Linear,
-            min_filter: FilterMode::Nearest,
-            mipmap_filter: FilterMode::Nearest,
-            ..Default::default()
-        });
-        let gui_texture = create_surface_texture(&device, &config, GUI_TEXTURE, 1);
-        let gui_sampler = device.create_sampler(&SamplerDescriptor {
-            address_mode_u: AddressMode::ClampToEdge,
-            address_mode_v: AddressMode::ClampToEdge,
-            address_mode_w: AddressMode::ClampToEdge,
-            mag_filter: FilterMode::Linear,
-            min_filter: FilterMode::Nearest,
-            mipmap_filter: FilterMode::Nearest,
-            ..Default::default()
-        });
-        let egui_texture = create_surface_texture(&device, &config, EGUI_TEXTURE, 1);
-        let egui_sampler = device.create_sampler(&SamplerDescriptor {
-            address_mode_u: AddressMode::ClampToEdge,
-            address_mode_v: AddressMode::ClampToEdge,
-            address_mode_w: AddressMode::ClampToEdge,
-            mag_filter: FilterMode::Linear,
-            min_filter: FilterMode::Nearest,
-            mipmap_filter: FilterMode::Nearest,
-            ..Default::default()
-        });
+        let multisampled_texture0 = create_surface_texture(
+            &device,
+            config.format,
+            extent3d(&config),
+            MULTISAMPLED_TEXTURE,
+            4,
+        );
+        let multisampled_texture1 = create_surface_texture(
+            &device,
+            config.format,
+            extent3d(&config),
+            MULTISAMPLED_TEXTURE,
+            4,
+        );
 
-        let game_depth_texture = create_depth_texture(&device, &config, GAME_DEPTH_TEXTURE);
+        let game_texture =
+            create_surface_texture(&device, config.format, extent3d(&config), GAME_TEXTURE, 1);
+        let game_depth_texture = create_texture(
+            &device,
+            DEPTH_FORMAT,
+            extent3d(&config),
+            GAME_DEPTH_TEXTURE,
+            4,
+        );
+        let processed_game_texture = create_surface_texture(
+            &device,
+            config.format,
+            extent3d(&config),
+            PROCESSED_GAME_TEXTURE,
+            1,
+        );
+        let processed_game_sampler = device.create_sampler(&sampler_desc);
+
+        let gui_texture =
+            create_surface_texture(&device, config.format, extent3d(&config), GUI_TEXTURE, 1);
+        let gui_sampler = device.create_sampler(&sampler_desc);
+        let gui_depth_texture = create_texture(
+            &device,
+            DEPTH_FORMAT,
+            extent3d(&config),
+            GUI_DEPTH_TEXTURE,
+            4,
+        );
+        let processed_gui_texture =
+            create_surface_texture(&device, config.format, extent3d(&config), GUI_TEXTURE, 1);
+        let processed_gui_sampler = device.create_sampler(&sampler_desc);
+
+        let egui_texture =
+            create_surface_texture(&device, config.format, extent3d(&config), EGUI_TEXTURE, 1);
+        let egui_sampler = device.create_sampler(&sampler_desc);
+
         let game_instance_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: GAME_INSTANCE_BUFFER,
             contents: &[],
@@ -829,7 +920,6 @@ impl Gpu {
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
 
-        let gui_depth_texture = create_depth_texture(&device, &config, GUI_DEPTH_TEXTURE);
         let gui_instance_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: GUI_INSTANCE_BUFFER,
             contents: &[],
@@ -842,8 +932,7 @@ impl Gpu {
             usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
         });
 
-        let (game_uniform_buffer, game_bind_group, game_pipeline) =
-            Self::game_setup(&device, &config);
+        let (game_uniform_buffer, game_bind_group, game_pipeline) = game_setup(&device, &config);
 
         let effects_bind_group_layout =
             device.create_bind_group_layout(&BindGroupLayoutDescriptor {
@@ -860,15 +949,17 @@ impl Gpu {
                 label: Some("effects_bind_group_layout"),
             });
 
-        let effects_bind_group =
-            Self::make_effects_bind_group(&device, &effects_bind_group_layout, &game_texture.1);
+        let game_effects_bind_group =
+            make_effects_bind_group(&device, &effects_bind_group_layout, &game_texture.1);
+        let gui_effects_bind_group =
+            make_effects_bind_group(&device, &effects_bind_group_layout, &gui_texture.1);
 
-        let effects_pipeline = Self::effects_setup(&device, &config, &effects_bind_group_layout);
+        let effects_pipeline = effects_setup(&device, &config, &effects_bind_group_layout);
 
-        let (gui_uniform_buffer, gui_bind_group, gui_pipeline) = Self::gui_setup(&device, &config);
+        let (gui_uniform_buffer, gui_bind_group, gui_pipeline) = gui_setup(&device, &config);
 
         let (overlay_uniform_buffer, overlay_bind_group, overlay_pipeline) =
-            Self::overlay_setup(&device, &config);
+            overlay_setup(&device, &config);
 
         let combine_bind_group_layout =
             device.create_bind_group_layout(&BindGroupLayoutDescriptor {
@@ -925,40 +1016,49 @@ impl Gpu {
                 label: Some("combine_bind_group_layout"),
             });
 
-        let combine_bind_group = Self::make_combine_bind_group(
+        let combine_bind_group = make_combine_bind_group(
             &device,
             &combine_bind_group_layout,
             &processed_game_texture.1,
             &processed_game_sampler,
-            &gui_texture.1,
-            &gui_sampler,
+            &processed_gui_texture.1,
+            &processed_gui_sampler,
             &egui_texture.1,
             &egui_sampler,
         );
 
-        let combine_pipeline = Self::combine_setup(&device, &config, &combine_bind_group_layout);
+        let combine_pipeline = combine_setup(&device, &config, &combine_bind_group_layout);
 
         Self {
+            vsync,
+
             instance,
             device,
             queue,
             surface,
             config,
-            window,
+            window: Arc::new(window),
 
             vertex_buffer,
             index_buffer,
 
-            multisampled_texture,
+            multisampled_texture0,
+            multisampled_texture1,
+
             game_texture,
+            game_depth_texture,
             processed_game_texture,
             processed_game_sampler,
+
             gui_texture,
             gui_sampler,
+            gui_depth_texture,
+            processed_gui_texture,
+            processed_gui_sampler,
+
             egui_texture,
             egui_sampler,
 
-            game_depth_texture,
             game_instance_buffer,
             game_indirect_buffer,
             game_uniform_buffer,
@@ -970,10 +1070,10 @@ impl Gpu {
             extra_uniform_buffer,
 
             effects_bind_group_layout,
-            effects_bind_group,
+            game_effects_bind_group,
+            gui_effects_bind_group,
             effects_pipeline,
 
-            gui_depth_texture,
             gui_instance_buffer,
             gui_uniform_buffer,
             gui_bind_group,

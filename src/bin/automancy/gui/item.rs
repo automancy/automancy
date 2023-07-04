@@ -24,5 +24,5 @@ pub fn draw_item(
 
     let model = resource_man.get_item_model(stack.item);
 
-    gui_instances.push((InstanceData::default(), model, rect, (0.0, 1.0)));
+    gui_instances.push((InstanceData::default(), model, rect));
 }

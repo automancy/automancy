@@ -6,13 +6,12 @@ use tokio::runtime::Runtime;
 use automancy::game::GameMsg;
 use automancy::renderer::GuiInstances;
 use automancy::tile_entity::TileEntityMsg;
-use automancy::util::render::hex_to_normalized;
-use automancy_defs::cg::Double;
-use automancy_defs::colors;
 use automancy_defs::coord::{TileCoord, TileHex};
 use automancy_defs::hexagon_tiles::traits::HexDirection;
 use automancy_defs::id::Id;
+use automancy_defs::math::Double;
 use automancy_defs::rendering::Vertex;
+use automancy_defs::{colors, math};
 use automancy_resources::data::stack::ItemStack;
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::tile::Tile;
@@ -175,10 +174,13 @@ fn node(
 
             if let Some(link) = result.as_ref().and_then(Data::as_coord) {
                 let (a, w0) =
-                    hex_to_normalized((width, height), setup.camera.get_pos(), config_open);
+                    math::hex_to_normalized((width, height), setup.camera.get_pos(), config_open);
 
-                let (b, w1) =
-                    hex_to_normalized((width, height), setup.camera.get_pos(), config_open + *link);
+                let (b, w1) = math::hex_to_normalized(
+                    (width, height),
+                    setup.camera.get_pos(),
+                    config_open + *link,
+                );
 
                 extra_vertices.extend_from_slice(&make_line(a, b, (w0 + w1) / 2.0, colors::RED));
             }

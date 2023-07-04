@@ -1,15 +1,15 @@
-use lazy_static::lazy_static;
 use std::error::Error;
 use std::fs::{File, OpenOptions};
-use std::io::{BufReader, BufWriter, ErrorKind, Read, Write};
+use std::io::{BufReader, Read, Write};
 
+use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use winit::event::VirtualKeyCode;
 
 use automancy_defs::hashbrown::HashMap;
 use automancy_defs::log;
 
-use crate::input::{actions, KeyAction, KeyActions};
+use crate::input::{actions, KeyAction};
 
 #[derive(Serialize, Deserialize)]
 pub struct Options {
@@ -26,7 +26,7 @@ lazy_static! {
 impl Default for Options {
     fn default() -> Self {
         Self {
-            vsync: false,
+            vsync: true,
             keymap: DEFAULT_KEYMAP.clone(),
         }
     }
@@ -45,17 +45,25 @@ impl Options {
         let mut body = String::new();
         BufReader::new(file).read_to_string(&mut body)?;
         let mut this: Self = toml::de::from_str(body.clone().as_str()).unwrap_or_default();
+
         if this.keymap.len() != DEFAULT_KEYMAP.len() {
+            // TODO show a popup warning the player
             this.keymap = DEFAULT_KEYMAP.clone();
         }
+
         this.save()?;
+
         Ok(this)
     }
+
     pub fn save(&mut self) -> Result<(), Box<dyn Error>> {
         let mut file = File::create(OPTIONS_PATH)?;
+
         let body = toml::ser::to_string_pretty(self)?;
         write!(&mut file, "{body}")?;
+
         log::info!("Saved options!");
+
         Ok(())
     }
 }
