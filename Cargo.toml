@@ -68,6 +68,7 @@ env_logger = "0.10.0"
 
 slice-group-by = "0.3.0"
 arraydeque = "0.5.1"
+enum-ordinalize = "3.1.13"
 fuse-rust = "0.3.1"
 
 rayon = "1.7.0"

@@ -3,10 +3,11 @@ use expect_dialog::ExpectDialog;
 use futures::executor::block_on;
 use tokio::runtime::Runtime;
 use winit::event_loop::EventLoop;
-use winit::window::{Icon, WindowBuilder};
+use winit::window::{Fullscreen, Icon, WindowBuilder};
 
 use automancy::camera::Camera;
 use automancy::gpu::Gpu;
+use automancy::input::KeyActions;
 use automancy::renderer::Renderer;
 use automancy_defs::gui::init_gui;
 use automancy_defs::{log, window};
@@ -57,7 +58,7 @@ fn main() {
         &setup.resource_man,
         vertices,
         indices,
-        setup.options.vsync,
+        setup.options.graphics.fps_limit == 0.0,
     ));
     log::info!("render setup.");
 
@@ -84,6 +85,18 @@ fn main() {
             control_flow,
         );
 
-        renderer.gpu.set_vsync(setup.options.vsync);
+        renderer
+            .gpu
+            .set_vsync(setup.options.graphics.fps_limit == 0.0);
+        setup.options.graphics.fullscreen =
+            setup.input_handler.key_pressed(&KeyActions::FULLSCREEN);
+        if setup.options.graphics.fullscreen {
+            renderer
+                .gpu
+                .window
+                .set_fullscreen(Some(Fullscreen::Borderless(None)));
+        } else {
+            renderer.gpu.window.set_fullscreen(None);
+        }
     });
 }

@@ -19,6 +19,7 @@ pub enum KeyActions {
     ESCAPE,
     UNDO,
     DEBUG,
+    FULLSCREEN,
 }
 
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -47,6 +48,10 @@ pub mod actions {
     };
     pub static DEBUG: KeyAction = KeyAction {
         action: KeyActions::DEBUG,
+        press_type: PressTypes::TOGGLE,
+    };
+    pub static FULLSCREEN: KeyAction = KeyAction {
+        action: KeyActions::FULLSCREEN,
         press_type: PressTypes::TOGGLE,
     };
 }
