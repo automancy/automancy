@@ -1,3 +1,4 @@
+use enum_ordinalize::Ordinalize;
 use std::error::Error;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, Read, Write};
@@ -13,7 +14,7 @@ use crate::input::{actions, KeyAction};
 
 #[derive(Serialize, Deserialize)]
 pub struct Options {
-    pub vsync: bool,
+    pub graphics: GraphicsOptions,
     pub keymap: HashMap<VirtualKeyCode, KeyAction>,
 }
 lazy_static! {
@@ -21,12 +22,13 @@ lazy_static! {
         (VirtualKeyCode::Z, actions::UNDO),
         (VirtualKeyCode::Escape, actions::ESCAPE),
         (VirtualKeyCode::F3, actions::DEBUG),
+        (VirtualKeyCode::F11, actions::FULLSCREEN)
     ]);
 }
 impl Default for Options {
     fn default() -> Self {
         Self {
-            vsync: true,
+            graphics: Default::default(),
             keymap: DEFAULT_KEYMAP.clone(),
         }
     }
@@ -65,5 +67,30 @@ impl Options {
         log::info!("Saved options!");
 
         Ok(())
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Ordinalize)]
+pub enum AALevel {
+    None,
+    FXAA,
+    TAA,
+    MSAA,
+}
+#[derive(Serialize, Deserialize)]
+pub struct GraphicsOptions {
+    pub fps_limit: f64,
+    pub fullscreen: bool,
+    pub scale: f32,
+    pub aa: AALevel,
+}
+impl Default for GraphicsOptions {
+    fn default() -> Self {
+        Self {
+            fps_limit: 0.0,
+            fullscreen: false,
+            scale: 1.0,
+            aa: AALevel::MSAA,
+        }
     }
 }
