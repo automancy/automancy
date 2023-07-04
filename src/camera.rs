@@ -113,7 +113,7 @@ impl Camera {
     fn on_moving_main(&mut self, delta: DVector2) {
         const MAX_MOVE_VEL: Double = 2.0;
 
-        self.move_vel += delta / 500.0;
+        self.move_vel += delta / 600.0;
         self.move_vel = self.move_vel.map(|v| v.clamp(-MAX_MOVE_VEL, MAX_MOVE_VEL));
     }
 }

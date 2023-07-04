@@ -77,7 +77,7 @@ fn get_angle_from_target(target: Option<&Data>) -> Option<Float> {
     }
 }
 
-pub type GuiInstances = Vec<(InstanceData, Id, Rect)>;
+pub type GuiInstances = Vec<(InstanceData, Id, Rect, Option<Rect>)>;
 
 impl Renderer {
     pub fn render(
@@ -222,7 +222,10 @@ impl Renderer {
             {
                 map.entry(model)
                     .or_insert_with(|| Vec::with_capacity(32))
-                    .push((RawInstanceData::from(instance), model))
+                    .push((
+                        RawInstanceData::from(instance.with_light_pos(camera_pos)),
+                        model,
+                    ))
             }
 
             map.into_values().flatten().collect::<Vec<_>>()
@@ -246,15 +249,20 @@ impl Renderer {
             let lerp = a.lerp(b, t);
             let point = math::frac_hex_to_pixel(lerp);
 
-            let instance = InstanceData::default().with_model_matrix(
-                Matrix4::from_translation(vec3(point.x as Float, point.y as Float, FAR as Float))
-                    * Matrix4::from_scale(0.5)
-                    * Matrix4::from_angle_z(deg(get_angle_from_target(
-                        self.tile_targets.get(source_coord),
-                    )
-                    .map(|v| v + 60.0)
-                    .unwrap_or(0.0))),
-            );
+            let instance = InstanceData::default()
+                .with_model_matrix(
+                    Matrix4::from_translation(vec3(
+                        point.x as Float,
+                        point.y as Float,
+                        FAR as Float,
+                    )) * Matrix4::from_scale(0.5)
+                        * Matrix4::from_angle_z(deg(get_angle_from_target(
+                            self.tile_targets.get(source_coord),
+                        )
+                        .map(|v| v + 60.0)
+                        .unwrap_or(0.0))),
+                )
+                .with_light_pos(camera_pos);
             let id = resource_man.get_item_model(stack.item);
 
             extra_instances.push((instance.into(), id));
@@ -263,7 +271,6 @@ impl Renderer {
         self.inner_render(
             &resource_man,
             matrix,
-            camera_pos,
             &instances,
             &extra_instances,
             gui_instances,
@@ -276,7 +283,6 @@ impl Renderer {
         &mut self,
         resource_man: &ResourceManager,
         matrix: Matrix4,
-        camera_pos: Point3,
         instances: &[(RawInstanceData, Id)],
         extra_instances: &[(RawInstanceData, Id)],
         gui_instances: GuiInstances,
@@ -325,7 +331,7 @@ impl Renderer {
             self.gpu.queue.write_buffer(
                 &self.gpu.game_uniform_buffer,
                 0,
-                bytemuck::cast_slice(&[GameUBO::new(matrix, camera_pos)]),
+                bytemuck::cast_slice(&[GameUBO::new(matrix)]),
             );
 
             let count = gpu::indirect_instance(
@@ -380,7 +386,7 @@ impl Renderer {
             self.gpu.queue.write_buffer(
                 &self.gpu.extra_uniform_buffer,
                 0,
-                bytemuck::cast_slice(&[GameUBO::new(matrix, camera_pos)]),
+                bytemuck::cast_slice(&[GameUBO::new(matrix)]),
             );
 
             let count = gpu::indirect_instance(
@@ -502,7 +508,9 @@ impl Renderer {
 
             let (instances, draws): (Vec<_>, Vec<_>) = gui_instances
                 .into_iter()
-                .map(|(instance, id, rect)| (RawInstanceData::from(instance), (id, rect)))
+                .map(|(instance, id, rect, scissor)| {
+                    (RawInstanceData::from(instance), (id, rect, scissor))
+                })
                 .unzip();
 
             self.gpu.queue.write_buffer(
@@ -525,17 +533,28 @@ impl Renderer {
             gui_pass.set_vertex_buffer(1, self.gpu.gui_instance_buffer.slice(..));
             gui_pass.set_index_buffer(self.gpu.index_buffer.slice(..), IndexFormat::Uint16);
 
-            for (idx, (id, rect)) in draws.into_iter().enumerate() {
+            let factor = gui.context.pixels_per_point();
+
+            for (idx, (id, rect, scissor)) in draws.into_iter().enumerate() {
                 let idx = idx as u32;
 
                 gui_pass.set_viewport(
-                    rect.left(),
-                    rect.top(),
-                    rect.width(),
-                    rect.height(),
+                    rect.left() * factor,
+                    rect.top() * factor,
+                    rect.width() * factor,
+                    rect.height() * factor,
                     1.0,
                     0.0,
                 );
+
+                if let Some(scissor) = scissor {
+                    gui_pass.set_scissor_rect(
+                        (scissor.left() * factor) as u32,
+                        (scissor.top() * factor) as u32,
+                        (scissor.width() * factor) as u32,
+                        (scissor.height() * factor) as u32,
+                    );
+                }
 
                 let index_range = resource_man.index_ranges[&id];
 

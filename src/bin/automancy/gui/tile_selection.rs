@@ -42,7 +42,8 @@ fn draw_tile_selection(
                 .map(|model| (*id, model))
         })
         .for_each(|(id, model)| {
-            let (rect, response) = ui.allocate_exact_size(vec2(size, size), Sense::click());
+            let (ui_id, rect) = ui.allocate_space(vec2(size, size));
+            let response = ui.interact(rect, ui_id, Sense::click());
 
             response
                 .clone()
@@ -65,9 +66,12 @@ fn draw_tile_selection(
                 * Matrix4::look_to_rh(pos, vec3(0.0, 0.5 * hover + 0.2, 1.0), Vector3::unit_y());
 
             gui_instances.push((
-                InstanceData::default().with_model_matrix(matrix),
+                InstanceData::default()
+                    .with_model_matrix(matrix)
+                    .with_light_pos(point3(0.0, 3.0, 4.0)),
                 model,
                 rect,
+                Some(ui.clip_rect()),
             ));
         });
 }

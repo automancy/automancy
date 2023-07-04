@@ -2,7 +2,7 @@ use std::error::Error;
 use std::f32::consts::PI;
 use std::mem;
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 use fuse_rust::Fuse;
 use futures::channel::mpsc;
@@ -18,7 +18,7 @@ use automancy::input::KeyActions;
 use automancy::renderer::Renderer;
 use automancy::tile_entity::{TileEntityMsg, TileModifier};
 use automancy_defs::cgmath::{point2, vec3, EuclideanSpace};
-use automancy_defs::colors::WithAlpha;
+use automancy_defs::colors::ColorAdj;
 use automancy_defs::coord::{ChunkCoord, TileCoord};
 use automancy_defs::gui::Gui;
 use automancy_defs::hashbrown::{HashMap, HashSet};
@@ -523,10 +523,6 @@ pub fn on_event(
                                 )
                                 .cloned()
                         }) {
-                            let time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-
-                            let glow = (time.as_secs_f64() * 1.2).sin().abs() / 4.0;
-
                             let instance = InstanceData {
                                 model_matrix: matrix
                                     * Matrix4::from_translation(vec3(
@@ -534,15 +530,15 @@ pub fn on_event(
                                         mouse_pos.y as Float,
                                         FAR as Float,
                                     )),
-                                color_offset: colors::TRANSPARENT
-                                    .with_alpha(glow as Float)
-                                    .to_array(),
+                                color_offset: colors::TRANSPARENT.with_alpha(0.8).to_array(),
+                                light_pos: setup.camera.get_pos().cast().unwrap(),
                             };
 
                             gui_instances.push((
                                 instance,
                                 model,
                                 window::window_size_rect(&renderer.gpu.window),
+                                None,
                             ));
                         }
                     }
@@ -575,10 +571,10 @@ pub fn on_event(
             }
         }
 
-        tile_tints.insert(setup.camera.pointing_at, colors::RED.with_alpha(0.2));
+        tile_tints.insert(setup.camera.pointing_at, colors::RED.mul(0.2));
 
         for selected in &loop_store.selected_tiles {
-            tile_tints.insert(*selected, colors::ORANGE.with_alpha(0.5));
+            tile_tints.insert(*selected, colors::ORANGE.mul(0.3));
         }
 
         if setup.input_handler.control_held {
@@ -600,7 +596,7 @@ pub fn on_event(
 
                 for selected in &loop_store.selected_tiles {
                     let dest = *selected + direction;
-                    tile_tints.insert(dest, colors::LIGHT_BLUE.with_alpha(0.5));
+                    tile_tints.insert(dest, colors::LIGHT_BLUE.mul(0.3));
                 }
             }
         }

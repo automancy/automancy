@@ -1,5 +1,4 @@
 struct Uniform {
-    light_pos: vec4<f32>,
     light_color: vec4<f32>,
     world: mat4x4<f32>,
 }
@@ -15,10 +14,12 @@ struct VertexInput {
 
 struct InstanceInput {
     @location(3) color_offset: vec4<f32>,
-    @location(4) model_matrix_0: vec4<f32>,
-    @location(5) model_matrix_1: vec4<f32>,
-    @location(6) model_matrix_2: vec4<f32>,
-    @location(7) model_matrix_3: vec4<f32>,
+    @location(4) light_pos: vec4<f32>,
+
+    @location(5) model_matrix_0: vec4<f32>,
+    @location(6) model_matrix_1: vec4<f32>,
+    @location(7) model_matrix_2: vec4<f32>,
+    @location(8) model_matrix_3: vec4<f32>,
 }
 
 struct VertexOutput {
@@ -26,6 +27,7 @@ struct VertexOutput {
     @location(0) color: vec4<f32>,
     @location(1) model_pos: vec3<f32>,
     @location(2) normal: vec3<f32>,
+    @location(3) light_pos: vec4<f32>,
 }
 
 @vertex
@@ -47,8 +49,8 @@ fn vs_main(
     out.model_pos = model_pos.xyz / model_pos.w;
     out.normal = model.normal;
 
-    out.color = ((1.0 - instance.color_offset.a) * model.color) +
-                      ((instance.color_offset.a) * instance.color_offset);
+    out.color = vec4(model.color.rgb + instance.color_offset.rgb, model.color.a * instance.color_offset.a);
+    out.light_pos = instance.light_pos;
 
     return out;
 }
@@ -56,7 +58,7 @@ fn vs_main(
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let light_color = ubo.light_color.rgb * 0.15;
-    let light_dir = ubo.light_pos.xyz - in.model_pos;
+    let light_dir = in.light_pos.xyz - in.model_pos;
 
     let norm = normalize(in.normal);
     let reflected = -reflect(normalize(light_dir), norm);

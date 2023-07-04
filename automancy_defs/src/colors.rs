@@ -24,14 +24,22 @@ macro_rules! hex_color {
     }};
 }
 
-pub trait WithAlpha {
+pub trait ColorAdj {
     fn with_alpha(&self, a: Float) -> Self;
+    fn mul(&self, m: Float) -> Self;
 }
 
-impl WithAlpha for Rgba {
+impl ColorAdj for Rgba {
     #[inline]
     fn with_alpha(&self, a: Float) -> Self {
         Rgba::from_rgba_premultiplied(self.r(), self.g(), self.b(), a)
+    }
+
+    #[inline]
+    fn mul(&self, m: Float) -> Self {
+        let mut r = Rgba::from_rgba_unmultiplied(self.r(), self.g(), self.b(), m);
+        r[3] = 1.0;
+        r
     }
 }
 

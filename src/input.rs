@@ -115,6 +115,13 @@ pub fn convert_input(
                             AlternateReleased
                         };
                     }
+                    MouseButton::Middle => {
+                        result = if state == &Pressed {
+                            TertiaryPressed
+                        } else {
+                            TertiaryReleased
+                        }
+                    }
                     _ => {}
                 };
             }

@@ -1,4 +1,4 @@
-use egui::{vec2, Sense, Ui};
+use egui::{vec2, Ui};
 
 use automancy::renderer::GuiInstances;
 use automancy_defs::rendering::InstanceData;
@@ -14,7 +14,7 @@ pub fn draw_item(
 ) {
     let size = ui.available_height();
 
-    let (rect, _) = ui.allocate_exact_size(vec2(size, size), Sense::focusable_noninteractive());
+    let (_ui_id, rect) = ui.allocate_space(vec2(size, size));
 
     ui.label(format!(
         "{} ({})",
@@ -24,5 +24,5 @@ pub fn draw_item(
 
     let model = resource_man.get_item_model(stack.item);
 
-    gui_instances.push((InstanceData::default(), model, rect));
+    gui_instances.push((InstanceData::default(), model, rect, None));
 }
