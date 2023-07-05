@@ -28,13 +28,13 @@ fn vs_main(
 }
 
 fn sobel(tex: vec2<i32>, size: vec2<i32>) -> f32 {
-    let sx = mat3x3<f32>(
+    let SX = mat3x3<f32>(
         1.0,  2.0,  1.0,
         0.0,  0.0,  0.0,
        -1.0, -2.0, -1.0
     );
 
-    let sy = mat3x3<f32>(
+    let SY = mat3x3<f32>(
         1.0, 0.0, -1.0,
         2.0, 0.0, -2.0,
         1.0, 0.0, -1.0
@@ -50,17 +50,17 @@ fn sobel(tex: vec2<i32>, size: vec2<i32>) -> f32 {
         for (var j = 0; j < 3; j++) {
             let t = tex + vec2(i - 2, j - 2);
 
-            let s = textureLoad(frame, clamp(vec2(0), t, size), 0).rgb;
+            let s = textureLoad(frame, clamp(t, vec2(0), size), 0).rgb;
 
             m[i][j] = length(s);
         }
     }
-    let gx = dot(sx[0], m[0]) + dot(sx[1], m[1]) + dot(sx[2], m[2]);
-    let gy = dot(sy[0], m[0]) + dot(sy[1], m[1]) + dot(sy[2], m[2]);
+    let gx = dot(SX[0], m[0]) + dot(SX[1], m[1]) + dot(SX[2], m[2]);
+    let gy = dot(SY[0], m[0]) + dot(SY[1], m[1]) + dot(SY[2], m[2]);
 
-    let g = sqrt(pow(gx, 2.0) + pow(gy, 2.0));
+    let g = length(vec2(gx, gy));
 
-    return smoothstep(0.5, 1.0, g);
+    return smoothstep(0.3, 0.6, g);
 }
 
 @fragment

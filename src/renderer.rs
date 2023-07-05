@@ -27,7 +27,7 @@ use automancy_resources::ResourceManager;
 
 use crate::game::{GameMsg, RenderInfo, RenderUnit, TickUnit, ANIMATION_SPEED};
 use crate::gpu;
-use crate::gpu::{Gpu, GUI_INSTANCE_BUFFER, OVERLAY_VERTEX_BUFFER};
+use crate::gpu::{Gpu, GUI_INSTANCE_BUFFER, OVERLAY_VERTEX_BUFFER, UPSCALE_LEVEL};
 use crate::tile_entity::TileEntityMsg;
 use crate::util::actor::multi_call_iter;
 
@@ -311,8 +311,8 @@ impl Renderer {
             let mut game_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Game Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.multisampled_texture0.1,
-                    resolve_target: Some(&self.gpu.game_texture.1),
+                    view: &self.gpu.game_texture.1,
+                    resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(Color::BLACK),
                         store: true,
@@ -347,8 +347,8 @@ impl Renderer {
                 game_pass.set_viewport(
                     0.0,
                     0.0,
-                    self.size.width as Float,
-                    self.size.height as Float,
+                    (self.size.width * UPSCALE_LEVEL) as Float,
+                    (self.size.height * UPSCALE_LEVEL) as Float,
                     1.0,
                     0.0,
                 );
@@ -366,8 +366,8 @@ impl Renderer {
             let mut extra_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Game Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.multisampled_texture0.1,
-                    resolve_target: Some(&self.gpu.game_texture.1),
+                    view: &self.gpu.game_texture.1,
+                    resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Load,
                         store: true,
@@ -402,8 +402,8 @@ impl Renderer {
                 extra_pass.set_viewport(
                     0.0,
                     0.0,
-                    self.size.width as Float,
-                    self.size.height as Float,
+                    (self.size.width * UPSCALE_LEVEL) as Float,
+                    (self.size.height * UPSCALE_LEVEL) as Float,
                     1.0,
                     0.0,
                 );
@@ -489,8 +489,8 @@ impl Renderer {
             let mut gui_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Gui Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.multisampled_texture0.1,
-                    resolve_target: Some(&self.gpu.gui_texture.1),
+                    view: &self.gpu.gui_texture.1,
+                    resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(Color::TRANSPARENT),
                         store: true,
@@ -540,10 +540,10 @@ impl Renderer {
 
                 if let Some(viewport) = viewport {
                     gui_pass.set_viewport(
-                        viewport.left() * factor,
-                        viewport.top() * factor,
-                        viewport.width() * factor,
-                        viewport.height() * factor,
+                        viewport.left() * factor * UPSCALE_LEVEL as Float,
+                        viewport.top() * factor * UPSCALE_LEVEL as Float,
+                        viewport.width() * factor * UPSCALE_LEVEL as Float,
+                        viewport.height() * factor * UPSCALE_LEVEL as Float,
                         1.0,
                         0.0,
                     );
@@ -551,8 +551,8 @@ impl Renderer {
                     gui_pass.set_viewport(
                         0.0,
                         0.0,
-                        self.size.width as Float,
-                        self.size.height as Float,
+                        (self.size.width * UPSCALE_LEVEL) as Float,
+                        (self.size.height * UPSCALE_LEVEL) as Float,
                         1.0,
                         0.0,
                     );
@@ -560,13 +560,18 @@ impl Renderer {
 
                 if let Some(scissor) = scissor {
                     gui_pass.set_scissor_rect(
-                        (scissor.left() * factor) as u32,
-                        (scissor.top() * factor) as u32,
-                        (scissor.width() * factor) as u32,
-                        (scissor.height() * factor) as u32,
+                        (scissor.left() * factor) as u32 * UPSCALE_LEVEL,
+                        (scissor.top() * factor) as u32 * UPSCALE_LEVEL,
+                        (scissor.width() * factor) as u32 * UPSCALE_LEVEL,
+                        (scissor.height() * factor) as u32 * UPSCALE_LEVEL,
                     );
                 } else {
-                    gui_pass.set_scissor_rect(0, 0, self.size.width, self.size.height);
+                    gui_pass.set_scissor_rect(
+                        0,
+                        0,
+                        self.size.width * UPSCALE_LEVEL,
+                        self.size.height * UPSCALE_LEVEL,
+                    );
                 }
 
                 let index_range = resource_man.index_ranges[&id];
@@ -601,8 +606,8 @@ impl Renderer {
             let mut overlay_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Overlay Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.multisampled_texture0.1,
-                    resolve_target: Some(&self.gpu.gui_texture.1),
+                    view: &self.gpu.gui_texture.1,
+                    resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Load,
                         store: true,
