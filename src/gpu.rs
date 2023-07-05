@@ -20,7 +20,6 @@ use winit::window::Window;
 
 use automancy_defs::bytemuck;
 use automancy_defs::id::Id;
-use automancy_defs::math::Float;
 use automancy_defs::rendering::{GameUBO, OverlayUBO, RawInstanceData, Vertex};
 use automancy_resources::ResourceManager;
 

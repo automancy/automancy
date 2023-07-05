@@ -61,8 +61,8 @@ impl Renderer {
     }
 }
 
-fn get_angle_from_target(target: Option<&Data>) -> Option<Float> {
-    if let Some(target) = target.and_then(Data::as_coord) {
+fn get_angle_from_target(target: &Data) -> Option<Float> {
+    if let Some(target) = target.as_coord() {
         match *target {
             TileCoord::TOP_RIGHT => Some(0.0),
             TileCoord::RIGHT => Some(-60.0),
@@ -156,24 +156,20 @@ impl Renderer {
                     .collect();
             }
 
-            for (coord, target) in &self.tile_targets {
-                if let Some(instance) = instances.get_mut(coord) {
-                    let theta = get_angle_from_target(Some(target));
+            for (coord, instance) in instances.iter_mut() {
+                if let Some(theta) = self.tile_targets.get(coord).and_then(get_angle_from_target) {
+                    let m = &mut instance.instance.model_matrix;
 
-                    if let Some(theta) = theta {
-                        let m = &mut instance.instance.model_matrix;
-
-                        *m = *m * Matrix4::from_angle_z(deg(theta))
-                    } else if let Some(inactive) = self
-                        .resource_man
-                        .registry
-                        .tile(instance.tile)
-                        .unwrap()
-                        .model_attributes
-                        .inactive_model
-                    {
-                        instance.model = inactive;
-                    }
+                    *m = *m * Matrix4::from_angle_z(deg(theta))
+                } else if let Some(inactive) = self
+                    .resource_man
+                    .registry
+                    .tile(instance.tile)
+                    .unwrap()
+                    .model_attributes
+                    .inactive_model
+                {
+                    instance.model = self.resource_man.get_model(inactive);
                 }
             }
 
@@ -256,11 +252,12 @@ impl Renderer {
                         point.y as Float,
                         FAR as Float,
                     )) * Matrix4::from_scale(0.5)
-                        * Matrix4::from_angle_z(deg(get_angle_from_target(
-                            self.tile_targets.get(source_coord),
-                        )
-                        .map(|v| v + 60.0)
-                        .unwrap_or(0.0))),
+                        * Matrix4::from_angle_z(deg(self
+                            .tile_targets
+                            .get(source_coord)
+                            .and_then(get_angle_from_target)
+                            .map(|v| v + 60.0)
+                            .unwrap_or(0.0))),
                 )
                 .with_light_pos(camera_pos);
             let id = resource_man.get_item_model(stack.item);
