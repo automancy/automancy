@@ -25,7 +25,7 @@ use automancy_defs::{bytemuck, math};
 use automancy_resources::data::Data;
 use automancy_resources::ResourceManager;
 
-use crate::game::{GameMsg, RenderInfo, RenderUnit, TickUnit, ANIMATION_SPEED};
+use crate::game::{GameMsg, RenderInfo, RenderUnit, TickUnit, TransactionRecord, ANIMATION_SPEED};
 use crate::gpu;
 use crate::gpu::{Gpu, GUI_INSTANCE_BUFFER, OVERLAY_VERTEX_BUFFER, UPSCALE_LEVEL};
 use crate::tile_entity::TileEntityMsg;
@@ -229,14 +229,23 @@ impl Renderer {
 
         let mut extra_instances = vec![];
 
-        let transaction_record = runtime
+        let transaction_records = runtime
             .block_on(game.call(GameMsg::GetRecordedTransactions, None))
             .unwrap()
             .unwrap();
         let now = Instant::now();
 
-        for (instant, ((source_coord, _source_id), (coord, _id)), stack) in
-            transaction_record.read().unwrap().iter()
+        let transaction_records_read = transaction_records.read().unwrap();
+
+        for (
+            instant,
+            TransactionRecord {
+                stack,
+                source_coord,
+                coord,
+                ..
+            },
+        ) in transaction_records_read.iter().flat_map(|v| v.1)
         {
             let duration = now.duration_since(*instant);
             let t = duration.as_secs_f64() / ANIMATION_SPEED.as_secs_f64();
@@ -260,10 +269,12 @@ impl Renderer {
                             .unwrap_or(0.0))),
                 )
                 .with_light_pos(camera_pos);
-            let id = resource_man.get_item_model(stack.item);
+            let model = resource_man.get_item_model(stack.item);
 
-            extra_instances.push((instance.into(), id));
+            extra_instances.push((instance.into(), model));
         }
+
+        extra_instances.sort_by_key(|v| v.1);
 
         self.inner_render(
             &resource_man,

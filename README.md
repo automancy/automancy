@@ -21,3 +21,51 @@ Links:
 - Fedi(Mastodon): https://gamedev.lgbt/@automancy
 - Git: https://github.com/sorcerers-class/automancy
 - Discord: https://discord.gg/jcJbUh3QX2
+
+## Development Notes
+
+### All
+
+*Run `make_assets.sh` to process certain assets into what the game can consume.*
+
+### Designers
+
+For SVG files, in order for them to be correctly converted to Blender files, the file needs to fit the following
+criteria:
+
+- The viewport is *exactly* 160cm by 160cm (cm is used to reduce rounding errors).
+- The file does not contain any color outside of fills.
+- The file does not contain any clipping or masking.
+    - Use the boolean operators.
+- The file does not contain any strokes.
+    - Use "Stroke to Path" to convert them.
+
+**Currently, the game supports neither materials nor textures,** ***and has no plans to support them.***
+
+**Use either Vertex Paint or a material with only the base color (they get turned into vertex colors upon
+running `make_assets.sh`**
+
+Note about `make_assets.sh`:
+
+- Models exported from SVG would seem inverted, this is not a bug-- it'll get flipped back when it gets exported into
+  the game.
+    - It's meant to be viewed from -Z to Z
+
+### Software
+
+The rendering is single-threaded. Game logic integration is run on Tokio runtime (which will block the rendering thread
+until the runtime completes the future).
+
+The game logic is run with an actor system.
+
+"Scripts" are called "functions" as the name is taken in-game by what would otherwise be called "recipes."
+
+- The weird terminology comes from the
+
+(When scripting support is here) write all tile logic within functions.
+
+If you can't feasibly do that, *implement more handling in source code, and then write the logic in functions.*
+
+### Translators
+
+[WIP]
