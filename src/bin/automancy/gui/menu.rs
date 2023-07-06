@@ -252,12 +252,14 @@ pub fn map_menu(
                     });
 
                     ui.horizontal(|ui| {
-                        ui.label(format_time(
-                            map_info.save_time,
-                            setup.resource_man.translates.gui
-                                [&setup.resource_man.registry.gui_ids.time_fmt]
-                                .as_str(),
-                        ));
+                        if let Some(save_time) = map_info.save_time {
+                            ui.label(format_time(
+                                save_time,
+                                setup.resource_man.translates.gui
+                                    [&setup.resource_man.registry.gui_ids.time_fmt]
+                                    .as_str(),
+                            ));
+                        }
 
                         if ui
                             .button(

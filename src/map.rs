@@ -46,7 +46,7 @@ pub struct Map {
     /// The list of tile data.
     pub data: DataMap,
     /// The last save time as a UTC Unix timestamp.
-    pub save_time: SystemTime,
+    pub save_time: Option<SystemTime>,
 }
 
 /// Contains information about a map.
@@ -55,7 +55,7 @@ pub struct MapInfo {
     /// The number of saved tiles.
     pub tile_count: u64,
     /// The last save time as a UTC Unix timestamp.
-    pub save_time: SystemTime,
+    pub save_time: Option<SystemTime>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -79,7 +79,7 @@ impl Map {
 
             tiles: Default::default(),
             data: Default::default(),
-            save_time: SystemTime::UNIX_EPOCH,
+            save_time: None,
         }
     }
 
@@ -101,14 +101,14 @@ impl Map {
     pub fn read_header(
         resource_man: &ResourceManager,
         map_name: &str,
-    ) -> Option<(MapHeader, SystemTime)> {
+    ) -> Option<(MapHeader, Option<SystemTime>)> {
         let path = Self::header(map_name);
 
         let file = File::open(path).ok()?;
         let time = file
             .metadata()
             .and_then(|v| v.modified().or(v.accessed()))
-            .unwrap();
+            .ok();
 
         let reader = BufReader::with_capacity(MAP_BUFFER_SIZE, file);
 
