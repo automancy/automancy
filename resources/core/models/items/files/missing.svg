@@ -6,21 +6,21 @@
         height="160cm"
         viewBox="0 0 160 160"
         version="1.1"
-        id="SVGRoot"
+        _id="SVGRoot"
         xmlns="http://www.w3.org/2000/svg"
 >
-  <defs
-          id="defs402"/>
-  <g
-          id="layer1"
-          transform="translate(-750,-600)">
-    <path
-            id="rect609"
-            style="fill:#000000;fill-opacity:1;stroke-width:0.442915;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke fill markers;stop-color:#000000"
-            d="m 750,600 v 80 h 80 v -80 z m 80,80 v 80 h 80 v -80 z"/>
-    <path
-            id="path383"
-            style="fill:#f400ff;stroke-width:0.885832;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke fill markers;stop-color:#000000"
-            d="m 830,600 v 80 h 80 v -80 z m 0,80 h -80 v 80 h 80 z"/>
-  </g>
+    <defs
+            _id="defs402"/>
+    <g
+            _id="layer1"
+            transform="translate(-750,-600)">
+        <path
+                _id="rect609"
+                style="fill:#000000;fill-opacity:1;stroke-width:0.442915;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke fill markers;stop-color:#000000"
+                d="m 750,600 v 80 h 80 v -80 z m 80,80 v 80 h 80 v -80 z"/>
+        <path
+                _id="path383"
+                style="fill:#f400ff;stroke-width:0.885832;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke fill markers;stop-color:#000000"
+                d="m 830,600 v 80 h 80 v -80 z m 0,80 h -80 v 80 h 80 z"/>
+    </g>
 </svg>

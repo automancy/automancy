@@ -2,10 +2,10 @@ use std::ffi::OsStr;
 use std::fmt;
 use std::fmt::{Debug, Formatter};
 use std::path::{Path, PathBuf};
-use std::time::{Duration, UNIX_EPOCH};
+use std::time::SystemTime;
 
 pub use chrono;
-use chrono::{DateTime, Local, Utc};
+use chrono::{DateTime, Local};
 pub use kira;
 use kira::sound::static_sound::StaticSoundData;
 use kira::track::TrackHandle;
@@ -45,10 +45,8 @@ pub fn format(format: &str, args: &[&str]) -> String {
 }
 
 /// Converts a UTC Unix timestamp into a formatted time string, using the given strftime format string.
-pub fn unix_to_formatted_time(utc: i64, fmt: &str) -> String {
-    let from_epoch = UNIX_EPOCH + Duration::from_secs(utc as u64);
-    let past = DateTime::<Utc>::from(from_epoch);
-    let time = DateTime::<Local>::from(past);
+pub fn format_time(time: SystemTime, fmt: &str) -> String {
+    let time = DateTime::<Local>::from(time);
     time.format(fmt).to_string()
 }
 

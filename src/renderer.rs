@@ -25,9 +25,9 @@ use automancy_defs::{bytemuck, math};
 use automancy_resources::data::Data;
 use automancy_resources::ResourceManager;
 
-use crate::game::{GameMsg, RenderInfo, RenderUnit, TickUnit, ANIMATION_SPEED};
+use crate::game::{GameMsg, RenderInfo, RenderUnit, TickUnit, TransactionRecord, ANIMATION_SPEED};
 use crate::gpu;
-use crate::gpu::{Gpu, GUI_INSTANCE_BUFFER, OVERLAY_VERTEX_BUFFER};
+use crate::gpu::{Gpu, GUI_INSTANCE_BUFFER, OVERLAY_VERTEX_BUFFER, UPSCALE_LEVEL};
 use crate::tile_entity::TileEntityMsg;
 use crate::util::actor::multi_call_iter;
 
@@ -61,8 +61,8 @@ impl Renderer {
     }
 }
 
-fn get_angle_from_target(target: Option<&Data>) -> Option<Float> {
-    if let Some(target) = target.and_then(Data::as_coord) {
+fn get_angle_from_target(target: &Data) -> Option<Float> {
+    if let Some(target) = target.as_coord() {
         match *target {
             TileCoord::TOP_RIGHT => Some(0.0),
             TileCoord::RIGHT => Some(-60.0),
@@ -156,24 +156,20 @@ impl Renderer {
                     .collect();
             }
 
-            for (coord, target) in &self.tile_targets {
-                if let Some(instance) = instances.get_mut(coord) {
-                    let theta = get_angle_from_target(Some(target));
+            for (coord, instance) in instances.iter_mut() {
+                if let Some(theta) = self.tile_targets.get(coord).and_then(get_angle_from_target) {
+                    let m = &mut instance.instance.model_matrix;
 
-                    if let Some(theta) = theta {
-                        let m = &mut instance.instance.model_matrix;
-
-                        *m = *m * Matrix4::from_angle_z(deg(theta))
-                    } else if let Some(inactive) = self
-                        .resource_man
-                        .registry
-                        .tile(instance.tile)
-                        .unwrap()
-                        .model_attributes
-                        .inactive_model
-                    {
-                        instance.model = inactive;
-                    }
+                    *m = *m * Matrix4::from_angle_z(deg(theta))
+                } else if let Some(inactive) = self
+                    .resource_man
+                    .registry
+                    .tile(instance.tile)
+                    .unwrap()
+                    .model_attributes
+                    .inactive_model
+                {
+                    instance.model = self.resource_man.get_model(inactive);
                 }
             }
 
@@ -233,14 +229,23 @@ impl Renderer {
 
         let mut extra_instances = vec![];
 
-        let transaction_record = runtime
+        let transaction_records = runtime
             .block_on(game.call(GameMsg::GetRecordedTransactions, None))
             .unwrap()
             .unwrap();
         let now = Instant::now();
 
-        for (instant, ((source_coord, _source_id), (coord, _id)), stack) in
-            transaction_record.read().unwrap().iter()
+        let transaction_records_read = transaction_records.read().unwrap();
+
+        for (
+            instant,
+            TransactionRecord {
+                stack,
+                source_coord,
+                coord,
+                ..
+            },
+        ) in transaction_records_read.iter().flat_map(|v| v.1)
         {
             let duration = now.duration_since(*instant);
             let t = duration.as_secs_f64() / ANIMATION_SPEED.as_secs_f64();
@@ -256,17 +261,20 @@ impl Renderer {
                         point.y as Float,
                         FAR as Float,
                     )) * Matrix4::from_scale(0.5)
-                        * Matrix4::from_angle_z(deg(get_angle_from_target(
-                            self.tile_targets.get(source_coord),
-                        )
-                        .map(|v| v + 60.0)
-                        .unwrap_or(0.0))),
+                        * Matrix4::from_angle_z(deg(self
+                            .tile_targets
+                            .get(source_coord)
+                            .and_then(get_angle_from_target)
+                            .map(|v| v + 60.0)
+                            .unwrap_or(0.0))),
                 )
                 .with_light_pos(camera_pos);
-            let id = resource_man.get_item_model(stack.item);
+            let model = resource_man.get_item_model(stack.item);
 
-            extra_instances.push((instance.into(), id));
+            extra_instances.push((instance.into(), model));
         }
+
+        extra_instances.sort_by_key(|v| v.1);
 
         self.inner_render(
             &resource_man,
@@ -311,8 +319,8 @@ impl Renderer {
             let mut game_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Game Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.multisampled_texture0.1,
-                    resolve_target: Some(&self.gpu.game_texture.1),
+                    view: &self.gpu.game_texture.1,
+                    resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(Color::BLACK),
                         store: true,
@@ -347,8 +355,8 @@ impl Renderer {
                 game_pass.set_viewport(
                     0.0,
                     0.0,
-                    self.size.width as Float,
-                    self.size.height as Float,
+                    (self.size.width * UPSCALE_LEVEL) as Float,
+                    (self.size.height * UPSCALE_LEVEL) as Float,
                     1.0,
                     0.0,
                 );
@@ -366,8 +374,8 @@ impl Renderer {
             let mut extra_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Game Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.multisampled_texture0.1,
-                    resolve_target: Some(&self.gpu.game_texture.1),
+                    view: &self.gpu.game_texture.1,
+                    resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Load,
                         store: true,
@@ -402,8 +410,8 @@ impl Renderer {
                 extra_pass.set_viewport(
                     0.0,
                     0.0,
-                    self.size.width as Float,
-                    self.size.height as Float,
+                    (self.size.width * UPSCALE_LEVEL) as Float,
+                    (self.size.height * UPSCALE_LEVEL) as Float,
                     1.0,
                     0.0,
                 );
@@ -489,8 +497,8 @@ impl Renderer {
             let mut gui_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Gui Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.multisampled_texture0.1,
-                    resolve_target: Some(&self.gpu.gui_texture.1),
+                    view: &self.gpu.gui_texture.1,
+                    resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(Color::TRANSPARENT),
                         store: true,
@@ -540,10 +548,10 @@ impl Renderer {
 
                 if let Some(viewport) = viewport {
                     gui_pass.set_viewport(
-                        viewport.left() * factor,
-                        viewport.top() * factor,
-                        viewport.width() * factor,
-                        viewport.height() * factor,
+                        viewport.left() * factor * UPSCALE_LEVEL as Float,
+                        viewport.top() * factor * UPSCALE_LEVEL as Float,
+                        viewport.width() * factor * UPSCALE_LEVEL as Float,
+                        viewport.height() * factor * UPSCALE_LEVEL as Float,
                         1.0,
                         0.0,
                     );
@@ -551,8 +559,8 @@ impl Renderer {
                     gui_pass.set_viewport(
                         0.0,
                         0.0,
-                        self.size.width as Float,
-                        self.size.height as Float,
+                        (self.size.width * UPSCALE_LEVEL) as Float,
+                        (self.size.height * UPSCALE_LEVEL) as Float,
                         1.0,
                         0.0,
                     );
@@ -560,13 +568,18 @@ impl Renderer {
 
                 if let Some(scissor) = scissor {
                     gui_pass.set_scissor_rect(
-                        (scissor.left() * factor) as u32,
-                        (scissor.top() * factor) as u32,
-                        (scissor.width() * factor) as u32,
-                        (scissor.height() * factor) as u32,
+                        (scissor.left() * factor) as u32 * UPSCALE_LEVEL,
+                        (scissor.top() * factor) as u32 * UPSCALE_LEVEL,
+                        (scissor.width() * factor) as u32 * UPSCALE_LEVEL,
+                        (scissor.height() * factor) as u32 * UPSCALE_LEVEL,
                     );
                 } else {
-                    gui_pass.set_scissor_rect(0, 0, self.size.width, self.size.height);
+                    gui_pass.set_scissor_rect(
+                        0,
+                        0,
+                        self.size.width * UPSCALE_LEVEL,
+                        self.size.height * UPSCALE_LEVEL,
+                    );
                 }
 
                 let index_range = resource_man.index_ranges[&id];
@@ -601,8 +614,8 @@ impl Renderer {
             let mut overlay_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Overlay Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.multisampled_texture0.1,
-                    resolve_target: Some(&self.gpu.gui_texture.1),
+                    view: &self.gpu.gui_texture.1,
+                    resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Load,
                         store: true,

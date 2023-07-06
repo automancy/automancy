@@ -1,7 +1,7 @@
 @group(0) @binding(0)
-var processed_game_texture: texture_2d<f32>;
+var game_texture: texture_2d<f32>;
 @group(0) @binding(1)
-var processed_game_sampler: sampler;
+var game_sampler: sampler;
 
 @group(0) @binding(2)
 var gui_texture: texture_2d<f32>;
@@ -41,8 +41,8 @@ fn vs_main(
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let game = textureSample(processed_game_texture, processed_game_sampler, in.uv);
-    let gui = textureSample(gui_texture, gui_sampler, in.uv);
+    let game = textureSample(game_texture, game_sampler, in.uv);
+    let gui  = textureSample(gui_texture, gui_sampler, in.uv);
     var egui = textureSample(egui_texture, egui_sampler, in.uv);
 
     return

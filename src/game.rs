@@ -38,7 +38,16 @@ pub const ANIMATION_SPEED: Duration = Duration::from_nanos(1_000_000_000 / 2);
 
 pub type TickUnit = u16;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
+pub struct TransactionRecord {
+    pub stack: ItemStack,
+    pub source_id: Id,
+    pub source_coord: TileCoord,
+    pub id: Id,
+    pub coord: TileCoord,
+}
+
+#[derive(Debug, Clone, Copy)]
 pub struct RenderUnit {
     pub instance: InstanceData,
     pub tile: Id,
@@ -46,12 +55,13 @@ pub struct RenderUnit {
 }
 
 pub type RenderInfo = HashMap<TileCoord, RenderUnit>;
-pub type TransactionRecord = VecDeque<(Instant, ((TileCoord, Id), (TileCoord, Id)), ItemStack)>;
+pub type TransactionRecords = HashMap<TileCoord, VecDeque<(Instant, TransactionRecord)>>;
 
 #[derive(Debug)]
 pub struct GameState {
     /// the resource manager
     resource_man: Arc<ResourceManager>,
+    // TODO make it inside Game itself
     /// the tile entities
     tile_entities: TileEntities,
     /// the map
@@ -68,7 +78,7 @@ pub struct GameState {
     /// what to do to undo the last UNDO_CACHE_SIZE user events
     undo_steps: ArrayDeque<Vec<GameMsg>, 16, Wrapping>,
     /// records transactions to be drawn
-    transactions_record: Arc<RwLock<TransactionRecord>>,
+    transaction_records: Arc<RwLock<TransactionRecords>>,
 }
 
 /// Represents a message the game receives
@@ -127,7 +137,8 @@ pub enum GameMsg {
     SetData(Id, Data),
     RemoveData(Id),
     StopTicking,
-    GetRecordedTransactions(RpcReplyPort<Arc<RwLock<TransactionRecord>>>),
+    GetRecordedTransactions(RpcReplyPort<Arc<RwLock<TransactionRecords>>>),
+    RecordTransaction(ItemStack, TileCoord, TileCoord),
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -184,7 +195,7 @@ impl Actor for Game {
                 state.map = map;
                 state.tile_entities = tile_entities;
                 state.render_cache.clear();
-                state.transactions_record.write().unwrap().clear();
+                state.transaction_records.write().unwrap().clear();
                 state.undo_steps.clear();
 
                 log::info!("Successfully loaded map {name}!");
@@ -332,24 +343,6 @@ impl Actor for Game {
                     }
                     ForwardMsgToTile(coord, msg) => {
                         if let Some(tile_entity) = state.tile_entities.get(&coord) {
-                            if state.tick_count % 5 == 0 {
-                                if let TileEntityMsg::Transaction {
-                                    stack,
-                                    source_id,
-                                    source_coord,
-                                    ..
-                                } = &msg
-                                {
-                                    if let Some((id, _)) = state.map.tiles.get(&coord) {
-                                        state.transactions_record.write().unwrap().push_back((
-                                            Instant::now(),
-                                            ((*source_coord, *source_id), (coord, *id)),
-                                            *stack,
-                                        ));
-                                    }
-                                }
-                            }
-
                             tile_entity.send_message(msg).unwrap();
                         }
                     }
@@ -400,21 +393,66 @@ impl Actor for Game {
                     GetRecordedTransactions(reply) => {
                         let now = Instant::now();
 
-                        let to_remove = state
-                            .transactions_record
-                            .read()
-                            .unwrap()
-                            .iter()
-                            .take_while(|(instant, _, _)| {
-                                now.duration_since(*instant) >= ANIMATION_SPEED
-                            })
-                            .count();
+                        let mut to_remove = HashMap::new();
 
-                        for _ in 0..to_remove {
-                            state.transactions_record.write().unwrap().pop_front();
+                        for (coord, deque) in state.transaction_records.read().unwrap().iter() {
+                            to_remove.insert(
+                                *coord,
+                                deque
+                                    .iter()
+                                    .take_while(|(instant, _)| {
+                                        now.duration_since(*instant) >= ANIMATION_SPEED
+                                    })
+                                    .count(),
+                            );
                         }
 
-                        reply.send(state.transactions_record.clone()).unwrap();
+                        let mut record = state.transaction_records.write().unwrap();
+                        for (coord, v) in to_remove {
+                            for _ in 0..v {
+                                record.get_mut(&coord).unwrap().pop_front();
+                            }
+                        }
+
+                        reply.send(state.transaction_records.clone()).unwrap();
+                    }
+                    RecordTransaction(stack, source_coord, coord) => {
+                        if let Some(len) = state
+                            .transaction_records
+                            .read()
+                            .unwrap()
+                            .get(&source_coord)
+                            .map(|v| v.len())
+                        {
+                            if (state.tick_count as usize % (len + 1)) != 0 {
+                                return Ok(());
+                            }
+                        }
+
+                        if let Some(((source_id, _), (id, _))) = state
+                            .map
+                            .tiles
+                            .get(&source_coord)
+                            .cloned()
+                            .zip(state.map.tiles.get(&coord).cloned())
+                        {
+                            state
+                                .transaction_records
+                                .write()
+                                .unwrap()
+                                .entry(source_coord)
+                                .or_insert_with(Default::default)
+                                .push_back((
+                                    Instant::now(),
+                                    TransactionRecord {
+                                        stack,
+                                        source_id,
+                                        source_coord,
+                                        id,
+                                        coord,
+                                    },
+                                ));
+                        }
                     }
                     MoveTiles(tiles, direction, record) => {
                         let mut undo = vec![];
@@ -635,7 +673,7 @@ impl GameState {
             stopped: false,
             last_tiles_update_time: 0,
             undo_steps: Default::default(),
-            transactions_record: Arc::new(Default::default()),
+            transaction_records: Arc::new(Default::default()),
         }
     }
 }

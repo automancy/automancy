@@ -58,7 +58,6 @@ pub enum TileEntityMsg {
     Transaction {
         resource_man: Arc<ResourceManager>,
         stack: ItemStack,
-        source_type: Option<Id>,
         source_id: Id,
         source_coord: TileCoord,
         source: ActorRef<TileEntityMsg>,
@@ -201,6 +200,173 @@ impl TileEntity {
 
         Err(TransactionError::NotSuitable)
     }
+
+    fn transaction(
+        &self,
+        state: &mut TileEntityState,
+        resource_man: Arc<ResourceManager>,
+        stack: ItemStack,
+        source_coord: TileCoord,
+        source: ActorRef<TileEntityMsg>,
+    ) -> Option<GameMsg> {
+        let tile = resource_man.registry.tile(self.id).unwrap();
+
+        if self.id == resource_man.registry.tile_ids.void {
+            source
+                .send_message(TransactionResult {
+                    resource_man,
+                    result: Ok(stack),
+                })
+                .unwrap();
+
+            return Some(GameMsg::RecordTransaction(stack, source_coord, self.coord));
+        } else if tile.tile_type == Some(resource_man.registry.tile_ids.machine) {
+            let result = TileEntity::machine_transaction(state, &resource_man, stack);
+
+            source
+                .send_message(TransactionResult {
+                    resource_man: resource_man.clone(),
+                    result,
+                })
+                .unwrap();
+
+            if result.is_ok() {
+                return Some(GameMsg::RecordTransaction(stack, source_coord, self.coord));
+            }
+        } else if tile.tile_type == Some(resource_man.registry.tile_ids.storage) {
+            if let Some((item, amount)) = state
+                .data
+                .get(&resource_man.registry.data_ids.storage)
+                .and_then(Data::as_id)
+                .and_then(|id| resource_man.registry.item(*id).cloned())
+                .zip(
+                    state
+                        .data
+                        .get(&resource_man.registry.data_ids.amount)
+                        .and_then(Data::as_amount)
+                        .cloned(),
+                )
+            {
+                if stack.item == item {
+                    let buffer = state
+                        .data
+                        .0
+                        .entry(resource_man.registry.data_ids.buffer)
+                        .or_insert_with(Data::inventory)
+                        .as_inventory_mut()
+                        .unwrap();
+                    let stored = buffer.0.entry(item).or_insert(0);
+
+                    if *stored > amount {
+                        *stored = amount;
+                    }
+
+                    return if *stored == amount {
+                        source
+                            .send_message(TransactionResult {
+                                resource_man: resource_man.clone(),
+                                result: Err(TransactionError::Full),
+                            })
+                            .unwrap();
+
+                        None
+                    } else {
+                        let inserting = stack.amount.at_most(amount - *stored);
+                        *stored += inserting;
+
+                        source
+                            .send_message(TransactionResult {
+                                resource_man: resource_man.clone(),
+                                result: Ok(ItemStack {
+                                    item,
+                                    amount: inserting,
+                                }),
+                            })
+                            .unwrap();
+
+                        Some(GameMsg::RecordTransaction(stack, source_coord, self.coord))
+                    };
+                }
+            } else {
+                source
+                    .send_message(TransactionResult {
+                        resource_man: resource_man.clone(),
+                        result: Err(TransactionError::NotSuitable),
+                    })
+                    .unwrap();
+            }
+        } else if self.id == resource_man.registry.tile_ids.merger {
+            if let Some(target) = state
+                .data
+                .get(&resource_man.registry.data_ids.target)
+                .and_then(Data::as_coord)
+                .cloned()
+            {
+                let target_coord = self.coord + target;
+
+                send_to_tile(
+                    self,
+                    state,
+                    target_coord,
+                    Transaction {
+                        resource_man: resource_man.clone(),
+                        stack,
+                        source_id: self.id,
+                        source_coord: self.coord,
+                        source,
+                    },
+                    &resource_man,
+                );
+
+                return Some(GameMsg::RecordTransaction(stack, source_coord, self.coord));
+            }
+        } else if self.id == resource_man.registry.tile_ids.splitter {
+            if let Some((a, b, c)) = match self.tile_modifier {
+                0 => Some((
+                    TileCoord::TOP_LEFT,
+                    TileCoord::BOTTOM_LEFT,
+                    TileCoord::RIGHT,
+                )),
+                1 => Some((
+                    TileCoord::TOP_RIGHT,
+                    TileCoord::BOTTOM_RIGHT,
+                    TileCoord::LEFT,
+                )),
+                _ => None,
+            } {
+                let direction = source_coord - self.coord;
+                let (first, second) = if direction == a {
+                    (b, c)
+                } else if direction == b {
+                    (a, c)
+                } else {
+                    (a, b)
+                };
+
+                let target = if random() % 2 == 0 { first } else { second };
+
+                let target_coord = self.coord + target;
+
+                send_to_tile(
+                    self,
+                    state,
+                    target_coord,
+                    Transaction {
+                        resource_man: resource_man.clone(),
+                        stack,
+                        source_id: self.id,
+                        source_coord: self.coord,
+                        source,
+                    },
+                    &resource_man,
+                );
+
+                return Some(GameMsg::RecordTransaction(stack, source_coord, self.coord));
+            }
+        }
+
+        None
+    }
 }
 
 #[async_trait::async_trait]
@@ -264,7 +430,6 @@ impl Actor for TileEntity {
                                 Transaction {
                                     resource_man: resource_man.clone(),
                                     stack,
-                                    source_type: tile_type,
                                     source_id: self.id,
                                     source_coord: self.coord,
                                     source: myself.clone(),
@@ -311,160 +476,10 @@ impl Actor for TileEntity {
                 source,
                 ..
             } => {
-                if self.id == resource_man.registry.tile_ids.void {
-                    source
-                        .send_message(TransactionResult {
-                            resource_man: resource_man.clone(),
-                            result: Ok(stack),
-                        })
-                        .unwrap()
-                }
-
-                let tile = resource_man.registry.tile(self.id).unwrap();
-
-                if tile.tile_type == Some(resource_man.registry.tile_ids.machine) {
-                    let result = TileEntity::machine_transaction(state, &resource_man, stack);
-
-                    source
-                        .send_message(TransactionResult {
-                            resource_man: resource_man.clone(),
-                            result,
-                        })
-                        .unwrap();
-                }
-
-                if tile.tile_type == Some(resource_man.registry.tile_ids.storage) {
-                    if let Some((item, amount)) = state
-                        .data
-                        .get(&resource_man.registry.data_ids.storage)
-                        .and_then(Data::as_id)
-                        .and_then(|id| resource_man.registry.item(*id).cloned())
-                        .zip(
-                            state
-                                .data
-                                .get(&resource_man.registry.data_ids.amount)
-                                .and_then(Data::as_amount)
-                                .cloned(),
-                        )
-                    {
-                        if stack.item == item {
-                            let buffer = state
-                                .data
-                                .0
-                                .entry(resource_man.registry.data_ids.buffer)
-                                .or_insert_with(Data::inventory)
-                                .as_inventory_mut()
-                                .unwrap();
-                            let stored = buffer.0.entry(item).or_insert(0);
-
-                            if *stored > amount {
-                                *stored = amount;
-                            }
-
-                            if *stored == amount {
-                                source
-                                    .send_message(TransactionResult {
-                                        resource_man: resource_man.clone(),
-                                        result: Err(TransactionError::Full),
-                                    })
-                                    .unwrap();
-
-                                return Ok(());
-                            }
-
-                            let inserting = stack.amount.at_most(amount - *stored);
-                            *stored += inserting;
-
-                            source
-                                .send_message(TransactionResult {
-                                    resource_man: resource_man.clone(),
-                                    result: Ok(ItemStack {
-                                        item,
-                                        amount: inserting,
-                                    }),
-                                })
-                                .unwrap();
-
-                            return Ok(());
-                        }
-                    }
-
-                    source
-                        .send_message(TransactionResult {
-                            resource_man: resource_man.clone(),
-                            result: Err(TransactionError::NotSuitable),
-                        })
-                        .unwrap();
-                }
-
-                if self.id == resource_man.registry.tile_ids.merger {
-                    if let Some(target) = state
-                        .data
-                        .get(&resource_man.registry.data_ids.target)
-                        .and_then(Data::as_coord)
-                        .cloned()
-                    {
-                        let target_coord = self.coord + target;
-
-                        send_to_tile(
-                            self,
-                            state,
-                            target_coord,
-                            Transaction {
-                                resource_man: resource_man.clone(),
-                                stack,
-                                source_type: Some(resource_man.registry.tile_ids.transfer),
-                                source_id: self.id,
-                                source_coord: self.coord,
-                                source: source.clone(),
-                            },
-                            &resource_man,
-                        )
-                    }
-                }
-
-                if self.id == resource_man.registry.tile_ids.splitter {
-                    if let Some((a, b, c)) = match self.tile_modifier {
-                        0 => Some((
-                            TileCoord::TOP_LEFT,
-                            TileCoord::BOTTOM_LEFT,
-                            TileCoord::RIGHT,
-                        )),
-                        1 => Some((
-                            TileCoord::TOP_RIGHT,
-                            TileCoord::BOTTOM_RIGHT,
-                            TileCoord::LEFT,
-                        )),
-                        _ => None,
-                    } {
-                        let direction = source_coord - self.coord;
-                        let (first, second) = if direction == a {
-                            (b, c)
-                        } else if direction == b {
-                            (a, c)
-                        } else {
-                            (a, b)
-                        };
-
-                        let target = if random() % 2 == 0 { first } else { second };
-
-                        let target_coord = self.coord + target;
-
-                        send_to_tile(
-                            self,
-                            state,
-                            target_coord,
-                            Transaction {
-                                resource_man: resource_man.clone(),
-                                stack,
-                                source_type: Some(resource_man.registry.tile_ids.transfer),
-                                source_id: self.id,
-                                source_coord: self.coord,
-                                source,
-                            },
-                            &resource_man,
-                        )
-                    }
+                if let Some(record) =
+                    self.transaction(state, resource_man, stack, source_coord, source)
+                {
+                    self.game.send_message(record).unwrap();
                 }
             }
             TransactionResult {
@@ -577,7 +592,6 @@ impl Actor for TileEntity {
                                         item,
                                         amount: extracting,
                                     },
-                                    source_type: tile_type,
                                     source_id: self.id,
                                     source_coord: self.coord,
                                     source: myself,

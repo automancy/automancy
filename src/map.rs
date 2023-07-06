@@ -1,7 +1,8 @@
 use std::fmt::Debug;
 use std::fs::File;
-use std::io::{BufReader, BufWriter};
+use std::io::{BufReader, BufWriter, Write};
 use std::iter::Iterator;
+use std::time::SystemTime;
 use std::{
     collections::{HashMap, HashSet},
     fs,
@@ -16,7 +17,7 @@ use zstd::{Decoder, Encoder};
 use automancy_defs::coord::TileCoord;
 use automancy_defs::id::{Id, Interner};
 use automancy_defs::log;
-use automancy_resources::chrono::{Local, Utc};
+use automancy_resources::chrono::Local;
 use automancy_resources::data::{DataMap, DataMapRaw};
 use automancy_resources::ResourceManager;
 
@@ -26,7 +27,9 @@ use crate::tile_entity::{TileEntityMsg, TileModifier};
 
 pub const MAP_PATH: &str = "map";
 pub const MAP_EXT: &str = ".zst";
-pub const MAIN_MENU: &str = ".mainmenu";
+pub const HEADER_EXT: &str = ".json";
+
+pub const MAIN_MENU: &str = ".main_menu";
 
 const MAP_BUFFER_SIZE: usize = 256 * 1024;
 
@@ -43,14 +46,16 @@ pub struct Map {
     /// The list of tile data.
     pub data: DataMap,
     /// The last save time as a UTC Unix timestamp.
-    pub save_time: i64,
+    pub save_time: Option<SystemTime>,
 }
 
-/// Contains information about a map to be saved to disk.
-#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
+/// Contains information about a map.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct MapInfo {
+    /// The number of saved tiles.
     pub tile_count: u64,
-    pub save_time: i64,
+    /// The last save time as a UTC Unix timestamp.
+    pub save_time: Option<SystemTime>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -63,7 +68,7 @@ pub struct MapHeader {
     #[serde(default)]
     pub data: DataMapRaw,
     #[serde(default)]
-    pub info: MapInfo,
+    pub tile_count: u64,
 }
 
 impl Map {
@@ -74,7 +79,7 @@ impl Map {
 
             tiles: Default::default(),
             data: Default::default(),
-            save_time: Local::now().timestamp(),
+            save_time: None,
         }
     }
 
@@ -85,7 +90,7 @@ impl Map {
 
     /// Gets the path to a map's header from its name.
     pub fn header(map_name: &str) -> PathBuf {
-        Map::path(map_name).join(format!("header{MAP_EXT}"))
+        Map::path(map_name).join(format!("header{HEADER_EXT}"))
     }
 
     /// Gets the path to a map's tiles from its name.
@@ -93,18 +98,24 @@ impl Map {
         Map::path(map_name).join(format!("tiles{MAP_EXT}"))
     }
 
-    pub fn read_header(resource_man: &ResourceManager, map_name: &str) -> Option<MapHeader> {
+    pub fn read_header(
+        resource_man: &ResourceManager,
+        map_name: &str,
+    ) -> Option<(MapHeader, Option<SystemTime>)> {
         let path = Self::header(map_name);
 
         let file = File::open(path).ok()?;
+        let time = file
+            .metadata()
+            .and_then(|v| v.modified().or(v.accessed()))
+            .ok();
 
         let reader = BufReader::with_capacity(MAP_BUFFER_SIZE, file);
-        let decoder = Decoder::new(reader).unwrap();
 
-        let decoded: serde_json::Result<MapHeader> = serde_json::from_reader(decoder);
+        let decoded: serde_json::Result<MapHeader> = serde_json::from_reader(reader);
 
         match decoded {
-            Ok(v) => Some(v),
+            Ok(v) => Some((v, time)),
             Err(e) => {
                 log::error!("serde: {e:?}");
 
@@ -165,7 +176,7 @@ impl Map {
         resource_man: &ResourceManager,
         map_name: &str,
     ) -> (Self, TileEntities) {
-        let Some(header) = Map::read_header(resource_man, map_name) else {
+        let Some((header, save_time)) = Map::read_header(resource_man, map_name) else {
             return (Map::new_empty(map_name.to_string()), Default::default());
         };
 
@@ -199,8 +210,6 @@ impl Map {
 
         let data = header.data.to_data(resource_man);
 
-        let save_time = header.info.save_time;
-
         (
             Self {
                 map_name: map_name.to_string(),
@@ -221,8 +230,7 @@ impl Map {
         let header = Self::header(&self.map_name);
         let header = File::create(header).unwrap();
 
-        let header_writer = BufWriter::with_capacity(MAP_BUFFER_SIZE, header);
-        let mut header_encoder = Encoder::new(header_writer, 0).unwrap();
+        let mut header_writer = BufWriter::with_capacity(MAP_BUFFER_SIZE, header);
 
         let tiles = Self::tiles(&self.map_name);
         let tiles = File::create(tiles).unwrap();
@@ -250,27 +258,25 @@ impl Map {
             }
         }
 
-        let tile_map = tile_map.into_iter().collect::<Vec<_>>();
+        let mut tile_map = tile_map.into_iter().collect::<Vec<_>>();
+        tile_map.sort_by_key(|v| v.0);
+
         let data = self.data.to_raw(interner);
         let tile_count = serde_tiles.len() as u64;
-        let save_time = Utc::now().timestamp();
 
         serde_json::to_writer(
-            &mut header_encoder,
+            &mut header_writer,
             &MapHeader {
                 tile_map,
                 data,
-                info: MapInfo {
-                    tile_count,
-                    save_time,
-                },
+                tile_count,
             },
         )
         .unwrap();
 
         serde_json::to_writer(&mut tiles_encoder, &serde_tiles).unwrap();
 
-        header_encoder.do_finish().unwrap();
+        header_writer.flush().unwrap();
         tiles_encoder.do_finish().unwrap();
     }
 

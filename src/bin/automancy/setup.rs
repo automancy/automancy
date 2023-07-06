@@ -117,7 +117,10 @@ impl GameSetup {
             .filter(|f| !f.starts_with('.'))
             .flat_map(|map| {
                 Map::read_header(&self.resource_man, &map)
-                    .map(|v| v.info)
+                    .map(|v| MapInfo {
+                        tile_count: v.0.tile_count,
+                        save_time: v.1,
+                    })
                     .zip(Some(map))
             })
             .collect::<Vec<_>>();

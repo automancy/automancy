@@ -67,9 +67,10 @@ fn combine_shader(device: &Device, resource_man: &ResourceManager) -> ShaderModu
     })
 }
 
+pub const UPSCALE_LEVEL: u32 = 2;
+
 pub const DEPTH_FORMAT: TextureFormat = TextureFormat::Depth32Float;
 
-pub const MULTISAMPLED_TEXTURE: Option<&str> = Some("Multisampled Texture");
 pub const GAME_TEXTURE: Option<&str> = Some("Game Texture");
 pub const PROCESSED_GAME_TEXTURE: Option<&str> = Some("Processed Game Texture");
 pub const GUI_TEXTURE: Option<&str> = Some("Gui Texture");
@@ -223,10 +224,10 @@ pub fn create_texture(
     (texture, view)
 }
 
-fn extent3d(config: &SurfaceConfiguration) -> Extent3d {
+fn extent3d(config: &SurfaceConfiguration, scale: u32) -> Extent3d {
     Extent3d {
-        width: config.width,
-        height: config.height,
+        width: config.width * scale,
+        height: config.height * scale,
         depth_or_array_layers: 1,
     }
 }
@@ -302,7 +303,7 @@ fn game_setup(
             bias: Default::default(),
         }),
         multisample: MultisampleState {
-            count: 4,
+            count: 1,
             mask: !0,
             alpha_to_coverage_enabled: false,
         },
@@ -445,7 +446,7 @@ fn gui_setup(
             bias: Default::default(),
         }),
         multisample: MultisampleState {
-            count: 4,
+            count: 1,
             mask: !0,
             alpha_to_coverage_enabled: false,
         },
@@ -519,7 +520,7 @@ fn overlay_setup(
         },
         depth_stencil: None,
         multisample: MultisampleState {
-            count: 4,
+            count: 1,
             mask: !0,
             alpha_to_coverage_enabled: false,
         },
@@ -630,9 +631,6 @@ pub struct Gpu {
     pub vertex_buffer: Buffer,
     pub index_buffer: Buffer,
 
-    pub multisampled_texture0: (Texture, TextureView),
-    pub multisampled_texture1: (Texture, TextureView),
-
     pub game_texture: (Texture, TextureView),
     pub game_depth_texture: (Texture, TextureView),
     pub processed_game_texture: (Texture, TextureView),
@@ -699,39 +697,24 @@ impl Gpu {
         self.config.width = size.width;
         self.config.height = size.height;
 
-        self.multisampled_texture0 = create_surface_texture(
-            &self.device,
-            self.config.format,
-            extent3d(&self.config),
-            MULTISAMPLED_TEXTURE,
-            4,
-        );
-        self.multisampled_texture1 = create_surface_texture(
-            &self.device,
-            self.config.format,
-            extent3d(&self.config),
-            MULTISAMPLED_TEXTURE,
-            4,
-        );
-
         self.game_texture = create_surface_texture(
             &self.device,
             self.config.format,
-            extent3d(&self.config),
+            extent3d(&self.config, UPSCALE_LEVEL),
             GAME_TEXTURE,
             1,
         );
         self.game_depth_texture = create_texture(
             &self.device,
             DEPTH_FORMAT,
-            extent3d(&self.config),
+            extent3d(&self.config, UPSCALE_LEVEL),
             GAME_DEPTH_TEXTURE,
-            4,
+            1,
         );
         self.processed_game_texture = create_surface_texture(
             &self.device,
             self.config.format,
-            extent3d(&self.config),
+            extent3d(&self.config, UPSCALE_LEVEL),
             PROCESSED_GAME_TEXTURE,
             1,
         );
@@ -739,28 +722,28 @@ impl Gpu {
         self.gui_texture = create_surface_texture(
             &self.device,
             self.config.format,
-            extent3d(&self.config),
+            extent3d(&self.config, UPSCALE_LEVEL),
             GUI_TEXTURE,
             1,
         );
         self.gui_depth_texture = create_texture(
             &self.device,
             DEPTH_FORMAT,
-            extent3d(&self.config),
+            extent3d(&self.config, UPSCALE_LEVEL),
             GUI_DEPTH_TEXTURE,
-            4,
+            1,
         );
         self.processed_gui_texture = create_surface_texture(
             &self.device,
             self.config.format,
-            extent3d(&self.config),
+            extent3d(&self.config, UPSCALE_LEVEL),
             GUI_TEXTURE,
             1,
         );
         self.egui_texture = create_surface_texture(
             &self.device,
             self.config.format,
-            extent3d(&self.config),
+            extent3d(&self.config, 1),
             EGUI_TEXTURE,
             1,
         );
@@ -849,7 +832,7 @@ impl Gpu {
             address_mode_u: AddressMode::ClampToEdge,
             address_mode_v: AddressMode::ClampToEdge,
             address_mode_w: AddressMode::ClampToEdge,
-            mag_filter: FilterMode::Linear,
+            mag_filter: FilterMode::Nearest,
             min_filter: FilterMode::Linear,
             mipmap_filter: FilterMode::Nearest,
             ..Default::default()
@@ -867,55 +850,60 @@ impl Gpu {
             usage: BufferUsages::INDEX,
         });
 
-        let multisampled_texture0 = create_surface_texture(
+        let game_texture = create_surface_texture(
             &device,
             config.format,
-            extent3d(&config),
-            MULTISAMPLED_TEXTURE,
-            4,
+            extent3d(&config, UPSCALE_LEVEL),
+            GAME_TEXTURE,
+            1,
         );
-        let multisampled_texture1 = create_surface_texture(
-            &device,
-            config.format,
-            extent3d(&config),
-            MULTISAMPLED_TEXTURE,
-            4,
-        );
-
-        let game_texture =
-            create_surface_texture(&device, config.format, extent3d(&config), GAME_TEXTURE, 1);
         let game_depth_texture = create_texture(
             &device,
             DEPTH_FORMAT,
-            extent3d(&config),
+            extent3d(&config, UPSCALE_LEVEL),
             GAME_DEPTH_TEXTURE,
-            4,
+            1,
         );
         let processed_game_texture = create_surface_texture(
             &device,
             config.format,
-            extent3d(&config),
+            extent3d(&config, UPSCALE_LEVEL),
             PROCESSED_GAME_TEXTURE,
             1,
         );
         let processed_game_sampler = device.create_sampler(&sampler_desc);
 
-        let gui_texture =
-            create_surface_texture(&device, config.format, extent3d(&config), GUI_TEXTURE, 1);
+        let gui_texture = create_surface_texture(
+            &device,
+            config.format,
+            extent3d(&config, UPSCALE_LEVEL),
+            GUI_TEXTURE,
+            1,
+        );
         let gui_sampler = device.create_sampler(&sampler_desc);
         let gui_depth_texture = create_texture(
             &device,
             DEPTH_FORMAT,
-            extent3d(&config),
+            extent3d(&config, UPSCALE_LEVEL),
             GUI_DEPTH_TEXTURE,
-            4,
+            1,
         );
-        let processed_gui_texture =
-            create_surface_texture(&device, config.format, extent3d(&config), GUI_TEXTURE, 1);
+        let processed_gui_texture = create_surface_texture(
+            &device,
+            config.format,
+            extent3d(&config, UPSCALE_LEVEL),
+            GUI_TEXTURE,
+            1,
+        );
         let processed_gui_sampler = device.create_sampler(&sampler_desc);
 
-        let egui_texture =
-            create_surface_texture(&device, config.format, extent3d(&config), EGUI_TEXTURE, 1);
+        let egui_texture = create_surface_texture(
+            &device,
+            config.format,
+            extent3d(&config, 1),
+            EGUI_TEXTURE,
+            1,
+        );
         let egui_sampler = device.create_sampler(&sampler_desc);
 
         let game_instance_buffer = device.create_buffer_init(&BufferInitDescriptor {
@@ -1078,9 +1066,6 @@ impl Gpu {
 
             vertex_buffer,
             index_buffer,
-
-            multisampled_texture0,
-            multisampled_texture1,
 
             game_texture,
             game_depth_texture,
