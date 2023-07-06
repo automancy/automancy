@@ -12,7 +12,7 @@ use automancy::renderer::Renderer;
 use automancy::VERSION;
 use automancy_defs::gui::HyperlinkWidget;
 use automancy_defs::log;
-use automancy_resources::{format, unix_to_formatted_time};
+use automancy_resources::{format, format_time};
 
 use crate::event::{shutdown_graceful, EventLoopStorage};
 use crate::gui::{default_frame, GuiState, PopupState};
@@ -252,7 +252,7 @@ pub fn map_menu(
                     });
 
                     ui.horizontal(|ui| {
-                        ui.label(unix_to_formatted_time(
+                        ui.label(format_time(
                             map_info.save_time,
                             setup.resource_man.translates.gui
                                 [&setup.resource_man.registry.gui_ids.time_fmt]

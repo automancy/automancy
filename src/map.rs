@@ -2,6 +2,7 @@ use std::fmt::Debug;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
 use std::iter::Iterator;
+use std::time::SystemTime;
 use std::{
     collections::{HashMap, HashSet},
     fs,
@@ -45,16 +46,16 @@ pub struct Map {
     /// The list of tile data.
     pub data: DataMap,
     /// The last save time as a UTC Unix timestamp.
-    pub save_time: u64,
+    pub save_time: SystemTime,
 }
 
 /// Contains information about a map.
-#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct MapInfo {
     /// The number of saved tiles.
     pub tile_count: u64,
     /// The last save time as a UTC Unix timestamp.
-    pub save_time: u64,
+    pub save_time: SystemTime,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -78,7 +79,7 @@ impl Map {
 
             tiles: Default::default(),
             data: Default::default(),
-            save_time: 0,
+            save_time: SystemTime::UNIX_EPOCH,
         }
     }
 
@@ -97,17 +98,17 @@ impl Map {
         Map::path(map_name).join(format!("tiles{MAP_EXT}"))
     }
 
-    pub fn read_header(resource_man: &ResourceManager, map_name: &str) -> Option<(MapHeader, u64)> {
+    pub fn read_header(
+        resource_man: &ResourceManager,
+        map_name: &str,
+    ) -> Option<(MapHeader, SystemTime)> {
         let path = Self::header(map_name);
 
         let file = File::open(path).ok()?;
         let time = file
             .metadata()
             .and_then(|v| v.modified().or(v.accessed()))
-            .unwrap()
-            .elapsed()
-            .unwrap()
-            .as_secs();
+            .unwrap();
 
         let reader = BufReader::with_capacity(MAP_BUFFER_SIZE, file);
 
