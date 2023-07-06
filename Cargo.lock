@@ -248,6 +248,7 @@ dependencies = [
  "slice-group-by",
  "tokio",
  "toml",
+ "toml_edit",
  "wgpu",
  "winit",
  "zstd",

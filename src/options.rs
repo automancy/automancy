@@ -5,6 +5,7 @@ use std::io::{BufReader, Read, Write};
 
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
+use toml_edit::{Item, Value};
 use winit::event::VirtualKeyCode;
 
 use automancy_defs::hashbrown::HashMap;
@@ -63,7 +64,16 @@ impl Options {
     pub fn save(&mut self) -> Result<(), Box<dyn Error>> {
         let mut file = File::create(OPTIONS_PATH)?;
 
-        let body = toml::ser::to_string(self)?;
+        let body = toml_edit::ser::to_string_pretty(&self)?;
+        // TODO why
+        // let value = Item::Value(Value::InlineTable(
+        //     body.remove("keymap")
+        //         .unwrap()
+        //         .into_table()
+        //         .unwrap()
+        //         .into_inline_table(),
+        // ));
+        // body.insert("keymap", value);
         write!(&mut file, "{body}")?;
 
         log::info!("Saved options!");
@@ -96,8 +106,16 @@ impl Default for GraphicsOptions {
         }
     }
 }
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize)]
 pub struct AudioOptions {
     pub sfx_volume: f64,
     pub music_volume: f64,
+}
+impl Default for AudioOptions {
+    fn default() -> Self {
+        Self {
+            sfx_volume: 0.5,
+            music_volume: 0.5,
+        }
+    }
 }
