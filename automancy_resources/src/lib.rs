@@ -45,8 +45,8 @@ pub fn format(format: &str, args: &[&str]) -> String {
 }
 
 /// Converts a UTC Unix timestamp into a formatted time string, using the given strftime format string.
-pub fn unix_to_formatted_time(utc: i64, fmt: &str) -> String {
-    let from_epoch = UNIX_EPOCH + Duration::from_secs(utc as u64);
+pub fn unix_to_formatted_time(utc: u64, fmt: &str) -> String {
+    let from_epoch = UNIX_EPOCH + Duration::from_secs(utc);
     let past = DateTime::<Utc>::from(from_epoch);
     let time = DateTime::<Local>::from(past);
     time.format(fmt).to_string()
