@@ -24,7 +24,9 @@ lazy_static! {
         (VirtualKeyCode::Z, actions::UNDO),
         (VirtualKeyCode::Escape, actions::ESCAPE),
         (VirtualKeyCode::F3, actions::DEBUG),
-        (VirtualKeyCode::F11, actions::FULLSCREEN)
+        (VirtualKeyCode::F11, actions::FULLSCREEN),
+        (VirtualKeyCode::F1, actions::HIDE_GUI),
+        (VirtualKeyCode::F2, actions::SCREENSHOT)
     ]);
 }
 impl Default for Options {
