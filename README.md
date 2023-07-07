@@ -6,7 +6,7 @@ Game's WIP.
 
 ---
 
-Tech used: Rust, wgpu, ractor, egui
+Tech used: Rust, wgpu, ractor, egui, Rhai
 
 Lead dev(s): Madeline Sparkles, Mae Rosaline
 
@@ -45,7 +45,7 @@ criteria:
 **Use either Vertex Paint or a material with only the base color (they get turned into vertex colors upon
 running `make_assets.sh`**
 
-Note about `make_assets.sh`:
+#### Note about `make_assets.sh`
 
 - Models exported from SVG would seem inverted, this is not a bug-- it'll get flipped back when it gets exported into
   the game.
@@ -60,9 +60,9 @@ The game logic is run with an actor system.
 
 "Scripts" are called "functions" as the name is taken in-game by what would otherwise be called "recipes."
 
-- The weird terminology comes from the
+- The weird terminology comes from the fact that "recipes" doesn't make sense for machines.
 
-(When scripting support is here) write all tile logic within functions.
+#### Write all tile logic within functions
 
 If you can't feasibly do that, *implement more handling in source code, and then write the logic in functions.*
 

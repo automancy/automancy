@@ -72,18 +72,19 @@ pub const UPSCALE_LEVEL: u32 = 2;
 pub const DEPTH_FORMAT: TextureFormat = TextureFormat::Depth32Float;
 
 pub const GAME_TEXTURE: Option<&str> = Some("Game Texture");
+pub const GAME_DEPTH_TEXTURE: Option<&str> = Some("Game Depth Texture");
 pub const PROCESSED_GAME_TEXTURE: Option<&str> = Some("Processed Game Texture");
 pub const GUI_TEXTURE: Option<&str> = Some("Gui Texture");
+pub const GUI_DEPTH_TEXTURE: Option<&str> = Some("Gui Depth Texture");
+pub const PROCESSED_GUI_TEXTURE: Option<&str> = Some("Processed Gui Texture");
 pub const EGUI_TEXTURE: Option<&str> = Some("Egui Texture");
 
-pub const GAME_DEPTH_TEXTURE: Option<&str> = Some("Game Depth Texture");
 pub const GAME_INDIRECT_BUFFER: Option<&str> = Some("Game Indirect Buffer");
 pub const GAME_INSTANCE_BUFFER: Option<&str> = Some("Game Instance Buffer");
 
 pub const EXTRA_INDIRECT_BUFFER: Option<&str> = Some("Extra Indirect Buffer");
 pub const EXTRA_INSTANCE_BUFFER: Option<&str> = Some("Extra Instance Buffer");
 
-pub const GUI_DEPTH_TEXTURE: Option<&str> = Some("Gui Depth Texture");
 pub const GUI_INSTANCE_BUFFER: Option<&str> = Some("Gui Instance Buffer");
 
 pub const OVERLAY_VERTEX_BUFFER: Option<&str> = Some("Overlay Vertex Buffer");
@@ -737,7 +738,7 @@ impl Gpu {
             &self.device,
             self.config.format,
             extent3d(&self.config, UPSCALE_LEVEL),
-            GUI_TEXTURE,
+            PROCESSED_GUI_TEXTURE,
             1,
         );
         self.egui_texture = create_surface_texture(
@@ -892,7 +893,7 @@ impl Gpu {
             &device,
             config.format,
             extent3d(&config, UPSCALE_LEVEL),
-            GUI_TEXTURE,
+            PROCESSED_GUI_TEXTURE,
             1,
         );
         let processed_gui_sampler = device.create_sampler(&sampler_desc);

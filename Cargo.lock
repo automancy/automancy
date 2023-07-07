@@ -50,9 +50,11 @@ version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2c99f64d1e06488f620f932677e24bc6e2897582980441ae90a671415bd7ec2f"
 dependencies = [
- "cfg-if",
- "once_cell",
- "version_check",
+    "cfg-if",
+    "const-random",
+    "getrandom",
+    "once_cell",
+    "version_check",
 ]
 
 [[package]]
@@ -224,54 +226,56 @@ checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 name = "automancy"
 version = "0.1.0"
 dependencies = [
- "arraydeque",
- "async-trait",
- "automancy_defs",
- "automancy_macros",
- "automancy_resources",
- "egui",
- "egui-wgpu",
- "egui-winit",
- "enum-ordinalize",
- "env_logger",
- "expect-dialog",
- "fuse-rust",
- "futures",
- "image",
- "lazy_static",
- "num",
- "ractor",
- "rand",
- "rayon",
- "serde",
- "serde_json",
- "slice-group-by",
- "tokio",
- "toml",
- "wgpu",
- "winit",
- "zstd",
+    "arraydeque",
+    "async-trait",
+    "automancy_defs",
+    "automancy_macros",
+    "automancy_resources",
+    "egui",
+    "egui-wgpu",
+    "egui-winit",
+    "enum-ordinalize",
+    "env_logger",
+    "expect-dialog",
+    "fuse-rust",
+    "futures",
+    "image",
+    "lazy_static",
+    "num",
+    "ractor",
+    "rand",
+    "rayon",
+    "rhai",
+    "serde",
+    "serde_json",
+    "slice-group-by",
+    "tokio",
+    "toml",
+    "wgpu",
+    "winit",
+    "zstd",
 ]
 
 [[package]]
 name = "automancy_defs"
 version = "0.1.0"
 dependencies = [
- "bytemuck",
- "cgmath",
- "color-hex",
- "egui",
- "egui-wgpu",
- "egui-winit",
- "flexstr",
- "hashbrown 0.14.0",
- "hexagon-tiles",
- "log",
- "ply-rs",
- "serde",
- "string-interner",
- "wgpu",
- "winit",
+    "bytemuck",
+    "cgmath",
+    "color-hex",
+    "egui",
+    "egui-wgpu",
+    "egui-winit",
+    "flexstr",
+    "hashbrown 0.14.0",
+    "hexagon-tiles",
+    "log",
+    "ply-rs",
+    "rhai",
+    "serde",
+    "string-interner",
+    "wgpu",
+    "winit",
 ]
 
 [[package]]
@@ -287,13 +291,14 @@ dependencies = [
 name = "automancy_resources"
 version = "0.1.0"
 dependencies = [
- "automancy_defs",
- "automancy_macros",
- "chrono",
- "kira",
- "serde",
- "serde_json",
- "walkdir",
+    "automancy_defs",
+    "automancy_macros",
+    "chrono",
+    "kira",
+    "rhai",
+    "serde",
+    "serde_json",
+    "walkdir",
 ]
 
 [[package]]
@@ -626,8 +631,30 @@ version = "4.6.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "35ed6e9d84f0b51a7f52daf1c7d71dd136fd7a3f41a8462b8cdb8c78d920fad4"
 dependencies = [
- "bytes",
- "memchr",
+    "bytes",
+    "memchr",
+]
+
+[[package]]
+name = "const-random"
+version = "0.1.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "368a7a772ead6ce7e1de82bfb04c485f3db8ec744f72925af5735e29a22cc18e"
+dependencies = [
+    "const-random-macro",
+    "proc-macro-hack",
+]
+
+[[package]]
+name = "const-random-macro"
+version = "0.1.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9d7d6ab3c3a2282db210df5f02c4dab6e0a7057af0fb7ebd4070f30fe05c0ddb"
+dependencies = [
+    "getrandom",
+    "once_cell",
+    "proc-macro-hack",
+    "tiny-keccak",
 ]
 
 [[package]]
@@ -636,8 +663,8 @@ version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "194a7a9e6de53fa55116934067c844d9d749312f75c6f6d0980e8c252f8c2146"
 dependencies = [
- "core-foundation-sys 0.8.4",
- "libc",
+    "core-foundation-sys 0.8.4",
+    "libc",
 ]
 
 [[package]]
@@ -2557,12 +2584,38 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "216080ab382b992234dda86873c18d4c48358f5cfcb70fd693d7f6f2131b628b"
 
 [[package]]
+name = "rhai"
+version = "1.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c2a11a646ef5d4e4a9d5cf80c7e4ecb20f9b1954292d5c5e6d6cbc8d33728ec"
+dependencies = [
+    "ahash 0.8.3",
+    "bitflags 1.3.2",
+    "instant",
+    "num-traits",
+    "rhai_codegen",
+    "smallvec",
+    "smartstring",
+]
+
+[[package]]
+name = "rhai_codegen"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "db74e3fdd29d969a0ec1f8e79171a6f0f71d0429293656901db382d248c4c021"
+dependencies = [
+    "proc-macro2",
+    "quote",
+    "syn 1.0.109",
+]
+
+[[package]]
 name = "ringbuf"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "79abed428d1fd2a128201cec72c5f6938e2da607c6f3745f769fabea399d950a"
 dependencies = [
- "crossbeam-utils",
+    "crossbeam-utils",
 ]
 
 [[package]]
@@ -2750,7 +2803,7 @@ version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e1e08e261d0e8f5c43123b7adf3e4ca1690d655377ac93a03b2c9d3e98de1342"
 dependencies = [
- "version_check",
+    "version_check",
 ]
 
 [[package]]
@@ -2760,22 +2813,33 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a507befe795404456341dfab10cef66ead4c041f62b8b11bbb92bffe5d0953e0"
 
 [[package]]
+name = "smartstring"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3fb72c633efbaa2dd666986505016c32c3044395ceaf881518399d2f4127ee29"
+dependencies = [
+    "autocfg",
+    "static_assertions",
+    "version_check",
+]
+
+[[package]]
 name = "smithay-client-toolkit"
 version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f307c47d32d2715eb2e0ece5589057820e0e5e70d07c247d1063e844e107f454"
 dependencies = [
- "bitflags 1.3.2",
- "calloop",
- "dlib",
- "lazy_static",
- "log",
- "memmap2",
- "nix 0.24.3",
- "pkg-config",
- "wayland-client",
- "wayland-cursor",
- "wayland-protocols",
+    "bitflags 1.3.2",
+    "calloop",
+    "dlib",
+    "lazy_static",
+    "log",
+    "memmap2",
+    "nix 0.24.3",
+    "pkg-config",
+    "wayland-client",
+    "wayland-cursor",
+    "wayland-protocols",
 ]
 
 [[package]]
@@ -3048,9 +3112,18 @@ version = "0.1.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b797afad3f312d1c66a56d11d0316f916356d11bd158fbc6ca6389ff6bf805a"
 dependencies = [
- "libc",
- "wasi 0.10.0+wasi-snapshot-preview1",
- "winapi",
+    "libc",
+    "wasi 0.10.0+wasi-snapshot-preview1",
+    "winapi",
+]
+
+[[package]]
+name = "tiny-keccak"
+version = "2.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2c9d3793400a45f954c52e73d068316d76b6f4e36977e3fcebb13a2721e80237"
+dependencies = [
+    "crunchy",
 ]
 
 [[package]]
@@ -3059,12 +3132,12 @@ version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df8493a203431061e901613751931f047d1971337153f96d0e5e363d6dbf6a67"
 dependencies = [
- "arrayref",
- "arrayvec",
- "bytemuck",
- "cfg-if",
- "png",
- "tiny-skia-path",
+    "arrayref",
+    "arrayvec",
+    "bytemuck",
+    "cfg-if",
+    "png",
+    "tiny-skia-path",
 ]
 
 [[package]]

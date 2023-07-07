@@ -17,9 +17,38 @@ use automancy_defs::rendering::Vertex;
 use automancy_resources::kira::manager::backend::cpal::CpalBackend;
 use automancy_resources::kira::manager::{AudioManager, AudioManagerSettings};
 use automancy_resources::kira::track::{TrackBuilder, TrackHandle};
-use automancy_resources::{ResourceManager, RESOURCES_PATH};
+use automancy_resources::{ResourceManager, RESOURCES_PATH, RESOURCE_MAN};
 
 use crate::gui;
+
+/// Initialize the Resource Manager system, and loads all the resources in all namespaces.
+fn load_resources(track: TrackHandle) -> (Arc<ResourceManager>, Vec<Vertex>, Vec<u16>) {
+    let mut resource_man = ResourceManager::new(track);
+
+    fs::read_dir(RESOURCES_PATH)
+        .unwrap()
+        .flatten()
+        .map(|v| v.path())
+        .for_each(|dir| {
+            let namespace = dir.file_name().unwrap().to_str().unwrap();
+            log::info!("loading namespace {namespace}...");
+            resource_man.load_models(&dir);
+            resource_man.load_audio(&dir);
+            resource_man.load_tiles(&dir);
+            resource_man.load_items(&dir);
+            resource_man.load_tags(&dir);
+            resource_man.load_scripts(&dir);
+            resource_man.load_translates(&dir);
+            resource_man.load_shaders(&dir);
+            resource_man.load_functions(&dir);
+            log::info!("loaded namespace {namespace}.");
+        });
+
+    resource_man.ordered_items();
+    let (vertices, indices) = resource_man.compile_models();
+
+    (Arc::new(resource_man), vertices, indices)
+}
 
 /// Stores what the game initializes on startup.
 pub struct GameSetup {
@@ -60,6 +89,8 @@ impl GameSetup {
 
         log::info!("loading resources...");
         let (resource_man, vertices, indices) = load_resources(track);
+        RESOURCE_MAN.write().unwrap().replace(resource_man.clone());
+
         log::info!("loaded resources.");
 
         // --- game ---
@@ -129,32 +160,4 @@ impl GameSetup {
         self.maps.sort_by(|a, b| a.0.save_time.cmp(&b.0.save_time));
         self.maps.reverse();
     }
-}
-
-/// Initialize the Resource Manager system, and loads all the resources in all namespaces.
-fn load_resources(track: TrackHandle) -> (Arc<ResourceManager>, Vec<Vertex>, Vec<u16>) {
-    let mut resource_man = ResourceManager::new(track);
-
-    fs::read_dir(RESOURCES_PATH)
-        .unwrap()
-        .flatten()
-        .map(|v| v.path())
-        .for_each(|dir| {
-            let namespace = dir.file_name().unwrap().to_str().unwrap();
-            log::info!("loading namespace {namespace}...");
-            resource_man.load_models(&dir);
-            resource_man.load_audio(&dir);
-            resource_man.load_tiles(&dir);
-            resource_man.load_items(&dir);
-            resource_man.load_tags(&dir);
-            resource_man.load_scripts(&dir);
-            resource_man.load_translates(&dir);
-            resource_man.load_shaders(&dir);
-            log::info!("loaded namespace {namespace}.");
-        });
-
-    resource_man.ordered_items();
-    let (vertices, indices) = resource_man.compile_models();
-
-    (Arc::new(resource_man), vertices, indices)
 }

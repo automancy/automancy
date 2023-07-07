@@ -24,6 +24,7 @@ pub struct ModelAttributes {
 #[derive(Debug, Deserialize)]
 pub struct TileJson {
     pub id: IdRaw,
+    pub function: Option<IdRaw>,
     pub tile_type: Option<IdRaw>,
     pub models: Vec<IdRaw>,
     #[serde(default)]
@@ -36,6 +37,7 @@ pub struct TileJson {
 #[derive(Debug, Clone)]
 pub struct Tile {
     pub models: Vec<Id>,
+    pub function: Option<Id>,
     pub tile_type: Option<Id>,
     pub data: DataMap,
     pub model_attributes: ModelAttributes,
@@ -53,7 +55,9 @@ impl ResourceManager {
 
         let id = tile.id.to_id(&mut self.interner);
 
-        let tile_type = tile.tile_type.map(|v| v.to_id(&mut self.interner));
+        let function = tile.function.map(|v| v.to_id(&mut self.interner));
+
+        let tile_type = tile.tile_type.map(|v| v.to_id(&mut self.interner)); // TODO this will be deprecated
 
         let data = tile.data.intern_to_data(self);
 
@@ -78,6 +82,7 @@ impl ResourceManager {
             id,
             Tile {
                 tile_type,
+                function,
                 model_attributes,
                 targeted,
                 models,

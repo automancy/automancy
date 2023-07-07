@@ -1,6 +1,7 @@
 {
     "id": "merger",
     "tile_type": "transfer",
+    "function": "merger",
     "models": [
         "merger"
     ],

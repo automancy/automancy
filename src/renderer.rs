@@ -7,8 +7,10 @@ use ractor::rpc::CallResult;
 use ractor::ActorRef;
 use tokio::runtime::Runtime;
 use wgpu::{
-    Color, CommandEncoderDescriptor, IndexFormat, LoadOp, Operations, RenderPassColorAttachment,
-    RenderPassDepthStencilAttachment, RenderPassDescriptor, SurfaceError, TextureViewDescriptor,
+    BufferAddress, BufferDescriptor, BufferUsages, Color, CommandEncoderDescriptor,
+    ImageCopyBuffer, ImageDataLayout, IndexFormat, LoadOp, MapMode, Operations,
+    RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor,
+    SurfaceError, TextureViewDescriptor, COPY_BYTES_PER_ROW_ALIGNMENT,
 };
 use winit::dpi::PhysicalSize;
 
@@ -670,9 +672,42 @@ impl Renderer {
             combine_pass.draw(0..3, 0..1)
         }
 
+        /* TODO screenshot
+        let screenshot_= if screenshot
+        let dim = output.texture.size().physical_size(output.texture.format());
+        let size = dim.width * dim.height;
+
+        let buffer = self.gpu.device.create_buffer(&BufferDescriptor {
+            label: None,
+            size: size as BufferAddress,
+            usage: BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+
+        encoder.copy_texture_to_buffer(
+            output.texture.as_image_copy(),
+            ImageCopyBuffer {
+                buffer: &buffer,
+                layout: ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: Some(
+                        (size / COPY_BYTES_PER_ROW_ALIGNMENT + 1) * COPY_BYTES_PER_ROW_ALIGNMENT,
+                    ),
+                    rows_per_image: None,
+                },
+            },
+            Default::default(),
+        );
+
+        let slice = buffer.slice(..);
+        slice.get_mapped_range()
+        // endif screenshot
+         */
+
         self.gpu
             .queue
             .submit(user_commands.into_iter().chain([encoder.finish()]));
+
         output.present();
 
         Ok(())

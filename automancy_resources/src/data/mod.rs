@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use rhai::{Dynamic, ImmutableString};
 use serde::{Deserialize, Serialize};
 
 use automancy_defs::coord::TileCoord;
@@ -8,7 +9,7 @@ use automancy_defs::id::{Id, IdRaw, Interner};
 
 use crate::data::inventory::{Inventory, InventoryRaw};
 use crate::data::stack::ItemAmount;
-use crate::ResourceManager;
+use crate::{ResourceManager, RESOURCE_MAN};
 
 pub mod inventory;
 pub mod item;
@@ -31,15 +32,15 @@ pub enum Data {
 
 impl Data {
     /// Gets the default Inventory.
-    pub fn inventory() -> Self {
+    pub fn new_inventory() -> Self {
         Self::Inventory(Default::default())
     }
 
-    pub fn vec_coord() -> Self {
+    /// Gets the default VecCoord.
+    pub fn new_vec_coord() -> Self {
         Self::VecCoord(Default::default())
     }
 
-    /// Gets a mutable reference to  the tile's Inventory, or None.
     pub fn as_inventory_mut(&mut self) -> Option<&mut Inventory> {
         if let Self::Inventory(v) = self {
             return Some(v);
@@ -47,7 +48,6 @@ impl Data {
         None
     }
 
-    /// Gets a mutable reference to  the tile's coordinates, or None.
     pub fn as_coord_mut(&mut self) -> Option<&mut TileCoord> {
         if let Self::Coord(v) = self {
             return Some(v);
@@ -91,7 +91,6 @@ impl Data {
         None
     }
 
-    /// Gets an immutable reference to  the tile's Inventory, or None.
     pub fn as_inventory(&self) -> Option<&Inventory> {
         if let Self::Inventory(v) = self {
             return Some(v);
@@ -99,7 +98,6 @@ impl Data {
         None
     }
 
-    /// Gets an immutable reference to  the tile's coordinates, or None.
     pub fn as_coord(&self) -> Option<&TileCoord> {
         if let Self::Coord(v) = self {
             return Some(v);
@@ -107,7 +105,6 @@ impl Data {
         None
     }
 
-    /// Gets an immutable reference to the tile's ID, or None.
     pub fn as_bool(&self) -> Option<&bool> {
         if let Self::Bool(v) = self {
             return Some(v);
@@ -142,12 +139,90 @@ impl Data {
         }
         None
     }
+
+    pub fn rhai_inventory(self) -> Dynamic {
+        if let Self::Inventory(v) = self {
+            return Dynamic::from(v.0);
+        }
+        Dynamic::UNIT
+    }
+
+    pub fn rhai_coord(self) -> Dynamic {
+        if let Self::Coord(v) = self {
+            return Dynamic::from(v);
+        }
+        Dynamic::UNIT
+    }
+
+    pub fn rhai_bool(self) -> Dynamic {
+        if let Self::Bool(v) = self {
+            return Dynamic::from_bool(v);
+        }
+        Dynamic::UNIT
+    }
+
+    pub fn rhai_vec_coord(self) -> Dynamic {
+        if let Self::VecCoord(v) = self {
+            return Dynamic::from_iter(v);
+        }
+        Dynamic::UNIT
+    }
+
+    pub fn rhai_id(self) -> Dynamic {
+        if let Self::Id(v) = self {
+            return Dynamic::from(v);
+        }
+        Dynamic::UNIT
+    }
+
+    pub fn rhai_vec_id(self) -> Dynamic {
+        if let Self::VecId(v) = self {
+            return Dynamic::from_iter(v);
+        }
+        Dynamic::UNIT
+    }
+
+    pub fn rhai_amount(self) -> Dynamic {
+        if let Self::Amount(v) = self {
+            return Dynamic::from_int(v);
+        }
+        Dynamic::UNIT
+    }
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct DataMap(pub BTreeMap<Id, Data>);
 
 impl DataMap {
+    pub fn rhai_get(&mut self, id: ImmutableString) -> Dynamic {
+        if let Some(v) = RESOURCE_MAN
+            .read()
+            .unwrap()
+            .clone()
+            .unwrap()
+            .interner
+            .get(IdRaw::parse(&id).to_string())
+            .and_then(|id| self.get(&id).cloned())
+        {
+            Dynamic::from(v)
+        } else {
+            Dynamic::UNIT
+        }
+    }
+
+    pub fn rhai_set(&mut self, id: ImmutableString, value: Dynamic) {
+        if let Some(v) = RESOURCE_MAN
+            .read()
+            .unwrap()
+            .clone()
+            .unwrap()
+            .interner
+            .get(IdRaw::parse(&id).to_string())
+        {
+            self.0.insert(v, value.cast::<Data>());
+        }
+    }
+
     pub fn get(&self, id: &Id) -> Option<&Data> {
         self.0.get(id)
     }

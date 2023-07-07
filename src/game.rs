@@ -362,7 +362,7 @@ impl Actor for Game {
 
                             for neighbor in TileHex::NEIGHBORS.iter().map(|v| coord + (*v).into()) {
                                 if let Some((id, _)) = state.map.tiles.get(&neighbor) {
-                                    if item_match(&state.resource_man.registry, *id, adjacent) {
+                                    if item_match(&state.resource_man, *id, adjacent) {
                                         fulfilled = true;
                                         break;
                                     }
@@ -544,9 +544,8 @@ pub async fn new_tile(
             id,
             coord,
             tile_modifier,
-            game: game.clone(),
         },
-        (),
+        (game.clone(),),
         game.get_cell(),
     )
     .await

@@ -26,10 +26,11 @@ impl ResourceManager {
                     &file,
                     StaticSoundSettings::default().output_destination(&self.track),
                 ) {
-                    self.audio.insert(
-                        file.file_stem().unwrap().to_str().unwrap().to_shared_str(),
-                        audio,
-                    );
+                    let name = file.file_stem().unwrap().to_str().unwrap();
+
+                    self.audio.insert(name.to_shared_str(), audio);
+
+                    log::info!("registered audio with name {name}");
                 }
             });
 

@@ -16,6 +16,8 @@ egui-winit = { workspace = true }
 
 winit = { workspace = true }
 
+rhai = { workspace = true }
+
 
 
 log = "0.4"

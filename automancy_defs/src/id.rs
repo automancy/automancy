@@ -3,6 +3,7 @@ use std::hash::Hash;
 
 use bytemuck::{Pod, Zeroable};
 use flexstr::SharedStr;
+use rhai::Dynamic;
 use serde::de::{Error, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use string_interner::backend::StringBackend;
@@ -17,23 +18,29 @@ pub static NONE: IdRaw = id_static("automancy", "none");
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Zeroable, Pod, Serialize, Deserialize,
 )]
-pub struct Id(u64);
+pub struct Id(u32);
 
-impl From<Id> for usize {
+impl From<Id> for Dynamic {
     fn from(value: Id) -> Self {
-        value.0 as usize
+        Dynamic::from_int(value.0 as i32)
     }
 }
 
-impl From<usize> for Id {
-    fn from(value: usize) -> Self {
-        Self(value as u64)
+impl From<Id> for i32 {
+    fn from(value: Id) -> Self {
+        value.0 as i32
+    }
+}
+
+impl From<i32> for Id {
+    fn from(value: i32) -> Self {
+        Self(value as u32)
     }
 }
 
 impl Symbol for Id {
     fn try_from_usize(index: usize) -> Option<Self> {
-        Some(Self(index as u64))
+        Some(Self(index as u32))
     }
 
     fn to_usize(self) -> usize {

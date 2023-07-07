@@ -6,6 +6,11 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[profile.release]
+lto = "fat"         # turn on Link-Time Optimizations
+codegen-units = 1   # trade compile time with maximum optimization
+opt-level = "z"     # optimize for size
+
 
 
 [workspace]
@@ -39,6 +44,8 @@ winit = { version = "0.28.3", features = ["serde"] }
 
 lazy_static = "1.4.0"
 
+rhai = { version = "1.15.0", features = ["sync", "no_time", "no_custom_syntax", "no_closure", "no_float", "only_i32"] }
+
 
 
 [dependencies]
@@ -57,6 +64,8 @@ egui-winit = { workspace = true }
 winit = { workspace = true }
 
 lazy_static = { workspace = true }
+
+rhai = { workspace = true }
 
 
 

@@ -1,6 +1,6 @@
 use crate::data::item::Item;
 
-pub type ItemAmount = u64;
+pub type ItemAmount = i32;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct ItemStack {
