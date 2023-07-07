@@ -16,17 +16,19 @@ use crate::options::DEFAULT_KEYMAP;
 
 #[derive(Serialize, Deserialize, Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub enum KeyActions {
-    ESCAPE,
-    UNDO,
-    DEBUG,
-    FULLSCREEN,
+    Escape,
+    Undo,
+    Debug,
+    Fullscreen,
+    Screenshot,
+    HideGui,
 }
 
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum PressTypes {
-    ONESHOT, // returns true when the key is pressed once and will not press again until released
-    HOLD,    // returns true whenever the key is down
-    TOGGLE,  // pressing the key will either toggle it on or off
+    Tap,    // returns true when the key is pressed once and will not press again until released
+    Hold,   // returns true whenever the key is down
+    Toggle, // pressing the key will either toggle it on or off
 }
 
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -39,20 +41,28 @@ pub mod actions {
     use super::{KeyAction, KeyActions, PressTypes};
 
     pub static ESCAPE: KeyAction = KeyAction {
-        action: KeyActions::ESCAPE,
-        press_type: PressTypes::ONESHOT,
+        action: KeyActions::Escape,
+        press_type: PressTypes::Tap,
     };
     pub static UNDO: KeyAction = KeyAction {
-        action: KeyActions::UNDO,
-        press_type: PressTypes::ONESHOT,
+        action: KeyActions::Undo,
+        press_type: PressTypes::Tap,
     };
     pub static DEBUG: KeyAction = KeyAction {
-        action: KeyActions::DEBUG,
-        press_type: PressTypes::TOGGLE,
+        action: KeyActions::Debug,
+        press_type: PressTypes::Toggle,
     };
     pub static FULLSCREEN: KeyAction = KeyAction {
-        action: KeyActions::FULLSCREEN,
-        press_type: PressTypes::TOGGLE,
+        action: KeyActions::Fullscreen,
+        press_type: PressTypes::Toggle,
+    };
+    pub static SCREENSHOT: KeyAction = KeyAction {
+        action: KeyActions::Screenshot,
+        press_type: PressTypes::Tap,
+    };
+    pub static HIDE_GUI: KeyAction = KeyAction {
+        action: KeyActions::HideGui,
+        press_type: PressTypes::Toggle,
     };
 }
 
@@ -288,7 +298,7 @@ impl InputHandler {
         let action = *self.key_map.get(&key)?;
 
         match action.press_type {
-            PressTypes::ONESHOT => match state {
+            PressTypes::Tap => match state {
                 Pressed => {
                     self.key_states.insert(action.action);
                     self.to_clear.push(action);
@@ -297,7 +307,7 @@ impl InputHandler {
                     self.key_states.remove(&action.action);
                 }
             },
-            PressTypes::HOLD => match state {
+            PressTypes::Hold => match state {
                 Pressed => {
                     self.key_states.insert(action.action);
                 }
@@ -305,7 +315,7 @@ impl InputHandler {
                     self.key_states.remove(&action.action);
                 }
             },
-            PressTypes::TOGGLE => match state {
+            PressTypes::Toggle => match state {
                 Pressed => {
                     if self.key_states.contains(&action.action) {
                         self.key_states.remove(&action.action);
@@ -320,7 +330,7 @@ impl InputHandler {
         Some(())
     }
 
-    pub fn key_pressed(&self, action: &KeyActions) -> bool {
+    pub fn key_active(&self, action: &KeyActions) -> bool {
         self.key_states.contains(action)
     }
 }

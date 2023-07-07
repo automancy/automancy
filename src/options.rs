@@ -5,6 +5,7 @@ use std::io::{BufReader, Read, Write};
 
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
+use toml_edit::{Item, Value};
 use winit::event::VirtualKeyCode;
 
 use automancy_defs::hashbrown::HashMap;
@@ -15,6 +16,7 @@ use crate::input::{actions, KeyAction};
 #[derive(Serialize, Deserialize)]
 pub struct Options {
     pub graphics: GraphicsOptions,
+    pub audio: AudioOptions,
     pub keymap: HashMap<VirtualKeyCode, KeyAction>,
 }
 lazy_static! {
@@ -22,13 +24,16 @@ lazy_static! {
         (VirtualKeyCode::Z, actions::UNDO),
         (VirtualKeyCode::Escape, actions::ESCAPE),
         (VirtualKeyCode::F3, actions::DEBUG),
-        (VirtualKeyCode::F11, actions::FULLSCREEN)
+        (VirtualKeyCode::F11, actions::FULLSCREEN),
+        (VirtualKeyCode::F1, actions::HIDE_GUI),
+        (VirtualKeyCode::F2, actions::SCREENSHOT)
     ]);
 }
 impl Default for Options {
     fn default() -> Self {
         Self {
             graphics: Default::default(),
+            audio: Default::default(),
             keymap: DEFAULT_KEYMAP.clone(),
         }
     }
@@ -61,7 +66,16 @@ impl Options {
     pub fn save(&mut self) -> Result<(), Box<dyn Error>> {
         let mut file = File::create(OPTIONS_PATH)?;
 
-        let body = toml::ser::to_string_pretty(self)?;
+        let body = toml_edit::ser::to_string_pretty(&self)?;
+        // TODO why
+        // let value = Item::Value(Value::InlineTable(
+        //     body.remove("keymap")
+        //         .unwrap()
+        //         .into_table()
+        //         .unwrap()
+        //         .into_inline_table(),
+        // ));
+        // body.insert("keymap", value);
         write!(&mut file, "{body}")?;
 
         log::info!("Saved options!");
@@ -91,6 +105,19 @@ impl Default for GraphicsOptions {
             fullscreen: false,
             scale: 1.0,
             aa: AALevel::MSAA,
+        }
+    }
+}
+#[derive(Serialize, Deserialize)]
+pub struct AudioOptions {
+    pub sfx_volume: f64,
+    pub music_volume: f64,
+}
+impl Default for AudioOptions {
+    fn default() -> Self {
+        Self {
+            sfx_volume: 0.5,
+            music_volume: 0.5,
         }
     }
 }
