@@ -6,7 +6,8 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[profile.release]
+[profile.release-bin]
+inherits = "release"
 lto = "fat"         # turn on Link-Time Optimizations
 codegen-units = 1   # trade compile time with maximum optimization
 opt-level = "z"     # optimize for size

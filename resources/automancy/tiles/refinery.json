@@ -1,9 +1,7 @@
 {
     "id": "refinery",
-    "tile_type": "machine",
-    "models": [
-        "refinery"
-    ],
+    "function": "machine",
+    "models": ["refinery"],
     "data": {
         "scripts": {
             "VecId": [

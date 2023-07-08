@@ -1,3 +1,7 @@
+fn id_deps() {
+    []
+}
+
 fn function_id() {
     "splitter"
 }

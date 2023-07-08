@@ -1,9 +1,7 @@
 {
     "id": "extractor",
-    "tile_type": "machine",
-    "models": [
-        "extractor"
-    ],
+    "function": "machine",
+    "models": ["extractor"],
     "data": {
         "scripts": {
             "VecId": [

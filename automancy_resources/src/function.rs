@@ -2,7 +2,7 @@ use std::ffi::OsStr;
 use std::fs::read_dir;
 use std::path::Path;
 
-use rhai::{ImmutableString, Scope};
+use rhai::{Dynamic, ImmutableString, Scope};
 
 use automancy_defs::id::IdRaw;
 use automancy_defs::log;
@@ -14,8 +14,6 @@ impl ResourceManager {
         let functions = dir.join("functions");
         let functions = read_dir(functions).ok()?;
 
-        let mut scope = Scope::new();
-
         functions
             .into_iter()
             .flatten()
@@ -23,17 +21,36 @@ impl ResourceManager {
             .filter(|v| v.extension() == Some(OsStr::new(FUNCTION_EXT)))
             .for_each(|file| {
                 log::info!("loading function at {file:?}");
+                let mut scope = Scope::new();
                 let ast = self.engine.compile_file(file).unwrap();
 
                 let str_id = self
                     .engine
                     .call_fn::<ImmutableString>(&mut scope, &ast, "function_id", ())
                     .unwrap();
-                let id = self
-                    .interner
-                    .get_or_intern(IdRaw::parse(&str_id).to_string());
+                let str_id = IdRaw::parse(&str_id).to_string();
+                let id = self.interner.get_or_intern(&str_id);
 
-                self.functions.insert(id, ast);
+                let id_deps = self
+                    .engine
+                    .call_fn::<Dynamic>(&mut scope, &ast, "id_deps", ())
+                    .unwrap();
+
+                if let Some(id_deps) = id_deps.try_cast::<rhai::Array>() {
+                    id_deps.into_iter().for_each(|v| {
+                        let v = v.cast::<rhai::Array>();
+
+                        let id = IdRaw::parse(v[0].clone().cast::<ImmutableString>().as_str())
+                            .to_string();
+                        let key = v[1].clone().cast::<ImmutableString>();
+
+                        log::info!("adding {key} -> {id} into scope of function {str_id}");
+
+                        scope.push_constant(key.as_str(), self.interner.get_or_intern(&id));
+                    });
+                }
+
+                self.functions.insert(id, (ast, scope));
 
                 log::info!("registered function with id {str_id} ({id:?})");
             });

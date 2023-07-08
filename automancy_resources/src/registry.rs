@@ -45,12 +45,7 @@ impl Registry {
 
 #[derive(Copy, Clone, IdReg)]
 pub struct TileIds {
-    pub machine: Id,
-    pub transfer: Id,
-    pub void: Id,
-    pub storage: Id,
-    pub merger: Id,
-    pub splitter: Id,
+    pub small_storage: Id,
     pub master_node: Id,
     pub node: Id,
 }

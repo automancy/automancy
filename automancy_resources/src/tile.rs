@@ -25,7 +25,6 @@ pub struct ModelAttributes {
 pub struct TileJson {
     pub id: IdRaw,
     pub function: Option<IdRaw>,
-    pub tile_type: Option<IdRaw>,
     pub models: Vec<IdRaw>,
     #[serde(default)]
     pub data: DataMapRaw,
@@ -38,7 +37,6 @@ pub struct TileJson {
 pub struct Tile {
     pub models: Vec<Id>,
     pub function: Option<Id>,
-    pub tile_type: Option<Id>,
     pub data: DataMap,
     pub model_attributes: ModelAttributes,
     pub targeted: bool,
@@ -57,8 +55,6 @@ impl ResourceManager {
 
         let function = tile.function.map(|v| v.to_id(&mut self.interner));
 
-        let tile_type = tile.tile_type.map(|v| v.to_id(&mut self.interner)); // TODO this will be deprecated
-
         let data = tile.data.intern_to_data(self);
 
         let models = tile
@@ -67,9 +63,7 @@ impl ResourceManager {
             .map(|v| v.to_id(&mut self.interner))
             .collect();
 
-        let targeted = tile
-            .targeted
-            .unwrap_or(tile_type == Some(self.registry.tile_ids.machine));
+        let targeted = tile.targeted.unwrap_or(true);
 
         let model_attributes = ModelAttributes {
             inactive_model: tile
@@ -81,7 +75,6 @@ impl ResourceManager {
         self.registry.tiles.insert(
             id,
             Tile {
-                tile_type,
                 function,
                 model_attributes,
                 targeted,

@@ -51,6 +51,10 @@ running `make_assets.sh`**
   the game.
     - It's meant to be viewed from -Z to Z
 
+### Scripts
+
+`input.data` (aka DataMap) needs to be *manually assigned if you make modifications*.
+
 ### Software
 
 The rendering is single-threaded. Game logic integration is run on Tokio runtime (which will block the rendering thread

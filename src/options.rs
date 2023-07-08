@@ -1,11 +1,10 @@
-use enum_ordinalize::Ordinalize;
 use std::error::Error;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, Read, Write};
 
+use enum_ordinalize::Ordinalize;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
-use toml_edit::{Item, Value};
 use winit::event::VirtualKeyCode;
 
 use automancy_defs::hashbrown::HashMap;

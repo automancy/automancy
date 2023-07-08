@@ -1,9 +1,6 @@
 {
     "id": "splitter",
-    "tile_type": "transfer",
     "function": "splitter",
-    "models": [
-        "r_splitter",
-        "l_splitter"
-    ]
+    "models": ["r_splitter", "l_splitter"],
+    "targeted": false
 }

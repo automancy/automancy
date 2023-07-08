@@ -1,8 +1,4 @@
 {
     "id": "node",
-    "tile_type": "transfer",
-    "models": [
-        "void"
-    ],
-    "targeted": true
+    "models": ["void"]
 }

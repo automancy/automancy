@@ -1,12 +1,8 @@
 {
     "id": "merger",
-    "tile_type": "transfer",
     "function": "merger",
-    "models": [
-        "merger"
-    ],
+    "models": ["merger"],
     "model_attributes": {
         "inactive_model": "merger_inactive"
-    },
-    "targeted": true
+    }
 }

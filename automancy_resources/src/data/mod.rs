@@ -1,3 +1,4 @@
+use std::any::TypeId;
 use std::collections::BTreeMap;
 
 use rhai::{Dynamic, ImmutableString};
@@ -9,7 +10,7 @@ use automancy_defs::id::{Id, IdRaw, Interner};
 
 use crate::data::inventory::{Inventory, InventoryRaw};
 use crate::data::stack::ItemAmount;
-use crate::{ResourceManager, RESOURCE_MAN};
+use crate::ResourceManager;
 
 pub mod inventory;
 pub mod item;
@@ -18,11 +19,8 @@ pub mod stack;
 /// Represents the data a tile entity holds. This data is given to functions.
 #[derive(Debug, Clone)]
 pub enum Data {
-    /// The tile entity's inventory.
     Inventory(Inventory),
-    /// The coordinates of the tile.
     Coord(TileCoord),
-    /// The tile's ID.
     VecCoord(Vec<TileCoord>),
     Id(Id),
     VecId(Vec<Id>),
@@ -142,7 +140,7 @@ impl Data {
 
     pub fn rhai_inventory(self) -> Dynamic {
         if let Self::Inventory(v) = self {
-            return Dynamic::from(v.0);
+            return Dynamic::from(v);
         }
         Dynamic::UNIT
     }
@@ -190,37 +188,73 @@ impl Data {
     }
 }
 
+impl TryFrom<Dynamic> for Data {
+    type Error = ();
+
+    fn try_from(value: Dynamic) -> Result<Self, Self::Error> {
+        let ty = value.type_id();
+
+        if ty == TypeId::of::<Inventory>() {
+            Ok(Data::Inventory(value.cast()))
+        } else if ty == TypeId::of::<TileCoord>() {
+            Ok(Data::Coord(value.cast()))
+        } else if ty == TypeId::of::<Vec<TileCoord>>() {
+            Ok(Data::VecCoord(value.cast()))
+        } else if ty == TypeId::of::<Id>() {
+            Ok(Data::Id(value.cast()))
+        } else if ty == TypeId::of::<Vec<Id>>() {
+            Ok(Data::VecId(value.cast()))
+        } else if ty == TypeId::of::<ItemAmount>() {
+            Ok(Data::Amount(value.cast()))
+        } else if ty == TypeId::of::<bool>() {
+            Ok(Data::Bool(value.cast()))
+        } else {
+            Err(())
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct DataMap(pub BTreeMap<Id, Data>);
 
 impl DataMap {
-    pub fn rhai_get(&mut self, id: ImmutableString) -> Dynamic {
-        if let Some(v) = RESOURCE_MAN
-            .read()
-            .unwrap()
-            .clone()
-            .unwrap()
-            .interner
-            .get(IdRaw::parse(&id).to_string())
-            .and_then(|id| self.get(&id).cloned())
-        {
+    fn rhai_parse(ty: ImmutableString) -> Option<Data> {
+        let ty = ty.to_lowercase();
+
+        if ty == "inventory" {
+            Some(Data::new_inventory())
+        } else if ty == "veccoord" {
+            Some(Data::new_vec_coord())
+        } else if ty == "bool" {
+            Some(Data::Bool(false))
+        } else if ty == "amount" {
+            Some(Data::Amount(0))
+        } else if ty == "coord" {
+            Some(Data::Coord(TileCoord::ZERO))
+        } else {
+            None
+        }
+    }
+
+    pub fn rhai_get(&mut self, id: Id) -> Dynamic {
+        if let Some(v) = self.get(&id).cloned() {
             Dynamic::from(v)
         } else {
             Dynamic::UNIT
         }
     }
 
-    pub fn rhai_set(&mut self, id: ImmutableString, value: Dynamic) {
-        if let Some(v) = RESOURCE_MAN
-            .read()
-            .unwrap()
-            .clone()
-            .unwrap()
-            .interner
-            .get(IdRaw::parse(&id).to_string())
-        {
-            self.0.insert(v, value.cast::<Data>());
-        }
+    pub fn rhai_set(&mut self, id: Id, value: Dynamic) {
+        self.0.insert(id, value.try_into().unwrap());
+    }
+
+    pub fn rhai_get_or_insert(&mut self, id: Id, ty: ImmutableString) -> Dynamic {
+        Dynamic::from(
+            self.0
+                .entry(id)
+                .or_insert_with(|| Self::rhai_parse(ty).unwrap())
+                .clone(),
+        )
     }
 
     pub fn get(&self, id: &Id) -> Option<&Data> {

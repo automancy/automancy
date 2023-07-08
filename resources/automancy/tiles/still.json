@@ -1,9 +1,7 @@
 {
     "id": "still",
-    "tile_type": "machine",
-    "models": [
-        "still"
-    ],
+    "function": "machine",
+    "models": ["still"],
     "data": {
         "scripts": {
             "VecId": [

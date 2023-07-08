@@ -1,6 +1,6 @@
 {
     "id": "void",
-    "models": [
-        "void"
-    ]
+    "function": "void",
+    "models": ["void"],
+    "targeted": false
 }

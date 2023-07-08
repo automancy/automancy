@@ -1,15 +1,12 @@
 use std::mem;
 use std::sync::Arc;
 
-use egui::NumExt;
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort};
 use rand::{thread_rng, RngCore};
 use rhai::{CallFnOptions, Dynamic, ImmutableString, Scope};
 
 use automancy_defs::coord::TileCoord;
 use automancy_defs::id::Id;
-use automancy_defs::log;
-use automancy_resources::data::item::item_match;
 use automancy_resources::data::stack::ItemStack;
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::ResourceManager;
@@ -41,7 +38,7 @@ pub struct TileEntityState {
     rhai_map: rhai::Map, // TODO deprecate the data map entirely
 
     /// Rhai scope
-    scope: Scope<'static>,
+    scope: Option<Scope<'static>>,
 
     /// The data map stored by the tile.
     data: DataMap,
@@ -63,7 +60,7 @@ impl TileEntityState {
 
             data: DataMap::default(),
 
-            adjacent_fulfilled: false,
+            adjacent_fulfilled: true,
         }
     }
 }
@@ -83,13 +80,12 @@ pub enum TileEntityMsg {
     },
     TransactionResult {
         resource_man: Arc<ResourceManager>,
-        result: Result<ItemStack, TransactionError>,
+        result: Result<ItemStack, ()>,
     },
     ExtractRequest {
         resource_man: Arc<ResourceManager>,
         tick_count: TickUnit,
         coord: TileCoord,
-        direction: TileCoord,
     },
     AdjacentState {
         fulfilled: bool,
@@ -103,123 +99,7 @@ pub enum TileEntityMsg {
     GetDataValueWithCoord(Id, RpcReplyPort<(TileCoord, Option<Data>)>),
 }
 
-/// Represents the various types of errors a tile can run into.
-#[derive(Debug, Copy, Clone)]
-pub enum TransactionError {
-    /// Tried to execute a script but could not find one.
-    NoScript,
-    /// Transaction type could not be applied to the specified tile.
-    NotSuitable,
-    /// Target inventory is full.
-    Full,
-}
-
-struct MachineTickResult {
-    pub target: TileCoord,
-    pub outputs: Vec<ItemStack>,
-}
-
 impl TileEntity {
-    fn machine_tick(
-        &self,
-        state: &mut TileEntityState,
-        resource_man: &ResourceManager,
-    ) -> Option<MachineTickResult> {
-        if let Some((target, script)) = state
-            .data
-            .get(&resource_man.registry.data_ids.target)
-            .and_then(Data::as_coord)
-            .cloned()
-            .zip(
-                state
-                    .data
-                    .get(&resource_man.registry.data_ids.script)
-                    .and_then(Data::as_id)
-                    .and_then(|id| resource_man.registry.script(*id)),
-            )
-        {
-            let coord = self.coord + target;
-
-            if let Some(inputs) = &script.instructions.inputs {
-                if let Some(buffer) = state
-                    .data
-                    .get_mut(&resource_man.registry.data_ids.buffer)
-                    .and_then(Data::as_inventory_mut)
-                {
-                    for input in inputs {
-                        let stored = buffer.get(input.item);
-
-                        if stored < input.amount {
-                            return None;
-                        }
-                    }
-
-                    return Some(MachineTickResult {
-                        target: coord,
-                        outputs: script.instructions.outputs.clone(),
-                    });
-                }
-            } else {
-                return Some(MachineTickResult {
-                    target: coord,
-                    outputs: script.instructions.outputs.clone(),
-                });
-            }
-        }
-
-        None
-    }
-
-    fn machine_transaction(
-        state: &mut TileEntityState,
-        resource_man: &ResourceManager,
-        item_stack: ItemStack,
-    ) -> Result<ItemStack, TransactionError> {
-        let script = state.data.get(&resource_man.registry.data_ids.script);
-
-        if script.is_none() {
-            return Err(TransactionError::NoScript);
-        }
-
-        if let Some(inputs) = script
-            .and_then(Data::as_id)
-            .and_then(|id| resource_man.registry.script(*id))
-            .and_then(|script| script.instructions.inputs.as_ref())
-        {
-            if let Data::Inventory(buffer) = state
-                .data
-                .0
-                .entry(resource_man.registry.data_ids.buffer)
-                .or_insert_with(Data::new_inventory)
-            {
-                let matched = inputs
-                    .iter()
-                    .find(|v| item_match(resource_man, item_stack.item.id, v.item.id));
-
-                if matched.is_none() {
-                    return Err(TransactionError::NotSuitable);
-                }
-
-                let matched = matched.unwrap();
-                let size = matched.amount * 8;
-
-                let amount = buffer.get_mut(item_stack.item);
-                if *amount >= size {
-                    return Err(TransactionError::Full);
-                }
-
-                *amount += item_stack.amount;
-                if *amount > size {
-                    *amount = size;
-                }
-
-                return Ok(*matched);
-            }
-        }
-
-        Err(TransactionError::NotSuitable)
-    }
-
     fn transaction(
         &self,
         state: &mut TileEntityState,
@@ -230,11 +110,13 @@ impl TileEntity {
     ) -> Option<GameMsg> {
         let tile = resource_man.registry.tile(self.id).unwrap();
 
-        if let Some(ast) = tile
+        if let Some((ast, default_scope)) = tile
             .function
             .as_ref()
             .and_then(|v| resource_man.functions.get(v))
         {
+            let scope = state.scope.get_or_insert_with(|| default_scope.clone());
+
             state
                 .rhai_map
                 .insert(RHAI_DATA_MAP_KEY.into(), Dynamic::from(state.data.clone()));
@@ -246,24 +128,22 @@ impl TileEntity {
                 .rewind_scope(true)
                 .bind_this_ptr(&mut rhai_state);
 
-            let result = resource_man
-                .engine
-                .call_fn_with_options::<Dynamic>(
-                    options,
-                    &mut state.scope,
-                    ast,
-                    "handle_transaction",
-                    (rhai::Map::from([
-                        (
-                            "tile_modifier".into(),
-                            Dynamic::from_int(self.tile_modifier),
-                        ),
-                        ("coord".into(), Dynamic::from(self.coord)),
-                        ("source_coord".into(), Dynamic::from(source_coord)),
-                        ("random".into(), Dynamic::from_int(random())),
-                    ]),),
-                )
-                .unwrap();
+            let result = resource_man.engine.call_fn_with_options::<Dynamic>(
+                options,
+                scope,
+                ast,
+                "handle_transaction",
+                (rhai::Map::from([
+                    (
+                        "tile_modifier".into(),
+                        Dynamic::from_int(self.tile_modifier),
+                    ),
+                    ("coord".into(), Dynamic::from(self.coord)),
+                    ("source_coord".into(), Dynamic::from(source_coord)),
+                    ("random".into(), Dynamic::from_int(random())),
+                    ("stack".into(), Dynamic::from(stack)),
+                ]),),
+            );
 
             state.rhai_map = rhai_state.take().cast::<rhai::Map>();
             state.data = state
@@ -273,7 +153,7 @@ impl TileEntity {
                 .unwrap()
                 .cast();
 
-            return if let Some(result) = result.try_cast::<rhai::Array>() {
+            return if let Some(result) = result.ok().and_then(|v| v.try_cast::<rhai::Array>()) {
                 let ty: ImmutableString = result[0].clone().cast();
 
                 if ty.as_str() == "pass_on" {
@@ -291,6 +171,13 @@ impl TileEntity {
                         },
                         &resource_man,
                     );
+                } else if ty.as_str() == "consume" {
+                    source
+                        .send_message(TransactionResult {
+                            resource_man,
+                            result: Ok(stack),
+                        })
+                        .unwrap();
                 }
 
                 Some(GameMsg::RecordTransaction(stack, source_coord, self.coord))
@@ -298,97 +185,11 @@ impl TileEntity {
                 source
                     .send_message(TransactionResult {
                         resource_man: resource_man.clone(),
-                        result: Err(TransactionError::NotSuitable), // TODO let the function return their own transaction error
+                        result: Err(()),
                     })
                     .unwrap();
                 None
             };
-        }
-
-        if self.id == resource_man.registry.tile_ids.void {
-            source
-                .send_message(TransactionResult {
-                    resource_man,
-                    result: Ok(stack),
-                })
-                .unwrap();
-
-            return Some(GameMsg::RecordTransaction(stack, source_coord, self.coord));
-        } else if tile.tile_type == Some(resource_man.registry.tile_ids.machine) {
-            let result = TileEntity::machine_transaction(state, &resource_man, stack);
-
-            source
-                .send_message(TransactionResult {
-                    resource_man: resource_man.clone(),
-                    result,
-                })
-                .unwrap();
-
-            if result.is_ok() {
-                return Some(GameMsg::RecordTransaction(stack, source_coord, self.coord));
-            }
-        } else if tile.tile_type == Some(resource_man.registry.tile_ids.storage) {
-            if let Some((item, amount)) = state
-                .data
-                .get(&resource_man.registry.data_ids.storage)
-                .and_then(Data::as_id)
-                .and_then(|id| resource_man.registry.item(*id).cloned())
-                .zip(
-                    state
-                        .data
-                        .get(&resource_man.registry.data_ids.amount)
-                        .and_then(Data::as_amount)
-                        .cloned(),
-                )
-            {
-                if stack.item == item {
-                    let buffer = state
-                        .data
-                        .0
-                        .entry(resource_man.registry.data_ids.buffer)
-                        .or_insert_with(Data::new_inventory)
-                        .as_inventory_mut()
-                        .unwrap();
-                    let stored = buffer.0.entry(item).or_insert(0);
-
-                    if *stored > amount {
-                        *stored = amount;
-                    }
-
-                    return if *stored == amount {
-                        source
-                            .send_message(TransactionResult {
-                                resource_man: resource_man.clone(),
-                                result: Err(TransactionError::Full),
-                            })
-                            .unwrap();
-
-                        None
-                    } else {
-                        let inserting = stack.amount.at_most(amount - *stored);
-                        *stored += inserting;
-
-                        source
-                            .send_message(TransactionResult {
-                                resource_man: resource_man.clone(),
-                                result: Ok(ItemStack {
-                                    item,
-                                    amount: inserting,
-                                }),
-                            })
-                            .unwrap();
-
-                        Some(GameMsg::RecordTransaction(stack, source_coord, self.coord))
-                    };
-                }
-            } else {
-                source
-                    .send_message(TransactionResult {
-                        resource_man: resource_man.clone(),
-                        result: Err(TransactionError::NotSuitable),
-                    })
-                    .unwrap();
-            }
         }
 
         None
@@ -420,48 +221,93 @@ impl Actor for TileEntity {
                 resource_man,
                 tick_count,
             } => {
-                let tile_type = resource_man.registry.tile(self.id).unwrap().tile_type;
+                let tile = resource_man.registry.tile(self.id).unwrap();
 
-                if tile_type == Some(resource_man.registry.tile_ids.machine) {
-                    if tick_count % 10 == 0 {
-                        if let Some(script) = state
-                            .data
-                            .get(&resource_man.registry.data_ids.script)
-                            .and_then(Data::as_id)
-                        {
-                            if let Some(script) = resource_man.registry.script(*script).cloned() {
-                                state
-                                    .game
-                                    .send_message(GameMsg::CheckAdjacent {
-                                        script,
-                                        coord: self.coord,
-                                        self_coord: self.coord,
-                                    })
-                                    .unwrap();
-                            }
+                if tick_count % 10 == 0 {
+                    if let Some(script) = state
+                        .data
+                        .get(&resource_man.registry.data_ids.script)
+                        .and_then(Data::as_id)
+                    {
+                        if let Some(script) = resource_man.registry.script(*script).cloned() {
+                            state
+                                .game
+                                .send_message(GameMsg::CheckAdjacent {
+                                    script,
+                                    coord: self.coord,
+                                    self_coord: self.coord,
+                                })
+                                .unwrap();
                         }
                     }
+                }
 
-                    if !state.adjacent_fulfilled {
-                        return Ok(());
-                    }
+                if !state.adjacent_fulfilled {
+                    return Ok(());
+                }
 
-                    if let Some(MachineTickResult { target, outputs }) =
-                        self.machine_tick(state, &resource_man)
-                    {
-                        for stack in outputs {
-                            send_to_tile(
-                                state,
-                                target,
-                                Transaction {
-                                    resource_man: resource_man.clone(),
-                                    stack,
-                                    source_id: self.id,
-                                    source_coord: self.coord,
-                                    source: myself.clone(),
-                                },
-                                &resource_man,
-                            );
+                if let Some((ast, default_scope)) = tile
+                    .function
+                    .as_ref()
+                    .and_then(|v| resource_man.functions.get(v))
+                {
+                    let scope = state.scope.get_or_insert_with(|| default_scope.clone());
+
+                    state
+                        .rhai_map
+                        .insert(RHAI_DATA_MAP_KEY.into(), Dynamic::from(state.data.clone()));
+
+                    let mut rhai_state = Dynamic::from_map(state.rhai_map.clone());
+
+                    let options = CallFnOptions::new()
+                        .eval_ast(false)
+                        .rewind_scope(true) //TODO dedupe these
+                        .bind_this_ptr(&mut rhai_state);
+
+                    let result = resource_man.engine.call_fn_with_options::<Dynamic>(
+                        options,
+                        scope,
+                        ast,
+                        "handle_tick",
+                        (rhai::Map::from([
+                            (
+                                "tile_modifier".into(),
+                                Dynamic::from_int(self.tile_modifier),
+                            ),
+                            ("coord".into(), Dynamic::from(self.coord)),
+                            ("random".into(), Dynamic::from_int(random())),
+                        ]),),
+                    );
+
+                    state.rhai_map = rhai_state.take().cast::<rhai::Map>();
+                    state.data = state
+                        .rhai_map
+                        .get(RHAI_DATA_MAP_KEY)
+                        .cloned()
+                        .unwrap()
+                        .cast();
+
+                    if let Some(result) = result.ok().and_then(|v| v.try_cast::<rhai::Array>()) {
+                        let ty: ImmutableString = result[0].clone().cast();
+
+                        if ty.as_str() == "make_transaction" {
+                            let target_coord: TileCoord = result[1].clone().cast();
+                            let stacks: Vec<ItemStack> = result[2].clone().cast();
+
+                            for stack in stacks {
+                                send_to_tile(
+                                    state,
+                                    target_coord,
+                                    Transaction {
+                                        resource_man: resource_man.clone(),
+                                        stack,
+                                        source_id: self.id,
+                                        source_coord: self.coord,
+                                        source: myself.clone(),
+                                    },
+                                    &resource_man,
+                                );
+                            }
                         }
                     }
                 }
@@ -487,7 +333,6 @@ impl Actor for TileEntity {
                                 resource_man: resource_man.clone(),
                                 tick_count,
                                 coord: self.coord + target,
-                                direction: -target,
                             },
                             &resource_man,
                         );
@@ -512,43 +357,49 @@ impl Actor for TileEntity {
                 result,
             } => {
                 if let Ok(transferred) = result {
-                    let tile_type = resource_man.registry.tile(self.id).unwrap().tile_type;
+                    let tile = resource_man.registry.tile(self.id).unwrap();
 
-                    if tile_type == Some(resource_man.registry.tile_ids.machine) {
-                        if let Some(inputs) = state
-                            .data
-                            .get(&resource_man.registry.data_ids.script)
-                            .and_then(Data::as_id)
-                            .and_then(|script| resource_man.registry.script(*script))
-                            .and_then(|script| script.instructions.inputs.as_ref())
-                        {
-                            let buffer = state
-                                .data
-                                .get_mut(&resource_man.registry.data_ids.buffer)
-                                .and_then(Data::as_inventory_mut)
-                                .unwrap();
+                    if let Some((ast, default_scope)) = tile
+                        .function
+                        .as_ref()
+                        .and_then(|v| resource_man.functions.get(v))
+                    {
+                        let scope = state.scope.get_or_insert_with(|| default_scope.clone());
 
-                            for input in inputs {
-                                let stored = buffer.0.entry(input.item).or_insert(0);
+                        state
+                            .rhai_map
+                            .insert(RHAI_DATA_MAP_KEY.into(), Dynamic::from(state.data.clone()));
 
-                                if *stored < input.amount {
-                                    log::error!("in transaction result: tile does not have enough input for the supposed output!");
-                                    *stored = 0;
-                                } else {
-                                    *stored -= input.amount
-                                }
-                            }
-                        }
-                    }
+                        let mut rhai_state = Dynamic::from_map(state.rhai_map.clone());
 
-                    if tile_type == Some(resource_man.registry.tile_ids.storage) {
-                        if let Some(buffer) = state
-                            .data
-                            .get_mut(&resource_man.registry.data_ids.buffer)
-                            .and_then(Data::as_inventory_mut)
-                        {
-                            buffer.take(transferred.item, transferred.amount);
-                        }
+                        let options = CallFnOptions::new()
+                            .eval_ast(false)
+                            .rewind_scope(true)
+                            .bind_this_ptr(&mut rhai_state);
+
+                        let _result = resource_man.engine.call_fn_with_options::<Dynamic>(
+                            options,
+                            scope,
+                            ast,
+                            "handle_transaction_result",
+                            (rhai::Map::from([
+                                (
+                                    "tile_modifier".into(),
+                                    Dynamic::from_int(self.tile_modifier),
+                                ),
+                                ("coord".into(), Dynamic::from(self.coord)),
+                                ("random".into(), Dynamic::from_int(random())),
+                                ("transferred".into(), Dynamic::from(transferred)),
+                            ]),),
+                        );
+
+                        state.rhai_map = rhai_state.take().cast::<rhai::Map>();
+                        state.data = state
+                            .rhai_map
+                            .get(RHAI_DATA_MAP_KEY)
+                            .cloned()
+                            .unwrap()
+                            .cast();
                     }
                 }
             }
@@ -579,11 +430,8 @@ impl Actor for TileEntity {
                 resource_man,
                 tick_count,
                 coord,
-                direction,
             } => {
-                let tile_type = resource_man.registry.tile(self.id).unwrap().tile_type;
-
-                if tile_type == Some(resource_man.registry.tile_ids.storage) {
+                if self.id == resource_man.registry.tile_ids.small_storage {
                     if let Some(((item, amount), inventory)) = state
                         .data
                         .get(&resource_man.registry.data_ids.storage)
@@ -640,7 +488,6 @@ impl Actor for TileEntity {
                                 resource_man: resource_man.clone(),
                                 tick_count,
                                 coord,
-                                direction,
                             },
                             &resource_man,
                         );

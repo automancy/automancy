@@ -616,7 +616,7 @@ impl Renderer {
             let mut overlay_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Overlay Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.gui_texture.1,
+                    view: &self.gpu.processed_gui_texture.1,
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Load,
