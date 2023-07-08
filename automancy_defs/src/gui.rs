@@ -6,37 +6,51 @@ use egui::{
     TextStyle, Ui, Visuals, Widget,
 };
 use egui_winit::State;
-use winit::window::Window;
+use std::error::Error;
+use std::fs;
+use std::fs::File;
+use std::io::Read;
 
-use crate::IOSEVKA_FONT;
+use winit::window::Window;
 
 pub struct Gui {
     pub renderer: egui_wgpu::Renderer,
     pub context: Context,
     pub state: State,
+    pub fonts: FontDefinitions,
 }
-
 /// Initialize the font families.
-fn init_fonts(gui: &Gui) {
-    let mut fonts = FontDefinitions::default();
-    let iosevka = "iosevka";
-
-    fonts
-        .font_data
-        .insert(iosevka.to_owned(), FontData::from_static(IOSEVKA_FONT));
-
-    fonts
+fn init_fonts(gui: &mut Gui) -> Result<(), Box<dyn Error>> {
+    gui.fonts = FontDefinitions::default();
+    let fonts_dir = fs::read_dir("resources/core/fonts")?;
+    let font_files: Vec<(File, String)> = fonts_dir
+        .filter_map(|f| f.ok())
+        .map(|f| (File::open(f.path()), f))
+        .filter(|(f, _d)| f.is_ok())
+        .map(|(f, d)| (f.unwrap(), d.file_name().to_str().unwrap().to_string()))
+        .collect();
+    for (mut file, filename) in font_files {
+        log::info!("loading font {filename}");
+        let mut data: Vec<u8> = Vec::new();
+        file.read_to_end(&mut data)?;
+        gui.fonts
+            .font_data
+            .insert(filename.to_owned(), FontData::from_owned(data));
+    }
+    Ok(())
+}
+pub fn set_font(font: String, gui: &mut Gui) {
+    gui.fonts
         .families
         .get_mut(&Proportional)
         .unwrap()
-        .insert(0, iosevka.to_owned());
-    fonts
+        .insert(0, font.to_owned());
+    gui.fonts
         .families
         .get_mut(&Monospace)
         .unwrap()
-        .insert(0, iosevka.to_owned());
-
-    gui.context.set_fonts(fonts);
+        .insert(0, font);
+    gui.context.set_fonts(gui.fonts.clone());
 }
 
 /// Initialize the GUI style.
@@ -104,13 +118,13 @@ fn init_styles(gui: &Gui) {
 
 /// Initializes the GUI.
 pub fn init_gui(renderer: egui_wgpu::Renderer, window: &Window) -> Gui {
-    let gui = Gui {
+    let mut gui = Gui {
         renderer,
         context: Default::default(),
         state: State::new(window),
+        fonts: FontDefinitions::default(),
     };
-
-    init_fonts(&gui);
+    init_fonts(&mut gui).expect("Failed to initialize fonts");
     init_styles(&gui);
 
     gui

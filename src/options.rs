@@ -3,6 +3,7 @@ use std::io::{BufReader, Read, Write};
 
 use enum_ordinalize::Ordinalize;
 use serde::{Deserialize, Serialize};
+
 use winit::event::VirtualKeyCode;
 
 use automancy_defs::hashbrown::HashMap;
@@ -11,10 +12,11 @@ use automancy_defs::math::{Double, Float};
 
 use crate::input::{KeyAction, DEFAULT_KEYMAP};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct Options {
     pub graphics: GraphicsOptions,
     pub audio: AudioOptions,
+    pub gui: GuiOptions,
     pub keymap: HashMap<VirtualKeyCode, KeyAction>,
 }
 
@@ -23,6 +25,7 @@ impl Default for Options {
         Self {
             graphics: Default::default(),
             audio: Default::default(),
+            gui: Default::default(),
             keymap: DEFAULT_KEYMAP.iter().cloned().collect(),
         }
     }
@@ -94,7 +97,21 @@ impl Default for GraphicsOptions {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GuiOptions {
+    pub scale: f32,
+    pub font: String,
+}
+
+impl Default for GuiOptions {
+    fn default() -> Self {
+        Self {
+            scale: 1.0,
+            font: "iosevka-extended.ttf".to_string(),
+        }
+    }
+}
+#[derive(Serialize, Deserialize)]
 pub struct AudioOptions {
     pub sfx_volume: f64,
     pub music_volume: f64,

@@ -20,6 +20,7 @@ use automancy::camera::Camera;
 use automancy::gpu::Gpu;
 use automancy::input::KeyActions;
 use automancy_defs::gui::init_gui;
+use automancy_defs::gui::set_font;
 use automancy_defs::{log, window};
 
 use crate::event::{on_event, EventLoopStorage};
@@ -167,6 +168,7 @@ fn main() -> eyre::Result<()> {
         egui_wgpu::Renderer::new(&gpu.device, gpu.config.format, None, 1),
         &gpu.window,
     );
+    set_font(setup.options.gui.font.clone(), &mut gui);
     log::info!("Gui set up.");
 
     let mut renderer = Renderer::new(gpu);
