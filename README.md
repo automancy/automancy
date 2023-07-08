@@ -35,6 +35,7 @@ criteria:
 
 - The viewport is *exactly* 160cm by 160cm (cm is used to reduce rounding errors).
 - The file does not contain any color outside of fills.
+    - That means, no gradients.
 - The file does not contain any clipping or masking.
     - Use the boolean operators.
 - The file does not contain any strokes.
