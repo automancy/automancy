@@ -9,9 +9,6 @@ use automancy::tile_entity::TileEntityMsg;
 use automancy_defs::coord::{TileCoord, TileHex};
 use automancy_defs::hexagon_tiles::traits::HexDirection;
 use automancy_defs::id::Id;
-use automancy_defs::math::Double;
-use automancy_defs::rendering::Vertex;
-use automancy_defs::{colors, math};
 use automancy_resources::data::stack::ItemStack;
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::tile::Tile;
@@ -19,7 +16,7 @@ use automancy_resources::ResourceManager;
 
 use crate::event::EventLoopStorage;
 use crate::gui::item::draw_item;
-use crate::gui::{make_line, searchable_id, ITEM_ICON_SIZE, MARGIN};
+use crate::gui::{searchable_id, ITEM_ICON_SIZE, MARGIN};
 use crate::setup::GameSetup;
 
 /// Draws the direction selector.
@@ -55,7 +52,14 @@ fn target(
         .cloned();
     let mut new_target_coord = current_target_coord;
 
-    if setup.resource_man.registry.tile(id).unwrap().targeted {
+    if !setup
+        .resource_man
+        .registry
+        .tile_data(id, setup.resource_man.registry.data_ids.not_targeted)
+        .and_then(Data::as_bool)
+        .cloned()
+        .unwrap_or(false)
+    {
         ui.add_space(MARGIN);
 
         ui.label(
@@ -93,19 +97,11 @@ fn target(
                     Data::Coord(target_coord),
                 ))
                 .unwrap();
-            setup
-                .game
-                .send_message(GameMsg::SignalTilesUpdated)
-                .unwrap();
         } else {
             tile_entity
                 .send_message(TileEntityMsg::RemoveData(
                     setup.resource_man.registry.data_ids.target,
                 ))
-                .unwrap();
-            setup
-                .game
-                .send_message(GameMsg::SignalTilesUpdated)
                 .unwrap();
         }
     }
@@ -118,7 +114,15 @@ fn master_node(
     config_open: TileCoord,
     id: Id,
 ) {
-    if id == setup.resource_man.registry.tile_ids.master_node {
+    // TODO make this more generic and not constrained to master_node
+    if Some(true)
+        == setup
+            .resource_man
+            .registry
+            .tile_data(id, setup.resource_man.registry.data_ids.linking)
+            .and_then(Data::as_bool)
+            .cloned()
+    {
         ui.add_space(MARGIN);
 
         if ui
@@ -138,53 +142,6 @@ fn master_node(
         );
 
         ui.add_space(MARGIN);
-    }
-}
-
-fn node(
-    runtime: &Runtime,
-    setup: &GameSetup,
-    config_open: TileCoord,
-    extra_vertices: &mut Vec<Vertex>,
-    (width, height): (Double, Double),
-    id: Id,
-) {
-    if id == setup.resource_man.registry.tile_ids.node {
-        if let Some(tile_entity) = runtime
-            .block_on(
-                setup
-                    .game
-                    .call(|reply| GameMsg::GetTileEntity(config_open, reply), None),
-            )
-            .unwrap()
-            .unwrap()
-        {
-            let result = runtime
-                .block_on(tile_entity.call(
-                    |reply| {
-                        TileEntityMsg::GetDataValue(
-                            setup.resource_man.registry.data_ids.link,
-                            reply,
-                        )
-                    },
-                    None,
-                ))
-                .unwrap()
-                .unwrap();
-
-            if let Some(link) = result.as_ref().and_then(Data::as_coord) {
-                let (a, w0) =
-                    math::hex_to_normalized((width, height), setup.camera.get_pos(), config_open);
-
-                let (b, w1) = math::hex_to_normalized(
-                    (width, height),
-                    setup.camera.get_pos(),
-                    config_open + *link,
-                );
-
-                extra_vertices.extend_from_slice(&make_line(a, b, (w0 + w1) / 2.0, colors::RED));
-            }
-        }
     }
 }
 
@@ -388,8 +345,6 @@ pub fn tile_config(
     loop_store: &mut EventLoopStorage,
     gui_instances: &mut GuiInstances,
     context: &Context,
-    (width, height): (Double, Double),
-    extra_vertices: &mut Vec<Vertex>,
 ) {
     if let Some(config_open) = loop_store.config_open {
         let tile = runtime
@@ -448,14 +403,7 @@ pub fn tile_config(
                     tile_info,
                 );
                 target(ui, setup, &data, tile_entity.clone(), id);
-                node(
-                    runtime,
-                    setup,
-                    config_open,
-                    extra_vertices,
-                    (width, height),
-                    id,
-                );
+
                 master_node(ui, setup, loop_store, config_open, id);
 
                 ui.add_space(MARGIN);

@@ -2,6 +2,7 @@ use std::fmt::Debug;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
 use std::iter::Iterator;
+use std::sync::Arc;
 use std::time::SystemTime;
 use std::{
     collections::{HashMap, HashSet},
@@ -173,14 +174,14 @@ impl Map {
     /// Loads a map from disk.
     pub async fn load(
         game: ActorRef<GameMsg>,
-        resource_man: &ResourceManager,
+        resource_man: Arc<ResourceManager>,
         map_name: &str,
     ) -> (Self, TileEntities) {
-        let Some((header, save_time)) = Map::read_header(resource_man, map_name) else {
+        let Some((header, save_time)) = Map::read_header(&resource_man, map_name) else {
             return (Map::new_empty(map_name.to_string()), Default::default());
         };
 
-        let Some(serde_tiles) = Map::read_tiles(resource_man, map_name) else {
+        let Some(serde_tiles) = Map::read_tiles(&resource_man, map_name) else {
             return (Map::new_empty(map_name.to_string()), Default::default());
         };
 
@@ -194,8 +195,10 @@ impl Map {
                 .get(&id)
                 .and_then(|id| resource_man.interner.get(id.as_str()))
             {
-                let tile_entity = game::new_tile(game.clone(), coord, id, tile_modifier).await;
-                let data = data.to_data(resource_man);
+                let tile_entity =
+                    game::new_tile(resource_man.clone(), game.clone(), coord, id, tile_modifier)
+                        .await;
+                let data = data.to_data(&resource_man);
 
                 for (key, value) in data.0 {
                     tile_entity
@@ -208,7 +211,7 @@ impl Map {
             }
         }
 
-        let data = header.data.to_data(resource_man);
+        let data = header.data.to_data(&resource_man);
 
         (
             Self {

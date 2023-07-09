@@ -11,14 +11,13 @@ fn function_id() {
 }
 
 fn handle_transaction(input) {
-    let item = this.data[STORAGE]?.id()?.as_item();
+    let storage = this.data[STORAGE]?.id()?.as_item();
     let amount = this.data[AMOUNT]?.amount();
-    let stack = input.stack;
 
-    if type_of(amount) != "()" && type_of(item) != "()" && stack.item == item {
+    if type_of(amount) != "()" && type_of(storage) != "()" && input.stack.item == storage {
         let buffer = this.data.get_or_insert(BUFFER, "Inventory").inventory();
 
-        let stored = buffer[item];
+        let stored = buffer[storage];
         if stored > amount {
             stored = amount;
         }
@@ -27,13 +26,13 @@ fn handle_transaction(input) {
             return;
         }
 
-        let inserting = min(stack.amount, amount - stored);
+        let inserting = min(input.stack.amount, amount - stored);
         stored += inserting;
 
-        buffer[item] = stored;
+        buffer[storage] = stored;
         this.data[BUFFER] = buffer;
 
-        return ["consume"];
+        return ["consume", inserting];
     }
 }
 
@@ -43,4 +42,25 @@ fn handle_transaction_result(input) {
     buffer.take(input.transferred.item, input.transferred.amount);
     
     this.data[BUFFER] = buffer;
+}
+
+fn handle_extract_request(input) {
+    let storage = this.data[STORAGE]?.id().as_item();
+    let amount = this.data[AMOUNT]?.amount();
+    let buffer = this.data[BUFFER]?.inventory();
+
+    if type_of(storage) != "()" && type_of(amount) != "()" && type_of(buffer) != "()" {
+        let stored = buffer[storage];
+        //let extracting = min(stored, amount); TODO ????
+
+        if stored > 0 {
+            return [
+                "make_transaction",
+                input.requested_from_coord,
+                input.id,
+                input.coord,
+                [ItemStack(storage, stored)]
+            ];
+        }
+    }
 }

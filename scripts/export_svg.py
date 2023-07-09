@@ -23,11 +23,11 @@ def main():
         bpy.data.objects.remove(obj)
 
         new_dim = new_obj.dimensions.copy()
-        new_dim.x = new_dim.x / 16.0
-        new_dim.y = new_dim.y / 16.0
+        new_dim.x = new_dim.x / 12.0
+        new_dim.y = new_dim.y / 12.0
         new_obj.dimensions = new_dim
         new_obj.rotation_euler.y = 3.141593
-        new_obj.location.xy = 0.5, -0.5
+        new_obj.location.xy = 0.75, -0.75
 
         bpy.context.view_layer.objects.active = new_obj
         bpy.ops.object.mode_set(mode='EDIT')

@@ -28,7 +28,7 @@ use crate::data::stack::{ItemAmount, ItemStack};
 use crate::data::{Data, DataMap};
 use crate::error::ErrorManager;
 use crate::model::IndexRange;
-use crate::registry::{DataIds, ErrorIds, GuiIds, ModelIds, Registry, TileIds};
+use crate::registry::{DataIds, ErrorIds, GuiIds, ModelIds, Registry};
 use crate::script::{Instructions, Script};
 use crate::tag::Tag;
 use crate::tile::Tile;
@@ -161,6 +161,7 @@ impl ResourceManager {
 
             engine
                 .register_type_with_name::<TileCoord>("TileCoord")
+                .register_fn("to_string", |coord: &mut TileCoord| coord.to_string())
                 .register_iterator::<Vec<TileCoord>>();
             engine
                 .register_type_with_name::<Inventory>("Inventory")
@@ -193,6 +194,10 @@ impl ResourceManager {
             engine
                 .register_type_with_name::<ItemStack>("ItemStack")
                 .register_iterator::<Vec<ItemStack>>()
+                .register_fn("ItemStack", |item: Item, amount: ItemAmount| ItemStack {
+                    item,
+                    amount,
+                })
                 .register_get("item", |v: &mut ItemStack| v.item)
                 .register_get("amount", |v: &mut ItemStack| v.amount);
             engine.register_type_with_name::<Tag>("Tag");
@@ -264,7 +269,6 @@ impl ResourceManager {
         let data_ids = DataIds::new(&mut interner);
         let model_ids = ModelIds::new(&mut interner);
         let gui_ids = GuiIds::new(&mut interner);
-        let tile_ids = TileIds::new(&mut interner);
         let err_ids = ErrorIds::new(&mut interner);
 
         Self {
@@ -284,7 +288,6 @@ impl ResourceManager {
 
                 data_ids,
                 model_ids,
-                tile_ids,
                 gui_ids,
                 err_ids,
             },

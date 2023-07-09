@@ -2,5 +2,9 @@
     "id": "void",
     "function": "void",
     "models": ["void"],
-    "targeted": false
+    "data": {
+        "not_targeted": {
+            "Bool": true
+        }
+    }
 }

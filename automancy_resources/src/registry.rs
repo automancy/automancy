@@ -3,6 +3,7 @@ use automancy_defs::id::Id;
 use automancy_macros::IdReg;
 
 use crate::data::item::Item;
+use crate::data::Data;
 use crate::script::Script;
 use crate::tag::Tag;
 use crate::tile::Tile;
@@ -20,12 +21,15 @@ pub struct Registry {
 
     pub data_ids: DataIds,
     pub model_ids: ModelIds,
-    pub tile_ids: TileIds,
     pub gui_ids: GuiIds,
     pub err_ids: ErrorIds,
 }
 
 impl Registry {
+    pub fn tile_data(&self, id: Id, data: Id) -> Option<&Data> {
+        self.tiles.get(&id).and_then(|v| v.data.get(&data))
+    }
+
     pub fn tile(&self, id: Id) -> Option<&Tile> {
         self.tiles.get(&id)
     }
@@ -44,13 +48,6 @@ impl Registry {
 }
 
 #[derive(Copy, Clone, IdReg)]
-pub struct TileIds {
-    pub small_storage: Id,
-    pub master_node: Id,
-    pub node: Id,
-}
-
-#[derive(Copy, Clone, IdReg)]
 pub struct DataIds {
     pub script: Id,
     pub scripts: Id,
@@ -60,6 +57,10 @@ pub struct DataIds {
     pub amount: Id,
     pub target: Id,
     pub link: Id,
+    pub inactive_model: Id,
+    pub not_targeted: Id,
+    pub linked: Id,
+    pub linking: Id,
 }
 
 #[derive(Copy, Clone, IdReg)]

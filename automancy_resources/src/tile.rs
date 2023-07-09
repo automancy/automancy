@@ -11,16 +11,6 @@ use automancy_defs::log;
 use crate::data::{DataMap, DataMapRaw};
 use crate::{load_recursively, ResourceManager, JSON_EXT};
 
-#[derive(Debug, Clone, Default, Deserialize)]
-pub struct ModelAttributesJson {
-    pub inactive_model: Option<IdRaw>,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct ModelAttributes {
-    pub inactive_model: Option<Id>,
-}
-
 #[derive(Debug, Deserialize)]
 pub struct TileJson {
     pub id: IdRaw,
@@ -28,9 +18,6 @@ pub struct TileJson {
     pub models: Vec<IdRaw>,
     #[serde(default)]
     pub data: DataMapRaw,
-    #[serde(default)]
-    pub model_attributes: ModelAttributesJson,
-    pub targeted: Option<bool>,
 }
 
 #[derive(Debug, Clone)]
@@ -38,8 +25,6 @@ pub struct Tile {
     pub models: Vec<Id>,
     pub function: Option<Id>,
     pub data: DataMap,
-    pub model_attributes: ModelAttributes,
-    pub targeted: bool,
 }
 
 impl ResourceManager {
@@ -63,21 +48,10 @@ impl ResourceManager {
             .map(|v| v.to_id(&mut self.interner))
             .collect();
 
-        let targeted = tile.targeted.unwrap_or(true);
-
-        let model_attributes = ModelAttributes {
-            inactive_model: tile
-                .model_attributes
-                .inactive_model
-                .map(|v| v.to_id(&mut self.interner)),
-        };
-
         self.registry.tiles.insert(
             id,
             Tile {
                 function,
-                model_attributes,
-                targeted,
                 models,
                 data,
             },

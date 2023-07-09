@@ -23,26 +23,18 @@ fn handle_transaction(input) {
 
     let buffer = this.data.get_or_insert(BUFFER, "Inventory").inventory();
     
-
-
-    let size = matched.amount * 8;
-    let amount = buffer[input.stack.item];
-    if amount >= size {
+    let amount = matched.amount * 8;
+    let stored = buffer[input.stack.item];
+    if stored >= amount {
         return;
     }
+    let inserting = min(input.stack.amount, amount - stored);
 
-    amount += input.stack.amount;
-    if amount > size {
-        amount = size;
-    }
-
-    buffer[input.stack.item] = amount;
-
-
+    buffer[input.stack.item] = stored + inserting;
 
     this.data[BUFFER] = buffer;
 
-    return ["consume"]
+    return ["consume", inserting]
 }
 
 fn handle_tick(input) {
@@ -51,14 +43,18 @@ fn handle_tick(input) {
         return;
     }
 
-    let script = this.data[SCRIPT]?.id()?.as_script();
-
     let coord = input.coord + target;
-    let outputs = script?.instructions?.outputs;
 
-    let inputs = script?.instructions?.inputs;
+    let script = this.data[SCRIPT]?.id()?.as_script();
+    if type_of(script) == "()" {
+        return;
+    }
+    
+    let outputs = script.instructions.outputs;
+    let inputs = script.instructions.inputs;
+
     if type_of(inputs) == "()" {
-        return ["make_transaction", coord, outputs];
+        return ["make_transaction", coord, input.id, input.coord, outputs];
     }
 
     let buffer = this.data[BUFFER]?.inventory();
@@ -74,7 +70,7 @@ fn handle_tick(input) {
         }
     }
 
-    ["make_transaction", coord, outputs]
+    ["make_transaction", coord, input.id, input.coord, outputs]
 }
 
 fn handle_transaction_result(input) {

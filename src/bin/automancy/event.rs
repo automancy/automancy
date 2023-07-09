@@ -24,14 +24,13 @@ use automancy_defs::gui::Gui;
 use automancy_defs::hashbrown::{HashMap, HashSet};
 use automancy_defs::id::Id;
 use automancy_defs::math::{Float, Matrix4, FAR};
-use automancy_defs::rendering::InstanceData;
+use automancy_defs::rendering::{make_line, InstanceData};
 use automancy_defs::{colors, log, math, window};
 use automancy_resources::data::item::Item;
 use automancy_resources::data::Data;
 
 use crate::gui::{
-    debug, error, make_line, menu, popup, tile_config, tile_info, tile_selection, GuiState,
-    PopupState,
+    debug, error, menu, popup, tile_config, tile_info, tile_selection, GuiState, PopupState,
 };
 use crate::setup::GameSetup;
 
@@ -307,8 +306,17 @@ pub fn on_event(
                     .unwrap()
                     .unwrap();
 
-                if let Some(((id, _), tile_entity)) = tile.zip(tile_entity) {
-                    if id == resource_man.registry.tile_ids.node {
+                if let Some((linked, tile_entity)) = tile
+                    .and_then(|(id, _)| {
+                        resource_man
+                            .registry
+                            .tile_data(id, resource_man.registry.data_ids.linked)
+                            .and_then(Data::as_bool)
+                            .cloned()
+                    })
+                    .zip(tile_entity)
+                {
+                    if linked {
                         let old = runtime
                             .block_on(tile_entity.call(
                                 |reply| {
@@ -331,27 +339,19 @@ pub fn on_event(
 
                             setup
                                 .audio_man
-                                .play(
-                                    resource_man.audio["click"]
-                                        .clone()
-                                        .with_modified_settings(|s| s.playback_rate(0.5)),
-                                )
-                                .unwrap();
+                                .play(resource_man.audio["click"].clone())
+                                .unwrap(); // TODO click2
                         } else {
                             tile_entity
                                 .send_message(TileEntityMsg::SetDataValue(
                                     resource_man.registry.data_ids.link,
-                                    Data::Coord(linking_tile - setup.camera.pointing_at),
+                                    Data::Coord(linking_tile),
                                 ))
                                 .unwrap();
 
                             setup
                                 .audio_man
-                                .play(
-                                    resource_man.audio["click"]
-                                        .clone()
-                                        .with_modified_settings(|s| s.playback_rate(1.5)),
-                                )
+                                .play(resource_man.audio["click"].clone())
                                 .unwrap();
                             loop_store.linking_tile = None;
                         }
@@ -490,8 +490,6 @@ pub fn on_event(
                             loop_store,
                             &mut gui_instances,
                             &gui.context,
-                            window::window_size_double(&renderer.gpu.window),
-                            &mut overlay,
                         );
 
                         if let Ok(Some(id)) = selection_recv.try_next() {
@@ -619,11 +617,11 @@ pub fn on_event(
         match renderer.render(
             runtime,
             setup.resource_man.clone(),
-            setup.camera.get_pos().cast().unwrap(),
+            setup.game.clone(),
+            setup.camera.get_pos(),
             setup.camera.get_tile_coord(),
             matrix,
             setup.camera.culling_range,
-            setup.game.clone(),
             &render_info,
             tile_tints,
             gui_instances,

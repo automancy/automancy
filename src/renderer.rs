@@ -21,10 +21,12 @@ use automancy_defs::hashbrown::HashMap;
 use automancy_defs::hexagon_tiles::fractional::FractionalHex;
 use automancy_defs::hexagon_tiles::traits::HexRound;
 use automancy_defs::id::Id;
-use automancy_defs::math::{deg, Double, Float, Matrix4, Point3, FAR};
-use automancy_defs::rendering::{GameUBO, InstanceData, OverlayUBO, RawInstanceData, Vertex};
-use automancy_defs::{bytemuck, math};
-use automancy_resources::data::Data;
+use automancy_defs::math::{deg, DPoint3, Double, Float, Matrix4, FAR};
+use automancy_defs::rendering::{
+    make_line, GameUBO, InstanceData, OverlayUBO, RawInstanceData, Vertex,
+};
+use automancy_defs::{bytemuck, colors, log, math, window};
+use automancy_resources::data::{Data, DataMap};
 use automancy_resources::ResourceManager;
 
 use crate::game::{GameMsg, RenderInfo, RenderUnit, TickUnit, TransactionRecord, ANIMATION_SPEED};
@@ -40,7 +42,7 @@ pub struct Renderer {
     pub gpu: Gpu,
     resource_man: Arc<ResourceManager>,
 
-    tile_targets: HashMap<TileCoord, Data>,
+    data_cache: HashMap<TileCoord, DataMap>,
     last_tiles_update: Option<TickUnit>,
 }
 
@@ -57,7 +59,7 @@ impl Renderer {
             gpu,
             resource_man,
 
-            tile_targets: Default::default(),
+            data_cache: Default::default(),
             last_tiles_update: None,
         }
     }
@@ -82,39 +84,36 @@ fn get_angle_from_target(target: &Data) -> Option<Float> {
 pub type GuiInstances = Vec<(InstanceData, Id, Option<Rect>, Option<Rect>)>;
 
 impl Renderer {
+    fn draw_links(
+        coord: TileCoord,
+        link: TileCoord,
+        camera_pos: DPoint3,
+        overlay: &mut Vec<Vertex>,
+        (width, height): (Double, Double),
+    ) {
+        let (a, w0) = math::hex_to_normalized((width, height), camera_pos, coord);
+
+        let (b, w1) = math::hex_to_normalized((width, height), camera_pos, link);
+
+        overlay.extend_from_slice(&make_line(a, b, (w0 + w1) / 2.0, colors::RED));
+    }
+
     pub fn render(
         &mut self,
         runtime: &Runtime,
         resource_man: Arc<ResourceManager>,
-        camera_pos: Point3,
+        game: ActorRef<GameMsg>,
+        camera_pos: DPoint3,
         camera_coord: TileCoord,
         matrix: Matrix4,
         culling_range: (TileUnit, TileUnit),
-        game: ActorRef<GameMsg>,
         map_render_info: &RenderInfo,
         tile_tints: HashMap<TileCoord, Rgba>,
         gui_instances: GuiInstances,
-        overlay: Vec<Vertex>,
+        mut overlay: Vec<Vertex>,
         gui: &mut Gui,
     ) -> Result<(), SurfaceError> {
-        let update = {
-            let new_last_tiles_update = runtime
-                .block_on(game.call(GameMsg::LastTilesUpdate, None))
-                .unwrap()
-                .unwrap();
-
-            if self.last_tiles_update.is_some() {
-                if self.last_tiles_update.unwrap() < new_last_tiles_update {
-                    self.last_tiles_update = Some(new_last_tiles_update);
-                    true
-                } else {
-                    false
-                }
-            } else {
-                self.last_tiles_update = Some(new_last_tiles_update);
-                true
-            }
-        };
+        let camera_pos_float = camera_pos.cast::<Float>().unwrap();
 
         let instances = {
             let none = self
@@ -126,52 +125,63 @@ impl Renderer {
 
             let mut instances = map_render_info.clone();
 
-            if update {
-                let tile_entities = runtime
-                    .block_on(game.call(
-                        |reply| GameMsg::GetTileEntities {
-                            center: camera_coord,
-                            culling_range,
-                            reply,
-                        },
-                        None,
-                    ))
-                    .unwrap()
-                    .unwrap();
+            let tile_entities = runtime
+                .block_on(game.call(
+                    |reply| GameMsg::GetTileEntities {
+                        center: camera_coord,
+                        culling_range,
+                        reply,
+                    },
+                    None,
+                ))
+                .unwrap()
+                .unwrap(); // TODO just ask the game for everyone's data lmfao
 
-                self.tile_targets = runtime
-                    .block_on(multi_call_iter(
-                        tile_entities.values(),
-                        tile_entities.values().len(),
-                        |reply| {
-                            TileEntityMsg::GetDataValueWithCoord(
-                                resource_man.registry.data_ids.target,
-                                reply,
-                            )
-                        },
-                        None,
-                    ))
-                    .unwrap()
-                    .into_iter()
-                    .map(CallResult::unwrap)
-                    .flat_map(|(a, b)| Some(a).zip(b))
-                    .collect();
-            }
+            self.data_cache = runtime
+                .block_on(multi_call_iter(
+                    tile_entities.values(),
+                    tile_entities.values().len(),
+                    TileEntityMsg::GetDataWithCoord,
+                    None,
+                ))
+                .unwrap()
+                .into_iter()
+                .map(CallResult::unwrap)
+                .collect();
 
             for (coord, instance) in instances.iter_mut() {
-                if let Some(theta) = self.tile_targets.get(coord).and_then(get_angle_from_target) {
+                if let Some(theta) = self
+                    .data_cache
+                    .get(coord)
+                    .and_then(|data| data.get(&resource_man.registry.data_ids.target))
+                    .and_then(get_angle_from_target)
+                {
                     let m = &mut instance.instance.model_matrix;
 
                     *m = *m * Matrix4::from_angle_z(deg(theta))
                 } else if let Some(inactive) = self
                     .resource_man
                     .registry
-                    .tile(instance.tile)
-                    .unwrap()
-                    .model_attributes
-                    .inactive_model
+                    .tile_data(instance.tile, resource_man.registry.data_ids.inactive_model)
+                    .and_then(Data::as_id)
                 {
-                    instance.model = self.resource_man.get_model(inactive);
+                    instance.model = self.resource_man.get_model(*inactive);
+                }
+
+                if let Some(link) = self
+                    .data_cache
+                    .get(coord)
+                    .and_then(|data| data.get(&resource_man.registry.data_ids.link))
+                    .and_then(Data::as_coord)
+                    .cloned()
+                {
+                    Self::draw_links(
+                        *coord,
+                        link,
+                        camera_pos,
+                        &mut overlay,
+                        window::window_size_double(&self.gpu.window),
+                    )
                 }
             }
 
@@ -221,7 +231,7 @@ impl Renderer {
                 map.entry(model)
                     .or_insert_with(|| Vec::with_capacity(32))
                     .push((
-                        RawInstanceData::from(instance.with_light_pos(camera_pos)),
+                        RawInstanceData::from(instance.with_light_pos(camera_pos_float)),
                         model,
                     ))
             }
@@ -264,13 +274,14 @@ impl Renderer {
                         FAR as Float,
                     )) * Matrix4::from_scale(0.5)
                         * Matrix4::from_angle_z(deg(self
-                            .tile_targets
+                            .data_cache
                             .get(source_coord)
+                            .and_then(|data| data.get(&resource_man.registry.data_ids.target))
                             .and_then(get_angle_from_target)
                             .map(|v| v + 60.0)
                             .unwrap_or(0.0))),
                 )
-                .with_light_pos(camera_pos);
+                .with_light_pos(camera_pos_float);
             let model = resource_man.get_item_model(stack.item);
 
             extra_instances.push((instance.into(), model));
@@ -447,6 +458,42 @@ impl Renderer {
             effects_pass.draw(0..4, 0..1);
         }
 
+        if !overlay.is_empty() {
+            let mut overlay_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some("Overlay Render Pass"),
+                color_attachments: &[Some(RenderPassColorAttachment {
+                    view: &self.gpu.processed_game_texture.1,
+                    resolve_target: None,
+                    ops: Operations {
+                        load: LoadOp::Load,
+                        store: true,
+                    },
+                })],
+                depth_stencil_attachment: None,
+            });
+
+            self.gpu.queue.write_buffer(
+                &self.gpu.overlay_uniform_buffer,
+                0,
+                bytemuck::cast_slice(&[OverlayUBO::new(Matrix4::identity())]),
+            );
+            gpu::create_or_write_buffer(
+                &self.gpu.device,
+                &self.gpu.queue,
+                &mut self.gpu.overlay_vertex_buffer,
+                OVERLAY_VERTEX_BUFFER,
+                bytemuck::cast_slice(overlay.as_slice()),
+            );
+
+            let vertex_count = overlay.len() as u32;
+
+            overlay_pass.set_pipeline(&self.gpu.overlay_pipeline);
+            overlay_pass.set_bind_group(0, &self.gpu.overlay_bind_group, &[]);
+            overlay_pass.set_vertex_buffer(0, self.gpu.overlay_vertex_buffer.slice(..));
+
+            overlay_pass.draw(0..vertex_count, 0..1);
+        }
+
         let user_commands = {
             let egui_out = gui.context.end_frame();
             let egui_primitives = gui.context.tessellate(egui_out.shapes);
@@ -610,42 +657,6 @@ impl Renderer {
             effects_pass.set_bind_group(0, &self.gpu.gui_effects_bind_group, &[]);
 
             effects_pass.draw(0..3, 0..1);
-        }
-
-        if !overlay.is_empty() {
-            let mut overlay_pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("Overlay Render Pass"),
-                color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.processed_gui_texture.1,
-                    resolve_target: None,
-                    ops: Operations {
-                        load: LoadOp::Load,
-                        store: true,
-                    },
-                })],
-                depth_stencil_attachment: None,
-            });
-
-            self.gpu.queue.write_buffer(
-                &self.gpu.overlay_uniform_buffer,
-                0,
-                bytemuck::cast_slice(&[OverlayUBO::new(Matrix4::identity())]),
-            );
-            gpu::create_or_write_buffer(
-                &self.gpu.device,
-                &self.gpu.queue,
-                &mut self.gpu.overlay_vertex_buffer,
-                OVERLAY_VERTEX_BUFFER,
-                bytemuck::cast_slice(overlay.as_slice()),
-            );
-
-            let vertex_count = overlay.len() as u32;
-
-            overlay_pass.set_pipeline(&self.gpu.overlay_pipeline);
-            overlay_pass.set_bind_group(0, &self.gpu.overlay_bind_group, &[]);
-            overlay_pass.set_vertex_buffer(0, self.gpu.overlay_vertex_buffer.slice(..));
-
-            overlay_pass.draw(0..vertex_count, 0..1);
         }
 
         {

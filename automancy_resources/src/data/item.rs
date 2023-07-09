@@ -70,27 +70,17 @@ pub fn rhai_item_match(id: Id, other: Id) -> bool {
 pub fn item_matches(
     resource_man: &ResourceManager,
     id: Id,
-    others: impl Iterator<Item = Item>,
+    mut others: impl Iterator<Item = Item>,
 ) -> Option<Item> {
-    for other in others {
-        if item_match(resource_man, id, other.id) {
-            return Some(other);
-        }
-    }
-    None
+    others.find(|&other| item_match(resource_man, id, other.id))
 }
 
 pub fn item_stack_matches(
     resource_man: &ResourceManager,
     id: Id,
-    others: impl Iterator<Item = ItemStack>,
+    mut others: impl Iterator<Item = ItemStack>,
 ) -> Option<ItemStack> {
-    for other in others {
-        if item_match(resource_man, id, other.item.id) {
-            return Some(other);
-        }
-    }
-    None
+    others.find(|&other| item_match(resource_man, id, other.item.id))
 }
 
 pub fn rhai_item_matches(id: Id, others: Vec<Item>) -> Dynamic {

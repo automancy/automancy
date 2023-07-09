@@ -2,5 +2,9 @@
     "id": "splitter",
     "function": "splitter",
     "models": ["r_splitter", "l_splitter"],
-    "targeted": false
+    "data": {
+        "not_targeted": {
+            "Bool": true
+        }
+    }
 }

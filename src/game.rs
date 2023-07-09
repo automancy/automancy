@@ -59,9 +59,6 @@ pub type TransactionRecords = HashMap<TileCoord, VecDeque<(Instant, TransactionR
 
 #[derive(Debug)]
 pub struct GameState {
-    /// the resource manager
-    resource_man: Arc<ResourceManager>,
-    // TODO make it inside Game itself
     /// the tile entities
     tile_entities: TileEntities,
     /// the map
@@ -73,8 +70,6 @@ pub struct GameState {
     render_cache: HashMap<(TileCoord, (TileUnit, TileUnit)), Arc<RenderInfo>>,
     /// is the game stopped
     stopped: bool,
-    /// the last time the tiles are updated
-    last_tiles_update_time: TickUnit,
     /// what to do to undo the last UNDO_CACHE_SIZE user events
     undo_steps: ArrayDeque<Vec<GameMsg>, 16, Wrapping>,
     /// records transactions to be drawn
@@ -86,10 +81,6 @@ pub struct GameState {
 pub enum GameMsg {
     /// tick the tile once
     Tick,
-    /// signals that the tiles have been updated in a meaningful way
-    SignalTilesUpdated,
-    /// get the last tile update time
-    LastTilesUpdate(RpcReplyPort<TickUnit>),
     /// get rendering information
     RenderInfoRequest {
         center: TileCoord,
@@ -148,20 +139,79 @@ pub enum PlaceTileResponse {
     Ignored,
 }
 
-pub struct Game;
+pub struct Game {
+    pub resource_man: Arc<ResourceManager>,
+}
+
+impl Game {
+    fn render_info(
+        &self,
+        state: &mut GameState,
+        center: TileCoord,
+        culling_range: (TileUnit, TileUnit),
+    ) -> Arc<RenderInfo> {
+        if let Some(info) = state.render_cache.get(&(center, culling_range)) {
+            return info.clone();
+        }
+
+        let instances: RenderInfo = state
+            .map
+            .tiles
+            .iter()
+            .filter(|(coord, _)| math::is_in_culling_range(center, **coord, culling_range))
+            .flat_map(|(coord, (id, tile_modifier))| {
+                self.resource_man
+                    .registry
+                    .tile(*id)
+                    .and_then(|r| r.models.get(*tile_modifier as usize).cloned())
+                    .map(|id| self.resource_man.get_model(id))
+                    .map(|model| {
+                        let p = math::hex_to_pixel((*coord).into());
+
+                        (
+                            *coord,
+                            RenderUnit {
+                                instance: InstanceData::default().with_model_matrix(
+                                    Matrix4::from_translation(vec3(
+                                        p.x as Float,
+                                        p.y as Float,
+                                        FAR as Float,
+                                    )),
+                                ),
+                                tile: *id,
+                                model,
+                            },
+                        )
+                    })
+            })
+            .collect();
+
+        let info = Arc::new(instances);
+
+        if state.render_cache.len() > 16 {
+            state.render_cache.clear();
+        }
+
+        state
+            .render_cache
+            .insert((center, culling_range), info.clone());
+
+        info
+    }
+}
 
 #[async_trait::async_trait]
 impl Actor for Game {
     type Msg = GameMsg;
     type State = GameState;
-    type Arguments = Arc<ResourceManager>;
+    type Arguments = ();
 
     async fn pre_start(
         &self,
         _myself: ActorRef<Self::Msg>,
-        args: Self::Arguments,
+        _args: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
-        Ok(Self::State::new(args))
+        Ok(Self::State::default())
     }
 
     async fn handle(
@@ -190,7 +240,7 @@ impl Actor for Game {
                     tile_entity.stop(Some("Loading new map".to_string()));
                 }
 
-                let (map, tile_entities) = Map::load(myself.clone(), &resource_man, &name).await;
+                let (map, tile_entities) = Map::load(myself.clone(), resource_man, &name).await;
 
                 state.map = map;
                 state.tile_entities = tile_entities;
@@ -235,20 +285,12 @@ impl Actor for Game {
 
                 return Ok(());
             }
-            LastTilesUpdate(reply) => {
-                reply.send(state.last_tiles_update_time).unwrap();
-
-                return Ok(());
-            }
             rest => {
                 if state.stopped {
                     return Ok(());
                 }
 
                 match rest {
-                    SignalTilesUpdated => {
-                        state.last_tiles_update_time = state.tick_count;
-                    }
                     Tick => {
                         tick(state);
                     }
@@ -257,7 +299,7 @@ impl Actor for Game {
                         culling_range,
                         reply,
                     } => {
-                        let render_info = render_info(state, center, culling_range);
+                        let render_info = self.render_info(state, center, culling_range);
 
                         reply.send(render_info).unwrap();
                     }
@@ -278,7 +320,7 @@ impl Actor for Game {
                             }
                         }
 
-                        let old_tile = if id == state.resource_man.registry.none {
+                        let old_tile = if id == self.resource_man.registry.none {
                             if !state.map.tiles.contains_key(&coord) {
                                 if let Some(reply) = reply {
                                     reply.send(PlaceTileResponse::Ignored).unwrap();
@@ -297,12 +339,20 @@ impl Actor for Game {
                                 reply.send(PlaceTileResponse::Placed).unwrap();
                             }
 
-                            insert_new_tile(myself.clone(), state, coord, id, tile_modifier).await
+                            insert_new_tile(
+                                self.resource_man.clone(),
+                                myself.clone(),
+                                state,
+                                coord,
+                                id,
+                                tile_modifier,
+                            )
+                            .await
                         };
 
                         if record {
                             let (id, tile_modifier) =
-                                old_tile.unwrap_or((state.resource_man.registry.none, 0));
+                                old_tile.unwrap_or((self.resource_man.registry.none, 0));
 
                             state.undo_steps.push_back(vec![PlaceTile {
                                 coord,
@@ -312,8 +362,6 @@ impl Actor for Game {
                                 reply: None,
                             }]);
                         }
-
-                        state.last_tiles_update_time = state.tick_count;
                     }
                     GetTile(coord, reply) => {
                         reply.send(state.map.tiles.get(&coord).cloned()).unwrap();
@@ -362,7 +410,7 @@ impl Actor for Game {
 
                             for neighbor in TileHex::NEIGHBORS.iter().map(|v| coord + (*v).into()) {
                                 if let Some((id, _)) = state.map.tiles.get(&neighbor) {
-                                    if item_match(&state.resource_man, *id, adjacent) {
+                                    if item_match(&self.resource_man, *id, adjacent) {
                                         fulfilled = true;
                                         break;
                                     }
@@ -533,6 +581,7 @@ fn remove_tile(state: &mut GameState, coord: TileCoord) -> Option<(Id, TileModif
 
 /// Creates a new tile of given type at the given position, and with an initial state.
 pub async fn new_tile(
+    resource_man: Arc<ResourceManager>,
     game: ActorRef<GameMsg>,
     coord: TileCoord,
     id: Id,
@@ -544,6 +593,7 @@ pub async fn new_tile(
             id,
             coord,
             tile_modifier,
+            resource_man,
         },
         (game.clone(),),
         game.get_cell(),
@@ -556,6 +606,7 @@ pub async fn new_tile(
 
 /// Makes a new tile and add it into both the map and the game
 async fn insert_new_tile(
+    resource_man: Arc<ResourceManager>,
     game: ActorRef<GameMsg>,
     state: &mut GameState,
     coord: TileCoord,
@@ -564,7 +615,7 @@ async fn insert_new_tile(
 ) -> Option<(Id, TileModifier)> {
     let old = remove_tile(state, coord);
 
-    let tile_entity = new_tile(game, coord, id, tile_modifier).await;
+    let tile_entity = new_tile(resource_man, game, coord, id, tile_modifier).await;
 
     state.tile_entities.insert(coord, tile_entity);
     state.map.tiles.insert(coord, (id, tile_modifier));
@@ -572,65 +623,9 @@ async fn insert_new_tile(
     old
 }
 
-fn render_info(
-    state: &mut GameState,
-    center: TileCoord,
-    culling_range: (TileUnit, TileUnit),
-) -> Arc<RenderInfo> {
-    if let Some(info) = state.render_cache.get(&(center, culling_range)) {
-        return info.clone();
-    }
-
-    let instances: RenderInfo = state
-        .map
-        .tiles
-        .iter()
-        .filter(|(coord, _)| math::is_in_culling_range(center, **coord, culling_range))
-        .flat_map(|(coord, (id, tile_modifier))| {
-            state
-                .resource_man
-                .registry
-                .tile(*id)
-                .and_then(|r| r.models.get(*tile_modifier as usize).cloned())
-                .map(|id| state.resource_man.get_model(id))
-                .map(|model| {
-                    let p = math::hex_to_pixel((*coord).into());
-
-                    (
-                        *coord,
-                        RenderUnit {
-                            instance: InstanceData::default().with_model_matrix(
-                                Matrix4::from_translation(vec3(
-                                    p.x as Float,
-                                    p.y as Float,
-                                    FAR as Float,
-                                )),
-                            ),
-                            tile: *id,
-                            model,
-                        },
-                    )
-                })
-        })
-        .collect();
-
-    let info = Arc::new(instances);
-
-    if state.render_cache.len() > 16 {
-        state.render_cache.clear();
-    }
-
-    state
-        .render_cache
-        .insert((center, culling_range), info.clone());
-
-    info
-}
-
 fn inner_tick(state: &mut GameState) {
     state.tile_entities.par_iter().for_each(|(_, tile_entity)| {
         if let Err(e) = tile_entity.send_message(TileEntityMsg::Tick {
-            resource_man: state.resource_man.clone(),
             tick_count: state.tick_count,
         }) {
             log::error!("{e:?}");
@@ -657,20 +652,15 @@ pub fn tick(state: &mut GameState) {
     }
 }
 
-impl GameState {
-    /// Creates a new game messaging/map system.
-    pub fn new(resource_man: Arc<ResourceManager>) -> Self {
+impl Default for GameState {
+    fn default() -> Self {
         Self {
-            tick_count: 0,
-
-            resource_man,
-
-            tile_entities: Default::default(),
             map: Map::new_empty("".to_string()),
+            tile_entities: Default::default(),
 
+            tick_count: 0,
             render_cache: Default::default(),
             stopped: false,
-            last_tiles_update_time: 0,
             undo_steps: Default::default(),
             transaction_records: Arc::new(Default::default()),
         }

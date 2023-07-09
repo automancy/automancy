@@ -96,8 +96,14 @@ impl GameSetup {
         // --- game ---
         log::info!("creating game...");
 
-        let (game, game_handle) =
-            Actor::spawn(Some("game".to_string()), Game, resource_man.clone()).await?;
+        let (game, game_handle) = Actor::spawn(
+            Some("game".to_string()),
+            Game {
+                resource_man: resource_man.clone(),
+            },
+            (),
+        )
+        .await?;
 
         game.send_message(GameMsg::LoadMap(
             resource_man.clone(),

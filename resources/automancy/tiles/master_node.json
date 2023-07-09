@@ -1,4 +1,10 @@
 {
     "id": "master_node",
-    "models": ["void"]
+    "function": "master_node",
+    "models": ["void"],
+    "data": {
+        "linking": {
+            "Bool": true
+        }
+    }
 }

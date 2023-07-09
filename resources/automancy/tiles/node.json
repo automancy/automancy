@@ -1,4 +1,10 @@
 {
     "id": "node",
-    "models": ["void"]
+    "function": "node",
+    "models": ["void"],
+    "data": {
+        "linked": {
+            "Bool": true
+        }
+    }
 }

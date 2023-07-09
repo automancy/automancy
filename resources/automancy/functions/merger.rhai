@@ -12,8 +12,6 @@ fn handle_transaction(input) {
     let target = this.data[TARGET]?.coord();
     
     if type_of(target) != "()" {
-        let target_coord = input.coord + target;
-
-        return ["pass_on", target_coord];
+        return ["pass_on", input.coord + target];
     }
 }

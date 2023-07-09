@@ -2,7 +2,9 @@
     "id": "merger",
     "function": "merger",
     "models": ["merger"],
-    "model_attributes": {
-        "inactive_model": "merger_inactive"
+    "data": {
+        "inactive_model": {
+            "Id": "merger_inactive"
+        }
     }
 }

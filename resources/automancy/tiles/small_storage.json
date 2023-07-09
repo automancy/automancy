@@ -5,7 +5,9 @@
     "data": {
         "storage_type": {
             "Id": "#any"
+        },
+        "not_targeted": {
+            "Bool": true
         }
-    },
-    "targeted": false
+    }
 }

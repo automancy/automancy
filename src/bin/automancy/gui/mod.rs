@@ -1,16 +1,14 @@
 use egui::epaint::Shadow;
-use egui::{Frame, Rgba, Rounding, ScrollArea, Ui};
+use egui::{Frame, Rounding, ScrollArea, Ui};
 use fuse_rust::Fuse;
 
-use automancy_defs::cgmath::MetricSpace;
+use automancy_defs::colors;
 use automancy_defs::id::Id;
-use automancy_defs::math::{DPoint2, Double, Float};
-use automancy_defs::rendering::Vertex;
-use automancy_defs::{cgmath, colors};
+use automancy_defs::math::Float;
 use automancy_resources::ResourceManager;
 
 const MARGIN: Float = 8.0;
-const ITEM_ICON_SIZE: Float = 32.0;
+const ITEM_ICON_SIZE: Float = 24.0;
 
 pub mod debug;
 pub mod error;
@@ -51,42 +49,6 @@ pub fn default_frame() -> Frame {
         .rounding(Rounding::same(5.0))
 }
 
-/// Produces a line shape.
-pub fn make_line(a: DPoint2, b: DPoint2, w: Double, color: Rgba) -> [Vertex; 6] {
-    let v = b - a;
-    let l = a.distance(b) * 16.0;
-    let t = cgmath::vec2(-v.y / l, v.x / l);
-    let t = t / w;
-
-    let a0 = (a + t).cast::<Float>().unwrap();
-    let a1 = (a - t).cast::<Float>().unwrap();
-    let b0 = (b + t).cast::<Float>().unwrap();
-    let b1 = (b - t).cast::<Float>().unwrap();
-
-    let a = Vertex {
-        pos: [a0.x, a0.y, 0.0],
-        color: color.to_array(),
-        normal: [0.0, 0.0, 0.0],
-    };
-    let b = Vertex {
-        pos: [b0.x, b0.y, 0.0],
-        color: color.to_array(),
-        normal: [0.0, 0.0, 0.0],
-    };
-    let c = Vertex {
-        pos: [a1.x, a1.y, 0.0],
-        color: color.to_array(),
-        normal: [0.0, 0.0, 0.0],
-    };
-    let d = Vertex {
-        pos: [b1.x, b1.y, 0.0],
-        color: color.to_array(),
-        normal: [0.0, 0.0, 0.0],
-    };
-
-    [a, b, c, b, c, d]
-}
-
 /// Draws a search bar.
 pub fn searchable_id<'a>(
     ui: &mut Ui,
@@ -99,7 +61,7 @@ pub fn searchable_id<'a>(
 ) {
     ui.text_edit_singleline(filter);
 
-    ScrollArea::vertical().max_height(80.0).show(ui, |ui| {
+    ScrollArea::vertical().max_height(160.0).show(ui, |ui| {
         ui.set_width(ui.available_width());
 
         let ids = if !filter.is_empty() {

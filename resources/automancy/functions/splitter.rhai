@@ -34,7 +34,5 @@ fn handle_transaction(input) {
 
     let target = if input.random % 2 == 0 { choices[0] } else { choices[1] };
 
-    let target_coord = input.coord + target;
-
-    ["pass_on", target_coord]
+    ["pass_on", input.coord + target]
 }

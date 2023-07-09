@@ -1,12 +1,49 @@
 use std::mem::size_of;
 
 use bytemuck::{Pod, Zeroable};
-use cgmath::{point3, SquareMatrix};
+use cgmath::{point3, MetricSpace, SquareMatrix};
 use egui::ecolor::{linear_f32_from_gamma_u8, linear_f32_from_linear_u8};
+use egui::Rgba;
 use ply_rs::ply::{Property, PropertyAccess};
 use wgpu::{vertex_attr_array, BufferAddress, VertexAttribute, VertexBufferLayout, VertexStepMode};
 
-use crate::math::{Float, Matrix4, Point3, Vector3};
+use crate::math::{DPoint2, Double, Float, Matrix4, Point3, Vector3};
+
+/// Produces a line shape.
+pub fn make_line(a: DPoint2, b: DPoint2, w: Double, color: Rgba) -> [Vertex; 6] {
+    let v = b - a;
+    let l = a.distance(b) * 16.0;
+    let t = cgmath::vec2(-v.y / l, v.x / l);
+    let t = t / w;
+
+    let a0 = (a + t).cast::<Float>().unwrap();
+    let a1 = (a - t).cast::<Float>().unwrap();
+    let b0 = (b + t).cast::<Float>().unwrap();
+    let b1 = (b - t).cast::<Float>().unwrap();
+
+    let a = Vertex {
+        pos: [a0.x, a0.y, 0.0],
+        color: color.to_array(),
+        normal: [0.0, 0.0, 0.0],
+    };
+    let b = Vertex {
+        pos: [b0.x, b0.y, 0.0],
+        color: color.to_array(),
+        normal: [0.0, 0.0, 0.0],
+    };
+    let c = Vertex {
+        pos: [a1.x, a1.y, 0.0],
+        color: color.to_array(),
+        normal: [0.0, 0.0, 0.0],
+    };
+    let d = Vertex {
+        pos: [b1.x, b1.y, 0.0],
+        color: color.to_array(),
+        normal: [0.0, 0.0, 0.0],
+    };
+
+    [a, b, c, b, c, d]
+}
 
 // vertex
 
