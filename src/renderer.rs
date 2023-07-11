@@ -7,25 +7,23 @@ use ractor::rpc::CallResult;
 use ractor::ActorRef;
 use tokio::runtime::Runtime;
 use wgpu::{
-    BufferAddress, BufferDescriptor, BufferUsages, Color, CommandEncoderDescriptor,
-    ImageCopyBuffer, ImageDataLayout, IndexFormat, LoadOp, MapMode, Operations,
-    RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor,
-    SurfaceError, TextureViewDescriptor, COPY_BYTES_PER_ROW_ALIGNMENT,
+    Color, CommandEncoderDescriptor, IndexFormat, LoadOp, Operations, RenderPassColorAttachment,
+    RenderPassDepthStencilAttachment, RenderPassDescriptor, SurfaceError, TextureViewDescriptor,
 };
 use winit::dpi::PhysicalSize;
 
-use automancy_defs::cgmath::{vec3, SquareMatrix};
+use automancy_defs::cgmath::{vec3, Angle, SquareMatrix};
 use automancy_defs::coord::{TileCoord, TileUnit};
 use automancy_defs::gui::Gui;
 use automancy_defs::hashbrown::HashMap;
 use automancy_defs::hexagon_tiles::fractional::FractionalHex;
 use automancy_defs::hexagon_tiles::traits::HexRound;
 use automancy_defs::id::Id;
-use automancy_defs::math::{deg, DPoint3, Double, Float, Matrix4, FAR};
+use automancy_defs::math::{deg, DPoint3, Double, Float, Matrix4, Rad, FAR};
 use automancy_defs::rendering::{
     make_line, GameUBO, InstanceData, OverlayUBO, RawInstanceData, Vertex,
 };
-use automancy_defs::{bytemuck, colors, log, math, window};
+use automancy_defs::{bytemuck, colors, math, window};
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::ResourceManager;
 
@@ -65,7 +63,7 @@ impl Renderer {
     }
 }
 
-fn get_angle_from_target(target: &Data) -> Option<Float> {
+fn get_angle_from_direction(target: &Data) -> Option<Float> {
     if let Some(target) = target.as_coord() {
         match *target {
             TileCoord::TOP_RIGHT => Some(0.0),
@@ -154,7 +152,7 @@ impl Renderer {
                     .data_cache
                     .get(coord)
                     .and_then(|data| data.get(&resource_man.registry.data_ids.target))
-                    .and_then(get_angle_from_target)
+                    .and_then(get_angle_from_direction)
                 {
                     let m = &mut instance.instance.model_matrix;
 
@@ -249,42 +247,33 @@ impl Renderer {
 
         let transaction_records_read = transaction_records.read().unwrap();
 
-        for (
-            instant,
-            TransactionRecord {
-                stack,
-                source_coord,
-                coord,
-                ..
-            },
-        ) in transaction_records_read.iter().flat_map(|v| v.1)
-        {
-            let duration = now.duration_since(*instant);
-            let t = duration.as_secs_f64() / ANIMATION_SPEED.as_secs_f64();
-            let a = FractionalHex::new(source_coord.q() as Double, source_coord.r() as Double);
-            let b = FractionalHex::new(coord.q() as Double, coord.r() as Double);
-            let lerp = a.lerp(b, t);
-            let point = math::frac_hex_to_pixel(lerp);
+        for ((source_coord, coord), instants) in transaction_records_read.iter() {
+            for (instant, TransactionRecord { stack, .. }) in instants {
+                let duration = now.duration_since(*instant);
+                let t = duration.as_secs_f64() / ANIMATION_SPEED.as_secs_f64();
+                let a = FractionalHex::new(source_coord.q() as Double, source_coord.r() as Double);
+                let b = FractionalHex::new(coord.q() as Double, coord.r() as Double);
+                let lerp = a.lerp(b, t);
+                let point = math::frac_hex_to_pixel(lerp);
 
-            let instance = InstanceData::default()
-                .with_model_matrix(
-                    Matrix4::from_translation(vec3(
-                        point.x as Float,
-                        point.y as Float,
-                        FAR as Float,
-                    )) * Matrix4::from_scale(0.5)
-                        * Matrix4::from_angle_z(deg(self
-                            .data_cache
-                            .get(source_coord)
-                            .and_then(|data| data.get(&resource_man.registry.data_ids.target))
-                            .and_then(get_angle_from_target)
-                            .map(|v| v + 60.0)
-                            .unwrap_or(0.0))),
-                )
-                .with_light_pos(camera_pos_float);
-            let model = resource_man.get_item_model(stack.item);
+                let direction = *coord - *source_coord;
+                let direction = math::hex_to_pixel(direction.into());
+                let angle = Rad::atan2(direction.y as Float, direction.x as Float);
 
-            extra_instances.push((instance.into(), model));
+                let instance = InstanceData::default()
+                    .with_model_matrix(
+                        Matrix4::from_translation(vec3(
+                            point.x as Float,
+                            point.y as Float,
+                            FAR as Float,
+                        )) * Matrix4::from_scale(0.375)
+                            * Matrix4::from_angle_z(angle),
+                    )
+                    .with_light_pos(camera_pos_float);
+                let model = resource_man.get_item_model(stack.item);
+
+                extra_instances.push((instance.into(), model));
+            }
         }
 
         extra_instances.sort_by_key(|v| v.1);

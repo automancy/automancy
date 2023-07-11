@@ -359,7 +359,7 @@ pub fn on_event(
                 }
             } else if let Some(id) = loop_store.selected_id {
                 let new = loop_store.selected_tile_modifiers.get(&id).unwrap_or(&0) + 1;
-                let max = resource_man.registry.tile(id).unwrap().models.len() as i32;
+                let max = resource_man.registry.tile(id).unwrap().models.len() as TileModifier;
 
                 loop_store.selected_tile_modifiers.insert(id, new % max);
                 loop_store.already_placed_at = None;
@@ -454,6 +454,14 @@ pub fn on_event(
 
         gui.context
             .begin_frame(gui.state.take_egui_input(&renderer.gpu.window));
+
+        if setup.input_handler.key_active(&KeyActions::Debug) {
+            gui.context.set_debug_on_hover(true);
+
+            debug::debugger(setup, &gui.context, runtime, setup.game.clone(), loop_store);
+        } else {
+            gui.context.set_debug_on_hover(false);
+        }
 
         if !setup.input_handler.key_active(&KeyActions::HideGui) {
             if loop_store.popup_state == PopupState::None {
@@ -595,10 +603,6 @@ pub fn on_event(
                     tile_tints.insert(dest, colors::LIGHT_BLUE.mul(0.3));
                 }
             }
-        }
-
-        if setup.input_handler.key_active(&KeyActions::Debug) {
-            debug::debugger(setup, gui, runtime, setup.game.clone(), loop_store);
         }
 
         error::error_popup(setup, gui);

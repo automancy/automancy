@@ -107,7 +107,7 @@ pub fn map_create_popup(
     .frame(default_frame().inner_margin(10.0))
     .show(&gui.context, |ui| {
         ui.horizontal(|ui| {
-            ui.label("Name:");
+            ui.label("Name:"); //TODO add this to translation
             ui.text_edit_singleline(&mut loop_store.map_name_input);
         });
         if ui

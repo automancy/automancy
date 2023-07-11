@@ -25,12 +25,6 @@ pub struct Item {
     pub model: Id,
 }
 
-impl From<Item> for Dynamic {
-    fn from(value: Item) -> Self {
-        Dynamic::from_int(value.id.into())
-    }
-}
-
 impl PartialOrd<Self> for Item {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.id.partial_cmp(&other.id)
@@ -83,22 +77,22 @@ pub fn item_stack_matches(
     others.find(|&other| item_match(resource_man, id, other.item.id))
 }
 
-pub fn rhai_item_matches(id: Id, others: Vec<Item>) -> Dynamic {
+pub fn rhai_item_matches(id: Id, others: rhai::Array) -> Dynamic {
     match item_matches(
         RESOURCE_MAN.read().unwrap().as_ref().unwrap(),
         id,
-        others.into_iter(),
+        others.into_iter().map(|v| v.cast::<Item>()),
     ) {
         Some(v) => Dynamic::from(v),
         None => Dynamic::UNIT,
     }
 }
 
-pub fn rhai_item_stack_matches(id: Id, others: Vec<ItemStack>) -> Dynamic {
+pub fn rhai_item_stack_matches(id: Id, others: rhai::Array) -> Dynamic {
     match item_stack_matches(
         RESOURCE_MAN.read().unwrap().as_ref().unwrap(),
         id,
-        others.into_iter(),
+        others.into_iter().map(|v| v.cast::<ItemStack>()),
     ) {
         Some(v) => Dynamic::from(v),
         None => Dynamic::UNIT,

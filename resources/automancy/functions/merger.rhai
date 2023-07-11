@@ -9,7 +9,7 @@ fn function_id() {
 }
 
 fn handle_transaction(input) {
-    let target = this.data[TARGET]?.coord();
+    let target = this.data[TARGET];
     
     if type_of(target) != "()" {
         return ["pass_on", input.coord + target];

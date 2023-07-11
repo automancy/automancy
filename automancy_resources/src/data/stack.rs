@@ -1,6 +1,8 @@
+use rhai::INT;
+
 use crate::data::item::Item;
 
-pub type ItemAmount = i32;
+pub type ItemAmount = INT;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct ItemStack {

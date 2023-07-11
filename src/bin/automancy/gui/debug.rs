@@ -1,9 +1,8 @@
-use egui::{Margin, Window};
+use egui::{Context, Margin, Window};
 use ractor::ActorRef;
 use tokio::runtime::Runtime;
 
 use automancy::game::GameMsg;
-use automancy_defs::gui::Gui;
 
 use crate::event::EventLoopStorage;
 use crate::gui::default_frame;
@@ -12,7 +11,7 @@ use crate::setup::GameSetup;
 /// Draws the debug menu (F3).
 pub fn debugger(
     setup: &GameSetup,
-    gui: &mut Gui,
+    context: &Context,
     runtime: &Runtime,
     game: ActorRef<GameMsg>,
     loop_store: &mut EventLoopStorage,
@@ -42,7 +41,7 @@ pub fn debugger(
     .resizable(false)
     .default_width(600.0)
     .frame(default_frame().inner_margin(Margin::same(10.0)))
-    .show(&gui.context, |ui| {
+    .show(context, |ui| {
         ui.label(format!("FPS: {fps:.1}"));
         //ui.label(format!("Device: {device_name} API {api_version}"));
         ui.label(format!(

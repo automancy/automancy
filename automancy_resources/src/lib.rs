@@ -12,7 +12,7 @@ use chrono::{DateTime, Local};
 pub use kira;
 use kira::sound::static_sound::StaticSoundData;
 use kira::track::TrackHandle;
-use rhai::{Dynamic, Engine, Module, Scope, AST};
+use rhai::{Dynamic, Engine, Module, Scope, AST, INT};
 use walkdir::WalkDir;
 
 use automancy_defs::coord::TileCoord;
@@ -25,7 +25,7 @@ use automancy_defs::rendering::Mesh;
 use crate::data::inventory::Inventory;
 use crate::data::item::{rhai_item_match, rhai_item_matches, rhai_item_stack_matches, Item};
 use crate::data::stack::{ItemAmount, ItemStack};
-use crate::data::{Data, DataMap};
+use crate::data::DataMap;
 use crate::error::ErrorManager;
 use crate::model::IndexRange;
 use crate::registry::{DataIds, ErrorIds, GuiIds, ModelIds, Registry};
@@ -118,6 +118,7 @@ impl ResourceManager {
         let any = id_static("automancy", "#any").to_id(&mut interner);
 
         let mut engine = Engine::new();
+        engine.set_max_expr_depths(64, 32);
         engine.set_fast_operators(false);
 
         engine.register_fn("item_match", rhai_item_match);
@@ -128,6 +129,7 @@ impl ResourceManager {
             let mut module = Module::new();
 
             module
+                .set_var("ZERO", TileCoord::ZERO)
                 .set_var("TOP_RIGHT", TileCoord::TOP_RIGHT)
                 .set_var("RIGHT", TileCoord::RIGHT)
                 .set_var("BOTTOM_RIGHT", TileCoord::BOTTOM_RIGHT)
@@ -138,6 +140,14 @@ impl ResourceManager {
             engine.register_static_module("TileCoord", module.into());
 
             engine
+                .register_type_with_name::<TileCoord>("TileCoord")
+                .register_fn("to_string", |v: TileCoord| v.to_string())
+                .register_iterator::<Vec<TileCoord>>()
+                .register_fn("TileCoord", TileCoord::new)
+                .register_fn("rotate_left", |n: TileCoord| n.rotate_left())
+                .register_fn("rotate_right", |n: TileCoord| n.rotate_right())
+                .register_get("q", |v: &mut TileCoord| v.q())
+                .register_get("r", |v: &mut TileCoord| v.r())
                 .register_fn("+", TileCoord::add)
                 .register_fn("-", TileCoord::sub)
                 .register_fn("-", TileCoord::neg)
@@ -150,19 +160,6 @@ impl ResourceManager {
                 .register_indexer_get_set(DataMap::rhai_get, DataMap::rhai_set)
                 .register_fn("get_or_insert", DataMap::rhai_get_or_insert);
 
-            engine
-                .register_fn("inventory", Data::rhai_inventory)
-                .register_fn("amount", Data::rhai_amount)
-                .register_fn("bool", Data::rhai_bool)
-                .register_fn("id", Data::rhai_id)
-                .register_fn("vec_id", Data::rhai_vec_id)
-                .register_fn("coord", Data::rhai_coord)
-                .register_fn("vec_coord", Data::rhai_vec_coord);
-
-            engine
-                .register_type_with_name::<TileCoord>("TileCoord")
-                .register_fn("to_string", |coord: &mut TileCoord| coord.to_string())
-                .register_iterator::<Vec<TileCoord>>();
             engine
                 .register_type_with_name::<Inventory>("Inventory")
                 .register_fn(
@@ -179,7 +176,7 @@ impl ResourceManager {
             engine
                 .register_type_with_name::<Instructions>("Instructions")
                 .register_get("inputs", |v: &mut Instructions| match &v.inputs {
-                    Some(v) => Dynamic::from(v.clone()),
+                    Some(v) => Dynamic::from_iter(v.clone()),
                     None => Dynamic::UNIT,
                 })
                 .register_get("outputs", |v: &mut Instructions| v.outputs.clone());
@@ -204,56 +201,56 @@ impl ResourceManager {
         }
 
         {
-            engine.register_fn("as_script", |id: Id| {
+            engine.register_fn("as_script", |id: INT| {
                 match RESOURCE_MAN
                     .read()
                     .unwrap()
                     .as_ref()
                     .unwrap()
                     .registry
-                    .script(id)
+                    .script(Id::from(id))
                     .cloned()
                 {
                     Some(v) => Dynamic::from(v),
                     None => Dynamic::UNIT,
                 }
             });
-            engine.register_fn("as_tile", |id: Id| {
+            engine.register_fn("as_tile", |id: INT| {
                 match RESOURCE_MAN
                     .read()
                     .unwrap()
                     .as_ref()
                     .unwrap()
                     .registry
-                    .tile(id)
+                    .tile(Id::from(id))
                     .cloned()
                 {
                     Some(v) => Dynamic::from(v),
                     None => Dynamic::UNIT,
                 }
             });
-            engine.register_fn("as_item", |id: Id| {
+            engine.register_fn("as_item", |id: INT| {
                 match RESOURCE_MAN
                     .read()
                     .unwrap()
                     .as_ref()
                     .unwrap()
                     .registry
-                    .item(id)
+                    .item(Id::from(id))
                     .cloned()
                 {
                     Some(v) => Dynamic::from(v),
                     None => Dynamic::UNIT,
                 }
             });
-            engine.register_fn("as_tag", |id: Id| {
+            engine.register_fn("as_tag", |id: INT| {
                 match RESOURCE_MAN
                     .read()
                     .unwrap()
                     .clone()
                     .unwrap()
                     .registry
-                    .tag(id)
+                    .tag(Id::from(id))
                     .cloned()
                 {
                     Some(v) => Dynamic::from(v),

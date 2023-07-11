@@ -7,7 +7,6 @@ use automancy_defs::id::Id;
 use automancy_defs::math::Float;
 use automancy_resources::ResourceManager;
 
-const MARGIN: Float = 8.0;
 const ITEM_ICON_SIZE: Float = 24.0;
 
 pub mod debug;

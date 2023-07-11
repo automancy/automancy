@@ -8,8 +8,8 @@ use automancy_defs::colors;
 use automancy_resources::data::stack::ItemStack;
 use automancy_resources::data::Data;
 
+use crate::gui::default_frame;
 use crate::gui::item::draw_item;
-use crate::gui::{default_frame, ITEM_ICON_SIZE};
 use crate::setup::GameSetup;
 
 /// Draws the tile info GUI.
@@ -60,16 +60,13 @@ pub fn tile_info(
                 .cloned()
             {
                 for (item, amount) in inventory.0.into_iter() {
-                    ui.horizontal(|ui| {
-                        ui.set_height(ITEM_ICON_SIZE);
-
-                        draw_item(
-                            &setup.resource_man,
-                            ui,
-                            gui_instances,
-                            ItemStack { item, amount },
-                        )
-                    });
+                    draw_item(
+                        &setup.resource_man,
+                        ui,
+                        gui_instances,
+                        None,
+                        ItemStack { item, amount },
+                    )
                 }
             }
             //ui.label(format!("State: {}", ask(sys, &game, )))

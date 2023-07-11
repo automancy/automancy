@@ -3,7 +3,7 @@ use std::ops::{Add, Div, Mul, Neg, RangeInclusive, Sub};
 
 use hexagon_tiles::fractional::FractionalHex;
 use hexagon_tiles::hex::{hex, Hex};
-use hexagon_tiles::traits::{HexDirection, HexMath, HexRound};
+use hexagon_tiles::traits::{HexDirection, HexMath, HexRotate, HexRound};
 use serde::de::{SeqAccess, Visitor};
 use serde::ser::SerializeTuple;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -54,15 +54,23 @@ pub const CHUNK_SIZE_SQUARED: TileUnit = CHUNK_SIZE * CHUNK_SIZE;
 pub const CHUNK_ARIA: Double = (3 * CHUNK_SIZE_SQUARED + 3 * CHUNK_SIZE + 1) as Double;
 
 impl TileCoord {
-    /// Shorthand for the tile at position (0, 0, 0).
+    /// Shorthand for the tile at position (0, 0).
     pub const ZERO: Self = Self(hex(0, 0, 0));
     /// Creates a new coordinate from a q and an r component, at the position (q, r, -q - r).
     pub fn new(q: TileUnit, r: TileUnit) -> Self {
-        Self(Hex::new(q, r))
+        Self(TileHex::new(q, r))
     }
 }
 
 impl TileCoord {
+    pub fn rotate_right(self) -> Self {
+        Self(self.0.rotate_right())
+    }
+
+    pub fn rotate_left(self) -> Self {
+        Self(self.0.rotate_left())
+    }
+
     /// Gets the q component of the coordinate.
     pub fn q(self) -> TileUnit {
         self.0.q()
@@ -230,7 +238,7 @@ impl HexRangeIterator {
 }
 
 impl Iterator for HexRangeIterator {
-    type Item = Hex<TileUnit>;
+    type Item = TileHex;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.r.next() {
@@ -240,14 +248,14 @@ impl Iterator for HexRangeIterator {
                     self.r = (-self.size).max(-q - self.size)..=(self.size).min(-q + self.size);
 
                     if let Some(r) = self.r.next() {
-                        Some(Hex::new(self.current_q, r))
+                        Some(TileHex::new(self.current_q, r))
                     } else {
                         None
                     }
                 }
                 None => None,
             },
-            Some(r) => Some(Hex::new(self.current_q, r)),
+            Some(r) => Some(TileHex::new(self.current_q, r)),
         }
     }
 }

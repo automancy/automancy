@@ -4,7 +4,7 @@
     "models": ["merger"],
     "data": {
         "inactive_model": {
-            "Id": "merger_inactive"
+            "Id": "transfer_tile_inactive"
         }
     }
 }

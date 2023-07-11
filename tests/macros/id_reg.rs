@@ -15,8 +15,6 @@ pub struct Foo {
 
 #[test]
 pub fn test_id_reg() {
-    println!("Testing IdReg macro...");
-
     let mut interner = Interner::new();
 
     let bar = Foo::new(&mut interner);
@@ -25,6 +23,4 @@ pub fn test_id_reg() {
     assert_eq!(bar.b, interner.get_or_intern("core:b"));
     assert_eq!(bar.c, interner.get_or_intern("automancy:ccccccccccc"));
     assert_eq!(bar.d, interner.get_or_intern("deez:deez/nuts"));
-
-    println!("Success!");
 }

@@ -168,7 +168,7 @@ impl Data {
 
     pub fn rhai_id(self) -> Dynamic {
         if let Self::Id(v) = self {
-            return Dynamic::from(v);
+            return Dynamic::from_int(v.into());
         }
         Dynamic::UNIT
     }
@@ -185,6 +185,18 @@ impl Data {
             return Dynamic::from_int(v);
         }
         Dynamic::UNIT
+    }
+
+    pub fn rhai_value(self) -> Dynamic {
+        match self {
+            v @ Data::Inventory(_) => v.rhai_inventory(),
+            v @ Data::Coord(_) => v.rhai_coord(),
+            v @ Data::VecCoord(_) => v.rhai_vec_coord(),
+            v @ Data::Id(_) => v.rhai_id(),
+            v @ Data::VecId(_) => v.rhai_vec_id(),
+            v @ Data::Amount(_) => v.rhai_amount(),
+            v @ Data::Bool(_) => v.rhai_bool(),
+        }
     }
 }
 
@@ -221,24 +233,19 @@ impl DataMap {
     fn rhai_parse(ty: ImmutableString) -> Option<Data> {
         let ty = ty.to_lowercase();
 
-        if ty == "inventory" {
-            Some(Data::new_inventory())
-        } else if ty == "veccoord" {
-            Some(Data::new_vec_coord())
-        } else if ty == "bool" {
-            Some(Data::Bool(false))
-        } else if ty == "amount" {
-            Some(Data::Amount(0))
-        } else if ty == "coord" {
-            Some(Data::Coord(TileCoord::ZERO))
-        } else {
-            None
+        match ty.as_str() {
+            "inventory" => Some(Data::new_inventory()),
+            "veccoord" => Some(Data::new_vec_coord()),
+            "bool" => Some(Data::Bool(false)),
+            "amount" => Some(Data::Amount(0)),
+            "coord" => Some(Data::Coord(TileCoord::ZERO)),
+            _ => None,
         }
     }
 
     pub fn rhai_get(&mut self, id: Id) -> Dynamic {
         if let Some(v) = self.get(&id).cloned() {
-            Dynamic::from(v)
+            v.rhai_value()
         } else {
             Dynamic::UNIT
         }
@@ -249,12 +256,11 @@ impl DataMap {
     }
 
     pub fn rhai_get_or_insert(&mut self, id: Id, ty: ImmutableString) -> Dynamic {
-        Dynamic::from(
-            self.0
-                .entry(id)
-                .or_insert_with(|| Self::rhai_parse(ty).unwrap())
-                .clone(),
-        )
+        self.0
+            .entry(id)
+            .or_insert_with(|| Self::rhai_parse(ty).unwrap())
+            .clone()
+            .rhai_value()
     }
 
     pub fn get(&self, id: &Id) -> Option<&Data> {

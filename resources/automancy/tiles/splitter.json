@@ -1,7 +1,7 @@
 {
     "id": "splitter",
     "function": "splitter",
-    "models": ["r_splitter", "l_splitter"],
+    "models": ["splitter_right", "splitter_left"],
     "data": {
         "not_targeted": {
             "Bool": true

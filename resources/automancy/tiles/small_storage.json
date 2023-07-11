@@ -3,8 +3,11 @@
     "function": "storage",
     "models": ["small_storage"],
     "data": {
-        "storage_type": {
+        "item_type": {
             "Id": "#any"
+        },
+        "max_amount": {
+            "Amount": 65536
         },
         "not_targeted": {
             "Bool": true

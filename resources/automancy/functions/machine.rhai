@@ -11,7 +11,7 @@ fn function_id() {
 }
 
 fn handle_transaction(input) {
-    let inputs = this.data[SCRIPT]?.id().as_script()?.instructions?.inputs;
+    let inputs = this.data[SCRIPT]?.as_script()?.instructions?.inputs;
     if type_of(inputs) == "()" {
         return;
     }
@@ -21,7 +21,7 @@ fn handle_transaction(input) {
         return;
     }
 
-    let buffer = this.data.get_or_insert(BUFFER, "Inventory").inventory();
+    let buffer = this.data.get_or_insert(BUFFER, "Inventory");
     
     let amount = matched.amount * 8;
     let stored = buffer[input.stack.item];
@@ -38,14 +38,15 @@ fn handle_transaction(input) {
 }
 
 fn handle_tick(input) {
-    let target = this.data[TARGET]?.coord();
+    let target = this.data[TARGET];
+
     if type_of(target) == "()" {
         return;
     }
 
     let coord = input.coord + target;
 
-    let script = this.data[SCRIPT]?.id()?.as_script();
+    let script = this.data[SCRIPT]?.as_script();
     if type_of(script) == "()" {
         return;
     }
@@ -57,7 +58,7 @@ fn handle_tick(input) {
         return ["make_transaction", coord, input.id, input.coord, outputs];
     }
 
-    let buffer = this.data[BUFFER]?.inventory();
+    let buffer = this.data[BUFFER];
     if type_of(buffer) == "()" {
         return;
     }
@@ -74,8 +75,8 @@ fn handle_tick(input) {
 }
 
 fn handle_transaction_result(input) {
-    let inputs = this.data[SCRIPT]?.id()?.as_script()?.instructions?.inputs;
-    let buffer = this.data[BUFFER]?.inventory();
+    let inputs = this.data[SCRIPT]?.as_script()?.instructions?.inputs;
+    let buffer = this.data[BUFFER];
 
     if type_of(inputs) != "()" && type_of(buffer) != "()" {
         for input in inputs {

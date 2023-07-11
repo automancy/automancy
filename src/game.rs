@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 use std::mem;
+use std::ops::Div;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
@@ -42,9 +43,7 @@ pub type TickUnit = u16;
 pub struct TransactionRecord {
     pub stack: ItemStack,
     pub source_id: Id,
-    pub source_coord: TileCoord,
     pub id: Id,
-    pub coord: TileCoord,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -55,7 +54,8 @@ pub struct RenderUnit {
 }
 
 pub type RenderInfo = HashMap<TileCoord, RenderUnit>;
-pub type TransactionRecords = HashMap<TileCoord, VecDeque<(Instant, TransactionRecord)>>;
+pub type TransactionRecords =
+    HashMap<(TileCoord, TileCoord), VecDeque<(Instant, TransactionRecord)>>;
 
 #[derive(Debug)]
 pub struct GameState {
@@ -465,14 +465,14 @@ impl Actor for Game {
                         reply.send(state.transaction_records.clone()).unwrap();
                     }
                     RecordTransaction(stack, source_coord, coord) => {
-                        if let Some(len) = state
+                        if let Some((instant, _)) = state
                             .transaction_records
                             .read()
                             .unwrap()
-                            .get(&source_coord)
-                            .map(|v| v.len())
+                            .get(&(source_coord, coord))
+                            .and_then(|v| v.back())
                         {
-                            if (state.tick_count as usize % (len + 1)) != 0 {
+                            if Instant::now().duration_since(*instant) < ANIMATION_SPEED.div(5) {
                                 return Ok(());
                             }
                         }
@@ -488,16 +488,14 @@ impl Actor for Game {
                                 .transaction_records
                                 .write()
                                 .unwrap()
-                                .entry(source_coord)
+                                .entry((source_coord, coord))
                                 .or_insert_with(Default::default)
                                 .push_back((
                                     Instant::now(),
                                     TransactionRecord {
                                         stack,
                                         source_id,
-                                        source_coord,
                                         id,
-                                        coord,
                                     },
                                 ));
                         }
