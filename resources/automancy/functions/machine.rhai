@@ -12,12 +12,12 @@ fn function_id() {
 
 fn handle_transaction(input) {
     let inputs = this.data[SCRIPT]?.as_script()?.instructions?.inputs;
-    if type_of(inputs) == "()" {
+    if inputs == () {
         return;
     }
 
     let matched = item_matches(input.stack.item.id, inputs);
-    if type_of(matched) == "()" {
+    if matched == () {
         return;
     }
 
@@ -40,26 +40,26 @@ fn handle_transaction(input) {
 fn handle_tick(input) {
     let target = this.data[TARGET];
 
-    if type_of(target) == "()" {
+    if target == () {
         return;
     }
 
     let coord = input.coord + target;
 
     let script = this.data[SCRIPT]?.as_script();
-    if type_of(script) == "()" {
+    if script == () {
         return;
     }
     
     let outputs = script.instructions.outputs;
     let inputs = script.instructions.inputs;
 
-    if type_of(inputs) == "()" {
+    if inputs == () {
         return ["make_transaction", coord, input.id, input.coord, outputs];
     }
 
     let buffer = this.data[BUFFER];
-    if type_of(buffer) == "()" {
+    if buffer == () {
         return;
     }
 
@@ -78,7 +78,7 @@ fn handle_transaction_result(input) {
     let inputs = this.data[SCRIPT]?.as_script()?.instructions?.inputs;
     let buffer = this.data[BUFFER];
 
-    if type_of(inputs) != "()" && type_of(buffer) != "()" {
+    if inputs != () && buffer != () {
         for input in inputs {
             let stored = buffer[input.item];
 

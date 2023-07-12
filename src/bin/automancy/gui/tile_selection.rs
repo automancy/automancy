@@ -72,6 +72,7 @@ fn draw_tile_selection(
                 model,
                 Some(rect),
                 Some(ui.clip_rect().shrink2(Vec2::new(2.0, 0.0))),
+                None,
             ));
         });
 }

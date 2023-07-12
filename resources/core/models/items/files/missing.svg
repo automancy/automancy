@@ -7,20 +7,20 @@
         viewBox="0 0 160 160"
         version="1.1"
         _id="SVGRoot"
+        id="svg10"
         xmlns="http://www.w3.org/2000/svg"
 >
     <defs
-            _id="defs402"/>
-    <g
-            _id="layer1"
-            transform="translate(-750,-600)">
-        <path
-                _id="rect609"
-                style="fill:#000000;fill-opacity:1;stroke-width:0.442915;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke fill markers;stop-color:#000000"
-                d="m 750,600 v 80 h 80 v -80 z m 80,80 v 80 h 80 v -80 z"/>
-        <path
-                _id="path383"
-                style="fill:#f400ff;stroke-width:0.885832;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke fill markers;stop-color:#000000"
-                d="m 830,600 v 80 h 80 v -80 z m 0,80 h -80 v 80 h 80 z"/>
-    </g>
+            _id="defs402"
+            id="defs2"/>
+    <path
+            _id="rect609"
+            style="fill:#000000;fill-opacity:1;stroke-width:0.442915;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke fill markers;stop-color:#000000"
+            d="M 0,0 V 80 H 80 V 0 Z m 80,80 v 80 h 80 V 80 Z"
+            id="path4"/>
+    <path
+            _id="path383"
+            style="fill:#f400ff;stroke-width:0.885832;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke fill markers;stop-color:#000000"
+            d="m 80,0 v 80 h 80 V 0 Z m 0,80 H 0 v 80 h 80 z"
+            id="path6"/>
 </svg>

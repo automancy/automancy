@@ -46,12 +46,6 @@ criteria:
 **Use either Vertex Paint or a material with only the base color (they get turned into vertex colors upon
 running `make_assets.sh`**
 
-#### Note about `make_assets.sh`
-
-- Models exported from SVG would seem inverted, this is not a bug-- it'll get flipped back when it gets exported into
-  the game.
-    - It's meant to be viewed from -Z to Z
-
 ### Scripts
 
 `input.data` (aka DataMap) needs to be *manually assigned if you make modifications*.

@@ -1,3 +1,4 @@
+use std::f32::consts::PI;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -19,7 +20,7 @@ use automancy_defs::hashbrown::HashMap;
 use automancy_defs::hexagon_tiles::fractional::FractionalHex;
 use automancy_defs::hexagon_tiles::traits::HexRound;
 use automancy_defs::id::Id;
-use automancy_defs::math::{deg, DPoint3, Double, Float, Matrix4, Rad, FAR};
+use automancy_defs::math::{deg, rad, DPoint3, Double, Float, Matrix4, Rad, FAR};
 use automancy_defs::rendering::{
     make_line, GameUBO, InstanceData, OverlayUBO, RawInstanceData, Vertex,
 };
@@ -79,7 +80,13 @@ fn get_angle_from_direction(target: &Data) -> Option<Float> {
     }
 }
 
-pub type GuiInstances = Vec<(InstanceData, Id, Option<Rect>, Option<Rect>)>;
+pub type GuiInstances = Vec<(
+    InstanceData,
+    Id,
+    Option<Rect>,
+    Option<Rect>,
+    Option<(Float, Float)>,
+)>;
 
 impl Renderer {
     fn draw_links(
@@ -111,6 +118,17 @@ impl Renderer {
         mut overlay: Vec<Vertex>,
         gui: &mut Gui,
     ) -> Result<(), SurfaceError> {
+        if self.size.width == 0 || self.size.height == 0 {
+            return Ok(());
+        }
+
+        if self.resized {
+            self.gpu.resize(self.size);
+            self.resized = false;
+
+            return Ok(());
+        }
+
         let camera_pos_float = camera_pos.cast::<Float>().unwrap();
 
         let instances = {
@@ -259,6 +277,7 @@ impl Renderer {
                 let direction = *coord - *source_coord;
                 let direction = math::hex_to_pixel(direction.into());
                 let angle = Rad::atan2(direction.y as Float, direction.x as Float);
+                let angle = rad(angle.0.rem_euclid(PI));
 
                 let instance = InstanceData::default()
                     .with_model_matrix(
@@ -266,7 +285,7 @@ impl Renderer {
                             point.x as Float,
                             point.y as Float,
                             FAR as Float,
-                        )) * Matrix4::from_scale(0.375)
+                        )) * Matrix4::from_scale(0.3)
                             * Matrix4::from_angle_z(angle),
                     )
                     .with_light_pos(camera_pos_float);
@@ -299,15 +318,6 @@ impl Renderer {
         overlay: Vec<Vertex>,
         gui: &mut Gui,
     ) -> Result<(), SurfaceError> {
-        if self.size.width == 0 || self.size.height == 0 {
-            return Ok(());
-        }
-
-        if self.resized {
-            self.gpu.resize(self.size);
-            self.resized = false;
-        }
-
         let output = self.gpu.surface.get_current_texture()?;
 
         let mut encoder = self
@@ -554,8 +564,11 @@ impl Renderer {
 
             let (instances, draws): (Vec<_>, Vec<_>) = gui_instances
                 .into_iter()
-                .map(|(instance, id, viewport, scissor)| {
-                    (RawInstanceData::from(instance), (id, viewport, scissor))
+                .map(|(instance, id, viewport, scissor, depth)| {
+                    (
+                        RawInstanceData::from(instance),
+                        (id, viewport, scissor, depth),
+                    )
                 })
                 .unzip();
 
@@ -581,8 +594,10 @@ impl Renderer {
 
             let factor = gui.context.pixels_per_point();
 
-            for (idx, (id, viewport, scissor)) in draws.into_iter().enumerate() {
+            for (idx, (id, viewport, scissor, depth)) in draws.into_iter().enumerate() {
                 let idx = idx as u32;
+
+                let depth = depth.unwrap_or((1.0, 0.0));
 
                 if let Some(viewport) = viewport {
                     gui_pass.set_viewport(
@@ -590,8 +605,8 @@ impl Renderer {
                         viewport.top() * factor * UPSCALE_LEVEL as Float,
                         viewport.width() * factor * UPSCALE_LEVEL as Float,
                         viewport.height() * factor * UPSCALE_LEVEL as Float,
-                        1.0,
-                        0.0,
+                        depth.0,
+                        depth.1,
                     );
                 } else {
                     gui_pass.set_viewport(
@@ -599,8 +614,8 @@ impl Renderer {
                         0.0,
                         (self.size.width * UPSCALE_LEVEL) as Float,
                         (self.size.height * UPSCALE_LEVEL) as Float,
-                        1.0,
-                        0.0,
+                        depth.0,
+                        depth.1,
                     );
                 }
 

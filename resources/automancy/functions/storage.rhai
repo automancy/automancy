@@ -14,7 +14,7 @@ fn handle_transaction(input) {
     let item = this.data[ITEM]?.as_item();
     let amount = this.data[AMOUNT];
 
-    if type_of(amount) != "()" && type_of(item) != "()" && input.stack.item == item {
+    if amount != () && item != () && input.stack.item == item {
         let buffer = this.data.get_or_insert(BUFFER, "Inventory");
 
         let stored = buffer[item];
@@ -48,7 +48,7 @@ fn handle_extract_request(input) {
     let item = this.data[ITEM]?.as_item();
     let buffer = this.data[BUFFER];
 
-    if type_of(item) != "()" && type_of(buffer) != "()" {
+    if item != () && buffer != () {
         let stored = buffer[item];
 
         if stored > 0 {

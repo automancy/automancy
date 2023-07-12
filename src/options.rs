@@ -3,37 +3,27 @@ use std::fs::{File, OpenOptions};
 use std::io::{BufReader, Read, Write};
 
 use enum_ordinalize::Ordinalize;
-use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use winit::event::VirtualKeyCode;
 
 use automancy_defs::hashbrown::HashMap;
 use automancy_defs::log;
 
-use crate::input::{actions, KeyAction};
+use crate::input::{KeyAction, DEFAULT_KEYMAP};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Options {
     pub graphics: GraphicsOptions,
     pub audio: AudioOptions,
     pub keymap: HashMap<VirtualKeyCode, KeyAction>,
 }
-lazy_static! {
-    pub static ref DEFAULT_KEYMAP: HashMap<VirtualKeyCode, KeyAction> = HashMap::from([
-        (VirtualKeyCode::Z, actions::UNDO),
-        (VirtualKeyCode::Escape, actions::ESCAPE),
-        (VirtualKeyCode::F3, actions::DEBUG),
-        (VirtualKeyCode::F11, actions::FULLSCREEN),
-        (VirtualKeyCode::F1, actions::HIDE_GUI),
-        (VirtualKeyCode::F2, actions::SCREENSHOT)
-    ]);
-}
+
 impl Default for Options {
     fn default() -> Self {
         Self {
             graphics: Default::default(),
             audio: Default::default(),
-            keymap: DEFAULT_KEYMAP.clone(),
+            keymap: DEFAULT_KEYMAP.iter().cloned().collect(),
         }
     }
 }
@@ -43,18 +33,20 @@ static OPTIONS_PATH: &str = "options.toml";
 impl Options {
     pub fn load() -> Result<Self, Box<dyn Error>> {
         log::info!("Loading options...");
+
         let file = OpenOptions::new()
             .write(true)
             .read(true)
             .create(true)
             .open(OPTIONS_PATH)?;
         let mut body = String::new();
+
         BufReader::new(file).read_to_string(&mut body)?;
-        let mut this: Self = toml::de::from_str(body.clone().as_str()).unwrap_or_default();
+        let mut this: Options = toml::de::from_str(body.clone().as_str()).unwrap_or_default();
 
         if this.keymap.len() != DEFAULT_KEYMAP.len() {
             // TODO show a popup warning the player
-            this.keymap = DEFAULT_KEYMAP.clone();
+            this.keymap = DEFAULT_KEYMAP.iter().cloned().collect();
         }
 
         this.save()?;
@@ -62,20 +54,12 @@ impl Options {
         Ok(this)
     }
 
-    pub fn save(&mut self) -> Result<(), Box<dyn Error>> {
+    pub fn save(&self) -> Result<(), Box<dyn Error>> {
         let mut file = File::create(OPTIONS_PATH)?;
 
-        let body = toml_edit::ser::to_string_pretty(&self)?;
-        // TODO why
-        // let value = Item::Value(Value::InlineTable(
-        //     body.remove("keymap")
-        //         .unwrap()
-        //         .into_table()
-        //         .unwrap()
-        //         .into_inline_table(),
-        // ));
-        // body.insert("keymap", value);
-        write!(&mut file, "{body}")?;
+        let document = toml::ser::to_string_pretty(&self)?;
+
+        write!(&mut file, "{document}")?;
 
         log::info!("Saved options!");
 
@@ -83,35 +67,39 @@ impl Options {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Ordinalize)]
-pub enum AALevel {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Ordinalize)]
+pub enum AAType {
     None,
     FXAA,
     TAA,
-    MSAA,
+    Upscale,
 }
-#[derive(Serialize, Deserialize)]
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct GraphicsOptions {
     pub fps_limit: f64,
     pub fullscreen: bool,
     pub scale: f32,
-    pub aa: AALevel,
+    pub anti_aliasing: AAType,
 }
+
 impl Default for GraphicsOptions {
     fn default() -> Self {
         Self {
             fps_limit: 0.0,
             fullscreen: false,
             scale: 1.0,
-            aa: AALevel::MSAA,
+            anti_aliasing: AAType::Upscale,
         }
     }
 }
-#[derive(Serialize, Deserialize)]
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct AudioOptions {
     pub sfx_volume: f64,
     pub music_volume: f64,
 }
+
 impl Default for AudioOptions {
     fn default() -> Self {
         Self {

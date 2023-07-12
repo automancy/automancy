@@ -251,7 +251,6 @@ dependencies = [
  "slice-group-by",
  "tokio",
  "toml",
- "toml_edit",
  "wgpu",
  "winit",
  "zstd",
@@ -455,11 +454,11 @@ dependencies = [
 
 [[package]]
 name = "camino"
-version = "1.1.4"
+version = "1.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c530edf18f37068ac2d977409ed5cd50d53d73bc653c7647b48eb78976ac9ae2"
+checksum = "c59e92b5a388f549b863a7bea62612c09f24c8393560709a54558a9abdfb3b9c"
 dependencies = [
- "serde",
+    "serde",
 ]
 
 [[package]]
@@ -1566,9 +1565,9 @@ version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb0889898416213fab133e1d33a0e5858a48177452750691bde3666d0fdbaf8b"
 dependencies = [
- "hermit-abi",
- "rustix 0.38.3",
- "windows-sys 0.48.0",
+    "hermit-abi",
+    "rustix 0.38.4",
+    "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -1978,16 +1977,16 @@ dependencies = [
 
 [[package]]
 name = "num"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43db66d1170d347f9a065114077f7dccb00c1b9478c89384490a3425279a4606"
+checksum = "b05180d69e3da0e530ba2a1dae5110317e49e3b7f3d41be227dc5f92e49ee7af"
 dependencies = [
- "num-bigint",
- "num-complex",
- "num-integer",
- "num-iter",
- "num-rational",
- "num-traits",
+    "num-bigint",
+    "num-complex",
+    "num-integer",
+    "num-iter",
+    "num-rational",
+    "num-traits",
 ]
 
 [[package]]
@@ -2581,28 +2580,26 @@ checksum = "216080ab382b992234dda86873c18d4c48358f5cfcb70fd693d7f6f2131b628b"
 
 [[package]]
 name = "rhai"
-version = "1.15.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c2a11a646ef5d4e4a9d5cf80c7e4ecb20f9b1954292d5c5e6d6cbc8d33728ec"
+version = "1.16.0"
+source = "git+https://github.com/rhaiscript/rhai.git#84fd228281b1ccc4b062c5caa98d8acb14db3d42"
 dependencies = [
- "ahash 0.8.3",
- "bitflags 1.3.2",
- "instant",
- "num-traits",
- "rhai_codegen",
- "smallvec",
- "smartstring",
+    "ahash 0.8.3",
+    "bitflags 1.3.2",
+    "instant",
+    "num-traits",
+    "rhai_codegen",
+    "smallvec",
+    "smartstring",
 ]
 
 [[package]]
 name = "rhai_codegen"
 version = "1.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db74e3fdd29d969a0ec1f8e79171a6f0f71d0429293656901db382d248c4c021"
+source = "git+https://github.com/rhaiscript/rhai.git#84fd228281b1ccc4b062c5caa98d8acb14db3d42"
 dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
+    "proc-macro2",
+    "quote",
+    "syn 1.0.109",
 ]
 
 [[package]]
@@ -2642,15 +2639,15 @@ dependencies = [
 
 [[package]]
 name = "rustix"
-version = "0.38.3"
+version = "0.38.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac5ffa1efe7548069688cd7028f32591853cd7b5b756d41bcffd2353e4fc75b4"
+checksum = "0a962918ea88d644592894bc6dc55acc6c0956488adcebbfb6e273506b7fd6e5"
 dependencies = [
- "bitflags 2.3.3",
- "errno",
- "libc",
- "linux-raw-sys 0.4.3",
- "windows-sys 0.48.0",
+    "bitflags 2.3.3",
+    "errno",
+    "libc",
+    "linux-raw-sys 0.4.3",
+    "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -2724,13 +2721,13 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.100"
+version = "1.0.102"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f1e14e89be7aa4c4b78bdbdc9eb5bf8517829a600ae8eaa39a6e1d960b5185c"
+checksum = "b5062a995d481b2308b6064e9af76011f2921c35f97b0468811ed9f6cd91dfed"
 dependencies = [
- "itoa",
- "ryu",
- "serde",
+    "itoa",
+    "ryu",
+    "serde",
 ]
 
 [[package]]

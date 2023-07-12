@@ -45,7 +45,7 @@ winit = { version = "0.28.3", features = ["serde"] }
 
 lazy_static = "1.4.0"
 
-rhai = { version = "1.15.0", features = ["sync", "no_time", "no_custom_syntax", "no_closure", "no_float", "only_i32"] }
+rhai = { git = "https://github.com/rhaiscript/rhai.git", features = ["sync", "no_time", "no_custom_syntax", "no_closure", "no_float", "only_i32"] }
 
 
 
@@ -89,7 +89,6 @@ image = "0.24.6"
 zstd = "0.12.3"
 
 toml = "0.7.4"
-toml_edit = "0.19.11"
 
 async-trait = "0.1.68"
 futures = "0.3.28"

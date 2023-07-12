@@ -12,7 +12,16 @@ use automancy_defs::cgmath::{point2, vec2};
 use automancy_defs::hashbrown::HashMap;
 use automancy_defs::math::{DPoint2, DVector2, Double};
 
-use crate::options::DEFAULT_KEYMAP;
+use crate::options::Options;
+
+pub static DEFAULT_KEYMAP: &[(VirtualKeyCode, KeyAction)] = &[
+    (VirtualKeyCode::Z, actions::UNDO),
+    (VirtualKeyCode::Escape, actions::ESCAPE),
+    (VirtualKeyCode::F3, actions::DEBUG),
+    (VirtualKeyCode::F11, actions::FULLSCREEN),
+    (VirtualKeyCode::F1, actions::HIDE_GUI),
+    (VirtualKeyCode::F2, actions::SCREENSHOT),
+];
 
 #[derive(Serialize, Deserialize, Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub enum KeyActions {
@@ -191,8 +200,8 @@ pub struct InputHandler {
     to_clear: Vec<KeyAction>,
 }
 
-impl Default for InputHandler {
-    fn default() -> Self {
+impl InputHandler {
+    pub fn new(options: &Options) -> Self {
         Self {
             main_pos: point2(0.0, 0.0),
             scroll: None,
@@ -209,21 +218,13 @@ impl Default for InputHandler {
             alternate_pressed: false,
             tertiary_pressed: false,
 
-            key_map: DEFAULT_KEYMAP.clone(),
+            key_map: options.keymap.clone(),
             key_states: Default::default(),
 
             to_clear: Default::default(),
         }
     }
-}
 
-impl InputHandler {
-    pub fn new(key_map: HashMap<VirtualKeyCode, KeyAction>) -> Self {
-        Self {
-            key_map,
-            ..Default::default()
-        }
-    }
     pub fn reset(&mut self) {
         self.main_pressed = false;
         self.alternate_pressed = false;

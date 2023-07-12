@@ -13,7 +13,7 @@ fn handle_transaction(input) {
     let item = this.data[ITEM]?.as_item();
     let target = this.data[TARGET];
 
-    if type_of(item) != "()" && type_of(target) != "()" {
+    if item != () && target != () {
         if input.stack.item == item {
             return ["pass_on", input.coord + target];
         } else {

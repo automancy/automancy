@@ -11,7 +11,7 @@ fn function_id() {
 fn handle_extract_request(input) {
     let target = this.data[TARGET];
 
-    if type_of(target) != "()" {
+    if target != () {
         return ["make_extract_request", input.coord + target, input.requested_from_id, input.requested_from_coord]
     }
 }

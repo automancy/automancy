@@ -182,12 +182,14 @@ pub fn on_event(
 
             match event {
                 WindowEvent::Resized(size) => {
-                    renderer.resized = true;
                     renderer.size = *size;
+                    renderer.resized = true;
+                    return Ok(());
                 }
                 WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                    renderer.resized = true;
                     renderer.size = **new_inner_size;
+                    renderer.resized = true;
+                    return Ok(());
                 }
                 _ => {}
             }
@@ -463,22 +465,22 @@ pub fn on_event(
             gui.context.set_debug_on_hover(false);
         }
 
-        if !setup.input_handler.key_active(&KeyActions::HideGui) {
-            if loop_store.popup_state == PopupState::None {
-                match loop_store.gui_state {
-                    GuiState::MainMenu => {
-                        menu::main_menu(setup, &gui.context, control_flow, loop_store)
-                    }
-                    GuiState::MapLoad => {
-                        menu::map_menu(setup, &gui.context, loop_store, renderer);
-                    }
-                    GuiState::Options => {
-                        menu::options_menu(setup, &gui.context, loop_store);
-                    }
-                    GuiState::Paused => {
-                        menu::pause_menu(runtime, setup, &gui.context, loop_store, renderer);
-                    }
-                    GuiState::Ingame => {
+        if loop_store.popup_state == PopupState::None {
+            match loop_store.gui_state {
+                GuiState::MainMenu => {
+                    menu::main_menu(setup, &gui.context, control_flow, loop_store)
+                }
+                GuiState::MapLoad => {
+                    menu::map_menu(setup, &gui.context, loop_store, renderer);
+                }
+                GuiState::Options => {
+                    menu::options_menu(setup, &gui.context, loop_store);
+                }
+                GuiState::Paused => {
+                    menu::pause_menu(runtime, setup, &gui.context, loop_store, renderer);
+                }
+                GuiState::Ingame => {
+                    if !setup.input_handler.key_active(&KeyActions::HideGui) {
                         // tile_selections
                         tile_selection::tile_selections(
                             setup,
@@ -542,7 +544,7 @@ pub fn on_event(
                                     light_pos: setup.camera.get_pos().cast().unwrap(),
                                 };
 
-                                gui_instances.push((instance, model, None, None));
+                                gui_instances.push((instance, model, None, None, None));
                             }
                         }
 

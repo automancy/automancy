@@ -1,33 +1,44 @@
 import bmesh
 import bpy
 import sys
+import xml.etree.ElementTree as ET
 
 
 def main():
     src = sys.argv[-2]
+    print(src)
+
     dst = sys.argv[-1]
 
     for obj in bpy.data.objects:
         bpy.data.objects.remove(obj)
 
+    tree = ET.parse(src)
+    root = tree.getroot()
+
+    ids = [path.attrib['id'] for path in root.iter('{http://www.w3.org/2000/svg}path')]
+    total = float(len(ids))
+    ids = dict(map(lambda e: (e[1], e[0]), enumerate(ids)))
+    offset = 1.0 - 1.0 / total
+
     bpy.ops.import_curve.svg(filepath=src)
 
     curves = list(filter(lambda o: o.type == 'CURVE', bpy.data.objects))
 
-    for idx, obj in enumerate(curves):
+    for obj in curves:
         mesh = bpy.data.meshes.new_from_object(obj)
         new_obj = bpy.data.objects.new(obj.name, mesh)
         new_obj.matrix_world = obj.matrix_world
-        new_obj.delta_location.z = (1.0 - float(idx) / len(curves)) / 16.0
+        new_obj.delta_location.z = (offset + ids[obj.name] / total) / 24.0
         bpy.context.collection.objects.link(new_obj)
         bpy.data.objects.remove(obj)
 
         new_dim = new_obj.dimensions.copy()
-        new_dim.x = new_dim.x / 12.0
-        new_dim.y = new_dim.y / 12.0
+        new_dim.x = new_dim.x / 8.0
+        new_dim.y = new_dim.y / 8.0
         new_obj.dimensions = new_dim
         new_obj.rotation_euler.y = 3.141593
-        new_obj.location.xy = 0.75, -0.75
+        new_obj.location.xy = 1.0, -1.0
 
         bpy.context.view_layer.objects.active = new_obj
         bpy.ops.object.mode_set(mode='EDIT')

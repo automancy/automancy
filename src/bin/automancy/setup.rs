@@ -136,7 +136,7 @@ impl GameSetup {
                 camera,
                 camera_chunk_coord: camera_coord.into(),
                 maps: Vec::new(),
-                input_handler: InputHandler::new(options.keymap.clone()),
+                input_handler: InputHandler::new(&options),
                 options,
             },
             vertices,
