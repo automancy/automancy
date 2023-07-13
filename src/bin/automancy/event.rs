@@ -30,7 +30,7 @@ use automancy_resources::data::item::Item;
 use automancy_resources::data::Data;
 
 use crate::gui::{
-    debug, error, menu, popup, tile_config, tile_info, tile_selection, GuiState, PopupState,
+    debug, error, info, menu, popup, tile_config, tile_selection, GuiState, PopupState,
 };
 use crate::setup::GameSetup;
 
@@ -491,7 +491,7 @@ pub fn on_event(
                         );
 
                         // tile_info
-                        tile_info::tile_info(runtime, setup, &mut gui_instances, &gui.context);
+                        info::info(runtime, setup, &mut gui_instances, &gui.context);
 
                         // tile_config
                         tile_config::tile_config(

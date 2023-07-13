@@ -162,11 +162,12 @@ impl ResourceManager {
 
             engine
                 .register_type_with_name::<Inventory>("Inventory")
-                .register_fn(
-                    "take",
-                    |v: &mut Inventory, item: Item, amount: ItemAmount| v.take(item, amount),
-                )
-                .register_indexer_get_set(Inventory::get, Inventory::insert);
+                .register_fn("take", Inventory::take)
+                .register_fn("take", Inventory::take_with_item)
+                .register_fn("add", Inventory::add)
+                .register_fn("add", Inventory::add_with_item)
+                .register_indexer_get_set(Inventory::get, Inventory::insert)
+                .register_indexer_get_set(Inventory::get_with_item, Inventory::insert_with_item);
             engine
                 .register_type_with_name::<Id>("Id")
                 .register_iterator::<Vec<Id>>();

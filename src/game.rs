@@ -123,8 +123,9 @@ pub enum GameMsg {
     /// load a map
     LoadMap(Arc<ResourceManager>, String),
     GetMapInfo(RpcReplyPort<(MapInfo, String)>),
-    GetDataMap(RpcReplyPort<DataMap>),
+    TakeDataMap(RpcReplyPort<DataMap>),
     GetDataValue(Id, RpcReplyPort<Option<Data>>),
+    SetDataMap(DataMap),
     SetData(Id, Data),
     RemoveData(Id),
     StopTicking,
@@ -275,10 +276,13 @@ impl Actor for Game {
 
                 return Ok(());
             }
-            GetDataMap(reply) => {
+            TakeDataMap(reply) => {
                 reply.send(mem::take(&mut state.map.data)).unwrap();
 
                 return Ok(());
+            }
+            SetDataMap(data) => {
+                state.map.data = data;
             }
             GetDataValue(key, reply) => {
                 reply.send(state.map.data.get(&key).cloned()).unwrap();

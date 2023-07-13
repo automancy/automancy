@@ -8,11 +8,11 @@ use automancy_resources::ResourceManager;
 
 pub mod debug;
 pub mod error;
+pub mod info;
 pub mod item;
 pub mod menu;
 pub mod popup;
 pub mod tile_config;
-pub mod tile_info;
 pub mod tile_selection;
 
 /// The state of the main game GUI.

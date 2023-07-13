@@ -10,13 +10,14 @@ use automancy_defs::coord::{TileCoord, TileHex};
 use automancy_defs::hexagon_tiles::traits::HexDirection;
 use automancy_defs::id::Id;
 use automancy_defs::math::Float;
+use automancy_resources::data::inventory::Inventory;
 use automancy_resources::data::stack::ItemStack;
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::tile::Tile;
 use automancy_resources::ResourceManager;
 
 use crate::event::EventLoopStorage;
-use crate::gui::item::draw_item;
+use crate::gui::item::{draw_item, MEDIUM_ITEM_ICON_SIZE, SMALL_ITEM_ICON_SIZE};
 use crate::gui::searchable_id;
 use crate::setup::GameSetup;
 
@@ -161,6 +162,48 @@ fn config_amount(
     }
 }
 
+fn takeable_item(
+    ui: &mut Ui,
+    setup: &GameSetup,
+    gui_instances: &mut GuiInstances,
+    mut buffer: Inventory,
+    game_data: &mut DataMap,
+    tile_entity: ActorRef<TileEntityMsg>,
+) {
+    if let Some(inventory) = game_data
+        .0
+        .entry(setup.resource_man.registry.data_ids.player_inventory)
+        .or_insert_with(Data::new_inventory)
+        .as_inventory_mut()
+    {
+        for (id, amount) in buffer.0.clone().into_iter() {
+            let item = *setup.resource_man.registry.item(id).unwrap();
+
+            let response = draw_item(
+                &setup.resource_man,
+                ui,
+                gui_instances,
+                None,
+                ItemStack { item, amount },
+                MEDIUM_ITEM_ICON_SIZE,
+            );
+
+            if response.clicked() {
+                if let Some(amount) = buffer.take(id, amount) {
+                    inventory.add(id, amount);
+                }
+            }
+        }
+    }
+
+    tile_entity
+        .send_message(TileEntityMsg::SetDataValue(
+            setup.resource_man.registry.data_ids.buffer, //TODO rename "tile config"
+            Data::Inventory(buffer),
+        ))
+        .unwrap();
+}
+
 fn config_item(
     ui: &mut Ui,
     setup: &GameSetup,
@@ -199,7 +242,14 @@ fn config_item(
         .cloned()
         .map(|item| ItemStack { item, amount: 0 })
     {
-        draw_item(&setup.resource_man, ui, gui_instances, None, stack);
+        draw_item(
+            &setup.resource_man,
+            ui,
+            gui_instances,
+            None,
+            stack,
+            SMALL_ITEM_ICON_SIZE,
+        );
     }
 
     searchable_id(
@@ -255,12 +305,26 @@ fn config_script(
         if let Some(script) = new_script.and_then(|id| setup.resource_man.registry.script(id)) {
             if let Some(inputs) = &script.instructions.inputs {
                 for input in inputs {
-                    draw_item(&setup.resource_man, ui, gui_instances, Some(" + "), *input);
+                    draw_item(
+                        &setup.resource_man,
+                        ui,
+                        gui_instances,
+                        Some(" + "),
+                        *input,
+                        SMALL_ITEM_ICON_SIZE,
+                    );
                 }
             }
 
             for output in &script.instructions.outputs {
-                draw_item(&setup.resource_man, ui, gui_instances, Some("=> "), *output);
+                draw_item(
+                    &setup.resource_man,
+                    ui,
+                    gui_instances,
+                    Some("=> "),
+                    *output,
+                    SMALL_ITEM_ICON_SIZE,
+                );
             }
         }
     });
@@ -301,6 +365,11 @@ pub fn tile_config(
     context: &Context,
 ) {
     if let Some(config_open) = loop_store.config_open {
+        let mut game_data = runtime
+            .block_on(setup.game.call(GameMsg::TakeDataMap, None))
+            .unwrap()
+            .unwrap();
+
         let tile = runtime
             .block_on(
                 setup
@@ -360,6 +429,34 @@ pub fn tile_config(
                     ui.add_space(MARGIN);
                 }
 
+                if setup
+                    .resource_man
+                    .registry
+                    .tile_data(id, setup.resource_man.registry.data_ids.storage_takeable)
+                    .and_then(Data::as_bool)
+                    .cloned()
+                    .unwrap_or(false)
+                {
+                    if let Some(buffer) = data
+                        .get(&setup.resource_man.registry.data_ids.buffer)
+                        .and_then(Data::as_inventory)
+                        .cloned()
+                    {
+                        ui.add_space(MARGIN);
+                        ui.vertical(|ui| {
+                            takeable_item(
+                                ui,
+                                setup,
+                                gui_instances,
+                                buffer,
+                                &mut game_data,
+                                tile_entity.clone(),
+                            );
+                        });
+                        ui.add_space(MARGIN);
+                    }
+                }
+
                 if let Some(Data::Id(item_type)) = tile_info
                     .data
                     .get(&setup.resource_man.registry.data_ids.item_type)
@@ -410,6 +507,11 @@ pub fn tile_config(
                     });
                     ui.add_space(MARGIN);
                 }
+
+                setup
+                    .game
+                    .send_message(GameMsg::SetDataMap(game_data))
+                    .unwrap();
             });
         }
     }

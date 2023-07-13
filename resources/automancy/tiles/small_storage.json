@@ -3,6 +3,9 @@
     "function": "storage",
     "models": ["small_storage"],
     "data": {
+        "storage_takeable": {
+            "Bool": true
+        },
         "item_type": {
             "Id": "#any"
         },

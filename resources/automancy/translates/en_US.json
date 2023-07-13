@@ -54,8 +54,9 @@
         "still": "Alchemical Still"
     },
     "gui": {
+        "info": "Info",
+        "player_inventory": "Player Inventory:",
         "tile_config": "Config",
-        "tile_info": "Tile Info",
         "tile_config_script": "Script: ",
         "tile_config_item": "Item: ",
         "tile_config_target": "Target: ",

@@ -1,23 +1,11 @@
 use std::cmp::Ordering;
 
 use rhai::Dynamic;
-use serde::{Deserialize, Serialize};
 
-use automancy_defs::id::{Id, IdRaw, Interner};
+use automancy_defs::id::Id;
 
 use crate::data::stack::ItemStack;
 use crate::{ResourceManager, RESOURCE_MAN};
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct ItemRaw(pub IdRaw);
-
-impl ItemRaw {
-    pub fn to_item(&self, resource_man: &ResourceManager) -> Option<Item> {
-        let id = resource_man.interner.get(self.0.to_string())?;
-
-        resource_man.registry.item(id).cloned()
-    }
-}
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct Item {
@@ -34,14 +22,6 @@ impl PartialOrd<Self> for Item {
 impl Ord for Item {
     fn cmp(&self, other: &Self) -> Ordering {
         self.id.cmp(&other.id)
-    }
-}
-
-impl Item {
-    pub fn to_item_raw(self, interner: &Interner) -> Option<ItemRaw> {
-        let id = IdRaw::parse(interner.resolve(self.id)?);
-
-        Some(ItemRaw(id))
     }
 }
 

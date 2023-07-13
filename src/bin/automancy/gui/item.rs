@@ -1,4 +1,4 @@
-use egui::{vec2, Sense, Ui};
+use egui::{vec2, Response, Sense, Ui};
 
 use automancy::renderer::GuiInstances;
 use automancy_defs::math::Float;
@@ -6,7 +6,9 @@ use automancy_defs::rendering::InstanceData;
 use automancy_resources::data::stack::ItemStack;
 use automancy_resources::ResourceManager;
 
-const ITEM_ICON_SIZE: Float = 20.0;
+pub const SMALL_ITEM_ICON_SIZE: Float = 24.0;
+pub const MEDIUM_ITEM_ICON_SIZE: Float = 48.0;
+pub const LARGE_ITEM_ICON_SIZE: Float = 96.0;
 
 /// Draws an Item's icon.
 pub fn draw_item(
@@ -15,26 +17,29 @@ pub fn draw_item(
     gui_instances: &mut GuiInstances,
     prefix: Option<&'static str>,
     stack: ItemStack,
-) {
+    size: Float,
+) -> Response {
     ui.horizontal(|ui| {
-        ui.style_mut().spacing.item_spacing = vec2(ITEM_ICON_SIZE / 2.0, 0.0);
+        ui.set_height(size);
+
+        ui.style_mut().spacing.item_spacing = vec2(size / 2.0, 0.0);
 
         if let Some(prefix) = prefix {
             ui.label(prefix);
         }
 
-        let (rect, _) =
-            ui.allocate_exact_size(vec2(ITEM_ICON_SIZE, ITEM_ICON_SIZE), Sense::hover());
+        let (rect, icon_response) =
+            ui.allocate_exact_size(vec2(size, size), Sense::click_and_drag());
 
-        if stack.amount > 0 {
+        let label_response = if stack.amount > 0 {
             ui.label(format!(
                 "{} ({})",
                 resource_man.item_name(&stack.item.id),
                 stack.amount
-            ));
+            ))
         } else {
-            ui.label(resource_man.item_name(&stack.item.id).to_string());
-        }
+            ui.label(resource_man.item_name(&stack.item.id).to_string())
+        };
 
         let model = resource_man.get_item_model(stack.item);
 
@@ -45,5 +50,8 @@ pub fn draw_item(
             None,
             Some((0.0, 1.0)),
         ));
-    });
+
+        icon_response.union(label_response)
+    })
+    .inner
 }

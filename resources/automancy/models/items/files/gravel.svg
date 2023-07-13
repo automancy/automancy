@@ -25,42 +25,42 @@
             inkscape:deskcolor="#505050"
             inkscape:document-units="cm"
             showgrid="false"
-            inkscape:zoom="0.10243104"
-            inkscape:cx="1806.0932"
-            inkscape:cy="3958.7609"
+            inkscape:zoom="0.072429683"
+            inkscape:cx="2070.9741"
+            inkscape:cy="4466.4009"
             inkscape:window-width="1870"
             inkscape:window-height="1051"
             inkscape:window-x="1920"
             inkscape:window-y="0"
             inkscape:window-maximized="1"
-            inkscape:current-layer="g4133"/>
+            inkscape:current-layer="svg26"/>
     <defs
             _id="defs402"
             id="defs8"/>
     <path
             id="path1249-5"
-            style="fill:#2b291d;fill-opacity:1;stroke:none;stroke-width:0.0529872px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
-            d="M 80.000031,0 5.4860499,43.120967 V 122.45385 L 80.000031,160 154.51395,122.45385 V 43.120967 Z"
+            style="fill:#2b291d;fill-opacity:1;stroke:none;stroke-width:0.0549032px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+            d="M 80.000033,0 0,43.120967 V 122.45385 L 80.000033,160 160,122.45385 V 43.120967 Z"
             inkscape:label="d"/>
     <path
-            style="fill:#7a7b7f;fill-opacity:1;stroke:none;stroke-width:0.0443771px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
-            d="m 142.40569,49.11367 v 66.44158 l -62.405689,31.445 V 83.509766 Z"
+            style="fill:#7a7b7f;fill-opacity:1;stroke:none;stroke-width:0.0441735px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+            d="M 144.36558,50.328233 V 114.15709 L 80.000001,144.36556 V 83.371749 Z"
             id="path1249-7"
             inkscape:label="c"/>
     <path
-            style="fill:#8c8e93;fill-opacity:1;stroke:none;stroke-width:0.0443771px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
-            d="m 17.594308,49.113667 v 66.441583 l 62.405693,31.445 V 83.509764 Z"
+            style="fill:#8c8e93;fill-opacity:1;stroke:none;stroke-width:0.0441735px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+            d="m 15.634417,50.32823 v 63.82886 l 64.365584,30.20847 V 83.371747 Z"
             id="path1249"
             inkscape:label="b"/>
     <path
             id="rect1458"
-            style="fill:#a3a4a9;fill-opacity:1;stroke-width:20.1269;stroke-linejoin:bevel;stop-color:#000000"
-            d="M 80,12.999728 142.40569,49.113667 80.000001,83.509764 17.594308,49.113666 Z"
+            style="fill:#a3a4a9;fill-opacity:1;stroke-width:20.0346;stroke-linejoin:bevel;stop-color:#000000"
+            d="M 80,15.634423 144.36558,50.32823 80.000001,83.371747 15.634417,50.328229 Z"
             inkscape:label="a"/>
     <g
             id="g4133"
             inkscape:label="1"
-            transform="matrix(1.1819127,0,0,1.1036682,-14.55302,-4.7836964)">
+            transform="matrix(1.3056537,0,0,1.1356087,-24.441278,-4.990284)">
         <path
                 style="fill:#615c50;fill-opacity:1;stroke:none;stroke-width:0.0264583px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
                 d="M 35.029703,85.64112 48.19116,90.478498 41.049201,69.521509 Z"
@@ -83,12 +83,12 @@
                 inkscape:label="g"/>
         <path
                 style="fill:#424230;fill-opacity:1;stroke:none;stroke-width:0.0264583px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
-                d="m 92.558594,102.43466 1.185845,13.97205 15.966701,-15.33844 z"
+                d="M 93.863978,97.308904 95.049823,111.28093 111.01653,95.942526 Z"
                 id="path3843-3"
                 inkscape:label="f"/>
         <path
                 style="fill:#615c50;fill-opacity:1;stroke:none;stroke-width:0.0264583px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
-                d="m 59.020936,117.8883 8.591943,-11.85308 -21.094019,1.01875 z"
+                d="m 60.32632,112.76252 8.591943,-11.85308 -21.094019,1.01875 z"
                 id="path3843-6"
                 inkscape:label="e"/>
         <path

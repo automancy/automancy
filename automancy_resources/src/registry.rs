@@ -57,7 +57,9 @@ pub struct DataIds {
     pub amount: Id,
     pub target: Id,
     pub link: Id,
+    pub player_inventory: Id,
 
+    pub storage_takeable: Id,
     pub inactive_model: Id,
     pub not_targeted: Id,
     pub max_amount: Id,
@@ -76,8 +78,9 @@ pub struct ModelIds {
 /// The list of GUI translation keys.
 #[derive(Clone, Copy, IdReg)]
 pub struct GuiIds {
+    pub info: Id,
+    pub player_inventory: Id,
     pub tile_config: Id,
-    pub tile_info: Id,
     pub tile_config_script: Id,
     pub tile_config_item: Id,
     pub tile_config_target: Id,
