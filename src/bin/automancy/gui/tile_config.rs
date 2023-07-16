@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use egui::Context;
 use egui::{vec2, DragValue, Margin, Ui, Window};
 use ractor::ActorRef;
@@ -165,6 +167,7 @@ fn config_amount(
 fn takeable_item(
     ui: &mut Ui,
     setup: &GameSetup,
+    loop_store: &mut EventLoopStorage,
     gui_instances: &mut GuiInstances,
     mut buffer: Inventory,
     game_data: &mut DataMap,
@@ -179,7 +182,7 @@ fn takeable_item(
         for (id, amount) in buffer.0.clone().into_iter() {
             let item = *setup.resource_man.registry.item(id).unwrap();
 
-            let response = draw_item(
+            let (rect, response) = draw_item(
                 &setup.resource_man,
                 ui,
                 gui_instances,
@@ -191,6 +194,11 @@ fn takeable_item(
             if response.clicked() {
                 if let Some(amount) = buffer.take(id, amount) {
                     inventory.add(id, amount);
+                    loop_store
+                        .take_item_animations
+                        .entry(item)
+                        .or_insert_with(Default::default)
+                        .push_back((Instant::now(), rect));
                 }
             }
         }
@@ -447,6 +455,7 @@ pub fn tile_config(
                             takeable_item(
                                 ui,
                                 setup,
+                                loop_store,
                                 gui_instances,
                                 buffer,
                                 &mut game_data,

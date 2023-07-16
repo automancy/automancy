@@ -35,7 +35,8 @@ pub const TPS: u64 = 30;
 pub const TICK_INTERVAL: Duration = Duration::from_nanos(1_000_000_000 / TPS);
 pub const MAX_ALLOWED_TICK_INTERVAL: Duration = TICK_INTERVAL.saturating_mul(5);
 
-pub const ANIMATION_SPEED: Duration = Duration::from_nanos(666_666_666);
+pub const TRANSACTION_ANIMATION_SPEED: Duration = Duration::from_nanos(666_666_666);
+pub const TAKE_ITEM_ANIMATION_SPEED: Duration = Duration::from_nanos(200_000_000);
 
 pub type TickUnit = u16;
 
@@ -453,7 +454,7 @@ impl Actor for Game {
                                 deque
                                     .iter()
                                     .take_while(|(instant, _)| {
-                                        now.duration_since(*instant) >= ANIMATION_SPEED
+                                        now.duration_since(*instant) >= TRANSACTION_ANIMATION_SPEED
                                     })
                                     .count(),
                             );
@@ -476,7 +477,9 @@ impl Actor for Game {
                             .get(&(source_coord, coord))
                             .and_then(|v| v.back())
                         {
-                            if Instant::now().duration_since(*instant) < ANIMATION_SPEED.div(4) {
+                            if Instant::now().duration_since(*instant)
+                                < TRANSACTION_ANIMATION_SPEED.div(4)
+                            {
                                 return Ok(());
                             }
                         }

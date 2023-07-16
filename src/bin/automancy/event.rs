@@ -1,9 +1,11 @@
+use std::collections::VecDeque;
 use std::error::Error;
 use std::f32::consts::PI;
 use std::mem;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use egui::Rect;
 use fuse_rust::Fuse;
 use futures::channel::mpsc;
 use futures::executor::block_on;
@@ -68,6 +70,8 @@ pub struct EventLoopStorage {
     /// the stored initial cursor position, for moving tiles
     pub initial_cursor_position: Option<TileCoord>,
 
+    pub take_item_animations: HashMap<Item, VecDeque<(Instant, Rect)>>,
+
     prev_gui_state: Option<GuiState>,
     gui_state: GuiState,
     pub popup_state: PopupState,
@@ -92,6 +96,7 @@ impl Default for EventLoopStorage {
             elapsed: Default::default(),
             selected_tiles: Default::default(),
             initial_cursor_position: None,
+            take_item_animations: Default::default(),
 
             prev_gui_state: None,
             gui_state: GuiState::MainMenu,
@@ -491,7 +496,7 @@ pub fn on_event(
                         );
 
                         // tile_info
-                        info::info(runtime, setup, &mut gui_instances, &gui.context);
+                        info::info(runtime, setup, loop_store, &mut gui_instances, &gui.context);
 
                         // tile_config
                         tile_config::tile_config(

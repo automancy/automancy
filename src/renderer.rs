@@ -28,7 +28,9 @@ use automancy_defs::{bytemuck, colors, math, window};
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::ResourceManager;
 
-use crate::game::{GameMsg, RenderInfo, RenderUnit, TickUnit, TransactionRecord, ANIMATION_SPEED};
+use crate::game::{
+    GameMsg, RenderInfo, RenderUnit, TickUnit, TransactionRecord, TRANSACTION_ANIMATION_SPEED,
+};
 use crate::gpu;
 use crate::gpu::{Gpu, GUI_INSTANCE_BUFFER, OVERLAY_VERTEX_BUFFER, UPSCALE_LEVEL};
 use crate::tile_entity::TileEntityMsg;
@@ -268,7 +270,7 @@ impl Renderer {
         for ((source_coord, coord), instants) in transaction_records_read.iter() {
             for (instant, TransactionRecord { stack, .. }) in instants {
                 let duration = now.duration_since(*instant);
-                let t = duration.as_secs_f64() / ANIMATION_SPEED.as_secs_f64();
+                let t = duration.as_secs_f64() / TRANSACTION_ANIMATION_SPEED.as_secs_f64();
                 let a = FractionalHex::new(source_coord.q() as Double, source_coord.r() as Double);
                 let b = FractionalHex::new(coord.q() as Double, coord.r() as Double);
                 let lerp = a.lerp(b, t);

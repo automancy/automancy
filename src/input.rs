@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::mem;
 
 use serde::{Deserialize, Serialize};
@@ -9,7 +8,7 @@ use winit::event::{
 };
 
 use automancy_defs::cgmath::{point2, vec2};
-use automancy_defs::hashbrown::HashMap;
+use automancy_defs::hashbrown::{HashMap, HashSet};
 use automancy_defs::math::{DPoint2, DVector2, Double};
 
 use crate::options::Options;

@@ -1,22 +1,27 @@
+use std::time::Instant;
+
 use egui::{vec2, Align, Align2, Context, Margin, Window};
 use tokio::runtime::Runtime;
 
-use automancy::game::GameMsg;
+use automancy::game::{GameMsg, TAKE_ITEM_ANIMATION_SPEED};
 use automancy::renderer::GuiInstances;
 use automancy::tile_entity::TileEntityMsg;
 use automancy_defs::colors;
+use automancy_defs::hashbrown::HashMap;
 use automancy_defs::math::Float;
 use automancy_resources::data::stack::ItemStack;
 use automancy_resources::data::Data;
 
+use crate::event::EventLoopStorage;
 use crate::gui::default_frame;
-use crate::gui::item::{draw_item, SMALL_ITEM_ICON_SIZE};
+use crate::gui::item::{draw_item, paint_item, SMALL_ITEM_ICON_SIZE};
 use crate::setup::GameSetup;
 
 /// Draws the info GUI.
 pub fn info(
     runtime: &Runtime,
     setup: &GameSetup,
+    loop_store: &mut EventLoopStorage,
     gui_instances: &mut GuiInstances,
     context: &Context,
 ) {
@@ -114,7 +119,7 @@ pub fn info(
                                 .item(*id)
                                 .map(|item| (*item, *amount))
                         }) {
-                            draw_item(
+                            let (dst_rect, _) = draw_item(
                                 &setup.resource_man,
                                 ui,
                                 gui_instances,
@@ -122,6 +127,47 @@ pub fn info(
                                 ItemStack { item, amount },
                                 SMALL_ITEM_ICON_SIZE,
                             );
+
+                            let now = Instant::now();
+
+                            let mut to_remove = HashMap::new();
+
+                            for (coord, deque) in &loop_store.take_item_animations {
+                                to_remove.insert(
+                                    *coord,
+                                    deque
+                                        .iter()
+                                        .take_while(|(instant, _)| {
+                                            now.duration_since(*instant)
+                                                >= TAKE_ITEM_ANIMATION_SPEED
+                                        })
+                                        .count(),
+                                );
+                            }
+
+                            for (coord, v) in to_remove {
+                                for _ in 0..v {
+                                    loop_store
+                                        .take_item_animations
+                                        .get_mut(&coord)
+                                        .unwrap()
+                                        .pop_front();
+                                }
+                            }
+
+                            if let Some(animations) = loop_store.take_item_animations.get(&item) {
+                                for (instant, src_rect) in animations {
+                                    let d = now.duration_since(*instant).as_secs_f32()
+                                        / TAKE_ITEM_ANIMATION_SPEED.as_secs_f32();
+
+                                    paint_item(
+                                        &setup.resource_man,
+                                        gui_instances,
+                                        item,
+                                        src_rect.lerp_towards(&dst_rect, d),
+                                    );
+                                }
+                            }
                         }
                     });
                 }
