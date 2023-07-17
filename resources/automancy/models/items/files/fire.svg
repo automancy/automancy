@@ -14,37 +14,36 @@
         xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
         xmlns="http://www.w3.org/2000/svg"
 >
-  <sodipodi:namedview
-          id="namedview22"
-          pagecolor="#505050"
-          bordercolor="#eeeeee"
-          borderopacity="1"
-          inkscape:showpageshadow="0"
-          inkscape:pageopacity="0"
-          inkscape:pagecheckerboard="0"
-          inkscape:deskcolor="#505050"
-          inkscape:document-units="cm"
-          showgrid="false"
-          inkscape:zoom="0.079999996"
-          inkscape:cx="2637.5001"
-          inkscape:cy="3418.7502"
-          inkscape:window-width="1870"
-          inkscape:window-height="1051"
-          inkscape:window-x="1920"
-          inkscape:window-y="0"
-          inkscape:window-maximized="1"
-          inkscape:current-layer="svg26"/>
-  <defs
-          _id="defs402"
-          id="defs8"/>
-  <path
-          style="color:#000000;fill:#3b1b00;stroke-width:0.926631;stroke-linecap:square;-inkscape-stroke:none;paint-order:stroke fill markers"
-          d="M 85.243043,3.2041608 C 60.556848,-14.493613 3.2647887,45.557306 0.60638194,74.842046 -9.1845731,182.69822 102.64183,160.85178 115.88755,152.16398 208.17262,91.634746 127.01562,15.004774 126.99011,15.03662 c 0,0 -50.318693,11.487765 -48.101137,2.156499 C 81.960277,4.2693731 89.322859,6.1290204 85.243043,3.2041608 Z"
-          id="path1596"
-          sodipodi:nodetypes="ssscss"/>
-  <path
-          style="color:#000000;display:inline;fill:#e1771d;stroke-width:18.8436;stroke-linecap:square;-inkscape-stroke:none;paint-order:stroke fill markers"
-          d="M 63.244766,23.322367 C 31.274311,44.011211 77.33056,98.527894 71.601294,109.25602 35.774502,123.44512 36.583586,84.654215 36.149976,63.362058 -15.620155,102.54012 53.001796,143.79664 83.335787,142.33601 103.63235,141.01029 124.4475,127.56847 133.74138,109.25602 151.70135,73.868148 123.38873,20.603121 80.808939,36.811996 98.48468,38.052857 128.71233,77.01093 109.13959,91.097467 72.17117,92.596886 67.11376,42.130021 63.244766,23.322367 Z"
-          id="path1598"
-          sodipodi:nodetypes="ccccsccc"/>
+    <sodipodi:namedview
+            id="namedview22"
+            pagecolor="#505050"
+            bordercolor="#eeeeee"
+            borderopacity="1"
+            inkscape:showpageshadow="0"
+            inkscape:pageopacity="0"
+            inkscape:pagecheckerboard="0"
+            inkscape:deskcolor="#505050"
+            inkscape:document-units="cm"
+            showgrid="false"
+            inkscape:zoom="0.056568542"
+            inkscape:cx="-194.45437"
+            inkscape:cy="4799.4873"
+            inkscape:window-width="1870"
+            inkscape:window-height="1051"
+            inkscape:window-x="1920"
+            inkscape:window-y="0"
+            inkscape:window-maximized="1"
+            inkscape:current-layer="svg26"/>
+    <defs
+            _id="defs402"
+            id="defs8"/>
+    <path
+            id="path285"
+            style="fill:#3b1b00;stroke-linecap:square;paint-order:stroke fill markers;stop-color:#000000"
+            d="M 159.99998,79.999992 A 79.999992,79.999992 0 0 1 79.999992,159.99998 79.999992,79.999992 0 0 1 0,79.999992 79.999992,79.999992 0 0 1 79.999992,0 79.999992,79.999992 0 0 1 159.99998,79.999992 Z"/>
+    <path
+            id="path1598"
+            style="color:#000000;display:inline;fill:#e1771d;stroke-width:17.2274;stroke-linecap:square;-inkscape-stroke:none;paint-order:stroke fill markers"
+            d="M 34.279856,37.512704 C 72.452512,33.559633 99.862619,74.519518 100.27556,75.82241 129.01083,64.496637 106.04565,37.419102 73.792045,22.886032 151.04185,25.456198 149.45741,103.18057 112.62554,125.50674 43.312336,167.52193 -3.3838805,84.208208 39.027129,54.285085 23.884301,142.77046 118.38047,87.248975 34.279856,37.512704 Z M 83.722703,79.180628 C 86.210667,112.12441 59.780495,117.10391 59.780495,117.10391 80.070698,132.97125 121.9417,110.79226 119.08888,81.622871 98.641834,104.25752 83.441898,79.601836 83.722703,79.180628 Z"
+            sodipodi:nodetypes="cccscccccc"/>
 </svg>
