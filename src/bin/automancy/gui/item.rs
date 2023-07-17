@@ -46,8 +46,7 @@ pub fn draw_item(
             ui.label(prefix);
         }
 
-        let (rect, icon_response) =
-            ui.allocate_exact_size(vec2(size, size), Sense::click_and_drag());
+        let (rect, icon_response) = ui.allocate_exact_size(vec2(size, size), Sense::click());
 
         let label_response = if stack.amount > 0 {
             ui.label(format!(
