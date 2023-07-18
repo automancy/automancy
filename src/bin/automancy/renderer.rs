@@ -1,20 +1,34 @@
+use std::borrow::Cow;
 use std::f32::consts::PI;
-use std::sync::Arc;
 use std::time::Instant;
 
+use arboard::{Clipboard, ImageData};
 use egui::{Rect, Rgba};
 use egui_wgpu::renderer::ScreenDescriptor;
+use image::{EncodableLayout, RgbaImage};
+use num::PrimInt;
 use ractor::rpc::CallResult;
-use ractor::ActorRef;
 use tokio::runtime::Runtime;
+use tokio::sync::oneshot;
 use wgpu::{
-    Color, CommandEncoderDescriptor, IndexFormat, LoadOp, Operations, RenderPassColorAttachment,
-    RenderPassDepthStencilAttachment, RenderPassDescriptor, SurfaceError, TextureViewDescriptor,
+    BufferAddress, BufferDescriptor, BufferUsages, Color, CommandEncoderDescriptor,
+    ImageCopyBuffer, ImageDataLayout, IndexFormat, LoadOp, Maintain, MapMode, Operations,
+    RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor,
+    SurfaceError, TextureFormat, TextureViewDescriptor, COPY_BUFFER_ALIGNMENT,
+    COPY_BYTES_PER_ROW_ALIGNMENT,
 };
 use winit::dpi::PhysicalSize;
 
+use automancy::game::{
+    GameMsg, RenderInfo, RenderUnit, TickUnit, TransactionRecord, TRANSACTION_ANIMATION_SPEED,
+};
+use automancy::gpu;
+use automancy::gpu::{Gpu, GUI_INSTANCE_BUFFER, OVERLAY_VERTEX_BUFFER, UPSCALE_LEVEL};
+use automancy::input::KeyActions;
+use automancy::tile_entity::TileEntityMsg;
+use automancy::util::actor::multi_call_iter;
 use automancy_defs::cgmath::{vec3, Angle, SquareMatrix};
-use automancy_defs::coord::{TileCoord, TileUnit};
+use automancy_defs::coord::TileCoord;
 use automancy_defs::gui::Gui;
 use automancy_defs::hashbrown::HashMap;
 use automancy_defs::hexagon_tiles::fractional::FractionalHex;
@@ -26,22 +40,14 @@ use automancy_defs::rendering::{
 };
 use automancy_defs::{bytemuck, colors, math, window};
 use automancy_resources::data::{Data, DataMap};
-use automancy_resources::ResourceManager;
 
-use crate::game::{
-    GameMsg, RenderInfo, RenderUnit, TickUnit, TransactionRecord, TRANSACTION_ANIMATION_SPEED,
-};
-use crate::gpu;
-use crate::gpu::{Gpu, GUI_INSTANCE_BUFFER, OVERLAY_VERTEX_BUFFER, UPSCALE_LEVEL};
-use crate::tile_entity::TileEntityMsg;
-use crate::util::actor::multi_call_iter;
+use crate::setup::GameSetup;
 
 pub struct Renderer {
     pub resized: bool,
     pub size: PhysicalSize<u32>,
 
     pub gpu: Gpu,
-    resource_man: Arc<ResourceManager>,
 
     data_cache: HashMap<TileCoord, DataMap>,
     last_tiles_update: Option<TickUnit>,
@@ -52,13 +58,12 @@ impl Renderer {
         self.last_tiles_update = None;
     }
 
-    pub fn new(resource_man: Arc<ResourceManager>, gpu: Gpu) -> Self {
+    pub fn new(gpu: Gpu) -> Self {
         Self {
             resized: false,
 
             size: gpu.window.inner_size(),
             gpu,
-            resource_man,
 
             data_cache: Default::default(),
             last_tiles_update: None,
@@ -108,17 +113,13 @@ impl Renderer {
     pub fn render(
         &mut self,
         runtime: &Runtime,
-        resource_man: Arc<ResourceManager>,
-        game: ActorRef<GameMsg>,
-        camera_pos: DPoint3,
-        camera_coord: TileCoord,
+        setup: &GameSetup,
+        gui: &mut Gui,
         matrix: Matrix4,
-        culling_range: (TileUnit, TileUnit),
         map_render_info: &RenderInfo,
         tile_tints: HashMap<TileCoord, Rgba>,
         gui_instances: GuiInstances,
         mut overlay: Vec<Vertex>,
-        gui: &mut Gui,
     ) -> Result<(), SurfaceError> {
         if self.size.width == 0 || self.size.height == 0 {
             return Ok(());
@@ -131,20 +132,23 @@ impl Renderer {
             return Ok(());
         }
 
+        let culling_range = setup.camera.culling_range;
+        let camera_coord = setup.camera.get_tile_coord();
+        let camera_pos = setup.camera.get_pos();
         let camera_pos_float = camera_pos.cast::<Float>().unwrap();
 
         let instances = {
-            let none = self
+            let none = setup
                 .resource_man
                 .registry
-                .tile(self.resource_man.registry.none)
+                .tile(setup.resource_man.registry.none)
                 .unwrap()
                 .models[0];
 
             let mut instances = map_render_info.clone();
 
             let tile_entities = runtime
-                .block_on(game.call(
+                .block_on(setup.game.call(
                     |reply| GameMsg::GetTileEntities {
                         center: camera_coord,
                         culling_range,
@@ -171,25 +175,28 @@ impl Renderer {
                 if let Some(theta) = self
                     .data_cache
                     .get(coord)
-                    .and_then(|data| data.get(&resource_man.registry.data_ids.target))
+                    .and_then(|data| data.get(&setup.resource_man.registry.data_ids.target))
                     .and_then(get_angle_from_direction)
                 {
                     let m = &mut instance.instance.model_matrix;
 
                     *m = *m * Matrix4::from_angle_z(deg(theta))
-                } else if let Some(inactive) = self
+                } else if let Some(inactive) = setup
                     .resource_man
                     .registry
-                    .tile_data(instance.tile, resource_man.registry.data_ids.inactive_model)
+                    .tile_data(
+                        instance.tile,
+                        setup.resource_man.registry.data_ids.inactive_model,
+                    )
                     .and_then(Data::as_id)
                 {
-                    instance.model = self.resource_man.get_model(*inactive);
+                    instance.model = setup.resource_man.get_model(*inactive);
                 }
 
                 if let Some(link) = self
                     .data_cache
                     .get(coord)
-                    .and_then(|data| data.get(&resource_man.registry.data_ids.link))
+                    .and_then(|data| data.get(&setup.resource_man.registry.data_ids.link))
                     .and_then(Data::as_coord)
                     .cloned()
                 {
@@ -260,7 +267,7 @@ impl Renderer {
         let mut extra_instances = vec![];
 
         let transaction_records = runtime
-            .block_on(game.call(GameMsg::GetRecordedTransactions, None))
+            .block_on(setup.game.call(GameMsg::GetRecordedTransactions, None))
             .unwrap()
             .unwrap();
         let now = Instant::now();
@@ -291,7 +298,7 @@ impl Renderer {
                             * Matrix4::from_angle_z(angle),
                     )
                     .with_light_pos(camera_pos_float);
-                let model = resource_man.get_item_model(stack.item);
+                let model = setup.resource_man.get_item_model(stack.item);
 
                 extra_instances.push((instance.into(), model));
             }
@@ -300,25 +307,25 @@ impl Renderer {
         extra_instances.sort_by_key(|v| v.1);
 
         self.inner_render(
-            &resource_man,
+            setup,
+            gui,
             matrix,
             &instances,
             &extra_instances,
             gui_instances,
             overlay,
-            gui,
         )
     }
 
     fn inner_render(
         &mut self,
-        resource_man: &ResourceManager,
+        setup: &GameSetup,
+        gui: &mut Gui,
         matrix: Matrix4,
         instances: &[(RawInstanceData, Id)],
         extra_instances: &[(RawInstanceData, Id)],
         gui_instances: GuiInstances,
         overlay: Vec<Vertex>,
-        gui: &mut Gui,
     ) -> Result<(), SurfaceError> {
         let output = self.gpu.surface.get_current_texture()?;
 
@@ -359,7 +366,7 @@ impl Renderer {
             let count = gpu::indirect_instance(
                 &self.gpu.device,
                 &self.gpu.queue,
-                &self.resource_man,
+                &setup.resource_man,
                 instances,
                 &mut self.gpu.game_instance_buffer,
                 &mut self.gpu.game_indirect_buffer,
@@ -414,7 +421,7 @@ impl Renderer {
             let count = gpu::indirect_instance(
                 &self.gpu.device,
                 &self.gpu.queue,
-                &self.resource_man,
+                &setup.resource_man,
                 extra_instances,
                 &mut self.gpu.extra_instance_buffer,
                 &mut self.gpu.extra_indirect_buffer,
@@ -637,7 +644,7 @@ impl Renderer {
                     );
                 }
 
-                let index_range = resource_man.index_ranges[&id];
+                let index_range = setup.resource_man.index_ranges[&id];
 
                 let a = index_range.offset;
                 let b = a + index_range.size;
@@ -689,41 +696,99 @@ impl Renderer {
             combine_pass.draw(0..3, 0..1)
         }
 
-        /* TODO screenshot
-        let screenshot_= if screenshot
-        let dim = output.texture.size().physical_size(output.texture.format());
-        let size = dim.width * dim.height;
+        fn size_align<T: PrimInt>(size: T, alignment: T) -> T {
+            ((size + alignment - T::one()) / alignment) * alignment
+        }
 
-        let buffer = self.gpu.device.create_buffer(&BufferDescriptor {
-            label: None,
-            size: size as BufferAddress,
-            usage: BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
+        let block_size = output.texture.format().block_size(None).unwrap();
+        let texture_dim = output.texture.size();
+        let buffer_dim = texture_dim.physical_size(output.texture.format());
+        let padded_width = size_align(buffer_dim.width * block_size, COPY_BYTES_PER_ROW_ALIGNMENT);
 
-        encoder.copy_texture_to_buffer(
-            output.texture.as_image_copy(),
-            ImageCopyBuffer {
-                buffer: &buffer,
-                layout: ImageDataLayout {
-                    offset: 0,
-                    bytes_per_row: Some(
-                        (size / COPY_BYTES_PER_ROW_ALIGNMENT + 1) * COPY_BYTES_PER_ROW_ALIGNMENT,
-                    ),
-                    rows_per_image: None,
+        let screenshot_buffer = if setup.input_handler.key_active(KeyActions::Screenshot) {
+            let buffer = self.gpu.device.create_buffer(&BufferDescriptor {
+                label: None,
+                size: size_align(
+                    (padded_width * buffer_dim.height) as BufferAddress,
+                    COPY_BUFFER_ALIGNMENT,
+                ),
+                usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+
+            encoder.copy_texture_to_buffer(
+                output.texture.as_image_copy(),
+                ImageCopyBuffer {
+                    buffer: &buffer,
+                    layout: ImageDataLayout {
+                        offset: 0,
+                        bytes_per_row: Some(padded_width),
+                        rows_per_image: Some(buffer_dim.height),
+                    },
                 },
-            },
-            Default::default(),
-        );
+                buffer_dim,
+            );
 
-        let slice = buffer.slice(..);
-        slice.get_mapped_range()
-        // endif screenshot
-         */
+            Some(buffer)
+        } else {
+            None
+        };
 
         self.gpu
             .queue
             .submit(user_commands.into_iter().chain([encoder.finish()]));
+
+        if let Some(buffer) = screenshot_buffer {
+            {
+                let slice = buffer.slice(..);
+
+                let (tx, rx) = oneshot::channel();
+
+                slice.map_async(MapMode::Read, move |result| {
+                    tx.send(result).unwrap();
+                });
+                self.gpu.device.poll(Maintain::Wait);
+                rx.blocking_recv().unwrap().unwrap();
+
+                // TODO does screenshotting work on windows
+
+                let texture_width = texture_dim.width * block_size;
+
+                let data = slice.get_mapped_range();
+                let mut result = Vec::new();
+                for chunk in data.chunks(padded_width as usize) {
+                    match output.texture.format().remove_srgb_suffix() {
+                        TextureFormat::Rgba8Unorm => {
+                            result.extend(&chunk[..texture_width as usize]);
+                        }
+                        TextureFormat::Bgra8Unorm => {
+                            result.extend(
+                                chunk[..texture_width as usize]
+                                    .chunks_exact(4)
+                                    .flat_map(|v| [v[2], v[1], v[0], v[3]]),
+                            );
+                        }
+                        _ => {}
+                    }
+                }
+
+                if let Some(image) =
+                    RgbaImage::from_raw(texture_dim.width, texture_dim.height, result)
+                {
+                    let mut clipboard = Clipboard::new().unwrap();
+
+                    clipboard
+                        .set_image(ImageData {
+                            width: image.width() as usize,
+                            height: image.height() as usize,
+                            bytes: Cow::from(image.as_bytes()),
+                        })
+                        .unwrap();
+                }
+            }
+
+            buffer.unmap();
+        }
 
         output.present();
 

@@ -1,11 +1,12 @@
 use egui::{vec2, Rect, Response, Sense, Ui};
 
-use automancy::renderer::GuiInstances;
 use automancy_defs::math::Float;
 use automancy_defs::rendering::InstanceData;
 use automancy_resources::data::item::Item;
 use automancy_resources::data::stack::ItemStack;
 use automancy_resources::ResourceManager;
+
+use crate::renderer::GuiInstances;
 
 pub const SMALL_ITEM_ICON_SIZE: Float = 24.0;
 pub const MEDIUM_ITEM_ICON_SIZE: Float = 48.0;

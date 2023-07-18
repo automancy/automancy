@@ -17,7 +17,6 @@ use winit::event_loop::ControlFlow;
 use automancy::game::{GameMsg, PlaceTileResponse};
 use automancy::input;
 use automancy::input::KeyActions;
-use automancy::renderer::Renderer;
 use automancy::tile_entity::{TileEntityMsg, TileModifier};
 use automancy_defs::cgmath::{point2, vec3, EuclideanSpace};
 use automancy_defs::colors::ColorAdj;
@@ -34,6 +33,7 @@ use automancy_resources::data::Data;
 use crate::gui::{
     debug, error, info, menu, popup, tile_config, tile_selection, GuiState, PopupState,
 };
+use crate::renderer::Renderer;
 use crate::setup::GameSetup;
 
 /// Stores information that lives for the entire lifetime of the session, and is not dropped at the end of one event cycle or handled elsewhere.
@@ -238,7 +238,7 @@ pub fn on_event(
             }
         }
 
-        if setup.input_handler.key_active(&KeyActions::Escape) {
+        if setup.input_handler.key_active(KeyActions::Escape) {
             // one by one
             if loop_store.selected_id.take().is_none() && loop_store.linking_tile.take().is_none() {
                 if loop_store.switch_gui_state_when(&|s| s == GuiState::Ingame, GuiState::Paused) {
@@ -432,7 +432,7 @@ pub fn on_event(
             loop_store.initial_cursor_position = None;
         }
 
-        if setup.input_handler.control_held && setup.input_handler.key_active(&KeyActions::Undo) {
+        if setup.input_handler.control_held && setup.input_handler.key_active(KeyActions::Undo) {
             setup.game.send_message(GameMsg::Undo).unwrap();
         }
     }
@@ -462,7 +462,7 @@ pub fn on_event(
         gui.context
             .begin_frame(gui.state.take_egui_input(&renderer.gpu.window));
 
-        if setup.input_handler.key_active(&KeyActions::Debug) {
+        if setup.input_handler.key_active(KeyActions::Debug) {
             gui.context.set_debug_on_hover(true);
 
             debug::debugger(setup, &gui.context, runtime, setup.game.clone(), loop_store);
@@ -485,7 +485,7 @@ pub fn on_event(
                     menu::pause_menu(runtime, setup, &gui.context, loop_store, renderer);
                 }
                 GuiState::Ingame => {
-                    if !setup.input_handler.key_active(&KeyActions::HideGui) {
+                    if !setup.input_handler.key_active(KeyActions::HideGui) {
                         // tile_selections
                         tile_selection::tile_selections(
                             setup,
@@ -627,17 +627,13 @@ pub fn on_event(
 
         match renderer.render(
             runtime,
-            setup.resource_man.clone(),
-            setup.game.clone(),
-            setup.camera.get_pos(),
-            setup.camera.get_tile_coord(),
+            setup,
+            gui,
             matrix,
-            setup.camera.culling_range,
             &render_info,
             tile_tints,
             gui_instances,
             overlay,
-            gui,
         ) {
             Ok(_) => {}
             Err(SurfaceError::Lost) => renderer.gpu.resize(renderer.size),

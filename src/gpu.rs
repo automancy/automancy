@@ -818,7 +818,7 @@ impl Gpu {
         let size = window.inner_size();
 
         let config = SurfaceConfiguration {
-            usage: TextureUsages::RENDER_ATTACHMENT,
+            usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::COPY_SRC,
             format: surface_format,
             width: size.width,
             height: size.height,

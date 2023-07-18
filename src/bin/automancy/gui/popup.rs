@@ -4,12 +4,12 @@ use egui::{vec2, Align, Align2, Window};
 
 use automancy::game::GameMsg;
 use automancy::map::Map;
-use automancy::renderer::Renderer;
 use automancy_defs::gui::Gui;
 use automancy_defs::log;
 
 use crate::event::EventLoopStorage;
 use crate::gui::{default_frame, GuiState, PopupState};
+use crate::renderer::Renderer;
 use crate::setup::GameSetup;
 
 pub fn invalid_name_popup(setup: &GameSetup, gui: &mut Gui, loop_store: &mut EventLoopStorage) {

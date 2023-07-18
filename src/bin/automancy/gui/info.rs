@@ -4,7 +4,6 @@ use egui::{vec2, Align, Align2, Context, Margin, Window};
 use tokio::runtime::Runtime;
 
 use automancy::game::{GameMsg, TAKE_ITEM_ANIMATION_SPEED};
-use automancy::renderer::GuiInstances;
 use automancy::tile_entity::TileEntityMsg;
 use automancy_defs::colors;
 use automancy_defs::hashbrown::HashMap;
@@ -15,6 +14,7 @@ use automancy_resources::data::Data;
 use crate::event::EventLoopStorage;
 use crate::gui::default_frame;
 use crate::gui::item::{draw_item, paint_item, SMALL_ITEM_ICON_SIZE};
+use crate::renderer::GuiInstances;
 use crate::setup::GameSetup;
 
 /// Draws the info GUI.

@@ -8,17 +8,18 @@ use winit::window::{Fullscreen, Icon, WindowBuilder};
 use automancy::camera::Camera;
 use automancy::gpu::Gpu;
 use automancy::input::KeyActions;
-use automancy::renderer::Renderer;
 use automancy_defs::gui::init_gui;
 use automancy_defs::{log, window};
 
 use crate::event::{on_event, EventLoopStorage};
+use crate::renderer::Renderer;
 use crate::setup::GameSetup;
 
 pub static LOGO: &[u8] = include_bytes!("assets/logo.png");
 
 mod event;
 mod gui;
+pub mod renderer;
 mod setup;
 
 /// Gets the game icon.
@@ -70,7 +71,7 @@ fn main() {
     );
     log::info!("gui set up.");
 
-    let mut renderer = Renderer::new(setup.resource_man.clone(), gpu);
+    let mut renderer = Renderer::new(gpu);
 
     let mut storage = EventLoopStorage::default();
 
@@ -89,7 +90,7 @@ fn main() {
             .gpu
             .set_vsync(setup.options.graphics.fps_limit == 0.0);
 
-        setup.options.graphics.fullscreen = setup.input_handler.key_active(&KeyActions::Fullscreen);
+        setup.options.graphics.fullscreen = setup.input_handler.key_active(KeyActions::Fullscreen);
         if setup.options.graphics.fullscreen {
             renderer
                 .gpu

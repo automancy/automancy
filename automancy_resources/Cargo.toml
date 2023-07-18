@@ -9,11 +9,13 @@ edition = "2021"
 automancy_macros = { workspace = true }
 automancy_defs = { workspace = true }
 
-walkdir = "2.3.3"
-chrono = "0.4.24"
-kira = "0.8.3"
-
 serde_json = { workspace = true }
 serde = { workspace = true }
 
 rhai = { workspace = true }
+
+
+
+walkdir = "2.3.3"
+chrono = "0.4.24"
+kira = "0.8.3"

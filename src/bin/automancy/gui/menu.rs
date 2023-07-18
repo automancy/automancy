@@ -8,7 +8,6 @@ use winit::event_loop::ControlFlow;
 
 use automancy::game::GameMsg;
 use automancy::map::{Map, MAIN_MENU};
-use automancy::renderer::Renderer;
 use automancy::VERSION;
 use automancy_defs::gui::HyperlinkWidget;
 use automancy_defs::log;
@@ -16,6 +15,7 @@ use automancy_resources::{format, format_time};
 
 use crate::event::{shutdown_graceful, EventLoopStorage};
 use crate::gui::{default_frame, GuiState, PopupState};
+use crate::renderer::Renderer;
 use crate::setup::GameSetup;
 
 /// Draws the main menu.

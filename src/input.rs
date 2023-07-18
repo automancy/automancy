@@ -330,7 +330,7 @@ impl InputHandler {
         Some(())
     }
 
-    pub fn key_active(&self, action: &KeyActions) -> bool {
-        self.key_states.contains(action)
+    pub fn key_active(&self, action: KeyActions) -> bool {
+        self.key_states.contains(&action)
     }
 }

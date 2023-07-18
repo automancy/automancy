@@ -6,7 +6,6 @@ use ractor::ActorRef;
 use tokio::runtime::Runtime;
 
 use automancy::game::GameMsg;
-use automancy::renderer::GuiInstances;
 use automancy::tile_entity::TileEntityMsg;
 use automancy_defs::coord::{TileCoord, TileHex};
 use automancy_defs::hexagon_tiles::traits::HexDirection;
@@ -21,6 +20,7 @@ use automancy_resources::ResourceManager;
 use crate::event::EventLoopStorage;
 use crate::gui::item::{draw_item, MEDIUM_ITEM_ICON_SIZE, SMALL_ITEM_ICON_SIZE};
 use crate::gui::searchable_id;
+use crate::renderer::GuiInstances;
 use crate::setup::GameSetup;
 
 /// Draws the direction selector.

@@ -4,7 +4,6 @@ use egui::scroll_area::ScrollBarVisibility;
 use egui::{vec2, Context, CursorIcon, Margin, ScrollArea, Sense, TopBottomPanel, Ui, Vec2};
 use futures::channel::mpsc;
 
-use automancy::renderer::GuiInstances;
 use automancy::tile_entity::TileModifier;
 use automancy_defs::cgmath::{point3, vec3};
 use automancy_defs::hashbrown::HashMap;
@@ -14,6 +13,7 @@ use automancy_defs::math::{Matrix4, Vector3};
 use automancy_defs::rendering::InstanceData;
 
 use crate::gui::default_frame;
+use crate::renderer::GuiInstances;
 use crate::setup::GameSetup;
 
 /// Draws the tile selection.
