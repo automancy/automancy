@@ -249,14 +249,14 @@ dependencies = [
     "rand",
     "rayon",
     "rhai",
- "serde",
- "serde_json",
- "slice-group-by",
- "tokio",
- "toml",
- "wgpu",
- "winit",
- "zstd",
+    "serde",
+    "serde_json",
+    "slice-group-by",
+    "tokio",
+    "toml",
+    "wgpu",
+    "winit",
+    "zstd",
 ]
 
 [[package]]
@@ -3555,13 +3555,13 @@ dependencies = [
     "profiling",
     "raw-window-handle 0.5.2",
     "smallvec",
- "static_assertions",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
- "wgpu-core",
- "wgpu-hal",
- "wgpu-types",
+    "static_assertions",
+    "wasm-bindgen",
+    "wasm-bindgen-futures",
+    "web-sys",
+    "wgpu-core",
+    "wgpu-hal",
+    "wgpu-types",
 ]
 
 [[package]]
