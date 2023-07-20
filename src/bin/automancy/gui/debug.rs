@@ -1,4 +1,4 @@
-use egui::{Context, Margin, Window};
+use egui::{Context, Window};
 use ractor::ActorRef;
 use tokio::runtime::Runtime;
 
@@ -40,7 +40,7 @@ pub fn debugger(
     )
     .resizable(false)
     .default_width(600.0)
-    .frame(default_frame().inner_margin(Margin::same(10.0)))
+    .frame(default_frame())
     .show(context, |ui| {
         ui.label(format!("FPS: {fps:.1}"));
         //ui.label(format!("Device: {device_name} API {api_version}"));

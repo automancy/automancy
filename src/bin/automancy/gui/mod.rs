@@ -1,5 +1,5 @@
 use egui::epaint::Shadow;
-use egui::{Frame, Rounding, ScrollArea, Ui};
+use egui::{Frame, Margin, Rounding, ScrollArea, Ui};
 use fuse_rust::Fuse;
 
 use automancy_defs::colors;
@@ -11,6 +11,7 @@ pub mod error;
 pub mod info;
 pub mod item;
 pub mod menu;
+pub mod player;
 pub mod popup;
 pub mod tile_config;
 pub mod tile_selection;
@@ -23,6 +24,7 @@ pub enum GuiState {
     Options,
     Ingame,
     Paused,
+    Research,
 }
 
 /// The state of popups (which are on top of the main GUI), if any should be displayed.
@@ -43,6 +45,7 @@ pub fn default_frame() -> Frame {
             color: colors::DARK_GRAY.multiply(0.5).into(),
         })
         .rounding(Rounding::same(5.0))
+        .inner_margin(Margin::same(10.0))
 }
 
 /// Draws a search bar.

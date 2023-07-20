@@ -516,12 +516,12 @@ pub fn tile_config(
                     });
                     ui.add_space(MARGIN);
                 }
-
-                setup
-                    .game
-                    .send_message(GameMsg::SetDataMap(game_data))
-                    .unwrap();
             });
         }
+
+        setup
+            .game
+            .send_message(GameMsg::SetDataMap(game_data))
+            .unwrap();
     }
 }

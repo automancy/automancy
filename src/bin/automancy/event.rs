@@ -31,7 +31,7 @@ use automancy_resources::data::item::Item;
 use automancy_resources::data::Data;
 
 use crate::gui::{
-    debug, error, info, menu, popup, tile_config, tile_selection, GuiState, PopupState,
+    debug, error, info, menu, player, popup, tile_config, tile_selection, GuiState, PopupState,
 };
 use crate::renderer::Renderer;
 use crate::setup::GameSetup;
@@ -250,6 +250,10 @@ pub fn on_event(
                         .unwrap();
                 } else {
                     loop_store.switch_gui_state_when(&|s| s == GuiState::Paused, GuiState::Ingame);
+                }
+
+                if loop_store.gui_state == GuiState::Research {
+                    loop_store.return_gui_state();
                 }
             }
         }
@@ -472,31 +476,20 @@ pub fn on_event(
 
         if loop_store.popup_state == PopupState::None {
             match loop_store.gui_state {
-                GuiState::MainMenu => {
-                    menu::main_menu(setup, &gui.context, control_flow, loop_store)
-                }
-                GuiState::MapLoad => {
-                    menu::map_menu(setup, &gui.context, loop_store, renderer);
-                }
-                GuiState::Options => {
-                    menu::options_menu(setup, &gui.context, loop_store);
-                }
-                GuiState::Paused => {
-                    menu::pause_menu(runtime, setup, &gui.context, loop_store, renderer);
-                }
                 GuiState::Ingame => {
                     if !setup.input_handler.key_active(KeyActions::HideGui) {
-                        // tile_selections
-                        tile_selection::tile_selections(
-                            setup,
-                            &mut gui_instances,
-                            &gui.context,
-                            &loop_store.selected_tile_modifiers,
-                            selection_send,
-                        );
+                        if setup.input_handler.key_active(KeyActions::Player) {
+                            player::player(
+                                runtime,
+                                setup,
+                                loop_store,
+                                &mut gui_instances,
+                                &gui.context,
+                            );
+                        }
 
                         // tile_info
-                        info::info(runtime, setup, loop_store, &mut gui_instances, &gui.context);
+                        info::info(runtime, setup, &mut gui_instances, &gui.context);
 
                         // tile_config
                         tile_config::tile_config(
@@ -505,6 +498,15 @@ pub fn on_event(
                             loop_store,
                             &mut gui_instances,
                             &gui.context,
+                        );
+
+                        // tile_selections
+                        tile_selection::tile_selections(
+                            setup,
+                            &mut gui_instances,
+                            &gui.context,
+                            &loop_store.selected_tile_modifiers,
+                            selection_send,
                         );
 
                         if let Ok(Some(id)) = selection_recv.try_next() {
@@ -568,17 +570,30 @@ pub fn on_event(
                         }
                     }
                 }
+                GuiState::MainMenu => {
+                    menu::main_menu(setup, &gui.context, control_flow, loop_store)
+                }
+                GuiState::MapLoad => {
+                    menu::map_menu(setup, &gui.context, loop_store, renderer);
+                }
+                GuiState::Options => {
+                    menu::options_menu(setup, &gui.context, loop_store);
+                }
+                GuiState::Paused => {
+                    menu::pause_menu(runtime, setup, &gui.context, loop_store, renderer);
+                }
+                GuiState::Research => {}
             }
+        }
 
-            match loop_store.popup_state.clone() {
-                PopupState::None => {}
-                PopupState::MapCreate => popup::map_create_popup(setup, gui, loop_store, renderer),
-                PopupState::MapDeleteConfirmation(map_name) => {
-                    popup::map_delete_popup(setup, gui, loop_store, &map_name);
-                }
-                PopupState::InvalidName => {
-                    popup::invalid_name_popup(setup, gui, loop_store);
-                }
+        match loop_store.popup_state.clone() {
+            PopupState::None => {}
+            PopupState::MapCreate => popup::map_create_popup(setup, gui, loop_store, renderer),
+            PopupState::MapDeleteConfirmation(map_name) => {
+                popup::map_delete_popup(setup, gui, loop_store, &map_name);
+            }
+            PopupState::InvalidName => {
+                popup::invalid_name_popup(setup, gui, loop_store);
             }
         }
 

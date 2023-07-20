@@ -117,7 +117,7 @@ pub enum GameMsg {
     },
     /// take the tile entities
     TakeTileEntities(RpcReplyPort<TileEntities>),
-    /// get the map
+    /// take the map
     TakeMap(RpcReplyPort<Map>),
     SaveMap(Arc<ResourceManager>, RpcReplyPort<()>),
     MoveTiles(Vec<TileCoord>, TileCoord, bool),

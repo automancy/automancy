@@ -20,6 +20,7 @@ pub static DEFAULT_KEYMAP: &[(VirtualKeyCode, KeyAction)] = &[
     (VirtualKeyCode::F11, actions::FULLSCREEN),
     (VirtualKeyCode::F1, actions::HIDE_GUI),
     (VirtualKeyCode::F2, actions::SCREENSHOT),
+    (VirtualKeyCode::E, actions::PLAYER),
 ];
 
 #[derive(Serialize, Deserialize, Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
@@ -30,6 +31,7 @@ pub enum KeyActions {
     Fullscreen,
     Screenshot,
     HideGui,
+    Player,
 }
 
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -70,6 +72,10 @@ pub mod actions {
     };
     pub static HIDE_GUI: KeyAction = KeyAction {
         action: KeyActions::HideGui,
+        press_type: PressTypes::Toggle,
+    };
+    pub static PLAYER: KeyAction = KeyAction {
+        action: KeyActions::Player,
         press_type: PressTypes::Toggle,
     };
 }

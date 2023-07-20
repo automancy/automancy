@@ -1,6 +1,6 @@
 use std::fs;
 
-use egui::{vec2, Align, Align2, Window};
+use egui::{vec2, Align2, Window};
 
 use automancy::game::GameMsg;
 use automancy::map::Map;
@@ -20,8 +20,8 @@ pub fn invalid_name_popup(setup: &GameSetup, gui: &mut Gui, loop_store: &mut Eve
     .resizable(false)
     .collapsible(false)
     .default_width(250.0)
-    .anchor(Align2([Align::Center, Align::Center]), vec2(0.0, 0.0))
-    .frame(default_frame().inner_margin(10.0))
+    .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0))
+    .frame(default_frame())
     .show(&gui.context, |ui| {
         ui.label(
             setup.resource_man.translates.gui
@@ -54,8 +54,8 @@ pub fn map_delete_popup(
     .resizable(false)
     .collapsible(false)
     .default_width(250.0)
-    .anchor(Align2([Align::Center, Align::Center]), vec2(0.0, 0.0))
-    .frame(default_frame().inner_margin(10.0))
+    .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0))
+    .frame(default_frame())
     .show(&gui.context, |ui| {
         ui.label(
             setup.resource_man.translates.gui
@@ -103,8 +103,8 @@ pub fn map_create_popup(
     .resizable(false)
     .collapsible(false)
     .default_width(250.0)
-    .anchor(Align2([Align::Center, Align::Center]), vec2(0.0, 0.0))
-    .frame(default_frame().inner_margin(10.0))
+    .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0))
+    .frame(default_frame())
     .show(&gui.context, |ui| {
         ui.horizontal(|ui| {
             ui.label("Name:"); //TODO add this to translation

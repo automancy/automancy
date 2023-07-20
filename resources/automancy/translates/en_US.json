@@ -55,7 +55,9 @@
     },
     "gui": {
         "info": "Info",
+        "player_menu": "Player Menu",
         "player_inventory": "Player Inventory:",
+        "open_research": "Enter Research Menu",
         "tile_config": "Config",
         "tile_config_script": "Script: ",
         "tile_config_item": "Item: ",

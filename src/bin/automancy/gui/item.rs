@@ -41,7 +41,7 @@ pub fn draw_item(
     ui.horizontal(|ui| {
         ui.set_height(size);
 
-        ui.style_mut().spacing.item_spacing = vec2(size / 2.0, 0.0);
+        ui.style_mut().spacing.item_spacing = vec2(10.0, 0.0);
 
         if let Some(prefix) = prefix {
             ui.label(prefix);

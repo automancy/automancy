@@ -29,8 +29,8 @@ pub fn main_menu(
         .resizable(false)
         .title_bar(false)
         .default_width(175.0)
-        .anchor(Align2([Align::Center, Align::Center]), vec2(0.0, 0.0))
-        .frame(default_frame().inner_margin(10.0))
+        .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0))
+        .frame(default_frame())
         .show(context, |ui| {
             ui.with_layout(
                 ui.layout()
@@ -120,8 +120,8 @@ pub fn pause_menu(
         .resizable(false)
         .collapsible(false)
         .default_width(175.0)
-        .anchor(Align2([Align::Center, Align::Center]), vec2(0.0, 0.0))
-        .frame(default_frame().inner_margin(10.0))
+        .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0))
+        .frame(default_frame())
         .show(context, |ui| {
             ui.with_layout(
                 ui.layout()
@@ -200,8 +200,8 @@ pub fn map_menu(
     .resizable(false)
     .collapsible(false)
     .default_width(600.0)
-    .anchor(Align2([Align::Center, Align::Center]), vec2(0.0, 0.0))
-    .frame(default_frame().inner_margin(10.0))
+    .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0))
+    .frame(default_frame())
     .show(context, |ui| {
         ScrollArea::vertical().max_height(400.0).show(ui, |ui| {
             let mut dirty = false;
@@ -345,8 +345,8 @@ pub fn options_menu(setup: &mut GameSetup, context: &Context, loop_store: &mut E
     .resizable(false)
     .collapsible(false)
     .default_width(175.0)
-    .anchor(Align2([Align::Center, Align::Center]), vec2(0.0, 0.0))
-    .frame(default_frame().inner_margin(10.0))
+    .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0))
+    .frame(default_frame())
     .show(context, |ui| {
         ui.label("Not yet implemented");
         if ui
