@@ -17,7 +17,6 @@ use wgpu::{
     SurfaceError, TextureFormat, TextureViewDescriptor, COPY_BUFFER_ALIGNMENT,
     COPY_BYTES_PER_ROW_ALIGNMENT,
 };
-use winit::dpi::PhysicalSize;
 
 use automancy::game::{
     GameMsg, RenderInfo, RenderUnit, TickUnit, TransactionRecord, TRANSACTION_ANIMATION_SPEED,
@@ -44,9 +43,6 @@ use automancy_resources::data::{Data, DataMap};
 use crate::setup::GameSetup;
 
 pub struct Renderer {
-    pub resized: bool,
-    pub size: PhysicalSize<u32>,
-
     pub gpu: Gpu,
 
     data_cache: HashMap<TileCoord, DataMap>,
@@ -60,9 +56,6 @@ impl Renderer {
 
     pub fn new(gpu: Gpu) -> Self {
         Self {
-            resized: false,
-
-            size: gpu.window.inner_size(),
             gpu,
 
             data_cache: Default::default(),
@@ -121,14 +114,9 @@ impl Renderer {
         gui_instances: GuiInstances,
         mut overlay: Vec<Vertex>,
     ) -> Result<(), SurfaceError> {
-        if self.size.width == 0 || self.size.height == 0 {
-            return Ok(());
-        }
+        let size = self.gpu.window.inner_size();
 
-        if self.resized {
-            self.gpu.resize(self.size);
-            self.resized = false;
-
+        if size.width == 0 || size.height == 0 {
             return Ok(());
         }
 
@@ -327,7 +315,17 @@ impl Renderer {
         gui_instances: GuiInstances,
         overlay: Vec<Vertex>,
     ) -> Result<(), SurfaceError> {
+        let size = self.gpu.window.inner_size();
         let output = self.gpu.surface.get_current_texture()?;
+        {
+            let output_size = output.texture.size();
+
+            if output_size.width != size.width || output_size.height != size.height {
+                return Ok(());
+            }
+        }
+
+        let factor = gui.context.pixels_per_point();
 
         let mut encoder = self
             .gpu
@@ -376,8 +374,8 @@ impl Renderer {
                 game_pass.set_viewport(
                     0.0,
                     0.0,
-                    (self.size.width * UPSCALE_LEVEL) as Float,
-                    (self.size.height * UPSCALE_LEVEL) as Float,
+                    (size.width * UPSCALE_LEVEL) as Float,
+                    (size.height * UPSCALE_LEVEL) as Float,
                     1.0,
                     0.0,
                 );
@@ -431,8 +429,8 @@ impl Renderer {
                 extra_pass.set_viewport(
                     0.0,
                     0.0,
-                    (self.size.width * UPSCALE_LEVEL) as Float,
-                    (self.size.height * UPSCALE_LEVEL) as Float,
+                    (size.width * UPSCALE_LEVEL) as Float,
+                    (size.height * UPSCALE_LEVEL) as Float,
                     1.0,
                     0.0,
                 );
@@ -506,8 +504,8 @@ impl Renderer {
             let egui_out = gui.context.end_frame();
             let egui_primitives = gui.context.tessellate(egui_out.shapes);
             let egui_desc = ScreenDescriptor {
-                size_in_pixels: [self.size.width, self.size.height],
-                pixels_per_point: gui.context.pixels_per_point(),
+                size_in_pixels: [size.width, size.height],
+                pixels_per_point: factor,
             };
 
             let user_commands = {
@@ -601,8 +599,6 @@ impl Renderer {
             gui_pass.set_vertex_buffer(1, self.gpu.gui_instance_buffer.slice(..));
             gui_pass.set_index_buffer(self.gpu.index_buffer.slice(..), IndexFormat::Uint16);
 
-            let factor = gui.context.pixels_per_point();
-
             for (idx, (id, viewport, scissor, depth)) in draws.into_iter().enumerate() {
                 let idx = idx as u32;
 
@@ -621,8 +617,8 @@ impl Renderer {
                     gui_pass.set_viewport(
                         0.0,
                         0.0,
-                        (self.size.width * UPSCALE_LEVEL) as Float,
-                        (self.size.height * UPSCALE_LEVEL) as Float,
+                        (size.width * UPSCALE_LEVEL) as Float,
+                        (size.height * UPSCALE_LEVEL) as Float,
                         depth.0,
                         depth.1,
                     );
@@ -639,8 +635,8 @@ impl Renderer {
                     gui_pass.set_scissor_rect(
                         0,
                         0,
-                        self.size.width * UPSCALE_LEVEL,
-                        self.size.height * UPSCALE_LEVEL,
+                        size.width * UPSCALE_LEVEL,
+                        size.height * UPSCALE_LEVEL,
                     );
                 }
 

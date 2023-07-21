@@ -99,8 +99,7 @@ pub fn main_menu(
                         )
                         .clicked()
                     {
-                        shutdown_graceful(setup, control_flow)
-                            .expect("Failed to shutdown gracefully!");
+                        shutdown_graceful(setup, control_flow).unwrap();
                     };
                     ui.label(VERSION)
                 },

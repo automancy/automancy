@@ -2,6 +2,7 @@ use env_logger::Env;
 use expect_dialog::ExpectDialog;
 use futures::executor::block_on;
 use tokio::runtime::Runtime;
+use winit::dpi::PhysicalSize;
 use winit::event_loop::EventLoop;
 use winit::window::{Fullscreen, Icon, WindowBuilder};
 
@@ -42,6 +43,7 @@ fn main() {
     let window = WindowBuilder::new()
         .with_title("automancy")
         .with_window_icon(Some(get_icon()))
+        .with_min_inner_size(PhysicalSize::new(200, 200))
         .build(&event_loop)
         .expect_dialog("Failed to open window!");
 
@@ -76,7 +78,7 @@ fn main() {
     let mut storage = EventLoopStorage::default();
 
     event_loop.run(move |event, _, control_flow| {
-        let _ = on_event(
+        if let Err(e) = on_event(
             &runtime,
             &mut setup,
             &mut storage,
@@ -84,7 +86,9 @@ fn main() {
             &mut gui,
             event,
             control_flow,
-        );
+        ) {
+            log::warn!("Event loop returned error: {e}");
+        }
 
         renderer
             .gpu

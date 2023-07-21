@@ -138,7 +138,7 @@ pub fn shutdown_graceful(
     setup: &mut GameSetup,
     control_flow: &mut ControlFlow,
 ) -> Result<(), Box<dyn Error>> {
-    setup.game.send_message(GameMsg::StopTicking).unwrap();
+    setup.game.send_message(GameMsg::StopTicking)?;
 
     block_on(setup.game.call(
         |reply| GameMsg::SaveMap(setup.resource_man.clone(), reply),
@@ -178,6 +178,8 @@ pub fn on_event(
         } => {
             // game shutdown
             shutdown_graceful(setup, control_flow)?;
+
+            return Ok(());
         }
 
         Event::WindowEvent { event, .. } => {
@@ -187,13 +189,13 @@ pub fn on_event(
 
             match event {
                 WindowEvent::Resized(size) => {
-                    renderer.size = *size;
-                    renderer.resized = true;
+                    renderer.gpu.resize(*size);
+
                     return Ok(());
                 }
                 WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                    renderer.size = **new_inner_size;
-                    renderer.resized = true;
+                    renderer.gpu.resize(**new_inner_size);
+
                     return Ok(());
                 }
                 _ => {}
@@ -202,10 +204,6 @@ pub fn on_event(
 
         Event::DeviceEvent { event, .. } => {
             device_event = Some(event);
-        }
-
-        Event::MainEventsCleared => {
-            renderer.gpu.window.request_redraw();
         }
 
         _ => {}
@@ -246,7 +244,7 @@ pub fn on_event(
                         .block_on(setup.game.call(
                             |reply| GameMsg::SaveMap(setup.resource_man.clone(), reply),
                             None,
-                        ))
+                        ))?
                         .unwrap();
                 } else {
                     loop_store.switch_gui_state_when(&|s| s == GuiState::Paused, GuiState::Ingame);
@@ -274,8 +272,7 @@ pub fn on_event(
                                 reply: Some(reply),
                             },
                             None,
-                        ))
-                        .unwrap()
+                        ))?
                         .unwrap();
 
                     match response {
@@ -305,16 +302,14 @@ pub fn on_event(
                     .block_on(setup.game.call(
                         |reply| GameMsg::GetTile(setup.camera.pointing_at, reply),
                         None,
-                    ))
-                    .unwrap()
+                    ))?
                     .unwrap();
 
                 let tile_entity = runtime
                     .block_on(setup.game.call(
                         |reply| GameMsg::GetTileEntity(setup.camera.pointing_at, reply),
                         None,
-                    ))
-                    .unwrap()
+                    ))?
                     .unwrap();
 
                 if let Some((linked, tile_entity)) = tile
@@ -337,33 +332,23 @@ pub fn on_event(
                                     )
                                 },
                                 None,
-                            ))
-                            .unwrap()
+                            ))?
                             .unwrap();
 
                         if old.is_some() {
-                            tile_entity
-                                .send_message(TileEntityMsg::RemoveData(
-                                    resource_man.registry.data_ids.link,
-                                ))
-                                .unwrap();
+                            tile_entity.send_message(TileEntityMsg::RemoveData(
+                                resource_man.registry.data_ids.link,
+                            ))?;
 
-                            setup
-                                .audio_man
-                                .play(resource_man.audio["click"].clone())
-                                .unwrap(); // TODO click2
+                            setup.audio_man.play(resource_man.audio["click"].clone())?;
+                            // TODO click2
                         } else {
-                            tile_entity
-                                .send_message(TileEntityMsg::SetDataValue(
-                                    resource_man.registry.data_ids.link,
-                                    Data::Coord(linking_tile),
-                                ))
-                                .unwrap();
+                            tile_entity.send_message(TileEntityMsg::SetDataValue(
+                                resource_man.registry.data_ids.link,
+                                Data::Coord(linking_tile),
+                            ))?;
 
-                            setup
-                                .audio_man
-                                .play(resource_man.audio["click"].clone())
-                                .unwrap();
+                            setup.audio_man.play(resource_man.audio["click"].clone())?;
                             loop_store.linking_tile = None;
                         }
                     }
@@ -375,10 +360,7 @@ pub fn on_event(
                 loop_store.selected_tile_modifiers.insert(id, new % max);
                 loop_store.already_placed_at = None;
 
-                setup
-                    .audio_man
-                    .play(resource_man.audio["click"].clone())
-                    .unwrap();
+                setup.audio_man.play(resource_man.audio["click"].clone())?;
             } else if loop_store.config_open == Some(setup.camera.pointing_at) {
                 loop_store.config_open = None;
                 loop_store.filter_input.clear();
@@ -392,18 +374,15 @@ pub fn on_event(
                 if setup.input_handler.tertiary_pressed {
                     let direction = setup.camera.pointing_at - start;
 
-                    setup
-                        .game
-                        .send_message(GameMsg::MoveTiles(
-                            loop_store
-                                .selected_tiles
-                                .iter()
-                                .cloned()
-                                .collect::<Vec<_>>(),
-                            direction,
-                            true,
-                        ))
-                        .unwrap();
+                    setup.game.send_message(GameMsg::MoveTiles(
+                        loop_store
+                            .selected_tiles
+                            .iter()
+                            .cloned()
+                            .collect::<Vec<_>>(),
+                        direction,
+                        true,
+                    ))?;
 
                     let cap = loop_store.selected_tiles.capacity();
                     for selected in
@@ -415,17 +394,11 @@ pub fn on_event(
                     }
 
                     loop_store.initial_cursor_position = None;
-                    setup
-                        .audio_man
-                        .play(resource_man.audio["click"].clone()) // TODO click2
-                        .unwrap();
+                    setup.audio_man.play(resource_man.audio["click"].clone())?; // TODO click2
                 }
             } else if setup.input_handler.tertiary_pressed {
                 loop_store.initial_cursor_position = Some(setup.camera.pointing_at);
-                setup
-                    .audio_man
-                    .play(resource_man.audio["click"].clone())
-                    .unwrap();
+                setup.audio_man.play(resource_man.audio["click"].clone())?;
             }
 
             if loop_store.initial_cursor_position.is_none() {
@@ -437,11 +410,11 @@ pub fn on_event(
         }
 
         if setup.input_handler.control_held && setup.input_handler.key_active(KeyActions::Undo) {
-            setup.game.send_message(GameMsg::Undo).unwrap();
+            setup.game.send_message(GameMsg::Undo)?;
         }
     }
 
-    if event == Event::RedrawRequested(renderer.gpu.window.id()) {
+    if event == Event::MainEventsCleared {
         loop_store.frame_start = Instant::now();
 
         let mut gui_instances = vec![];
@@ -651,8 +624,8 @@ pub fn on_event(
             overlay,
         ) {
             Ok(_) => {}
-            Err(SurfaceError::Lost) => renderer.gpu.resize(renderer.size),
-            Err(SurfaceError::OutOfMemory) => shutdown_graceful(setup, control_flow).unwrap(),
+            Err(SurfaceError::Lost) => renderer.gpu.resize(renderer.gpu.window.inner_size()),
+            Err(SurfaceError::OutOfMemory) => shutdown_graceful(setup, control_flow)?,
             Err(e) => log::error!("{e:?}"),
         }
 
