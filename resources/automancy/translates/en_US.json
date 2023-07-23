@@ -42,16 +42,16 @@
         "grass": "Grass",
         "splitter": "Splitter",
         "void": "Resource® Void™",
-        "extractor": "Extractor",
-        "refinery": "Refinery",
+        "basic_extractor": "Basic Extractor",
+        "basic_refinery": "Basic Refinery",
+        "basic_still": "Basic Alchemical Still",
         "small_storage": "Small Storage",
         "sorter": "Item Sorter",
         "node": "Node",
         "master_node": "Master Node",
         "copper_mine": "Copper Mine",
         "coal_mine": "Coal Mine",
-        "merger": "Merger",
-        "still": "Alchemical Still"
+        "merger": "Merger"
     },
     "gui": {
         "info": "Info",

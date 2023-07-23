@@ -1,7 +1,7 @@
 {
-    "id": "extractor",
+    "id": "basic_extractor",
     "function": "machine",
-    "models": ["extractor"],
+    "models": ["basic_extractor"],
     "data": {
         "scripts": {
             "VecId": [

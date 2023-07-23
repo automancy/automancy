@@ -1,7 +1,7 @@
 {
-    "id": "refinery",
+    "id": "basic_refinery",
     "function": "machine",
-    "models": ["refinery"],
+    "models": ["basic_refinery"],
     "data": {
         "scripts": {
             "VecId": [

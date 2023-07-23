@@ -3,6 +3,8 @@ import bpy
 import sys
 import xml.etree.ElementTree as ET
 
+from frozendict import frozendict
+
 
 def main():
     src = sys.argv[-2]
@@ -16,9 +18,14 @@ def main():
     tree = ET.parse(src)
     root = tree.getroot()
 
-    ids = [path.attrib['id'] for path in root.iter('{http://www.w3.org/2000/svg}path')]
-    total = float(len(ids))
-    ids = dict(map(lambda e: (e[1], e[0]), enumerate(ids)))
+    paths = [tuple([path.attrib['id'],
+                    frozendict(map(lambda x: tuple(x.split(':')), path.attrib['style'].split(';')))
+                    ])
+             for path in root.iter('{http://www.w3.org/2000/svg}path')]
+    total = float(len(paths))
+    ids = dict(map(lambda e: (e[1][0], e[0]), enumerate(paths)))
+    styles = dict(map(lambda e: (e[0], e[1]), paths))
+
     offset = 1.0 - 1.0 / total
 
     bpy.ops.import_curve.svg(filepath=src)
@@ -27,9 +34,14 @@ def main():
 
     for obj in curves:
         mesh = bpy.data.meshes.new_from_object(obj)
+
         new_obj = bpy.data.objects.new(obj.name, mesh)
+
         new_obj.matrix_world = obj.matrix_world
         new_obj.delta_location.z = (offset + ids[obj.name] / total) / 24.0
+        alpha = styles[obj.name].get('fill-opacity')
+        if alpha:
+            new_obj.active_material.diffuse_color[3] = float(alpha)
         bpy.context.collection.objects.link(new_obj)
         bpy.data.objects.remove(obj)
 
@@ -52,12 +64,10 @@ def main():
 
         bpy.ops.mesh.beautify_fill()
         bpy.ops.mesh.tris_convert_to_quads(face_threshold=3.141593, shape_threshold=3.141593)
-        bpy.ops.mesh.remove_doubles(threshold=0.38)
+        bpy.ops.mesh.remove_doubles(threshold=0.25)
         bpy.ops.mesh.flip_normals()
 
         bmesh.update_edit_mesh(bpy.context.edit_object.data)
-
-        # bpy.ops.transform.mirror(orient_matrix=mathutils.Matrix.Rotation(3.141593, 3, 'Y'))
 
         bpy.ops.object.mode_set(mode='OBJECT')
 

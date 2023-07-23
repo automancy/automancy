@@ -1,7 +1,7 @@
 {
-    "id": "still",
+    "id": "basic_still",
     "function": "machine",
-    "models": ["still"],
+    "models": ["basic_still"],
     "data": {
         "scripts": {
             "VecId": [
