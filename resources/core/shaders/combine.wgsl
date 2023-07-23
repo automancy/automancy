@@ -19,7 +19,7 @@ struct VertexInput {
 
 struct VertexOutput {
     @builtin(position) pos: vec4<f32>,
-    @location(1) uv: vec2<f32>,
+    @location(0) uv: vec2<f32>,
 }
 
 @vertex
@@ -43,7 +43,7 @@ fn vs_main(
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let game = textureSample(game_texture, game_sampler, in.uv);
     let gui  = textureSample(gui_texture, gui_sampler, in.uv);
-    var egui = textureSample(egui_texture, egui_sampler, in.uv);
+    let egui = textureSample(egui_texture, egui_sampler, in.uv);
 
     return
         game * min(1.0 - gui.a, 1.0 - egui.a) +

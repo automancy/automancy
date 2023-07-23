@@ -55,8 +55,14 @@ fn vs_main(
     return out;
 }
 
+struct FragmentOutput {
+    @location(0) color: vec4<f32>,
+    @location(1) pos: vec4<f32>,
+    @location(2) normal: vec4<f32>,
+}
+
 @fragment
-fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+fn fs_main(in: VertexOutput) -> FragmentOutput {
     let light_color = ubo.light_color.rgb * 0.15;
     let light_dir = in.light_pos.xyz - in.model_pos;
 
@@ -72,8 +78,13 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let specular_intensity = dot(norm, halfway);
     let specular = light_color * specular_intensity;
 
-    var color = in.color;
-    color = vec4(color.rgb * (vec3(0.5) + diffuse + specular), color.a);
+    var out: FragmentOutput;
 
-    return color;
+    out.color = in.color;
+    out.color = vec4(out.color.rgb * (vec3(0.5) + diffuse + specular), out.color.a);
+
+    out.pos = vec4(in.model_pos, 1.0);
+    out.normal = vec4(in.normal, 1.0);
+
+    return out;
 }

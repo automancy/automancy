@@ -337,14 +337,32 @@ impl Renderer {
         {
             let mut game_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Game Render Pass"),
-                color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.game_texture.1,
-                    resolve_target: None,
-                    ops: Operations {
-                        load: LoadOp::Clear(Color::BLACK),
-                        store: true,
-                    },
-                })],
+                color_attachments: &[
+                    Some(RenderPassColorAttachment {
+                        view: &self.gpu.game_texture.1,
+                        resolve_target: None,
+                        ops: Operations {
+                            load: LoadOp::Clear(Color::BLACK),
+                            store: true,
+                        },
+                    }),
+                    Some(RenderPassColorAttachment {
+                        view: &self.gpu.game_position_texture.1,
+                        resolve_target: None,
+                        ops: Operations {
+                            load: LoadOp::Clear(Color::TRANSPARENT),
+                            store: true,
+                        },
+                    }),
+                    Some(RenderPassColorAttachment {
+                        view: &self.gpu.game_normal_texture.1,
+                        resolve_target: None,
+                        ops: Operations {
+                            load: LoadOp::Clear(Color::TRANSPARENT),
+                            store: true,
+                        },
+                    }),
+                ],
                 depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
                     view: &self.gpu.game_depth_texture.1,
                     depth_ops: Some(Operations {
@@ -392,14 +410,32 @@ impl Renderer {
         {
             let mut extra_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Game Render Pass"),
-                color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.game_texture.1,
-                    resolve_target: None,
-                    ops: Operations {
-                        load: LoadOp::Load,
-                        store: true,
-                    },
-                })],
+                color_attachments: &[
+                    Some(RenderPassColorAttachment {
+                        view: &self.gpu.game_texture.1,
+                        resolve_target: None,
+                        ops: Operations {
+                            load: LoadOp::Load,
+                            store: true,
+                        },
+                    }),
+                    Some(RenderPassColorAttachment {
+                        view: &self.gpu.game_position_texture.1,
+                        resolve_target: None,
+                        ops: Operations {
+                            load: LoadOp::Load,
+                            store: true,
+                        },
+                    }),
+                    Some(RenderPassColorAttachment {
+                        view: &self.gpu.game_normal_texture.1,
+                        resolve_target: None,
+                        ops: Operations {
+                            load: LoadOp::Load,
+                            store: true,
+                        },
+                    }),
+                ],
                 depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
                     view: &self.gpu.game_depth_texture.1,
                     depth_ops: Some(Operations {
@@ -551,14 +587,32 @@ impl Renderer {
         {
             let mut gui_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Gui Render Pass"),
-                color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.gui_texture.1,
-                    resolve_target: None,
-                    ops: Operations {
-                        load: LoadOp::Clear(Color::TRANSPARENT),
-                        store: true,
-                    },
-                })],
+                color_attachments: &[
+                    Some(RenderPassColorAttachment {
+                        view: &self.gpu.gui_texture.1,
+                        resolve_target: None,
+                        ops: Operations {
+                            load: LoadOp::Clear(Color::TRANSPARENT),
+                            store: true,
+                        },
+                    }),
+                    Some(RenderPassColorAttachment {
+                        view: &self.gpu.gui_position_texture.1,
+                        resolve_target: None,
+                        ops: Operations {
+                            load: LoadOp::Clear(Color::TRANSPARENT),
+                            store: true,
+                        },
+                    }),
+                    Some(RenderPassColorAttachment {
+                        view: &self.gpu.gui_normal_texture.1,
+                        resolve_target: None,
+                        ops: Operations {
+                            load: LoadOp::Clear(Color::TRANSPARENT),
+                            store: true,
+                        },
+                    }),
+                ],
                 depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
                     view: &self.gpu.gui_depth_texture.1,
                     depth_ops: Some(Operations {
