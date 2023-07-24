@@ -37,11 +37,11 @@ serde = { version = "1.0", features = ["derive"] }
 
 wgpu = { version = "0.16.2" }
 
+winit = { version = "0.28.6", features = ["x11", "serde"], default-features = false }
+
 egui = { version = "0.22.0", default-features = false, features = ["log"] }
 egui-wgpu = { version = "0.22.0" }
 egui-winit = "0.22.0"
-
-winit = { version = "0.28.6", features = ["serde"] }
 
 lazy_static = "1.4.0"
 

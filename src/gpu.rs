@@ -53,6 +53,13 @@ fn effects_shader(device: &Device, resource_man: &ResourceManager) -> ShaderModu
     })
 }
 
+fn ssao_shader(device: &Device, resource_man: &ResourceManager) -> ShaderModule {
+    device.create_shader_module(ShaderModuleDescriptor {
+        label: Some("SSAO Shader"),
+        source: ShaderSource::Wgsl(resource_man.shaders["ssao"].as_str().into()),
+    })
+}
+
 fn overlay_shader(device: &Device, resource_man: &ResourceManager) -> ShaderModule {
     device.create_shader_module(ShaderModuleDescriptor {
         label: Some("Overlay Shader"),
@@ -76,9 +83,8 @@ pub const GAME_POSITION_TEXTURE: Option<&str> = Some("Game Position Texture");
 pub const GAME_NORMAL_TEXTURE: Option<&str> = Some("Game Normal Texture");
 pub const GAME_DEPTH_TEXTURE: Option<&str> = Some("Game Depth Texture");
 pub const PROCESSED_GAME_TEXTURE: Option<&str> = Some("Processed Game Texture");
+pub const SSAO_GAME_TEXTURE: Option<&str> = Some("SSAO'd Game Texture");
 pub const GUI_TEXTURE: Option<&str> = Some("Gui Texture");
-pub const GUI_POSITION_TEXTURE: Option<&str> = Some("Gui Position Texture");
-pub const GUI_NORMAL_TEXTURE: Option<&str> = Some("Gui Normal Texture");
 pub const GUI_DEPTH_TEXTURE: Option<&str> = Some("Gui Depth Texture");
 pub const PROCESSED_GUI_TEXTURE: Option<&str> = Some("Processed Gui Texture");
 pub const EGUI_TEXTURE: Option<&str> = Some("Egui Texture");
@@ -92,6 +98,10 @@ pub const EXTRA_INSTANCE_BUFFER: Option<&str> = Some("Extra Instance Buffer");
 pub const GUI_INSTANCE_BUFFER: Option<&str> = Some("Gui Instance Buffer");
 
 pub const OVERLAY_VERTEX_BUFFER: Option<&str> = Some("Overlay Vertex Buffer");
+
+fn depth_texture_usages() -> TextureUsages {
+    TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING
+}
 
 pub fn indirect_instance(
     device: &Device,
@@ -194,9 +204,7 @@ pub fn create_surface_texture(
         sample_count: 1,
         dimension: TextureDimension::D2,
         format,
-        usage: TextureUsages::RENDER_ATTACHMENT
-            | TextureUsages::TEXTURE_BINDING
-            | TextureUsages::COPY_SRC,
+        usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
         view_formats: &[],
     });
 
@@ -208,17 +216,19 @@ pub fn create_surface_texture(
 pub fn create_texture(
     device: &Device,
     format: TextureFormat,
+    dimension: TextureDimension,
     size: Extent3d,
     label: Option<&str>,
+    usage: TextureUsages,
 ) -> (Texture, TextureView) {
     let texture = device.create_texture(&TextureDescriptor {
         label,
         size,
         mip_level_count: 1,
         sample_count: 1,
-        dimension: TextureDimension::D2,
+        dimension,
         format,
-        usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
+        usage,
         view_formats: &[],
     });
 
@@ -231,8 +241,10 @@ pub fn create_texture_init(
     device: &Device,
     queue: &Queue,
     format: TextureFormat,
+    dimension: TextureDimension,
     size: Extent3d,
     label: Option<&str>,
+    usage: TextureUsages,
     data: &[u8],
 ) -> (Texture, TextureView) {
     let texture = device.create_texture_with_data(
@@ -242,9 +254,9 @@ pub fn create_texture_init(
             size,
             mip_level_count: 1,
             sample_count: 1,
-            dimension: TextureDimension::D2,
+            dimension,
             format,
-            usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
+            usage,
             view_formats: &[],
         },
         data,
@@ -407,23 +419,11 @@ fn gui_setup(
         fragment: Some(FragmentState {
             module: shader,
             entry_point: "fs_main",
-            targets: &[
-                Some(ColorTargetState {
-                    format: config.format,
-                    blend: Some(BlendState::REPLACE),
-                    write_mask: ColorWrites::ALL,
-                }),
-                Some(ColorTargetState {
-                    format: TextureFormat::Rgba32Float,
-                    blend: None,
-                    write_mask: ColorWrites::ALL,
-                }),
-                Some(ColorTargetState {
-                    format: TextureFormat::Rgba8Unorm,
-                    blend: None,
-                    write_mask: ColorWrites::ALL,
-                }),
-            ],
+            targets: &[Some(ColorTargetState {
+                format: config.format,
+                blend: Some(BlendState::REPLACE),
+                write_mask: ColorWrites::ALL,
+            })],
         }),
         primitive: PrimitiveState {
             topology: PrimitiveTopology::TriangleList,
@@ -450,6 +450,84 @@ fn gui_setup(
 }
 
 fn make_effects_bind_group_layout(device: &Device) -> BindGroupLayout {
+    device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+        entries: &[BindGroupLayoutEntry {
+            binding: 0,
+            visibility: ShaderStages::FRAGMENT,
+            ty: BindingType::Texture {
+                sample_type: TextureSampleType::Float { filterable: false },
+                view_dimension: TextureViewDimension::D2,
+                multisampled: false,
+            },
+            count: None,
+        }],
+        label: Some("effects_bind_group_layout"),
+    })
+}
+
+fn make_effects_bind_group(
+    device: &Device,
+    bind_group_layout: &BindGroupLayout,
+    surface_texture: &TextureView,
+) -> BindGroup {
+    device.create_bind_group(&BindGroupDescriptor {
+        layout: bind_group_layout,
+        entries: &[BindGroupEntry {
+            binding: 0,
+            resource: BindingResource::TextureView(surface_texture),
+        }],
+        label: Some("effects_bind_group"),
+    })
+}
+
+fn effects_setup(
+    device: &Device,
+    config: &SurfaceConfiguration,
+    shader: &ShaderModule,
+    bind_group_layout: &BindGroupLayout,
+) -> RenderPipeline {
+    let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+        label: Some("Effects Render Pipeline Layout"),
+        bind_group_layouts: &[bind_group_layout],
+        push_constant_ranges: &[],
+    });
+
+    let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+        label: Some("Effects Render Pipeline"),
+        layout: Some(&pipeline_layout),
+        vertex: VertexState {
+            module: shader,
+            entry_point: "vs_main",
+            buffers: &[],
+        },
+        fragment: Some(FragmentState {
+            module: shader,
+            entry_point: "fs_main",
+            targets: &[Some(ColorTargetState {
+                format: config.format,
+                blend: Some(BlendState::REPLACE),
+                write_mask: ColorWrites::ALL,
+            })],
+        }),
+        primitive: PrimitiveState {
+            topology: PrimitiveTopology::TriangleList,
+            front_face: FrontFace::Ccw,
+            cull_mode: None,
+            ..Default::default()
+        },
+        depth_stencil: None,
+        multisample: MultisampleState {
+            count: 1,
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        },
+        multiview: None,
+    });
+
+    pipeline
+}
+
+fn make_ssao_bind_group_layout(device: &Device) -> BindGroupLayout {
     device.create_bind_group_layout(&BindGroupLayoutDescriptor {
         entries: &[
             BindGroupLayoutEntry {
@@ -508,20 +586,31 @@ fn make_effects_bind_group_layout(device: &Device) -> BindGroupLayout {
                 ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
                 count: None,
             },
+            BindGroupLayoutEntry {
+                binding: 6,
+                visibility: ShaderStages::FRAGMENT,
+                ty: BindingType::Texture {
+                    sample_type: TextureSampleType::Float { filterable: false },
+                    view_dimension: TextureViewDimension::D1,
+                    multisampled: false,
+                },
+                count: None,
+            },
         ],
-        label: Some("effects_bind_group_layout"),
+        label: Some("ssao_bind_group_layout"),
     })
 }
 
-fn make_effects_bind_group(
+fn make_ssao_bind_group(
     device: &Device,
     bind_group_layout: &BindGroupLayout,
     uniform_buffer: &Buffer,
     surface_texture: &TextureView,
     position_texture: &TextureView,
     normal_texture: &TextureView,
-    noise_texture: &TextureView,
-    noise_texture_sampler: &Sampler,
+    ssao_noise_texture: &TextureView,
+    ssao_noise_texture_sampler: &Sampler,
+    ssao_kernel_texture: &TextureView,
 ) -> BindGroup {
     device.create_bind_group(&BindGroupDescriptor {
         layout: bind_group_layout,
@@ -544,31 +633,35 @@ fn make_effects_bind_group(
             },
             BindGroupEntry {
                 binding: 4,
-                resource: BindingResource::TextureView(noise_texture),
+                resource: BindingResource::TextureView(ssao_noise_texture),
             },
             BindGroupEntry {
                 binding: 5,
-                resource: BindingResource::Sampler(noise_texture_sampler),
+                resource: BindingResource::Sampler(ssao_noise_texture_sampler),
+            },
+            BindGroupEntry {
+                binding: 6,
+                resource: BindingResource::TextureView(ssao_kernel_texture),
             },
         ],
         label: Some("effects_bind_group"),
     })
 }
 
-fn effects_setup(
+fn ssao_setup(
     device: &Device,
     config: &SurfaceConfiguration,
     shader: &ShaderModule,
     bind_group_layout: &BindGroupLayout,
 ) -> RenderPipeline {
     let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
-        label: Some("Effects Render Pipeline Layout"),
+        label: Some("SSAO Render Pipeline Layout"),
         bind_group_layouts: &[bind_group_layout],
         push_constant_ranges: &[],
     });
 
     let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
-        label: Some("Effects Render Pipeline"),
+        label: Some("SSAO Render Pipeline"),
         layout: Some(&pipeline_layout),
         vertex: VertexState {
             module: shader,
@@ -679,8 +772,8 @@ fn overlay_setup(
 fn make_combine_bind_group(
     device: &Device,
     bind_group_layout: &BindGroupLayout,
-    processed_game_texture: &TextureView,
-    processed_game_sampler: &Sampler,
+    ssao_game_texture: &TextureView,
+    ssao_game_sampler: &Sampler,
     gui_texture: &TextureView,
     gui_sampler: &Sampler,
     egui_texture: &TextureView,
@@ -691,11 +784,11 @@ fn make_combine_bind_group(
         entries: &[
             BindGroupEntry {
                 binding: 0,
-                resource: BindingResource::TextureView(processed_game_texture),
+                resource: BindingResource::TextureView(ssao_game_texture),
             },
             BindGroupEntry {
                 binding: 1,
-                resource: BindingResource::Sampler(processed_game_sampler),
+                resource: BindingResource::Sampler(ssao_game_sampler),
             },
             BindGroupEntry {
                 binding: 2,
@@ -782,11 +875,10 @@ pub struct Gpu {
     pub game_normal_texture: (Texture, TextureView),
     pub game_depth_texture: (Texture, TextureView),
     pub processed_game_texture: (Texture, TextureView),
-    pub processed_game_sampler: Sampler,
+    pub ssao_game_texture: (Texture, TextureView),
+    pub ssao_game_sampler: Sampler,
 
     pub gui_texture: (Texture, TextureView),
-    pub gui_position_texture: (Texture, TextureView),
-    pub gui_normal_texture: (Texture, TextureView),
     pub gui_depth_texture: (Texture, TextureView),
     pub processed_gui_texture: (Texture, TextureView),
     pub processed_gui_sampler: Sampler,
@@ -805,11 +897,17 @@ pub struct Gpu {
     pub extra_uniform_buffer: Buffer,
 
     pub effects_bind_group_layout: BindGroupLayout,
-    pub effects_noise_texture: (Texture, TextureView),
-    pub effects_noise_sampler: Sampler,
-    pub game_effects_bind_group: BindGroup,
-    pub gui_effects_bind_group: BindGroup,
     pub effects_pipeline: RenderPipeline,
+    pub ssao_bind_group_layout: BindGroupLayout,
+    pub ssao_pipeline: RenderPipeline,
+
+    pub ssao_noise_texture: (Texture, TextureView),
+    pub ssao_noise_sampler: Sampler,
+    pub ssao_kernel_texture: (Texture, TextureView),
+
+    pub game_effects_bind_group: BindGroup,
+    pub game_ssao_bind_group: BindGroup,
+    pub gui_effects_bind_group: BindGroup,
 
     pub gui_instance_buffer: Buffer,
     pub gui_uniform_buffer: Buffer,
@@ -864,31 +962,33 @@ impl Gpu {
             extent,
             GAME_NORMAL_TEXTURE,
         );
-        self.game_depth_texture =
-            create_texture(&self.device, DEPTH_FORMAT, extent, GAME_DEPTH_TEXTURE);
+        self.game_depth_texture = create_texture(
+            &self.device,
+            DEPTH_FORMAT,
+            TextureDimension::D2,
+            extent,
+            GAME_DEPTH_TEXTURE,
+            depth_texture_usages(),
+        );
         self.processed_game_texture = create_surface_texture(
             &self.device,
             self.config.format,
             extent,
             PROCESSED_GAME_TEXTURE,
         );
+        self.ssao_game_texture =
+            create_surface_texture(&self.device, self.config.format, extent, SSAO_GAME_TEXTURE);
 
         self.gui_texture =
             create_surface_texture(&self.device, self.config.format, extent, GUI_TEXTURE);
-        self.gui_position_texture = create_surface_texture(
+        self.gui_depth_texture = create_texture(
             &self.device,
-            TextureFormat::Rgba32Float,
+            DEPTH_FORMAT,
+            TextureDimension::D2,
             extent,
-            GUI_POSITION_TEXTURE,
+            GUI_DEPTH_TEXTURE,
+            depth_texture_usages(),
         );
-        self.gui_normal_texture = create_surface_texture(
-            &self.device,
-            TextureFormat::Rgba8Unorm,
-            extent,
-            GUI_NORMAL_TEXTURE,
-        );
-        self.gui_depth_texture =
-            create_texture(&self.device, DEPTH_FORMAT, extent, GUI_DEPTH_TEXTURE);
         self.processed_gui_texture = create_surface_texture(
             &self.device,
             self.config.format,
@@ -905,29 +1005,30 @@ impl Gpu {
         self.game_effects_bind_group = make_effects_bind_group(
             &self.device,
             &self.effects_bind_group_layout,
-            &self.game_uniform_buffer,
             &self.game_texture.1,
+        );
+        self.game_ssao_bind_group = make_ssao_bind_group(
+            &self.device,
+            &self.ssao_bind_group_layout,
+            &self.game_uniform_buffer,
+            &self.processed_game_texture.1,
             &self.game_position_texture.1,
             &self.game_normal_texture.1,
-            &self.effects_noise_texture.1,
-            &self.effects_noise_sampler,
+            &self.ssao_noise_texture.1,
+            &self.ssao_noise_sampler,
+            &self.ssao_kernel_texture.1,
         );
         self.gui_effects_bind_group = make_effects_bind_group(
             &self.device,
             &self.effects_bind_group_layout,
-            &self.gui_uniform_buffer,
             &self.gui_texture.1,
-            &self.gui_position_texture.1,
-            &self.gui_normal_texture.1,
-            &self.effects_noise_texture.1,
-            &self.effects_noise_sampler,
         );
 
         self.combine_bind_group = make_combine_bind_group(
             &self.device,
             &self.combine_bind_group_layout,
-            &self.processed_game_texture.1,
-            &self.processed_game_sampler,
+            &self.ssao_game_texture.1,
+            &self.ssao_game_sampler,
             &self.processed_gui_texture.1,
             &self.processed_gui_sampler,
             &self.egui_texture.1,
@@ -1028,25 +1129,30 @@ impl Gpu {
             extent,
             GAME_NORMAL_TEXTURE,
         );
-        let game_depth_texture = create_texture(&device, DEPTH_FORMAT, extent, GAME_DEPTH_TEXTURE);
+        let game_depth_texture = create_texture(
+            &device,
+            DEPTH_FORMAT,
+            TextureDimension::D2,
+            extent,
+            GAME_DEPTH_TEXTURE,
+            depth_texture_usages(),
+        );
         let processed_game_texture =
             create_surface_texture(&device, config.format, extent, PROCESSED_GAME_TEXTURE);
-        let processed_game_sampler = device.create_sampler(&sampler_desc);
+        let ssao_game_texture =
+            create_surface_texture(&device, config.format, extent, SSAO_GAME_TEXTURE);
+        let ssao_game_sampler = device.create_sampler(&sampler_desc);
 
         let gui_texture = create_surface_texture(&device, config.format, extent, GUI_TEXTURE);
-        let gui_position_texture = create_surface_texture(
+        let gui_depth_texture = create_texture(
             &device,
-            TextureFormat::Rgba32Float,
+            DEPTH_FORMAT,
+            TextureDimension::D2,
             extent,
-            GUI_POSITION_TEXTURE,
+            GUI_DEPTH_TEXTURE,
+            depth_texture_usages(),
         );
-        let gui_normal_texture = create_surface_texture(
-            &device,
-            TextureFormat::Rgba8Unorm,
-            extent,
-            GUI_NORMAL_TEXTURE,
-        );
-        let gui_depth_texture = create_texture(&device, DEPTH_FORMAT, extent, GUI_DEPTH_TEXTURE);
+
         let processed_gui_texture =
             create_surface_texture(&device, config.format, extent, PROCESSED_GUI_TEXTURE);
         let processed_gui_sampler = device.create_sampler(&sampler_desc);
@@ -1101,9 +1207,9 @@ impl Gpu {
         let (overlay_uniform_buffer, overlay_bind_group, overlay_pipeline) =
             overlay_setup(&device, &config, &overlay_shader(&device, resource_man));
 
-        let effects_bind_group_layout = make_effects_bind_group_layout(&device);
+        let ssao_bind_group_layout = make_ssao_bind_group_layout(&device);
 
-        let noise_texture_data: [[u8; 4]; 16] = [
+        let ssao_noise_texture_data: [[u8; 4]; 16] = [
             [163, 180, 0, 0],
             [32, 55, 0, 0],
             [127, 235, 0, 0],
@@ -1121,19 +1227,21 @@ impl Gpu {
             [202, 33, 0, 0],
             [185, 156, 0, 0],
         ];
-        let effects_noise_texture = create_texture_init(
+        let ssao_noise_texture = create_texture_init(
             &device,
             &queue,
             TextureFormat::Rgba8Unorm,
+            TextureDimension::D2,
             Extent3d {
                 width: 4,
                 height: 4,
                 depth_or_array_layers: 1,
             },
             None,
-            bytemuck::cast_slice(noise_texture_data.as_slice()),
+            TextureUsages::TEXTURE_BINDING,
+            bytemuck::cast_slice(ssao_noise_texture_data.as_slice()),
         );
-        let effects_noise_sampler = device.create_sampler(&SamplerDescriptor {
+        let ssao_noise_sampler = device.create_sampler(&SamplerDescriptor {
             address_mode_u: AddressMode::Repeat,
             address_mode_v: AddressMode::Repeat,
             address_mode_w: AddressMode::Repeat,
@@ -1142,26 +1250,79 @@ impl Gpu {
             ..Default::default()
         });
 
-        let game_effects_bind_group = make_effects_bind_group(
+        let ssao_kernel_texture_data: [[f32; 4]; 32] = [
+            [0.07254281, 0.046630185, 0.05062774, 0.0],
+            [-0.017220352, 0.030811489, 0.09356341, 0.0],
+            [-0.02349218, 0.081091926, 0.05359307, 0.0],
+            [0.0836956, 0.046090826, 0.029507339, 0.0],
+            [-0.04077291, -0.08355418, 0.036827564, 0.0],
+            [0.09710225, 0.023125265, 0.0060314154, 0.0],
+            [-0.0471211, 0.08602538, 0.01947401, 0.0],
+            [-0.08569633, -0.026361603, 0.044285472, 0.0],
+            [0.014087995, -0.093629174, 0.03217306, 0.0],
+            [0.09513675, -0.027729312, 0.013419534, 0.0],
+            [0.033061486, 0.061321355, 0.071740024, 0.0],
+            [0.046657324, -0.054629005, 0.069561236, 0.0],
+            [0.01876323, -0.08833922, 0.042943276, 0.0],
+            [-0.096585125, 0.0039059184, 0.0256136, 0.0],
+            [-0.05166439, 0.08561063, 0.0012688864, 0.0],
+            [0.074472204, -0.016265828, 0.064724915, 0.0],
+            [0.029056165, 0.029084323, 0.09115833, 0.0],
+            [-0.09785393, -0.01334513, 0.015700815, 0.0],
+            [0.09313943, -0.03243034, 0.016532337, 0.0],
+            [0.09949589, 0.0014346336, 0.009925237, 0.0],
+            [0.021845676, -0.047324594, 0.08534137, 0.0],
+            [0.028870692, -0.06568622, 0.069654904, 0.0],
+            [0.051971108, 0.030145064, 0.07993922, 0.0],
+            [0.056093276, -0.06651198, 0.049292, 0.0],
+            [-0.041101094, -0.0038475764, 0.09108182, 0.0],
+            [-0.021047466, -0.061807156, 0.07574219, 0.0],
+            [0.06053097, 0.07670124, 0.021281952, 0.0],
+            [-0.03145137, -0.08563602, 0.040954646, 0.0],
+            [0.0805923, 0.026875192, 0.052750416, 0.0],
+            [-0.008007409, -0.028499067, 0.095517986, 0.0],
+            [-0.042221442, 0.09053062, 0.0046429625, 0.0],
+            [0.010390808, 0.060059454, 0.07927733, 0.0],
+        ];
+        let ssao_kernel_texture = create_texture_init(
             &device,
-            &effects_bind_group_layout,
+            &queue,
+            TextureFormat::Rgba32Float,
+            TextureDimension::D1,
+            Extent3d {
+                width: 32,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+            None,
+            TextureUsages::TEXTURE_BINDING,
+            bytemuck::cast_slice(ssao_kernel_texture_data.as_slice()),
+        );
+        let ssao_pipeline = ssao_setup(
+            &device,
+            &config,
+            &ssao_shader(&device, resource_man),
+            &ssao_bind_group_layout,
+        );
+
+        let game_ssao_bind_group = make_ssao_bind_group(
+            &device,
+            &ssao_bind_group_layout,
             &game_uniform_buffer,
-            &game_texture.1,
+            &processed_game_texture.1,
             &game_position_texture.1,
             &game_normal_texture.1,
-            &effects_noise_texture.1,
-            &effects_noise_sampler,
+            &ssao_noise_texture.1,
+            &ssao_noise_sampler,
+            &ssao_kernel_texture.1,
         );
-        let gui_effects_bind_group = make_effects_bind_group(
-            &device,
-            &effects_bind_group_layout,
-            &gui_uniform_buffer,
-            &gui_texture.1,
-            &gui_position_texture.1,
-            &gui_normal_texture.1,
-            &effects_noise_texture.1,
-            &effects_noise_sampler,
-        );
+
+        let effects_bind_group_layout = make_effects_bind_group_layout(&device);
+
+        let game_effects_bind_group =
+            make_effects_bind_group(&device, &effects_bind_group_layout, &game_texture.1);
+        let gui_effects_bind_group =
+            make_effects_bind_group(&device, &effects_bind_group_layout, &gui_texture.1);
 
         let effects_pipeline = effects_setup(
             &device,
@@ -1228,8 +1389,8 @@ impl Gpu {
         let combine_bind_group = make_combine_bind_group(
             &device,
             &combine_bind_group_layout,
-            &processed_game_texture.1,
-            &processed_game_sampler,
+            &ssao_game_texture.1,
+            &ssao_game_sampler,
             &processed_gui_texture.1,
             &processed_gui_sampler,
             &egui_texture.1,
@@ -1261,11 +1422,10 @@ impl Gpu {
             game_normal_texture,
             game_depth_texture,
             processed_game_texture,
-            processed_game_sampler,
+            ssao_game_texture,
+            ssao_game_sampler,
 
             gui_texture,
-            gui_position_texture,
-            gui_normal_texture,
             gui_depth_texture,
             processed_gui_texture,
             processed_gui_sampler,
@@ -1284,11 +1444,17 @@ impl Gpu {
             extra_uniform_buffer,
 
             effects_bind_group_layout,
-            effects_noise_texture,
-            effects_noise_sampler,
-            game_effects_bind_group,
-            gui_effects_bind_group,
             effects_pipeline,
+            ssao_bind_group_layout,
+            ssao_pipeline,
+
+            ssao_noise_texture,
+            ssao_noise_sampler,
+            ssao_kernel_texture,
+
+            game_effects_bind_group,
+            game_ssao_bind_group,
+            gui_effects_bind_group,
 
             gui_instance_buffer,
             gui_uniform_buffer,

@@ -100,7 +100,7 @@ impl Renderer {
 
         let (b, w1) = math::hex_to_normalized((width, height), camera_pos, link);
 
-        overlay.extend_from_slice(&make_line(a, b, (w0 + w1) / 2.0, colors::RED));
+        overlay.extend_from_slice(&make_line(a, b, (w0 + w1) * 0.5, colors::RED));
     }
 
     pub fn render(
@@ -373,12 +373,6 @@ impl Renderer {
                 }),
             });
 
-            self.gpu.queue.write_buffer(
-                &self.gpu.game_uniform_buffer,
-                0,
-                bytemuck::cast_slice(&[GameUBO::new(matrix)]),
-            );
-
             let count = gpu::indirect_instance(
                 &self.gpu.device,
                 &self.gpu.queue,
@@ -389,6 +383,12 @@ impl Renderer {
             );
 
             if count > 0 {
+                self.gpu.queue.write_buffer(
+                    &self.gpu.game_uniform_buffer,
+                    0,
+                    bytemuck::cast_slice(&[GameUBO::new(matrix)]),
+                );
+
                 game_pass.set_viewport(
                     0.0,
                     0.0,
@@ -446,12 +446,6 @@ impl Renderer {
                 }),
             });
 
-            self.gpu.queue.write_buffer(
-                &self.gpu.extra_uniform_buffer,
-                0,
-                bytemuck::cast_slice(&[GameUBO::new(matrix)]),
-            );
-
             let count = gpu::indirect_instance(
                 &self.gpu.device,
                 &self.gpu.queue,
@@ -462,6 +456,12 @@ impl Renderer {
             );
 
             if count > 0 {
+                self.gpu.queue.write_buffer(
+                    &self.gpu.extra_uniform_buffer,
+                    0,
+                    bytemuck::cast_slice(&[GameUBO::new(matrix)]),
+                );
+
                 extra_pass.set_viewport(
                     0.0,
                     0.0,
@@ -482,7 +482,7 @@ impl Renderer {
 
         {
             let mut effects_pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("Effects Render Pass"),
+                label: Some("Game Effects Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
                     view: &self.gpu.processed_game_texture.1,
                     resolve_target: None,
@@ -497,14 +497,14 @@ impl Renderer {
             effects_pass.set_pipeline(&self.gpu.effects_pipeline);
             effects_pass.set_bind_group(0, &self.gpu.game_effects_bind_group, &[]);
 
-            effects_pass.draw(0..4, 0..1);
+            effects_pass.draw(0..3, 0..1);
         }
 
-        if !overlay.is_empty() {
-            let mut overlay_pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("Overlay Render Pass"),
+        {
+            let mut ssao_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some("Game SSAO Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.processed_game_texture.1,
+                    view: &self.gpu.ssao_game_texture.1,
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Load,
@@ -514,26 +514,48 @@ impl Renderer {
                 depth_stencil_attachment: None,
             });
 
-            self.gpu.queue.write_buffer(
-                &self.gpu.overlay_uniform_buffer,
-                0,
-                bytemuck::cast_slice(&[OverlayUBO::new(Matrix4::identity())]),
-            );
-            gpu::create_or_write_buffer(
-                &self.gpu.device,
-                &self.gpu.queue,
-                &mut self.gpu.overlay_vertex_buffer,
-                OVERLAY_VERTEX_BUFFER,
-                bytemuck::cast_slice(overlay.as_slice()),
-            );
+            ssao_pass.set_pipeline(&self.gpu.ssao_pipeline);
+            ssao_pass.set_bind_group(0, &self.gpu.game_ssao_bind_group, &[]);
 
-            let vertex_count = overlay.len() as u32;
+            ssao_pass.draw(0..3, 0..1);
+        }
 
-            overlay_pass.set_pipeline(&self.gpu.overlay_pipeline);
-            overlay_pass.set_bind_group(0, &self.gpu.overlay_bind_group, &[]);
-            overlay_pass.set_vertex_buffer(0, self.gpu.overlay_vertex_buffer.slice(..));
+        {
+            let mut overlay_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some("Overlay Render Pass"),
+                color_attachments: &[Some(RenderPassColorAttachment {
+                    view: &self.gpu.ssao_game_texture.1,
+                    resolve_target: None,
+                    ops: Operations {
+                        load: LoadOp::Load,
+                        store: true,
+                    },
+                })],
+                depth_stencil_attachment: None,
+            });
 
-            overlay_pass.draw(0..vertex_count, 0..1);
+            if !overlay.is_empty() {
+                self.gpu.queue.write_buffer(
+                    &self.gpu.overlay_uniform_buffer,
+                    0,
+                    bytemuck::cast_slice(&[OverlayUBO::new(Matrix4::identity())]),
+                );
+                gpu::create_or_write_buffer(
+                    &self.gpu.device,
+                    &self.gpu.queue,
+                    &mut self.gpu.overlay_vertex_buffer,
+                    OVERLAY_VERTEX_BUFFER,
+                    bytemuck::cast_slice(overlay.as_slice()),
+                );
+
+                let vertex_count = overlay.len() as u32;
+
+                overlay_pass.set_pipeline(&self.gpu.overlay_pipeline);
+                overlay_pass.set_bind_group(0, &self.gpu.overlay_bind_group, &[]);
+                overlay_pass.set_vertex_buffer(0, self.gpu.overlay_vertex_buffer.slice(..));
+
+                overlay_pass.draw(0..vertex_count, 0..1);
+            }
         }
 
         let user_commands = {
@@ -587,32 +609,14 @@ impl Renderer {
         {
             let mut gui_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Gui Render Pass"),
-                color_attachments: &[
-                    Some(RenderPassColorAttachment {
-                        view: &self.gpu.gui_texture.1,
-                        resolve_target: None,
-                        ops: Operations {
-                            load: LoadOp::Clear(Color::TRANSPARENT),
-                            store: true,
-                        },
-                    }),
-                    Some(RenderPassColorAttachment {
-                        view: &self.gpu.gui_position_texture.1,
-                        resolve_target: None,
-                        ops: Operations {
-                            load: LoadOp::Clear(Color::TRANSPARENT),
-                            store: true,
-                        },
-                    }),
-                    Some(RenderPassColorAttachment {
-                        view: &self.gpu.gui_normal_texture.1,
-                        resolve_target: None,
-                        ops: Operations {
-                            load: LoadOp::Clear(Color::TRANSPARENT),
-                            store: true,
-                        },
-                    }),
-                ],
+                color_attachments: &[Some(RenderPassColorAttachment {
+                    view: &self.gpu.gui_texture.1,
+                    resolve_target: None,
+                    ops: Operations {
+                        load: LoadOp::Clear(Color::TRANSPARENT),
+                        store: true,
+                    },
+                })],
                 depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
                     view: &self.gpu.gui_depth_texture.1,
                     depth_ops: Some(Operations {
@@ -633,78 +637,80 @@ impl Renderer {
                 })
                 .unzip();
 
-            self.gpu.queue.write_buffer(
-                &self.gpu.gui_uniform_buffer,
-                0,
-                bytemuck::cast_slice(&[GameUBO::default()]),
-            );
+            if !draws.is_empty() {
+                self.gpu.queue.write_buffer(
+                    &self.gpu.gui_uniform_buffer,
+                    0,
+                    bytemuck::cast_slice(&[GameUBO::default()]),
+                );
 
-            gpu::create_or_write_buffer(
-                &self.gpu.device,
-                &self.gpu.queue,
-                &mut self.gpu.gui_instance_buffer,
-                GUI_INSTANCE_BUFFER,
-                bytemuck::cast_slice(instances.as_slice()),
-            );
+                gpu::create_or_write_buffer(
+                    &self.gpu.device,
+                    &self.gpu.queue,
+                    &mut self.gpu.gui_instance_buffer,
+                    GUI_INSTANCE_BUFFER,
+                    bytemuck::cast_slice(instances.as_slice()),
+                );
 
-            gui_pass.set_pipeline(&self.gpu.gui_pipeline);
-            gui_pass.set_bind_group(0, &self.gpu.gui_bind_group, &[]);
-            gui_pass.set_vertex_buffer(0, self.gpu.vertex_buffer.slice(..));
-            gui_pass.set_vertex_buffer(1, self.gpu.gui_instance_buffer.slice(..));
-            gui_pass.set_index_buffer(self.gpu.index_buffer.slice(..), IndexFormat::Uint16);
+                gui_pass.set_pipeline(&self.gpu.gui_pipeline);
+                gui_pass.set_bind_group(0, &self.gpu.gui_bind_group, &[]);
+                gui_pass.set_vertex_buffer(0, self.gpu.vertex_buffer.slice(..));
+                gui_pass.set_vertex_buffer(1, self.gpu.gui_instance_buffer.slice(..));
+                gui_pass.set_index_buffer(self.gpu.index_buffer.slice(..), IndexFormat::Uint16);
 
-            for (idx, (id, viewport, scissor, depth)) in draws.into_iter().enumerate() {
-                let idx = idx as u32;
+                for (idx, (id, viewport, scissor, depth)) in draws.into_iter().enumerate() {
+                    let idx = idx as u32;
 
-                let depth = depth.unwrap_or((1.0, 0.0));
+                    let depth = depth.unwrap_or((1.0, 0.0));
 
-                if let Some(viewport) = viewport {
-                    gui_pass.set_viewport(
-                        viewport.left() * factor * UPSCALE_LEVEL as Float,
-                        viewport.top() * factor * UPSCALE_LEVEL as Float,
-                        viewport.width() * factor * UPSCALE_LEVEL as Float,
-                        viewport.height() * factor * UPSCALE_LEVEL as Float,
-                        depth.0,
-                        depth.1,
-                    );
-                } else {
-                    gui_pass.set_viewport(
-                        0.0,
-                        0.0,
-                        (size.width * UPSCALE_LEVEL) as Float,
-                        (size.height * UPSCALE_LEVEL) as Float,
-                        depth.0,
-                        depth.1,
-                    );
+                    if let Some(viewport) = viewport {
+                        gui_pass.set_viewport(
+                            viewport.left() * factor * UPSCALE_LEVEL as Float,
+                            viewport.top() * factor * UPSCALE_LEVEL as Float,
+                            viewport.width() * factor * UPSCALE_LEVEL as Float,
+                            viewport.height() * factor * UPSCALE_LEVEL as Float,
+                            depth.0,
+                            depth.1,
+                        );
+                    } else {
+                        gui_pass.set_viewport(
+                            0.0,
+                            0.0,
+                            (size.width * UPSCALE_LEVEL) as Float,
+                            (size.height * UPSCALE_LEVEL) as Float,
+                            depth.0,
+                            depth.1,
+                        );
+                    }
+
+                    if let Some(scissor) = scissor {
+                        gui_pass.set_scissor_rect(
+                            (scissor.left() * factor) as u32 * UPSCALE_LEVEL,
+                            (scissor.top() * factor) as u32 * UPSCALE_LEVEL,
+                            (scissor.width() * factor) as u32 * UPSCALE_LEVEL,
+                            (scissor.height() * factor) as u32 * UPSCALE_LEVEL,
+                        );
+                    } else {
+                        gui_pass.set_scissor_rect(
+                            0,
+                            0,
+                            size.width * UPSCALE_LEVEL,
+                            size.height * UPSCALE_LEVEL,
+                        );
+                    }
+
+                    let index_range = setup.resource_man.index_ranges[&id];
+
+                    let a = index_range.offset;
+                    let b = a + index_range.size;
+                    gui_pass.draw_indexed(a..b, 0, idx..(idx + 1));
                 }
-
-                if let Some(scissor) = scissor {
-                    gui_pass.set_scissor_rect(
-                        (scissor.left() * factor) as u32 * UPSCALE_LEVEL,
-                        (scissor.top() * factor) as u32 * UPSCALE_LEVEL,
-                        (scissor.width() * factor) as u32 * UPSCALE_LEVEL,
-                        (scissor.height() * factor) as u32 * UPSCALE_LEVEL,
-                    );
-                } else {
-                    gui_pass.set_scissor_rect(
-                        0,
-                        0,
-                        size.width * UPSCALE_LEVEL,
-                        size.height * UPSCALE_LEVEL,
-                    );
-                }
-
-                let index_range = setup.resource_man.index_ranges[&id];
-
-                let a = index_range.offset;
-                let b = a + index_range.size;
-                gui_pass.draw_indexed(a..b, 0, idx..(idx + 1));
             }
         }
 
         {
             let mut effects_pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("Effects Render Pass"),
+                label: Some("Gui Effects Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
                     view: &self.gpu.processed_gui_texture.1,
                     resolve_target: None,

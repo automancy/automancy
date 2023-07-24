@@ -206,6 +206,10 @@ pub fn on_event(
             device_event = Some(event);
         }
 
+        Event::MainEventsCleared => {
+            renderer.gpu.window.request_redraw();
+        }
+
         _ => {}
     };
 
@@ -414,7 +418,7 @@ pub fn on_event(
         }
     }
 
-    if event == Event::MainEventsCleared {
+    if event == Event::RedrawRequested(renderer.gpu.window.id()) {
         loop_store.frame_start = Instant::now();
 
         let mut gui_instances = vec![];
@@ -591,7 +595,7 @@ pub fn on_event(
                     setup.camera.pointing_at,
                 );
 
-                overlay.extend_from_slice(&make_line(a, b, (w0 + w1) / 2.0, colors::LIGHT_BLUE));
+                overlay.extend_from_slice(&make_line(a, b, (w0 + w1) * 0.5, colors::LIGHT_BLUE));
 
                 for selected in &loop_store.selected_tiles {
                     let dest = *selected + direction;

@@ -141,7 +141,7 @@ pub fn main_pos_to_hex(
 /// Converts screen space coordinates into normalized coordinates.
 #[inline]
 pub fn screen_to_normalized((width, height): (Double, Double), c: DPoint2) -> DPoint2 {
-    let size = vec2(width, height) / 2.0;
+    let size = vec2(width, height) * 0.5;
 
     let c = vec2(c.x, c.y);
     let c = c.zip(size, Sub::sub);
