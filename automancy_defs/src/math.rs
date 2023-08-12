@@ -98,12 +98,27 @@ pub fn view<N: BaseFloat>(pos: cgmath::Point3<N>) -> cgmath::Matrix4<N> {
     )
 }
 
+pub fn z_near<N: BaseFloat>() -> N {
+    let one = N::one();
+    let two = one + one;
+    let ten = two + two + two + two + two;
+
+    one / ten.powi(2)
+}
+
+pub fn z_far<N: BaseFloat>() -> N {
+    let one = N::one();
+    let two = one + one;
+    let ten = two + two + two + two + two;
+
+    ten.powi(4)
+}
+
 pub fn projection<N: BaseFloat>(aspect: N, pi: N) -> cgmath::Matrix4<N> {
     let one = N::one();
     let two = one + one;
-    let eight = two + two + two + two;
 
-    perspective(pi / two, aspect, one / eight.powi(2), eight.powi(4))
+    perspective(pi / two, aspect, z_near(), z_far())
 }
 
 pub fn pixel_to_hex<N: BaseFloat>(p: cgmath::Point2<N>) -> FractionalHex<Double> {

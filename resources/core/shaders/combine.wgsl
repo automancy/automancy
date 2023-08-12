@@ -1,17 +1,12 @@
 @group(0) @binding(0)
-var game_texture: texture_2d<f32>;
+var a_texture: texture_2d<f32>;
 @group(0) @binding(1)
-var game_sampler: sampler;
+var a_sampler: sampler;
 
 @group(0) @binding(2)
-var gui_texture: texture_2d<f32>;
+var b_texture: texture_2d<f32>;
 @group(0) @binding(3)
-var gui_sampler: sampler;
-
-@group(0) @binding(4)
-var egui_texture: texture_2d<f32>;
-@group(0) @binding(5)
-var egui_sampler: sampler;
+var b_sampler: sampler;
 
 struct VertexInput {
     @builtin(vertex_index) idx: u32,
@@ -41,12 +36,10 @@ fn vs_main(
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let game = textureSample(game_texture, game_sampler, in.uv);
-    let gui  = textureSample(gui_texture, gui_sampler, in.uv);
-    let egui = textureSample(egui_texture, egui_sampler, in.uv);
+    let a = textureSample(a_texture, a_sampler, in.uv);
+    let b  = textureSample(b_texture, b_sampler, in.uv);
 
     return
-        game * min(1.0 - gui.a, 1.0 - egui.a) +
-        gui +
-        egui * (1.0 - gui.a);
+        a * (1.0 - b.a) +
+        b;
 }

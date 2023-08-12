@@ -251,6 +251,13 @@ impl OverlayUBO {
     }
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
+pub struct PostEffectsUBO {
+    pub z_near: f32,
+    pub z_far: f32,
+}
+
 #[derive(Clone, Debug)]
 pub struct Face {
     pub indices: Vec<u16>,

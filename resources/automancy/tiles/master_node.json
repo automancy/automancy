@@ -1,7 +1,7 @@
 {
     "id": "master_node",
     "function": "master_node",
-    "models": ["void"],
+    "models": ["master_node"],
     "data": {
         "linking": {
             "Bool": true

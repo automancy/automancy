@@ -14,15 +14,14 @@ use wgpu::{
     BufferAddress, BufferDescriptor, BufferUsages, Color, CommandEncoderDescriptor,
     ImageCopyBuffer, ImageDataLayout, IndexFormat, LoadOp, Maintain, MapMode, Operations,
     RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor,
-    SurfaceError, TextureFormat, TextureViewDescriptor, COPY_BUFFER_ALIGNMENT,
-    COPY_BYTES_PER_ROW_ALIGNMENT,
+    SurfaceError, TextureFormat, COPY_BUFFER_ALIGNMENT, COPY_BYTES_PER_ROW_ALIGNMENT,
 };
 
 use automancy::game::{
     GameMsg, RenderInfo, RenderUnit, TickUnit, TransactionRecord, TRANSACTION_ANIMATION_SPEED,
 };
 use automancy::gpu;
-use automancy::gpu::{Gpu, GUI_INSTANCE_BUFFER, OVERLAY_VERTEX_BUFFER, UPSCALE_LEVEL};
+use automancy::gpu::{Gpu, UPSCALE_LEVEL};
 use automancy::input::KeyActions;
 use automancy::tile_entity::TileEntityMsg;
 use automancy::util::actor::multi_call_iter;
@@ -33,9 +32,9 @@ use automancy_defs::hashbrown::HashMap;
 use automancy_defs::hexagon_tiles::fractional::FractionalHex;
 use automancy_defs::hexagon_tiles::traits::HexRound;
 use automancy_defs::id::Id;
-use automancy_defs::math::{deg, rad, DPoint3, Double, Float, Matrix4, Rad, FAR};
+use automancy_defs::math::{deg, rad, z_far, z_near, DPoint3, Double, Float, Matrix4, Rad, FAR};
 use automancy_defs::rendering::{
-    make_line, GameUBO, InstanceData, OverlayUBO, RawInstanceData, Vertex,
+    make_line, GameUBO, InstanceData, OverlayUBO, PostEffectsUBO, RawInstanceData, Vertex,
 };
 use automancy_defs::{bytemuck, colors, math, window};
 use automancy_resources::data::{Data, DataMap};
@@ -112,12 +111,21 @@ impl Renderer {
         map_render_info: &RenderInfo,
         tile_tints: HashMap<TileCoord, Rgba>,
         gui_instances: GuiInstances,
+        mut extra_instances: Vec<(RawInstanceData, Id)>,
         mut overlay: Vec<Vertex>,
     ) -> Result<(), SurfaceError> {
         let size = self.gpu.window.inner_size();
 
         if size.width == 0 || size.height == 0 {
             return Ok(());
+        }
+
+        if let Some(size) = self.gpu.take_new_size() {
+            if size.width == 0 || size.height == 0 {
+                return Ok(());
+            }
+
+            self.gpu.create_textures(size);
         }
 
         let culling_range = setup.camera.culling_range;
@@ -252,8 +260,6 @@ impl Renderer {
             map.into_values().flatten().collect::<Vec<_>>()
         };
 
-        let mut extra_instances = vec![];
-
         let transaction_records = runtime
             .block_on(setup.game.call(GameMsg::GetRecordedTransactions, None))
             .unwrap()
@@ -317,6 +323,7 @@ impl Renderer {
     ) -> Result<(), SurfaceError> {
         let size = self.gpu.window.inner_size();
         let output = self.gpu.surface.get_current_texture()?;
+
         {
             let output_size = output.texture.size();
 
@@ -335,11 +342,20 @@ impl Renderer {
             });
 
         {
+            let count = gpu::indirect_instance(
+                &self.gpu.device,
+                &self.gpu.queue,
+                &setup.resource_man,
+                instances,
+                &mut self.gpu.game_resources.game_instance_buffer,
+                &mut self.gpu.game_resources.game_indirect_buffer,
+            );
+
             let mut game_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Game Render Pass"),
                 color_attachments: &[
                     Some(RenderPassColorAttachment {
-                        view: &self.gpu.game_texture.1,
+                        view: &self.gpu.game_texture().1,
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Clear(Color::BLACK),
@@ -347,7 +363,7 @@ impl Renderer {
                         },
                     }),
                     Some(RenderPassColorAttachment {
-                        view: &self.gpu.game_position_texture.1,
+                        view: &self.gpu.position_texture().1,
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Clear(Color::TRANSPARENT),
@@ -355,7 +371,7 @@ impl Renderer {
                         },
                     }),
                     Some(RenderPassColorAttachment {
-                        view: &self.gpu.game_normal_texture.1,
+                        view: &self.gpu.normal_texture().1,
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Clear(Color::TRANSPARENT),
@@ -364,7 +380,7 @@ impl Renderer {
                     }),
                 ],
                 depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                    view: &self.gpu.game_depth_texture.1,
+                    view: &self.gpu.depth_texture().1,
                     depth_ops: Some(Operations {
                         load: LoadOp::Clear(0.0),
                         store: true,
@@ -373,18 +389,9 @@ impl Renderer {
                 }),
             });
 
-            let count = gpu::indirect_instance(
-                &self.gpu.device,
-                &self.gpu.queue,
-                &setup.resource_man,
-                instances,
-                &mut self.gpu.game_instance_buffer,
-                &mut self.gpu.game_indirect_buffer,
-            );
-
             if count > 0 {
                 self.gpu.queue.write_buffer(
-                    &self.gpu.game_uniform_buffer,
+                    &self.gpu.game_resources.game_uniform_buffer,
                     0,
                     bytemuck::cast_slice(&[GameUBO::new(matrix)]),
                 );
@@ -397,22 +404,36 @@ impl Renderer {
                     1.0,
                     0.0,
                 );
-                game_pass.set_pipeline(&self.gpu.game_pipeline);
-                game_pass.set_bind_group(0, &self.gpu.game_bind_group, &[]);
+                game_pass.set_pipeline(&self.gpu.game_resources.game_pipeline);
+                game_pass.set_bind_group(0, &self.gpu.game_resources.game_bind_group, &[]);
                 game_pass.set_vertex_buffer(0, self.gpu.vertex_buffer.slice(..));
-                game_pass.set_vertex_buffer(1, self.gpu.game_instance_buffer.slice(..));
+                game_pass
+                    .set_vertex_buffer(1, self.gpu.game_resources.game_instance_buffer.slice(..));
                 game_pass.set_index_buffer(self.gpu.index_buffer.slice(..), IndexFormat::Uint16);
 
-                game_pass.multi_draw_indexed_indirect(&self.gpu.game_indirect_buffer, 0, count);
+                game_pass.multi_draw_indexed_indirect(
+                    &self.gpu.game_resources.game_indirect_buffer,
+                    0,
+                    count,
+                );
             }
         }
 
         {
+            let count = gpu::indirect_instance(
+                &self.gpu.device,
+                &self.gpu.queue,
+                &setup.resource_man,
+                extra_instances,
+                &mut self.gpu.extra_resources.extra_instance_buffer,
+                &mut self.gpu.extra_resources.extra_indirect_buffer,
+            );
+
             let mut extra_pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("Game Render Pass"),
+                label: Some("Extra Render Pass"),
                 color_attachments: &[
                     Some(RenderPassColorAttachment {
-                        view: &self.gpu.game_texture.1,
+                        view: &self.gpu.game_texture().1,
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Load,
@@ -420,7 +441,7 @@ impl Renderer {
                         },
                     }),
                     Some(RenderPassColorAttachment {
-                        view: &self.gpu.game_position_texture.1,
+                        view: &self.gpu.position_texture().1,
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Load,
@@ -428,7 +449,7 @@ impl Renderer {
                         },
                     }),
                     Some(RenderPassColorAttachment {
-                        view: &self.gpu.game_normal_texture.1,
+                        view: &self.gpu.normal_texture().1,
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Load,
@@ -437,7 +458,7 @@ impl Renderer {
                     }),
                 ],
                 depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                    view: &self.gpu.game_depth_texture.1,
+                    view: &self.gpu.extra_resources.extra_depth_texture().1,
                     depth_ops: Some(Operations {
                         load: LoadOp::Clear(0.0),
                         store: true,
@@ -446,18 +467,9 @@ impl Renderer {
                 }),
             });
 
-            let count = gpu::indirect_instance(
-                &self.gpu.device,
-                &self.gpu.queue,
-                &setup.resource_man,
-                extra_instances,
-                &mut self.gpu.extra_instance_buffer,
-                &mut self.gpu.extra_indirect_buffer,
-            );
-
             if count > 0 {
                 self.gpu.queue.write_buffer(
-                    &self.gpu.extra_uniform_buffer,
+                    &self.gpu.extra_resources.extra_uniform_buffer,
                     0,
                     bytemuck::cast_slice(&[GameUBO::new(matrix)]),
                 );
@@ -470,13 +482,18 @@ impl Renderer {
                     1.0,
                     0.0,
                 );
-                extra_pass.set_pipeline(&self.gpu.game_pipeline);
-                extra_pass.set_bind_group(0, &self.gpu.game_bind_group, &[]);
+                extra_pass.set_pipeline(&self.gpu.game_resources.game_pipeline);
+                extra_pass.set_bind_group(0, &self.gpu.game_resources.game_bind_group, &[]);
                 extra_pass.set_vertex_buffer(0, self.gpu.vertex_buffer.slice(..));
-                extra_pass.set_vertex_buffer(1, self.gpu.extra_instance_buffer.slice(..));
+                extra_pass
+                    .set_vertex_buffer(1, self.gpu.extra_resources.extra_instance_buffer.slice(..));
                 extra_pass.set_index_buffer(self.gpu.index_buffer.slice(..), IndexFormat::Uint16);
 
-                extra_pass.multi_draw_indexed_indirect(&self.gpu.extra_indirect_buffer, 0, count);
+                extra_pass.multi_draw_indexed_indirect(
+                    &self.gpu.extra_resources.extra_indirect_buffer,
+                    0,
+                    count,
+                );
             }
         }
 
@@ -484,7 +501,7 @@ impl Renderer {
             let mut effects_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Game Effects Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.processed_game_texture.1,
+                    view: &self.gpu.effects_resources.processed_texture().1,
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(Color::BLACK),
@@ -494,37 +511,51 @@ impl Renderer {
                 depth_stencil_attachment: None,
             });
 
-            effects_pass.set_pipeline(&self.gpu.effects_pipeline);
-            effects_pass.set_bind_group(0, &self.gpu.game_effects_bind_group, &[]);
+            effects_pass.set_pipeline(&self.gpu.effects_resources.effects_pipeline);
+            effects_pass.set_bind_group(0, self.gpu.effects_resources.effects_bind_group(), &[]);
 
             effects_pass.draw(0..3, 0..1);
         }
 
         {
-            let mut ssao_pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("Game SSAO Render Pass"),
+            let mut post_effects_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some("Game Post Effects Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.ssao_game_texture.1,
+                    view: &self.gpu.post_effects_resources.processed_texture().1,
                     resolve_target: None,
                     ops: Operations {
-                        load: LoadOp::Load,
+                        load: LoadOp::Clear(Color::BLACK),
                         store: true,
                     },
                 })],
                 depth_stencil_attachment: None,
             });
 
-            ssao_pass.set_pipeline(&self.gpu.ssao_pipeline);
-            ssao_pass.set_bind_group(0, &self.gpu.game_ssao_bind_group, &[]);
+            self.gpu.queue.write_buffer(
+                &self.gpu.game_resources.game_post_effects_uniform_buffer,
+                0,
+                bytemuck::cast_slice(&[PostEffectsUBO {
+                    z_near: z_near(),
+                    z_far: z_far(),
+                }]),
+            );
 
-            ssao_pass.draw(0..3, 0..1);
+            post_effects_pass.set_pipeline(&self.gpu.post_effects_resources.post_effects_pipeline);
+
+            post_effects_pass.set_bind_group(
+                0,
+                self.gpu.game_resources.game_post_effects_bind_group(),
+                &[],
+            );
+
+            post_effects_pass.draw(0..3, 0..1);
         }
 
         {
             let mut overlay_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Overlay Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.ssao_game_texture.1,
+                    view: &self.gpu.post_effects_resources.processed_texture().1,
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Load,
@@ -536,23 +567,25 @@ impl Renderer {
 
             if !overlay.is_empty() {
                 self.gpu.queue.write_buffer(
-                    &self.gpu.overlay_uniform_buffer,
+                    &self.gpu.overlay_resources.overlay_uniform_buffer,
                     0,
                     bytemuck::cast_slice(&[OverlayUBO::new(Matrix4::identity())]),
                 );
                 gpu::create_or_write_buffer(
                     &self.gpu.device,
                     &self.gpu.queue,
-                    &mut self.gpu.overlay_vertex_buffer,
-                    OVERLAY_VERTEX_BUFFER,
+                    &mut self.gpu.overlay_resources.overlay_vertex_buffer,
                     bytemuck::cast_slice(overlay.as_slice()),
                 );
 
                 let vertex_count = overlay.len() as u32;
 
-                overlay_pass.set_pipeline(&self.gpu.overlay_pipeline);
-                overlay_pass.set_bind_group(0, &self.gpu.overlay_bind_group, &[]);
-                overlay_pass.set_vertex_buffer(0, self.gpu.overlay_vertex_buffer.slice(..));
+                overlay_pass.set_pipeline(&self.gpu.overlay_resources.overlay_pipeline);
+                overlay_pass.set_bind_group(0, &self.gpu.overlay_resources.overlay_bind_group, &[]);
+                overlay_pass.set_vertex_buffer(
+                    0,
+                    self.gpu.overlay_resources.overlay_vertex_buffer.slice(..),
+                );
 
                 overlay_pass.draw(0..vertex_count, 0..1);
             }
@@ -585,7 +618,7 @@ impl Renderer {
                 let mut egui_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                     label: Some("Egui Render Pass"),
                     color_attachments: &[Some(RenderPassColorAttachment {
-                        view: &self.gpu.egui_texture.1,
+                        view: &self.gpu.egui_resources.egui_texture().1,
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Clear(Color::TRANSPARENT),
@@ -607,26 +640,30 @@ impl Renderer {
         };
 
         {
-            let mut gui_pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("Gui Render Pass"),
+            let mut combine_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some("Combine Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.gui_texture.1,
+                    view: &self.gpu.first_combine_resources.combine_texture().1,
                     resolve_target: None,
                     ops: Operations {
-                        load: LoadOp::Clear(Color::TRANSPARENT),
+                        load: LoadOp::Clear(Color::BLACK),
                         store: true,
                     },
                 })],
-                depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                    view: &self.gpu.gui_depth_texture.1,
-                    depth_ops: Some(Operations {
-                        load: LoadOp::Clear(0.0),
-                        store: true,
-                    }),
-                    stencil_ops: None,
-                }),
+                depth_stencil_attachment: None,
             });
 
+            combine_pass.set_pipeline(&self.gpu.first_combine_resources.combine_pipeline);
+            combine_pass.set_bind_group(
+                0,
+                self.gpu.first_combine_resources.combine_bind_group(),
+                &[],
+            );
+
+            combine_pass.draw(0..3, 0..1)
+        }
+
+        {
             let (instances, draws): (Vec<_>, Vec<_>) = gui_instances
                 .into_iter()
                 .map(|(instance, id, viewport, scissor, depth)| {
@@ -637,25 +674,44 @@ impl Renderer {
                 })
                 .unzip();
 
+            gpu::create_or_write_buffer(
+                &self.gpu.device,
+                &self.gpu.queue,
+                &mut self.gpu.gui_resources.gui_instance_buffer,
+                bytemuck::cast_slice(instances.as_slice()),
+            );
+
+            let mut gui_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some("Gui Render Pass"),
+                color_attachments: &[Some(RenderPassColorAttachment {
+                    view: &self.gpu.game_texture().1,
+                    resolve_target: None,
+                    ops: Operations {
+                        load: LoadOp::Clear(Color::TRANSPARENT),
+                        store: true,
+                    },
+                })],
+                depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
+                    view: &self.gpu.depth_texture().1,
+                    depth_ops: Some(Operations {
+                        load: LoadOp::Clear(0.0),
+                        store: true,
+                    }),
+                    stencil_ops: None,
+                }),
+            });
+
             if !draws.is_empty() {
                 self.gpu.queue.write_buffer(
-                    &self.gpu.gui_uniform_buffer,
+                    &self.gpu.gui_resources.gui_uniform_buffer,
                     0,
                     bytemuck::cast_slice(&[GameUBO::default()]),
                 );
 
-                gpu::create_or_write_buffer(
-                    &self.gpu.device,
-                    &self.gpu.queue,
-                    &mut self.gpu.gui_instance_buffer,
-                    GUI_INSTANCE_BUFFER,
-                    bytemuck::cast_slice(instances.as_slice()),
-                );
-
-                gui_pass.set_pipeline(&self.gpu.gui_pipeline);
-                gui_pass.set_bind_group(0, &self.gpu.gui_bind_group, &[]);
+                gui_pass.set_pipeline(&self.gpu.gui_resources.gui_pipeline);
+                gui_pass.set_bind_group(0, &self.gpu.gui_resources.gui_bind_group, &[]);
                 gui_pass.set_vertex_buffer(0, self.gpu.vertex_buffer.slice(..));
-                gui_pass.set_vertex_buffer(1, self.gpu.gui_instance_buffer.slice(..));
+                gui_pass.set_vertex_buffer(1, self.gpu.gui_resources.gui_instance_buffer.slice(..));
                 gui_pass.set_index_buffer(self.gpu.index_buffer.slice(..), IndexFormat::Uint16);
 
                 for (idx, (id, viewport, scissor, depth)) in draws.into_iter().enumerate() {
@@ -712,7 +768,7 @@ impl Renderer {
             let mut effects_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Gui Effects Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.processed_gui_texture.1,
+                    view: &self.gpu.effects_resources.processed_texture().1,
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(Color::BLACK),
@@ -722,21 +778,17 @@ impl Renderer {
                 depth_stencil_attachment: None,
             });
 
-            effects_pass.set_pipeline(&self.gpu.effects_pipeline);
-            effects_pass.set_bind_group(0, &self.gpu.gui_effects_bind_group, &[]);
+            effects_pass.set_pipeline(&self.gpu.effects_resources.effects_pipeline);
+            effects_pass.set_bind_group(0, self.gpu.effects_resources.effects_bind_group(), &[]);
 
             effects_pass.draw(0..3, 0..1);
         }
 
         {
-            let view = output
-                .texture
-                .create_view(&TextureViewDescriptor::default());
-
             let mut combine_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Combine Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &view,
+                    view: &self.gpu.second_combine_resources.combine_texture().1,
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(Color::BLACK),
@@ -746,11 +798,27 @@ impl Renderer {
                 depth_stencil_attachment: None,
             });
 
-            combine_pass.set_pipeline(&self.gpu.combine_pipeline);
-            combine_pass.set_bind_group(0, &self.gpu.combine_bind_group, &[]);
+            combine_pass.set_pipeline(&self.gpu.second_combine_resources.combine_pipeline);
+            combine_pass.set_bind_group(
+                0,
+                self.gpu.second_combine_resources.combine_bind_group(),
+                &[],
+            );
 
             combine_pass.draw(0..3, 0..1)
         }
+
+        let view = output.texture.as_image_copy();
+
+        encoder.copy_texture_to_texture(
+            self.gpu
+                .second_combine_resources
+                .combine_texture()
+                .0
+                .as_image_copy(),
+            view,
+            output.texture.size(),
+        );
 
         fn size_align<T: PrimInt>(size: T, alignment: T) -> T {
             ((size + alignment - T::one()) / alignment) * alignment

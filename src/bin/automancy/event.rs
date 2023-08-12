@@ -422,6 +422,7 @@ pub fn on_event(
         loop_store.frame_start = Instant::now();
 
         let mut gui_instances = vec![];
+        let extra_instances = vec![];
         let mut overlay = vec![];
 
         setup.camera.update_pointing_at(
@@ -625,10 +626,13 @@ pub fn on_event(
             &render_info,
             tile_tints,
             gui_instances,
+            extra_instances,
             overlay,
         ) {
             Ok(_) => {}
-            Err(SurfaceError::Lost) => renderer.gpu.resize(renderer.gpu.window.inner_size()),
+            Err(SurfaceError::Lost) => renderer
+                .gpu
+                .create_textures(renderer.gpu.window.inner_size()),
             Err(SurfaceError::OutOfMemory) => shutdown_graceful(setup, control_flow)?,
             Err(e) => log::error!("{e:?}"),
         }
