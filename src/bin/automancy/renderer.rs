@@ -11,10 +11,15 @@ use ractor::rpc::CallResult;
 use tokio::runtime::Runtime;
 use tokio::sync::oneshot;
 use wgpu::{
-    BufferAddress, BufferDescriptor, BufferUsages, Color, CommandEncoderDescriptor,
-    ImageCopyBuffer, ImageDataLayout, IndexFormat, LoadOp, Maintain, MapMode, Operations,
+    BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry,
+    BindingResource, BindingType, BlendState, BufferAddress, BufferDescriptor, BufferUsages, Color,
+    ColorTargetState, ColorWrites, CommandEncoderDescriptor, FragmentState, FrontFace,
+    ImageCopyBuffer, ImageDataLayout, IndexFormat, LoadOp, Maintain, MapMode, MultisampleState,
+    Operations, PipelineLayoutDescriptor, PrimitiveState, PrimitiveTopology,
     RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor,
-    SurfaceError, TextureFormat, COPY_BUFFER_ALIGNMENT, COPY_BYTES_PER_ROW_ALIGNMENT,
+    RenderPipelineDescriptor, ShaderStages, SurfaceError, TextureDescriptor, TextureDimension,
+    TextureFormat, TextureSampleType, TextureUsages, TextureViewDescriptor, TextureViewDimension,
+    VertexState, COPY_BUFFER_ALIGNMENT, COPY_BYTES_PER_ROW_ALIGNMENT,
 };
 
 use automancy::game::{
@@ -513,7 +518,6 @@ impl Renderer {
 
             effects_pass.set_pipeline(&self.gpu.effects_resources.effects_pipeline);
             effects_pass.set_bind_group(0, self.gpu.effects_resources.effects_bind_group(), &[]);
-
             effects_pass.draw(0..3, 0..1);
         }
 
@@ -541,13 +545,11 @@ impl Renderer {
             );
 
             post_effects_pass.set_pipeline(&self.gpu.post_effects_resources.post_effects_pipeline);
-
             post_effects_pass.set_bind_group(
                 0,
                 self.gpu.game_resources.game_post_effects_bind_group(),
                 &[],
             );
-
             post_effects_pass.draw(0..3, 0..1);
         }
 
@@ -586,7 +588,6 @@ impl Renderer {
                     0,
                     self.gpu.overlay_resources.overlay_vertex_buffer.slice(..),
                 );
-
                 overlay_pass.draw(0..vertex_count, 0..1);
             }
         }
@@ -659,7 +660,6 @@ impl Renderer {
                 self.gpu.first_combine_resources.combine_bind_group(),
                 &[],
             );
-
             combine_pass.draw(0..3, 0..1)
         }
 
@@ -780,7 +780,6 @@ impl Renderer {
 
             effects_pass.set_pipeline(&self.gpu.effects_resources.effects_pipeline);
             effects_pass.set_bind_group(0, self.gpu.effects_resources.effects_bind_group(), &[]);
-
             effects_pass.draw(0..3, 0..1);
         }
 
@@ -804,7 +803,6 @@ impl Renderer {
                 self.gpu.second_combine_resources.combine_bind_group(),
                 &[],
             );
-
             combine_pass.draw(0..3, 0..1)
         }
 
@@ -830,8 +828,117 @@ impl Renderer {
         let padded_width = size_align(buffer_dim.width * block_size, COPY_BYTES_PER_ROW_ALIGNMENT);
 
         let screenshot_buffer = if setup.input_handler.key_active(KeyActions::Screenshot) {
-            let buffer = self.gpu.device.create_buffer(&BufferDescriptor {
+            const SCREENSHOT_FORMAT: TextureFormat = TextureFormat::Rgba8UnormSrgb;
+
+            let intermediate_texture = self.gpu.device.create_texture(&TextureDescriptor {
+                label: Some("Screenshot Intermediate Texture"),
+                size: texture_dim,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: SCREENSHOT_FORMAT,
+                usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::COPY_SRC,
+                view_formats: &[],
+            });
+
+            let intermediate_texture_view =
+                intermediate_texture.create_view(&TextureViewDescriptor::default());
+
+            let intermediate_bind_group_layout =
+                self.gpu
+                    .device
+                    .create_bind_group_layout(&BindGroupLayoutDescriptor {
+                        label: None,
+                        entries: &[BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: ShaderStages::FRAGMENT,
+                            ty: BindingType::Texture {
+                                sample_type: TextureSampleType::Float { filterable: false },
+                                view_dimension: TextureViewDimension::D2,
+                                multisampled: false,
+                            },
+                            count: None,
+                        }],
+                    });
+
+            let intermediate_bind_group = self.gpu.device.create_bind_group(&BindGroupDescriptor {
                 label: None,
+                layout: &intermediate_bind_group_layout,
+                entries: &[BindGroupEntry {
+                    binding: 0,
+                    resource: BindingResource::TextureView(
+                        &output
+                            .texture
+                            .create_view(&TextureViewDescriptor::default()),
+                    ),
+                }],
+            });
+
+            let intermediate_pipeline_layout =
+                self.gpu
+                    .device
+                    .create_pipeline_layout(&PipelineLayoutDescriptor {
+                        label: Some("Intermediate Render Pipeline Layout"),
+                        bind_group_layouts: &[&intermediate_bind_group_layout],
+                        push_constant_ranges: &[],
+                    });
+
+            let intermediate_pipeline =
+                self.gpu
+                    .device
+                    .create_render_pipeline(&RenderPipelineDescriptor {
+                        label: Some("Intermediate Render Pipeline"),
+                        layout: Some(&intermediate_pipeline_layout),
+                        vertex: VertexState {
+                            module: &self.gpu.intermediate_shader,
+                            entry_point: "vs_main",
+                            buffers: &[],
+                        },
+                        fragment: Some(FragmentState {
+                            module: &self.gpu.intermediate_shader,
+                            entry_point: "fs_main",
+                            targets: &[Some(ColorTargetState {
+                                format: SCREENSHOT_FORMAT,
+                                blend: Some(BlendState::REPLACE),
+                                write_mask: ColorWrites::ALL,
+                            })],
+                        }),
+                        primitive: PrimitiveState {
+                            topology: PrimitiveTopology::TriangleList,
+                            front_face: FrontFace::Ccw,
+                            cull_mode: None,
+                            ..Default::default()
+                        },
+                        depth_stencil: None,
+                        multisample: MultisampleState {
+                            count: 1,
+                            mask: !0,
+                            alpha_to_coverage_enabled: false,
+                        },
+                        multiview: None,
+                    });
+
+            {
+                let mut intermediate_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                    label: Some("Screenshot Intermediate Pass"),
+                    color_attachments: &[Some(RenderPassColorAttachment {
+                        view: &intermediate_texture_view,
+                        resolve_target: None,
+                        ops: Operations {
+                            load: LoadOp::Load,
+                            store: true,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                });
+
+                intermediate_pass.set_pipeline(&intermediate_pipeline);
+                intermediate_pass.set_bind_group(0, &intermediate_bind_group, &[]);
+                intermediate_pass.draw(0..3, 0..1);
+            }
+
+            let buffer = self.gpu.device.create_buffer(&BufferDescriptor {
+                label: Some("Screenshot Buffer"),
                 size: size_align(
                     (padded_width * buffer_dim.height) as BufferAddress,
                     COPY_BUFFER_ALIGNMENT,
@@ -841,7 +948,7 @@ impl Renderer {
             });
 
             encoder.copy_texture_to_buffer(
-                output.texture.as_image_copy(),
+                intermediate_texture.as_image_copy(),
                 ImageCopyBuffer {
                     buffer: &buffer,
                     layout: ImageDataLayout {
@@ -881,19 +988,7 @@ impl Renderer {
                 let data = slice.get_mapped_range();
                 let mut result = Vec::new();
                 for chunk in data.chunks(padded_width as usize) {
-                    match output.texture.format().remove_srgb_suffix() {
-                        TextureFormat::Rgba8Unorm => {
-                            result.extend(&chunk[..texture_width as usize]);
-                        }
-                        TextureFormat::Bgra8Unorm => {
-                            result.extend(
-                                chunk[..texture_width as usize]
-                                    .chunks_exact(4)
-                                    .flat_map(|v| [v[2], v[1], v[0], v[3]]),
-                            );
-                        }
-                        _ => {}
-                    }
+                    result.extend(&chunk[..texture_width as usize]);
                 }
 
                 if let Some(image) =

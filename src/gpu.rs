@@ -41,41 +41,6 @@ pub fn device_descriptor() -> DeviceDescriptor<'static> {
     }
 }
 
-fn game_shader(device: &Device, resource_man: &ResourceManager) -> ShaderModule {
-    device.create_shader_module(ShaderModuleDescriptor {
-        label: Some("Game Shader"),
-        source: ShaderSource::Wgsl(resource_man.shaders["game"].as_str().into()),
-    })
-}
-
-fn effects_shader(device: &Device, resource_man: &ResourceManager) -> ShaderModule {
-    device.create_shader_module(ShaderModuleDescriptor {
-        label: Some("Effects Shader"),
-        source: ShaderSource::Wgsl(resource_man.shaders["effects"].as_str().into()),
-    })
-}
-
-fn post_effects_shader(device: &Device, resource_man: &ResourceManager) -> ShaderModule {
-    device.create_shader_module(ShaderModuleDescriptor {
-        label: Some("Post Effects Shader"),
-        source: ShaderSource::Wgsl(resource_man.shaders["post_effects"].as_str().into()),
-    })
-}
-
-fn overlay_shader(device: &Device, resource_man: &ResourceManager) -> ShaderModule {
-    device.create_shader_module(ShaderModuleDescriptor {
-        label: Some("Overlay Shader"),
-        source: ShaderSource::Wgsl(resource_man.shaders["overlay"].as_str().into()),
-    })
-}
-
-fn combine_shader(device: &Device, resource_man: &ResourceManager) -> ShaderModule {
-    device.create_shader_module(ShaderModuleDescriptor {
-        label: Some("Combine Shader"),
-        source: ShaderSource::Wgsl(resource_man.shaders["combine"].as_str().into()),
-    })
-}
-
 pub const UPSCALE_LEVEL: u32 = 2;
 
 pub const DEPTH_FORMAT: TextureFormat = TextureFormat::Depth32Float;
@@ -963,6 +928,13 @@ pub struct Gpu {
     pub config: SurfaceConfiguration,
     pub window: Arc<Window>,
 
+    pub game_shader: ShaderModule,
+    pub overlay_shader: ShaderModule,
+    pub effects_shader: ShaderModule,
+    pub post_effects_shader: ShaderModule,
+    pub combine_shader: ShaderModule,
+    pub intermediate_shader: ShaderModule,
+
     pub vertex_buffer: Buffer,
     pub index_buffer: Buffer,
 
@@ -1064,6 +1036,7 @@ impl Gpu {
 
         let config = SurfaceConfiguration {
             usage: TextureUsages::RENDER_ATTACHMENT
+                | TextureUsages::TEXTURE_BINDING
                 | TextureUsages::COPY_SRC
                 | TextureUsages::COPY_DST,
             format: surface_format,
@@ -1075,6 +1048,36 @@ impl Gpu {
         };
 
         surface.configure(&device, &config);
+
+        let game_shader = device.create_shader_module(ShaderModuleDescriptor {
+            label: Some("Game Shader"),
+            source: ShaderSource::Wgsl(resource_man.shaders["game"].as_str().into()),
+        });
+
+        let effects_shader = device.create_shader_module(ShaderModuleDescriptor {
+            label: Some("Effects Shader"),
+            source: ShaderSource::Wgsl(resource_man.shaders["effects"].as_str().into()),
+        });
+
+        let overlay_shader = device.create_shader_module(ShaderModuleDescriptor {
+            label: Some("Overlay Shader"),
+            source: ShaderSource::Wgsl(resource_man.shaders["overlay"].as_str().into()),
+        });
+
+        let post_effects_shader = device.create_shader_module(ShaderModuleDescriptor {
+            label: Some("Post Effects Shader"),
+            source: ShaderSource::Wgsl(resource_man.shaders["post_effects"].as_str().into()),
+        });
+
+        let combine_shader = device.create_shader_module(ShaderModuleDescriptor {
+            label: Some("Combine Shader"),
+            source: ShaderSource::Wgsl(resource_man.shaders["combine"].as_str().into()),
+        });
+
+        let intermediate_shader = device.create_shader_module(ShaderModuleDescriptor {
+            label: Some("Intermediate Shader"),
+            source: ShaderSource::Wgsl(resource_man.shaders["intermediate"].as_str().into()),
+        });
 
         let vertex_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Vertex Buffer"),
@@ -1108,7 +1111,7 @@ impl Gpu {
 
         let game_resources = {
             let (game_uniform_buffer, game_bind_group, game_pipeline) =
-                game_setup(&device, &config, &game_shader(&device, resource_man));
+                game_setup(&device, &config, &game_shader);
 
             GameResources {
                 game_instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
@@ -1137,7 +1140,7 @@ impl Gpu {
 
         let gui_resources = {
             let (gui_uniform_buffer, gui_bind_group, gui_pipeline) =
-                gui_setup(&device, &config, &game_shader(&device, resource_man));
+                gui_setup(&device, &config, &game_shader);
 
             GuiResources {
                 gui_instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
@@ -1174,7 +1177,7 @@ impl Gpu {
 
         let overlay_resources = {
             let (overlay_uniform_buffer, overlay_bind_group, overlay_pipeline) =
-                overlay_setup(&device, &config, &overlay_shader(&device, resource_man));
+                overlay_setup(&device, &config, &overlay_shader);
 
             OverlayResources {
                 overlay_vertex_buffer: device.create_buffer_init(&BufferInitDescriptor {
@@ -1194,7 +1197,7 @@ impl Gpu {
             let effects_pipeline = effects_setup(
                 &device,
                 &config,
-                &effects_shader(&device, resource_man),
+                &effects_shader,
                 &effects_bind_group_layout,
             );
 
@@ -1211,7 +1214,7 @@ impl Gpu {
         let combine_pipeline = Rc::new(combine_setup(
             &device,
             &config,
-            &combine_shader(&device, resource_man),
+            &combine_shader,
             &combine_bind_group_layout,
         ));
 
@@ -1228,7 +1231,7 @@ impl Gpu {
             let post_effects_pipeline = post_effects_setup(
                 &device,
                 &config,
-                &post_effects_shader(&device, resource_man),
+                &post_effects_shader,
                 &post_effects_bind_group_layout,
             );
 
@@ -1256,6 +1259,13 @@ impl Gpu {
             surface,
             config,
             window: Arc::new(window),
+
+            game_shader,
+            overlay_shader,
+            effects_shader,
+            post_effects_shader,
+            combine_shader,
+            intermediate_shader,
 
             vertex_buffer,
             index_buffer,
