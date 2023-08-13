@@ -1,6 +1,5 @@
-import sys
-
 import bpy
+import sys
 
 
 def main():
@@ -9,9 +8,9 @@ def main():
     # Doc can be found here: https://docs.blender.org/api/current/bpy.ops.export_mesh.html
 
     for obj in filter(lambda o: o.type == 'MESH', bpy.data.objects):
+        obj.modifiers.new(name='Triangulate', type='TRIANGULATE')
         edge_split = obj.modifiers.new(name='EdgeSplit', type='EDGE_SPLIT')
         edge_split.split_angle = 0.0
-        obj.modifiers.new(name='Triangulate', type='TRIANGULATE')
 
         mesh = obj.data
         material = obj.active_material

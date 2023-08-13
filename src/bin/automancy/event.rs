@@ -353,7 +353,6 @@ pub fn on_event(
                             ))?;
 
                             setup.audio_man.play(resource_man.audio["click"].clone())?;
-                            loop_store.linking_tile = None;
                         }
                     }
                 }

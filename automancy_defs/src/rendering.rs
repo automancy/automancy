@@ -1,20 +1,26 @@
 use std::mem::size_of;
 
 use bytemuck::{Pod, Zeroable};
-use cgmath::{point3, MetricSpace, SquareMatrix};
+use cgmath::{point2, point3, MetricSpace, SquareMatrix};
 use egui::ecolor::{linear_f32_from_gamma_u8, linear_f32_from_linear_u8};
 use egui::Rgba;
 use ply_rs::ply::{Property, PropertyAccess};
 use wgpu::{vertex_attr_array, BufferAddress, VertexAttribute, VertexBufferLayout, VertexStepMode};
 
-use crate::math::{DPoint2, Double, Float, Matrix4, Point3, Vector3};
+use crate::math::{DPoint3, Double, Float, Matrix4, Point3, Vector3};
 
 /// Produces a line shape.
-pub fn make_line(a: DPoint2, b: DPoint2, w: Double, color: Rgba) -> [Vertex; 6] {
+pub fn make_line(a: DPoint3, b: DPoint3, w: Double, color: Rgba) -> [Vertex; 6] {
     let v = b - a;
-    let l = a.distance(b) * 16.0;
+    let l = a.distance(b);
     let t = cgmath::vec2(-v.y / l, v.x / l);
-    let t = t / w;
+    let t = t / w / 24.0;
+
+    let z0 = a.z as Float;
+    let z1 = z0.max(b.z as Float);
+
+    let a = point2(a.x, a.y);
+    let b = point2(b.x, b.y);
 
     let a0 = (a + t).cast::<Float>().unwrap();
     let a1 = (a - t).cast::<Float>().unwrap();
@@ -22,22 +28,22 @@ pub fn make_line(a: DPoint2, b: DPoint2, w: Double, color: Rgba) -> [Vertex; 6] 
     let b1 = (b - t).cast::<Float>().unwrap();
 
     let a = Vertex {
-        pos: [a0.x, a0.y, 0.0],
+        pos: [a0.x, a0.y, z0],
         color: color.to_array(),
         normal: [0.0, 0.0, 0.0],
     };
     let b = Vertex {
-        pos: [b0.x, b0.y, 0.0],
+        pos: [b0.x, b0.y, z1],
         color: color.to_array(),
         normal: [0.0, 0.0, 0.0],
     };
     let c = Vertex {
-        pos: [a1.x, a1.y, 0.0],
+        pos: [a1.x, a1.y, z0],
         color: color.to_array(),
         normal: [0.0, 0.0, 0.0],
     };
     let d = Vertex {
-        pos: [b1.x, b1.y, 0.0],
+        pos: [b1.x, b1.y, z1],
         color: color.to_array(),
         normal: [0.0, 0.0, 0.0],
     };
@@ -254,8 +260,7 @@ impl OverlayUBO {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
 pub struct PostEffectsUBO {
-    pub z_near: f32,
-    pub z_far: f32,
+    pub depth_threshold: f32,
 }
 
 #[derive(Clone, Debug)]

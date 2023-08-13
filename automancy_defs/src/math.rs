@@ -155,14 +155,14 @@ pub fn main_pos_to_hex(
 
 /// Converts screen space coordinates into normalized coordinates.
 #[inline]
-pub fn screen_to_normalized((width, height): (Double, Double), c: DPoint2) -> DPoint2 {
+pub fn screen_to_normalized((width, height): (Double, Double), c: DPoint2) -> DPoint3 {
     let size = vec2(width, height) * 0.5;
 
     let c = vec2(c.x, c.y);
     let c = c.zip(size, Sub::sub);
     let c = c.zip(size, Div::div);
 
-    point2(c.x, c.y)
+    point3(c.x, c.y, 0.0)
 }
 
 /// Converts screen coordinates to world coordinates.
@@ -170,7 +170,7 @@ pub fn screen_to_normalized((width, height): (Double, Double), c: DPoint2) -> DP
 pub fn screen_to_world((width, height): (Double, Double), c: DPoint2, camera_z: Double) -> DPoint3 {
     let c = screen_to_normalized((width, height), c);
 
-    normalized_to_world((width, height), c, camera_z)
+    normalized_to_world((width, height), point2(c.x, c.y), camera_z)
 }
 
 /// Converts normalized screen coordinates to world coordinates.
@@ -195,7 +195,7 @@ pub fn hex_to_normalized(
     (width, height): (Double, Double),
     camera_pos: DPoint3,
     hex: TileCoord,
-) -> (DPoint2, Double) {
+) -> (DPoint3, Double) {
     let p = hex_to_pixel(hex.into()).to_vec();
 
     let aspect = width / height;
@@ -206,7 +206,7 @@ pub fn hex_to_normalized(
     let w = p.w;
     let p = p.truncate() / w;
 
-    (point2(p.x, p.y), w)
+    (point3(p.x, p.y, 1.00001 - p.z), w)
 }
 
 #[inline]

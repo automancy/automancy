@@ -60,7 +60,7 @@ fn sobel(tex: vec2<i32>, size: vec2<i32>) -> f32 {
 
     let g = length(vec2(gx, gy));
 
-    return smoothstep(0.3, 0.6, g);
+    return smoothstep(0.4, 0.8, sqrt(g));
 }
 
 @fragment

@@ -55,20 +55,20 @@ fn draw_tile_selection(
                     .animate_value_with_time(ui.next_auto_id(), 1.0, 0.3)
             } else {
                 ui.ctx()
-                    .animate_value_with_time(ui.next_auto_id(), 0.0, 0.3)
+                    .animate_value_with_time(ui.next_auto_id(), 0.15, 0.3)
             };
             if response.clicked() {
                 selection_send.try_send(id).unwrap();
             }
 
-            let pos = point3(0.0, 1.0 * hover + 0.5, 3.0 - 0.5 * hover);
-            let matrix = math::perspective(FRAC_PI_4, 1.0, 0.01, 10.0)
-                * Matrix4::look_to_rh(pos, vec3(0.0, 0.5 * hover + 0.2, 1.0), Vector3::unit_y());
+            let pos = point3(0.0, hover, 3.0 - hover / 2.0);
+            let matrix = math::perspective(FRAC_PI_4, 1.0, 0.01, 100.0)
+                * Matrix4::look_to_rh(pos, vec3(0.0, hover / 2.0, 1.0), Vector3::unit_y());
 
             gui_instances.push((
                 InstanceData::default()
                     .with_model_matrix(matrix)
-                    .with_light_pos(point3(0.0, 3.0, 4.0)),
+                    .with_light_pos(point3(0.0, 0.0, 6.0)),
                 model,
                 Some(rect),
                 Some(ui.clip_rect().shrink2(Vec2::new(2.0, 0.0))),

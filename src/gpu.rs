@@ -354,11 +354,23 @@ fn gui_setup(
         fragment: Some(FragmentState {
             module: shader,
             entry_point: "fs_main",
-            targets: &[Some(ColorTargetState {
-                format: config.format,
-                blend: Some(BlendState::REPLACE),
-                write_mask: ColorWrites::ALL,
-            })],
+            targets: &[
+                Some(ColorTargetState {
+                    format: config.format,
+                    blend: Some(BlendState::REPLACE),
+                    write_mask: ColorWrites::ALL,
+                }),
+                Some(ColorTargetState {
+                    format: TextureFormat::Rgba32Float,
+                    blend: None,
+                    write_mask: ColorWrites::ALL,
+                }),
+                Some(ColorTargetState {
+                    format: TextureFormat::Rgba8Unorm,
+                    blend: None,
+                    write_mask: ColorWrites::ALL,
+                }),
+            ],
         }),
         primitive: PrimitiveState {
             topology: PrimitiveTopology::TriangleList,
@@ -710,7 +722,13 @@ fn overlay_setup(
             front_face: FrontFace::Ccw,
             ..Default::default()
         },
-        depth_stencil: None,
+        depth_stencil: Some(DepthStencilState {
+            format: DEPTH_FORMAT,
+            depth_write_enabled: false,
+            depth_compare: CompareFunction::GreaterEqual,
+            stencil: Default::default(),
+            bias: Default::default(),
+        }),
         multisample: MultisampleState {
             count: 1,
             mask: !0,
@@ -852,11 +870,15 @@ pub struct GameResources {
     game_post_effects_bind_group: Option<BindGroup>,
 }
 
+#[derive(OptionGetter)]
 pub struct GuiResources {
     pub gui_instance_buffer: Buffer,
     pub gui_uniform_buffer: Buffer,
     pub gui_bind_group: BindGroup,
     pub gui_pipeline: RenderPipeline,
+    pub gui_post_effects_uniform_buffer: Buffer,
+    #[getters(get)]
+    gui_post_effects_bind_group: Option<BindGroup>,
 }
 
 #[derive(OptionGetter)]
@@ -1151,6 +1173,12 @@ impl Gpu {
                 gui_uniform_buffer,
                 gui_bind_group,
                 gui_pipeline,
+                gui_post_effects_uniform_buffer: device.create_buffer_init(&BufferInitDescriptor {
+                    label: Some("Gui Post Effects Uniform Buffer"),
+                    contents: bytemuck::cast_slice(&[PostEffectsUBO::default()]),
+                    usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+                }),
+                gui_post_effects_bind_group: None,
             }
         };
 
@@ -1375,6 +1403,20 @@ impl Gpu {
             &self.non_filtering_sampler,
         ));
 
+        self.gui_resources.gui_post_effects_bind_group = Some(make_post_effects_bind_group(
+            device,
+            &self.post_effects_resources.post_effects_bind_group_layout,
+            &self.gui_resources.gui_post_effects_uniform_buffer,
+            &self.effects_resources.processed_texture().1,
+            &self.filtering_sampler,
+            &self.position_texture().1,
+            &self.non_filtering_sampler,
+            &self.normal_texture().1,
+            &self.non_filtering_sampler,
+            &self.depth_texture().1,
+            &self.non_filtering_sampler,
+        ));
+
         self.post_effects_resources.processed_texture =
             Some(create_surface_texture(device, config.format, upscale, None));
 
@@ -1404,7 +1446,7 @@ impl Gpu {
             &self.second_combine_resources.combine_bind_group_layout,
             &self.first_combine_resources.combine_texture().1,
             &self.filtering_sampler,
-            &self.effects_resources.processed_texture().1,
+            &self.post_effects_resources.processed_texture().1,
             &self.filtering_sampler,
         ));
     }

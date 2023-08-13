@@ -1,6 +1,5 @@
 struct Uniform {
-    z_near: f32,
-    z_far: f32,
+    depth_threshold: f32,
 }
 
 @group(0) @binding(0)
@@ -53,32 +52,27 @@ fn vs_main(
     return out;
 }
 
-const EDGE_THRESHOLD: f32 = 0.00001;
+const THRESHOLD: f32 = 0.05;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var color = textureSample(frame_texture, frame_sampler, in.uv);
 
-    let normal = textureSample(normal_texture, normal_sampler, in.uv).xyz;
-    let frag = textureSample(position_texture, position_sampler, in.uv).xyz;
+    let texel_size = 1.0 / vec2<f32>(textureDimensions(normal_texture));
 
-    let depth_texel_size = 1.0 / vec2<f32>(textureDimensions(depth_texture));
+    let c =  textureSample(normal_texture, normal_sampler, in.uv);
+    let n  = dot(c, textureSample(normal_texture, normal_sampler, in.uv + texel_size * vec2<f32>( 0.0,  1.0)));
+    let e  = dot(c, textureSample(normal_texture, normal_sampler, in.uv + texel_size * vec2<f32>( 1.0,  0.0)));
+    let s  = dot(c, textureSample(normal_texture, normal_sampler, in.uv + texel_size * vec2<f32>( 0.0, -1.0)));
+    let w  = dot(c, textureSample(normal_texture, normal_sampler, in.uv + texel_size * vec2<f32>(-1.0,  0.0)));
+    let ne = dot(c, textureSample(normal_texture, normal_sampler, in.uv + texel_size * vec2<f32>( 1.0,  1.0)));
+    let nw = dot(c, textureSample(normal_texture, normal_sampler, in.uv + texel_size * vec2<f32>(-1.0,  1.0)));
+    let se = dot(c, textureSample(normal_texture, normal_sampler, in.uv + texel_size * vec2<f32>( 1.0, -1.0)));
+    let sw = dot(c, textureSample(normal_texture, normal_sampler, in.uv + texel_size * vec2<f32>(-1.0, -1.0)));
 
-    let n  = textureSample(depth_texture, depth_sampler, in.uv + depth_texel_size * vec2<f32>( 0.0,  1.0)).x;
-    let e  = textureSample(depth_texture, depth_sampler, in.uv + depth_texel_size * vec2<f32>( 1.0,  0.0)).x;
-    let s  = textureSample(depth_texture, depth_sampler, in.uv + depth_texel_size * vec2<f32>( 0.0, -1.0)).x;
-    let w  = textureSample(depth_texture, depth_sampler, in.uv + depth_texel_size * vec2<f32>(-1.0,  0.0)).x;
-    let ne = textureSample(depth_texture, depth_sampler, in.uv + depth_texel_size * vec2<f32>( 1.0,  1.0)).x;
-    let nw = textureSample(depth_texture, depth_sampler, in.uv + depth_texel_size * vec2<f32>(-1.0,  1.0)).x;
-    let se = textureSample(depth_texture, depth_sampler, in.uv + depth_texel_size * vec2<f32>( 1.0, -1.0)).x;
-    let sw = textureSample(depth_texture, depth_sampler, in.uv + depth_texel_size * vec2<f32>(-1.0, -1.0)).x;
-    
-    if ( n -  s > EDGE_THRESHOLD ||  w -  e > EDGE_THRESHOLD ||  e -  w > EDGE_THRESHOLD ||  s -  n > EDGE_THRESHOLD) {
-        color *= 0.3;
-    }
-
-    if (nw - se > EDGE_THRESHOLD || ne - sw > EDGE_THRESHOLD || se - nw > EDGE_THRESHOLD || sw - ne > EDGE_THRESHOLD) {
-        color *= 0.3;
+    if ( n -  s > THRESHOLD ||  w -  e > THRESHOLD ||  e -  w > THRESHOLD ||  s -  n > THRESHOLD
+     || nw - se > THRESHOLD || ne - sw > THRESHOLD || se - nw > THRESHOLD || sw - ne > THRESHOLD) {
+        color -= color * vec4(vec3(0.4), 0.0);
     }
 
     return color;
