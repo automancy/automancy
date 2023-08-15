@@ -23,18 +23,28 @@ pub struct Camera {
 
 impl Camera {
     pub fn new((width, height): (Double, Double)) -> Self {
+        let pos = point3(0.0, 0.0, 2.0);
+
         Self {
-            pos: point3(0.0, 0.0, 1.0),
+            pos,
             move_vel: vec2(0.0, 0.0),
             scroll_vel: 0.0,
 
-            culling_range: math::get_culling_range((width, height), Self::get_z(1.0)),
+            culling_range: math::get_culling_range((width, height), Self::get_z(pos.z)),
             pointing_at: TileCoord::new(0, 0),
         }
     }
 
-    pub fn get_z(z: Double) -> Double {
-        (z + 3.0) * 3.0
+    pub fn get_z(mut z: Double) -> Double {
+        if z > 2.0 {
+            if z <= 3.5 {
+                z = 2.0
+            } else {
+                z -= 1.5
+            }
+        }
+
+        7.5 + z.powi(2) * 1.5
     }
 
     /// Returns the position of the camera.
