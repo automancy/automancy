@@ -61,16 +61,16 @@ pub type RawMat4 = [[Float; 4]; 4];
 #[derive(Debug, Clone, Copy, Default, Zeroable, Pod)]
 pub struct Vertex {
     pub pos: VertexPos,
-    pub color: VertexColor,
     pub normal: VertexPos,
+    pub color: VertexColor,
 }
 
 impl Vertex {
     pub fn desc() -> VertexBufferLayout<'static> {
         static ATTRIBUTES: &[VertexAttribute] = &vertex_attr_array![
             0 => Float32x3,
-            1 => Float32x4,
-            2 => Float32x3,
+            1 => Float32x3,
+            2 => Float32x4,
         ];
 
         VertexBufferLayout {
@@ -95,13 +95,13 @@ impl PropertyAccess for Vertex {
             ("x", Property::Float(v)) => self.pos[0] = v,
             ("y", Property::Float(v)) => self.pos[1] = v,
             ("z", Property::Float(v)) => self.pos[2] = v,
+            ("nx", Property::Float(v)) => self.normal[0] = v,
+            ("ny", Property::Float(v)) => self.normal[1] = v,
+            ("nz", Property::Float(v)) => self.normal[2] = v,
             ("red", Property::UChar(v)) => self.color[0] = linear_f32_from_gamma_u8(v),
             ("green", Property::UChar(v)) => self.color[1] = linear_f32_from_gamma_u8(v),
             ("blue", Property::UChar(v)) => self.color[2] = linear_f32_from_gamma_u8(v),
             ("alpha", Property::UChar(v)) => self.color[3] = linear_f32_from_linear_u8(v),
-            ("nx", Property::Float(v)) => self.normal[0] = v,
-            ("ny", Property::Float(v)) => self.normal[1] = v,
-            ("nz", Property::Float(v)) => self.normal[2] = v,
             (_, _) => {}
         }
     }

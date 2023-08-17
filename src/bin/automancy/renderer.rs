@@ -11,22 +11,19 @@ use ractor::rpc::CallResult;
 use tokio::runtime::Runtime;
 use tokio::sync::oneshot;
 use wgpu::{
-    BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry,
-    BindingResource, BindingType, BlendState, BufferAddress, BufferDescriptor, BufferUsages, Color,
-    ColorTargetState, ColorWrites, CommandEncoderDescriptor, FragmentState, FrontFace,
-    ImageCopyBuffer, ImageDataLayout, IndexFormat, LoadOp, Maintain, MapMode, MultisampleState,
-    Operations, PipelineLayoutDescriptor, PrimitiveState, PrimitiveTopology,
-    RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor,
-    RenderPipelineDescriptor, ShaderStages, SurfaceError, TextureDescriptor, TextureDimension,
-    TextureFormat, TextureSampleType, TextureUsages, TextureViewDescriptor, TextureViewDimension,
-    VertexState, COPY_BUFFER_ALIGNMENT, COPY_BYTES_PER_ROW_ALIGNMENT,
+    BindGroupDescriptor, BindGroupEntry, BindingResource, BufferAddress, BufferDescriptor,
+    BufferUsages, Color, CommandEncoderDescriptor, ImageCopyBuffer, ImageDataLayout, IndexFormat,
+    LoadOp, Maintain, MapMode, Operations, RenderPassColorAttachment,
+    RenderPassDepthStencilAttachment, RenderPassDescriptor, SurfaceError, TextureDescriptor,
+    TextureDimension, TextureUsages, TextureViewDescriptor, COPY_BUFFER_ALIGNMENT,
+    COPY_BYTES_PER_ROW_ALIGNMENT,
 };
 
 use automancy::game::{
     GameMsg, RenderInfo, RenderUnit, TickUnit, TransactionRecord, TRANSACTION_ANIMATION_SPEED,
 };
 use automancy::gpu;
-use automancy::gpu::{Gpu, UPSCALE_LEVEL};
+use automancy::gpu::{Gpu, NORMAL_CLEAR, SCREENSHOT_FORMAT, UPSCALE_LEVEL};
 use automancy::input::KeyActions;
 use automancy::tile_entity::TileEntityMsg;
 use automancy::util::actor::multi_call_iter;
@@ -352,8 +349,8 @@ impl Renderer {
                 &self.gpu.queue,
                 &setup.resource_man,
                 instances,
-                &mut self.gpu.game_resources.game_instance_buffer,
-                &mut self.gpu.game_resources.game_indirect_buffer,
+                &mut self.gpu.game_resources.instance_buffer,
+                &mut self.gpu.game_resources.indirect_buffer,
             );
 
             let mut game_pass = encoder.begin_render_pass(&RenderPassDescriptor {
@@ -368,18 +365,10 @@ impl Renderer {
                         },
                     }),
                     Some(RenderPassColorAttachment {
-                        view: &self.gpu.position_texture().1,
-                        resolve_target: None,
-                        ops: Operations {
-                            load: LoadOp::Clear(Color::TRANSPARENT),
-                            store: true,
-                        },
-                    }),
-                    Some(RenderPassColorAttachment {
                         view: &self.gpu.normal_texture().1,
                         resolve_target: None,
                         ops: Operations {
-                            load: LoadOp::Clear(Color::TRANSPARENT),
+                            load: LoadOp::Clear(NORMAL_CLEAR),
                             store: true,
                         },
                     }),
@@ -396,7 +385,7 @@ impl Renderer {
 
             if count > 0 {
                 self.gpu.queue.write_buffer(
-                    &self.gpu.game_resources.game_uniform_buffer,
+                    &self.gpu.game_resources.uniform_buffer,
                     0,
                     bytemuck::cast_slice(&[GameUBO::new(matrix)]),
                 );
@@ -409,15 +398,14 @@ impl Renderer {
                     1.0,
                     0.0,
                 );
-                game_pass.set_pipeline(&self.gpu.game_resources.game_pipeline);
-                game_pass.set_bind_group(0, &self.gpu.game_resources.game_bind_group, &[]);
+                game_pass.set_pipeline(&self.gpu.game_resources.pipeline);
+                game_pass.set_bind_group(0, &self.gpu.game_resources.bind_group, &[]);
                 game_pass.set_vertex_buffer(0, self.gpu.vertex_buffer.slice(..));
-                game_pass
-                    .set_vertex_buffer(1, self.gpu.game_resources.game_instance_buffer.slice(..));
+                game_pass.set_vertex_buffer(1, self.gpu.game_resources.instance_buffer.slice(..));
                 game_pass.set_index_buffer(self.gpu.index_buffer.slice(..), IndexFormat::Uint16);
 
                 game_pass.multi_draw_indexed_indirect(
-                    &self.gpu.game_resources.game_indirect_buffer,
+                    &self.gpu.game_resources.indirect_buffer,
                     0,
                     count,
                 );
@@ -430,8 +418,8 @@ impl Renderer {
                 &self.gpu.queue,
                 &setup.resource_man,
                 extra_instances,
-                &mut self.gpu.extra_resources.extra_instance_buffer,
-                &mut self.gpu.extra_resources.extra_indirect_buffer,
+                &mut self.gpu.extra_resources.instance_buffer,
+                &mut self.gpu.extra_resources.indirect_buffer,
             );
 
             let mut extra_pass = encoder.begin_render_pass(&RenderPassDescriptor {
@@ -439,14 +427,6 @@ impl Renderer {
                 color_attachments: &[
                     Some(RenderPassColorAttachment {
                         view: &self.gpu.game_texture().1,
-                        resolve_target: None,
-                        ops: Operations {
-                            load: LoadOp::Load,
-                            store: true,
-                        },
-                    }),
-                    Some(RenderPassColorAttachment {
-                        view: &self.gpu.position_texture().1,
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Load,
@@ -463,7 +443,7 @@ impl Renderer {
                     }),
                 ],
                 depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                    view: &self.gpu.extra_resources.extra_depth_texture().1,
+                    view: &self.gpu.extra_resources.depth_texture().1,
                     depth_ops: Some(Operations {
                         load: LoadOp::Clear(0.0),
                         store: true,
@@ -474,7 +454,7 @@ impl Renderer {
 
             if count > 0 {
                 self.gpu.queue.write_buffer(
-                    &self.gpu.extra_resources.extra_uniform_buffer,
+                    &self.gpu.extra_resources.uniform_buffer,
                     0,
                     bytemuck::cast_slice(&[GameUBO::new(matrix)]),
                 );
@@ -487,45 +467,24 @@ impl Renderer {
                     1.0,
                     0.0,
                 );
-                extra_pass.set_pipeline(&self.gpu.game_resources.game_pipeline);
-                extra_pass.set_bind_group(0, &self.gpu.game_resources.game_bind_group, &[]);
+                extra_pass.set_pipeline(&self.gpu.game_resources.pipeline);
+                extra_pass.set_bind_group(0, &self.gpu.game_resources.bind_group, &[]);
                 extra_pass.set_vertex_buffer(0, self.gpu.vertex_buffer.slice(..));
-                extra_pass
-                    .set_vertex_buffer(1, self.gpu.extra_resources.extra_instance_buffer.slice(..));
+                extra_pass.set_vertex_buffer(1, self.gpu.extra_resources.instance_buffer.slice(..));
                 extra_pass.set_index_buffer(self.gpu.index_buffer.slice(..), IndexFormat::Uint16);
 
                 extra_pass.multi_draw_indexed_indirect(
-                    &self.gpu.extra_resources.extra_indirect_buffer,
+                    &self.gpu.extra_resources.indirect_buffer,
                     0,
                     count,
                 );
             }
         }
-
-        {
-            let mut effects_pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("Game Effects Render Pass"),
-                color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.effects_resources.processed_texture().1,
-                    resolve_target: None,
-                    ops: Operations {
-                        load: LoadOp::Clear(Color::BLACK),
-                        store: true,
-                    },
-                })],
-                depth_stencil_attachment: None,
-            });
-
-            effects_pass.set_pipeline(&self.gpu.effects_resources.effects_pipeline);
-            effects_pass.set_bind_group(0, self.gpu.effects_resources.effects_bind_group(), &[]);
-            effects_pass.draw(0..3, 0..1);
-        }
-
         {
             let mut post_effects_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Game Post Effects Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.post_effects_resources.processed_texture().1,
+                    view: &self.gpu.post_effects_resources.texture().1,
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(Color::BLACK),
@@ -536,17 +495,17 @@ impl Renderer {
             });
 
             self.gpu.queue.write_buffer(
-                &self.gpu.game_resources.game_post_effects_uniform_buffer,
+                &self.gpu.game_resources.post_effects_uniform_buffer,
                 0,
                 bytemuck::cast_slice(&[PostEffectsUBO {
                     depth_threshold: 0.00001,
                 }]),
             );
 
-            post_effects_pass.set_pipeline(&self.gpu.post_effects_resources.post_effects_pipeline);
+            post_effects_pass.set_pipeline(&self.gpu.post_effects_resources.pipeline);
             post_effects_pass.set_bind_group(
                 0,
-                self.gpu.game_resources.game_post_effects_bind_group(),
+                self.gpu.game_resources.post_effects_bind_group(),
                 &[],
             );
             post_effects_pass.draw(0..3, 0..1);
@@ -556,14 +515,14 @@ impl Renderer {
             gpu::create_or_write_buffer(
                 &self.gpu.device,
                 &self.gpu.queue,
-                &mut self.gpu.overlay_resources.overlay_vertex_buffer,
+                &mut self.gpu.overlay_resources.vertex_buffer,
                 bytemuck::cast_slice(overlay.as_slice()),
             );
 
             let mut overlay_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Overlay Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.post_effects_resources.processed_texture().1,
+                    view: &self.gpu.post_effects_resources.texture().1,
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Load,
@@ -582,19 +541,17 @@ impl Renderer {
 
             if !overlay.is_empty() {
                 self.gpu.queue.write_buffer(
-                    &self.gpu.overlay_resources.overlay_uniform_buffer,
+                    &self.gpu.overlay_resources.uniform_buffer,
                     0,
                     bytemuck::cast_slice(&[OverlayUBO::new(Matrix4::identity())]),
                 );
 
                 let vertex_count = overlay.len() as u32;
 
-                overlay_pass.set_pipeline(&self.gpu.overlay_resources.overlay_pipeline);
-                overlay_pass.set_bind_group(0, &self.gpu.overlay_resources.overlay_bind_group, &[]);
-                overlay_pass.set_vertex_buffer(
-                    0,
-                    self.gpu.overlay_resources.overlay_vertex_buffer.slice(..),
-                );
+                overlay_pass.set_pipeline(&self.gpu.overlay_resources.pipeline);
+                overlay_pass.set_bind_group(0, &self.gpu.overlay_resources.bind_group, &[]);
+                overlay_pass
+                    .set_vertex_buffer(0, self.gpu.overlay_resources.vertex_buffer.slice(..));
                 overlay_pass.draw(0..vertex_count, 0..1);
             }
         }
@@ -626,7 +583,7 @@ impl Renderer {
                 let mut egui_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                     label: Some("Egui Render Pass"),
                     color_attachments: &[Some(RenderPassColorAttachment {
-                        view: &self.gpu.egui_resources.egui_texture().1,
+                        view: &self.gpu.egui_resources.texture().1,
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Clear(Color::TRANSPARENT),
@@ -651,7 +608,7 @@ impl Renderer {
             let mut combine_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Combine Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.first_combine_resources.combine_texture().1,
+                    view: &self.gpu.first_combine_resources.texture().1,
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(Color::BLACK),
@@ -661,12 +618,8 @@ impl Renderer {
                 depth_stencil_attachment: None,
             });
 
-            combine_pass.set_pipeline(&self.gpu.first_combine_resources.combine_pipeline);
-            combine_pass.set_bind_group(
-                0,
-                self.gpu.first_combine_resources.combine_bind_group(),
-                &[],
-            );
+            combine_pass.set_pipeline(&self.gpu.first_combine_resources.pipeline);
+            combine_pass.set_bind_group(0, self.gpu.first_combine_resources.bind_group(), &[]);
             combine_pass.draw(0..3, 0..1)
         }
 
@@ -684,7 +637,7 @@ impl Renderer {
             gpu::create_or_write_buffer(
                 &self.gpu.device,
                 &self.gpu.queue,
-                &mut self.gpu.gui_resources.gui_instance_buffer,
+                &mut self.gpu.gui_resources.instance_buffer,
                 bytemuck::cast_slice(instances.as_slice()),
             );
 
@@ -700,18 +653,10 @@ impl Renderer {
                         },
                     }),
                     Some(RenderPassColorAttachment {
-                        view: &self.gpu.position_texture().1,
-                        resolve_target: None,
-                        ops: Operations {
-                            load: LoadOp::Clear(Color::TRANSPARENT),
-                            store: true,
-                        },
-                    }),
-                    Some(RenderPassColorAttachment {
                         view: &self.gpu.normal_texture().1,
                         resolve_target: None,
                         ops: Operations {
-                            load: LoadOp::Clear(Color::TRANSPARENT),
+                            load: LoadOp::Clear(NORMAL_CLEAR),
                             store: true,
                         },
                     }),
@@ -728,15 +673,15 @@ impl Renderer {
 
             if !draws.is_empty() {
                 self.gpu.queue.write_buffer(
-                    &self.gpu.gui_resources.gui_uniform_buffer,
+                    &self.gpu.gui_resources.uniform_buffer,
                     0,
                     bytemuck::cast_slice(&[GameUBO::default()]),
                 );
 
-                gui_pass.set_pipeline(&self.gpu.gui_resources.gui_pipeline);
-                gui_pass.set_bind_group(0, &self.gpu.gui_resources.gui_bind_group, &[]);
+                gui_pass.set_pipeline(&self.gpu.gui_resources.pipeline);
+                gui_pass.set_bind_group(0, &self.gpu.gui_resources.bind_group, &[]);
                 gui_pass.set_vertex_buffer(0, self.gpu.vertex_buffer.slice(..));
-                gui_pass.set_vertex_buffer(1, self.gpu.gui_resources.gui_instance_buffer.slice(..));
+                gui_pass.set_vertex_buffer(1, self.gpu.gui_resources.instance_buffer.slice(..));
                 gui_pass.set_index_buffer(self.gpu.index_buffer.slice(..), IndexFormat::Uint16);
 
                 for (idx, (id, viewport, scissor, depth)) in draws.into_iter().enumerate() {
@@ -790,29 +735,10 @@ impl Renderer {
         }
 
         {
-            let mut effects_pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("Gui Effects Render Pass"),
-                color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.effects_resources.processed_texture().1,
-                    resolve_target: None,
-                    ops: Operations {
-                        load: LoadOp::Clear(Color::BLACK),
-                        store: true,
-                    },
-                })],
-                depth_stencil_attachment: None,
-            });
-
-            effects_pass.set_pipeline(&self.gpu.effects_resources.effects_pipeline);
-            effects_pass.set_bind_group(0, self.gpu.effects_resources.effects_bind_group(), &[]);
-            effects_pass.draw(0..3, 0..1);
-        }
-
-        {
             let mut post_effects_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Gui Post Effects Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.post_effects_resources.processed_texture().1,
+                    view: &self.gpu.post_effects_resources.texture().1,
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(Color::BLACK),
@@ -823,17 +749,17 @@ impl Renderer {
             });
 
             self.gpu.queue.write_buffer(
-                &self.gpu.gui_resources.gui_post_effects_uniform_buffer,
+                &self.gpu.gui_resources.post_effects_uniform_buffer,
                 0,
                 bytemuck::cast_slice(&[PostEffectsUBO {
                     depth_threshold: 0.00025,
                 }]),
             );
 
-            post_effects_pass.set_pipeline(&self.gpu.post_effects_resources.post_effects_pipeline);
+            post_effects_pass.set_pipeline(&self.gpu.post_effects_resources.pipeline);
             post_effects_pass.set_bind_group(
                 0,
-                self.gpu.gui_resources.gui_post_effects_bind_group(),
+                self.gpu.gui_resources.post_effects_bind_group(),
                 &[],
             );
             post_effects_pass.draw(0..3, 0..1);
@@ -843,7 +769,7 @@ impl Renderer {
             let mut combine_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Combine Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.second_combine_resources.combine_texture().1,
+                    view: &self.gpu.second_combine_resources.texture().1,
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(Color::BLACK),
@@ -853,12 +779,8 @@ impl Renderer {
                 depth_stencil_attachment: None,
             });
 
-            combine_pass.set_pipeline(&self.gpu.second_combine_resources.combine_pipeline);
-            combine_pass.set_bind_group(
-                0,
-                self.gpu.second_combine_resources.combine_bind_group(),
-                &[],
-            );
+            combine_pass.set_pipeline(&self.gpu.second_combine_resources.pipeline);
+            combine_pass.set_bind_group(0, self.gpu.second_combine_resources.bind_group(), &[]);
             combine_pass.draw(0..3, 0..1)
         }
 
@@ -867,7 +789,7 @@ impl Renderer {
         encoder.copy_texture_to_texture(
             self.gpu
                 .second_combine_resources
-                .combine_texture()
+                .texture()
                 .0
                 .as_image_copy(),
             view,
@@ -884,8 +806,6 @@ impl Renderer {
         let padded_width = size_align(buffer_dim.width * block_size, COPY_BYTES_PER_ROW_ALIGNMENT);
 
         let screenshot_buffer = if setup.input_handler.key_active(KeyActions::Screenshot) {
-            const SCREENSHOT_FORMAT: TextureFormat = TextureFormat::Rgba8UnormSrgb;
-
             let intermediate_texture = self.gpu.device.create_texture(&TextureDescriptor {
                 label: Some("Screenshot Intermediate Texture"),
                 size: texture_dim,
@@ -900,79 +820,24 @@ impl Renderer {
             let intermediate_texture_view =
                 intermediate_texture.create_view(&TextureViewDescriptor::default());
 
-            let intermediate_bind_group_layout =
-                self.gpu
-                    .device
-                    .create_bind_group_layout(&BindGroupLayoutDescriptor {
-                        label: None,
-                        entries: &[BindGroupLayoutEntry {
-                            binding: 0,
-                            visibility: ShaderStages::FRAGMENT,
-                            ty: BindingType::Texture {
-                                sample_type: TextureSampleType::Float { filterable: false },
-                                view_dimension: TextureViewDimension::D2,
-                                multisampled: false,
-                            },
-                            count: None,
-                        }],
-                    });
-
             let intermediate_bind_group = self.gpu.device.create_bind_group(&BindGroupDescriptor {
                 label: None,
-                layout: &intermediate_bind_group_layout,
-                entries: &[BindGroupEntry {
-                    binding: 0,
-                    resource: BindingResource::TextureView(
-                        &output
-                            .texture
-                            .create_view(&TextureViewDescriptor::default()),
-                    ),
-                }],
+                layout: &self.gpu.intermediate_resources.bind_group_layout,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: BindingResource::TextureView(
+                            &output
+                                .texture
+                                .create_view(&TextureViewDescriptor::default()),
+                        ),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: BindingResource::Sampler(&self.gpu.filtering_sampler),
+                    },
+                ],
             });
-
-            let intermediate_pipeline_layout =
-                self.gpu
-                    .device
-                    .create_pipeline_layout(&PipelineLayoutDescriptor {
-                        label: Some("Intermediate Render Pipeline Layout"),
-                        bind_group_layouts: &[&intermediate_bind_group_layout],
-                        push_constant_ranges: &[],
-                    });
-
-            let intermediate_pipeline =
-                self.gpu
-                    .device
-                    .create_render_pipeline(&RenderPipelineDescriptor {
-                        label: Some("Intermediate Render Pipeline"),
-                        layout: Some(&intermediate_pipeline_layout),
-                        vertex: VertexState {
-                            module: &self.gpu.intermediate_shader,
-                            entry_point: "vs_main",
-                            buffers: &[],
-                        },
-                        fragment: Some(FragmentState {
-                            module: &self.gpu.intermediate_shader,
-                            entry_point: "fs_main",
-                            targets: &[Some(ColorTargetState {
-                                format: SCREENSHOT_FORMAT,
-                                blend: Some(BlendState::REPLACE),
-                                write_mask: ColorWrites::ALL,
-                            })],
-                        }),
-                        primitive: PrimitiveState {
-                            topology: PrimitiveTopology::TriangleList,
-                            front_face: FrontFace::Ccw,
-                            cull_mode: None,
-                            ..Default::default()
-                        },
-                        depth_stencil: None,
-                        multisample: MultisampleState {
-                            count: 1,
-                            mask: !0,
-                            alpha_to_coverage_enabled: false,
-                        },
-                        multiview: None,
-                    });
 
             {
                 let mut intermediate_pass = encoder.begin_render_pass(&RenderPassDescriptor {
@@ -988,7 +853,8 @@ impl Renderer {
                     depth_stencil_attachment: None,
                 });
 
-                intermediate_pass.set_pipeline(&intermediate_pipeline);
+                intermediate_pass
+                    .set_pipeline(&self.gpu.intermediate_resources.screenshot_pipeline);
                 intermediate_pass.set_bind_group(0, &intermediate_bind_group, &[]);
                 intermediate_pass.draw(0..3, 0..1);
             }
@@ -1042,13 +908,13 @@ impl Renderer {
                 let texture_width = texture_dim.width * block_size;
 
                 let data = slice.get_mapped_range();
-                let mut result = Vec::new();
-                for chunk in data.chunks(padded_width as usize) {
+                let mut result = Vec::<u8>::new();
+                for chunk in data.chunks_exact(padded_width as usize) {
                     result.extend(&chunk[..texture_width as usize]);
                 }
 
                 if let Some(image) =
-                    RgbaImage::from_raw(texture_dim.width, texture_dim.height, result)
+                    RgbaImage::from_vec(texture_dim.width, texture_dim.height, result)
                 {
                     let mut clipboard = Clipboard::new().unwrap();
 

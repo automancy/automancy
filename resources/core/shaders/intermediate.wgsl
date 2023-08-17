@@ -1,5 +1,7 @@
 @group(0) @binding(0)
-var frame: texture_2d<f32>;
+var frame_texture: texture_2d<f32>;
+@group(0) @binding(1)
+var frame_sampler: sampler;
 
 struct VertexInput {
     @builtin(vertex_index) idx: u32,
@@ -29,8 +31,5 @@ fn vs_main(
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let dim = vec2<f32>(textureDimensions(frame));
-    let tex = vec2<i32>(in.uv * dim);
-
-    return textureLoad(frame, tex, 0);
+    return textureSample(frame_texture, frame_sampler, in.uv);
 }

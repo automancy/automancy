@@ -8,8 +8,8 @@ var<uniform> ubo: Uniform;
 
 struct VertexInput {
     @location(0) pos: vec3<f32>,
-    @location(1) color: vec4<f32>,
-    @location(2) normal: vec3<f32>,
+    @location(1) normal: vec3<f32>,
+    @location(2) color: vec4<f32>,
 }
 
 struct InstanceInput {
@@ -57,8 +57,7 @@ fn vs_main(
 
 struct FragmentOutput {
     @location(0) color: vec4<f32>,
-    @location(1) pos: vec4<f32>,
-    @location(2) normal: vec4<f32>,
+    @location(1) normal: vec4<f32>,
 }
 
 @fragment
@@ -80,11 +79,8 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
 
     var out: FragmentOutput;
 
-    out.color = in.color;
-    out.color = vec4(out.color.rgb * (vec3(0.5) + diffuse + specular), out.color.a);
-
-    out.pos = vec4(in.model_pos, 1.0);
-    out.normal = vec4(in.normal, 1.0);
+    out.color = vec4(in.color.rgb * (vec3(0.5) + diffuse + specular), in.color.a);
+    out.normal = vec4(norm, 0.0);
 
     return out;
 }
