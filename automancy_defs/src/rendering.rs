@@ -1,54 +1,34 @@
 use std::mem::size_of;
 
+use crate::coord::TileCoord;
+use crate::math;
 use bytemuck::{Pod, Zeroable};
-use cgmath::{point2, point3, MetricSpace, SquareMatrix};
+use cgmath::{point3, vec3, EuclideanSpace, MetricSpace, SquareMatrix};
 use egui::ecolor::{linear_f32_from_gamma_u8, linear_f32_from_linear_u8};
-use egui::Rgba;
+use hexagon_tiles::fractional::FractionalHex;
+use hexagon_tiles::traits::HexRound;
 use ply_rs::ply::{Property, PropertyAccess};
 use wgpu::{vertex_attr_array, BufferAddress, VertexAttribute, VertexBufferLayout, VertexStepMode};
 
-use crate::math::{DPoint3, Double, Float, Matrix4, Point3, Vector3};
+use crate::math::{direction_to_angle, DPoint2, Double, Float, Matrix4, Point3, Vector3, FAR};
+
+pub fn lerp_coords_to_pixel(a: TileCoord, b: TileCoord, t: Double) -> DPoint2 {
+    let a = FractionalHex::new(a.q() as Double, a.r() as Double);
+    let b = FractionalHex::new(b.q() as Double, b.r() as Double);
+    let lerp = FractionalHex::lerp(a, b, t);
+
+    math::frac_hex_to_pixel(lerp)
+}
 
 /// Produces a line shape.
-pub fn make_line(a: DPoint3, b: DPoint3, w: Double, color: Rgba) -> [Vertex; 6] {
-    let v = b - a;
-    let l = a.distance(b);
-    let t = cgmath::vec2(-v.y / l, v.x / l);
-    let t = t / w / 24.0;
+pub fn make_line(a: DPoint2, b: DPoint2) -> Matrix4 {
+    let mid = a.midpoint(b).cast().unwrap();
+    let d = a.distance(b) as Float;
+    let theta = direction_to_angle(b - a);
 
-    let z0 = a.z as Float;
-    let z1 = z0.max(b.z as Float);
-
-    let a = point2(a.x, a.y);
-    let b = point2(b.x, b.y);
-
-    let a0 = (a + t).cast::<Float>().unwrap();
-    let a1 = (a - t).cast::<Float>().unwrap();
-    let b0 = (b + t).cast::<Float>().unwrap();
-    let b1 = (b - t).cast::<Float>().unwrap();
-
-    let a = Vertex {
-        pos: [a0.x, a0.y, z0],
-        color: color.to_array(),
-        normal: [0.0, 0.0, 0.0],
-    };
-    let b = Vertex {
-        pos: [b0.x, b0.y, z1],
-        color: color.to_array(),
-        normal: [0.0, 0.0, 0.0],
-    };
-    let c = Vertex {
-        pos: [a1.x, a1.y, z0],
-        color: color.to_array(),
-        normal: [0.0, 0.0, 0.0],
-    };
-    let d = Vertex {
-        pos: [b1.x, b1.y, z1],
-        color: color.to_array(),
-        normal: [0.0, 0.0, 0.0],
-    };
-
-    [a, b, c, b, c, d]
+    Matrix4::from_translation(vec3(mid.x, mid.y, 0.1))
+        * Matrix4::from_angle_z(theta)
+        * Matrix4::from_nonuniform_scale(d, 0.1, 0.01)
 }
 
 // vertex
@@ -260,7 +240,7 @@ impl OverlayUBO {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
 pub struct PostEffectsUBO {
-    pub depth_threshold: f32,
+    pub depth_threshold: Float,
 }
 
 #[derive(Clone, Debug)]

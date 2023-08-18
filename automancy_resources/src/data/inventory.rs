@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::ops::{Deref, DerefMut};
 
 use serde::{Deserialize, Serialize};
 
@@ -9,9 +10,27 @@ use crate::data::stack::ItemAmount;
 use crate::ResourceManager;
 
 #[derive(Debug, Default, Clone)]
-pub struct Inventory(pub BTreeMap<Id, ItemAmount>);
+pub struct Inventory(BTreeMap<Id, ItemAmount>);
+
+impl Deref for Inventory {
+    type Target = BTreeMap<Id, ItemAmount>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Inventory {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 
 impl Inventory {
+    pub fn into_inner(self) -> BTreeMap<Id, ItemAmount> {
+        self.0
+    }
+
     pub fn get(&mut self, id: Id) -> ItemAmount {
         *self.0.entry(id).or_insert(0)
     }
@@ -79,9 +98,13 @@ impl Inventory {
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
-pub struct InventoryRaw(pub Vec<(IdRaw, ItemAmount)>);
+pub struct InventoryRaw(Vec<(IdRaw, ItemAmount)>);
 
 impl InventoryRaw {
+    pub fn into_inner(self) -> Vec<(IdRaw, ItemAmount)> {
+        self.0
+    }
+
     pub fn to_inventory(&self, resource_man: &ResourceManager) -> Inventory {
         Inventory(
             self.0

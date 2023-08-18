@@ -400,7 +400,7 @@ impl Actor for Game {
                         }
                     }
                     SetData(key, value) => {
-                        state.map.data.0.insert(key, value);
+                        state.map.data.insert(key, value);
                     }
                     RemoveData(key) => {
                         state.map.data.remove(&key);

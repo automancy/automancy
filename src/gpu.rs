@@ -394,6 +394,87 @@ fn gui_setup(
     (uniform_buffer, bind_group, pipeline)
 }
 
+fn extra_setup(
+    device: &Device,
+    config: &SurfaceConfiguration,
+    shader: &ShaderModule,
+) -> (Buffer, BindGroup, RenderPipeline) {
+    let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
+        label: Some("Extra Uniform Buffer"),
+        contents: bytemuck::cast_slice(&[GameUBO::default()]),
+        usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+    });
+
+    let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+        entries: &[BindGroupLayoutEntry {
+            binding: 0,
+            visibility: ShaderStages::VERTEX_FRAGMENT,
+            ty: BindingType::Buffer {
+                ty: BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        }],
+        label: Some("extra_bind_group_layout"),
+    });
+
+    let bind_group = device.create_bind_group(&BindGroupDescriptor {
+        layout: &bind_group_layout,
+        entries: &[BindGroupEntry {
+            binding: 0,
+            resource: uniform_buffer.as_entire_binding(),
+        }],
+        label: Some("extra_bind_group"),
+    });
+
+    let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+        label: Some("Extra Render Pipeline Layout"),
+        bind_group_layouts: &[&bind_group_layout],
+        push_constant_ranges: &[],
+    });
+
+    let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+        label: Some("Extra Render Pipeline"),
+        layout: Some(&pipeline_layout),
+        vertex: VertexState {
+            module: shader,
+            entry_point: "vs_main",
+            buffers: &[Vertex::desc(), RawInstanceData::desc()],
+        },
+        fragment: Some(FragmentState {
+            module: shader,
+            entry_point: "fs_main",
+            targets: &[Some(ColorTargetState {
+                format: config.format,
+                blend: Some(BlendState::REPLACE),
+                write_mask: ColorWrites::ALL,
+            })],
+        }),
+        primitive: PrimitiveState {
+            topology: PrimitiveTopology::TriangleList,
+            front_face: FrontFace::Ccw,
+            cull_mode: None,
+            ..Default::default()
+        },
+        depth_stencil: Some(DepthStencilState {
+            format: DEPTH_FORMAT,
+            depth_write_enabled: true,
+            depth_compare: CompareFunction::GreaterEqual,
+            stencil: Default::default(),
+            bias: Default::default(),
+        }),
+        multisample: MultisampleState {
+            count: 1,
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        },
+        multiview: None,
+    });
+
+    (uniform_buffer, bind_group, pipeline)
+}
+
 fn make_post_effects_bind_group_layout(device: &Device) -> BindGroupLayout {
     device.create_bind_group_layout(&BindGroupLayoutDescriptor {
         entries: &[
@@ -786,8 +867,6 @@ pub struct ExtraResources {
     pub instance_buffer: Buffer,
     pub indirect_buffer: Buffer,
     pub uniform_buffer: Buffer,
-    #[getters(get)]
-    depth_texture: Option<(Texture, TextureView)>,
 }
 
 pub struct OverlayResources {
@@ -1052,23 +1131,23 @@ impl Gpu {
 
         let egui_resources = EguiResources { texture: None };
 
-        let extra_resources = ExtraResources {
-            instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
-                label: None,
-                contents: &[],
-                usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
-            }),
-            indirect_buffer: device.create_buffer_init(&BufferInitDescriptor {
-                label: None,
-                contents: &[],
-                usage: BufferUsages::INDIRECT | BufferUsages::COPY_DST,
-            }),
-            uniform_buffer: device.create_buffer_init(&BufferInitDescriptor {
-                label: Some("Extra Uniform Buffer"),
-                contents: bytemuck::cast_slice(&[GameUBO::default()]),
-                usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-            }),
-            depth_texture: None,
+        let extra_resources = {
+            let (uniform_buffer, bind_group, pipeline) =
+                extra_setup(&device, &config, &game_shader);
+
+            ExtraResources {
+                instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
+                    label: None,
+                    contents: &[],
+                    usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
+                }),
+                indirect_buffer: device.create_buffer_init(&BufferInitDescriptor {
+                    label: None,
+                    contents: &[],
+                    usage: BufferUsages::INDIRECT | BufferUsages::COPY_DST,
+                }),
+                uniform_buffer,
+            }
         };
 
         let overlay_resources = {
@@ -1303,15 +1382,6 @@ impl Gpu {
         ));
 
         self.game_texture = Some(create_surface_texture(device, config.format, upscale, None));
-
-        self.extra_resources.depth_texture = Some(create_texture(
-            device,
-            DEPTH_FORMAT,
-            TextureDimension::D2,
-            upscale,
-            None,
-            TextureUsages::RENDER_ATTACHMENT,
-        ));
 
         self.egui_resources.texture = Some(create_surface_texture(
             device,

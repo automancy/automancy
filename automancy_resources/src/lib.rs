@@ -1,4 +1,3 @@
-use std::cmp::min;
 use std::ffi::OsStr;
 use std::fmt;
 use std::fmt::{Debug, Formatter};
@@ -18,6 +17,7 @@ use walkdir::WalkDir;
 use automancy_defs::coord::TileCoord;
 use automancy_defs::flexstr::SharedStr;
 use automancy_defs::hashbrown::HashMap;
+use automancy_defs::hexagon_tiles::traits::HexRotate;
 use automancy_defs::id;
 use automancy_defs::id::{id_static, Id, Interner};
 use automancy_defs::rendering::Mesh;
@@ -258,10 +258,6 @@ impl ResourceManager {
                     None => Dynamic::UNIT,
                 }
             });
-        }
-
-        {
-            engine.register_fn("min", |a: i32, b: i32| min(a, b)); //TODO rhai bs
         }
 
         let data_ids = DataIds::new(&mut interner);

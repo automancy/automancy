@@ -174,12 +174,11 @@ fn takeable_item(
     tile_entity: ActorRef<TileEntityMsg>,
 ) {
     if let Some(inventory) = game_data
-        .0
         .entry(setup.resource_man.registry.data_ids.player_inventory)
         .or_insert_with(Data::new_inventory)
         .as_inventory_mut()
     {
-        for (id, amount) in buffer.0.clone().into_iter() {
+        for (id, amount) in buffer.clone().into_inner() {
             let item = *setup.resource_man.registry.item(id).unwrap();
 
             let (rect, response) = draw_item(

@@ -8,6 +8,7 @@ use winit::event::VirtualKeyCode;
 
 use automancy_defs::hashbrown::HashMap;
 use automancy_defs::log;
+use automancy_defs::math::{Double, Float};
 
 use crate::input::{KeyAction, DEFAULT_KEYMAP};
 
@@ -77,9 +78,9 @@ pub enum AAType {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct GraphicsOptions {
-    pub fps_limit: f64,
+    pub fps_limit: Double,
     pub fullscreen: bool,
-    pub scale: f32,
+    pub scale: Float,
     pub anti_aliasing: AAType,
 }
 

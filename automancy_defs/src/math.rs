@@ -3,11 +3,11 @@
 use std::f64::consts::PI;
 use std::ops::{Div, Sub};
 
-use cgmath::{point2, point3, vec2, BaseFloat, EuclideanSpace};
+use cgmath::{point2, point3, vec2, Angle, BaseFloat, EuclideanSpace};
 use hexagon_tiles::fractional::FractionalHex;
 use hexagon_tiles::layout::{Layout, LAYOUT_ORIENTATION_POINTY};
 use hexagon_tiles::point::Point;
-use hexagon_tiles::traits::HexRound;
+use hexagon_tiles::traits::{HexMath, HexRound};
 
 use crate::coord::{TileCoord, TileHex, TileUnit};
 
@@ -17,7 +17,7 @@ const HEX_GRID_LAYOUT: Layout = Layout {
     origin: Point { x: 0.0, y: 0.0 },
 };
 
-pub const FAR: Double = 1.0;
+pub const FAR: Double = 0.0;
 
 pub type Float = f32;
 
@@ -195,7 +195,7 @@ pub fn hex_to_normalized(
     (width, height): (Double, Double),
     camera_pos: DPoint3,
     hex: TileCoord,
-) -> (DPoint3, Double) {
+) -> DPoint3 {
     let p = hex_to_pixel(hex.into()).to_vec();
 
     let aspect = width / height;
@@ -206,7 +206,7 @@ pub fn hex_to_normalized(
     let w = p.w;
     let p = p.truncate() / w;
 
-    (point3(p.x, p.y, 1.00001 - p.z), w)
+    point3(p.x, p.y, p.z)
 }
 
 #[inline]
@@ -215,7 +215,7 @@ pub fn is_in_culling_range(
     other: TileCoord,
     culling_range: (TileUnit, TileUnit),
 ) -> bool {
-    center.distance(other) < culling_range.0 && center.distance(other) < culling_range.1
+    center.distance(*other) < culling_range.0 && center.distance(*other) < culling_range.1
 }
 
 /// Gets the culling range from the camera's position
@@ -233,4 +233,10 @@ pub fn get_culling_range((width, height): (Double, Double), z: Double) -> (TileU
     let o: TileHex = o.round();
 
     (o.q().abs(), o.r().abs())
+}
+
+pub fn direction_to_angle(d: DVector2) -> Rad {
+    let angle = cgmath::Rad::atan2(d.y, d.x);
+
+    rad(angle.0.rem_euclid(PI) as Float)
 }

@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::f32::consts::PI;
+
 use std::time::Instant;
 
 use arboard::{Clipboard, ImageData};
@@ -27,18 +27,18 @@ use automancy::gpu::{Gpu, NORMAL_CLEAR, SCREENSHOT_FORMAT, UPSCALE_LEVEL};
 use automancy::input::KeyActions;
 use automancy::tile_entity::TileEntityMsg;
 use automancy::util::actor::multi_call_iter;
-use automancy_defs::cgmath::{vec3, Angle, SquareMatrix};
+use automancy_defs::cgmath::{vec3, EuclideanSpace, SquareMatrix};
 use automancy_defs::coord::TileCoord;
 use automancy_defs::gui::Gui;
 use automancy_defs::hashbrown::HashMap;
-use automancy_defs::hexagon_tiles::fractional::FractionalHex;
-use automancy_defs::hexagon_tiles::traits::HexRound;
+
 use automancy_defs::id::Id;
-use automancy_defs::math::{deg, rad, DPoint3, Double, Float, Matrix4, Rad, FAR};
+use automancy_defs::math::{deg, direction_to_angle, Float, Matrix4, FAR};
 use automancy_defs::rendering::{
-    make_line, GameUBO, InstanceData, OverlayUBO, PostEffectsUBO, RawInstanceData, Vertex,
+    lerp_coords_to_pixel, make_line, GameUBO, InstanceData, OverlayUBO, PostEffectsUBO,
+    RawInstanceData, Vertex,
 };
-use automancy_defs::{bytemuck, colors, math, window};
+use automancy_defs::{bytemuck, colors, math};
 use automancy_resources::data::{Data, DataMap};
 
 use crate::setup::GameSetup;
@@ -90,20 +90,6 @@ pub type GuiInstances = Vec<(
 )>;
 
 impl Renderer {
-    fn draw_link(
-        coord: TileCoord,
-        link: TileCoord,
-        camera_pos: DPoint3,
-        overlay: &mut Vec<Vertex>,
-        (width, height): (Double, Double),
-    ) {
-        let (a, w0) = math::hex_to_normalized((width, height), camera_pos, coord);
-
-        let (b, w1) = math::hex_to_normalized((width, height), camera_pos, link);
-
-        overlay.extend_from_slice(&make_line(a, b, (w0 + w1) * 0.5, colors::RED));
-    }
-
     pub fn render(
         &mut self,
         runtime: &Runtime,
@@ -114,7 +100,7 @@ impl Renderer {
         tile_tints: HashMap<TileCoord, Rgba>,
         gui_instances: GuiInstances,
         mut extra_instances: Vec<(RawInstanceData, Id)>,
-        mut overlay: Vec<Vertex>,
+        overlay: Vec<Vertex>,
     ) -> Result<(), SurfaceError> {
         let size = self.gpu.window.inner_size();
 
@@ -198,13 +184,18 @@ impl Renderer {
                     .and_then(Data::as_coord)
                     .cloned()
                 {
-                    Self::draw_link(
-                        *coord,
-                        link,
-                        camera_pos,
-                        &mut overlay,
-                        window::window_size_double(&self.gpu.window),
-                    )
+                    extra_instances.push((
+                        InstanceData {
+                            color_offset: colors::RED.to_array(),
+                            light_pos: camera_pos_float,
+                            model_matrix: make_line(
+                                math::hex_to_pixel(**coord),
+                                math::hex_to_pixel(*link),
+                            ),
+                        }
+                        .into(),
+                        setup.resource_man.registry.model_ids.cube1x1,
+                    ));
                 }
             }
 
@@ -274,24 +265,18 @@ impl Renderer {
             for (instant, TransactionRecord { stack, .. }) in instants {
                 let duration = now.duration_since(*instant);
                 let t = duration.as_secs_f64() / TRANSACTION_ANIMATION_SPEED.as_secs_f64();
-                let a = FractionalHex::new(source_coord.q() as Double, source_coord.r() as Double);
-                let b = FractionalHex::new(coord.q() as Double, coord.r() as Double);
-                let lerp = a.lerp(b, t);
-                let point = math::frac_hex_to_pixel(lerp);
+
+                let point = lerp_coords_to_pixel(*source_coord, *coord, t);
 
                 let direction = *coord - *source_coord;
                 let direction = math::hex_to_pixel(direction.into());
-                let angle = Rad::atan2(direction.y as Float, direction.x as Float);
-                let angle = rad(angle.0.rem_euclid(PI));
+                let theta = direction_to_angle(direction.to_vec());
 
                 let instance = InstanceData::default()
                     .with_model_matrix(
-                        Matrix4::from_translation(vec3(
-                            point.x as Float,
-                            point.y as Float,
-                            FAR as Float,
-                        )) * Matrix4::from_scale(0.3)
-                            * Matrix4::from_angle_z(angle),
+                        Matrix4::from_translation(vec3(point.x as Float, point.y as Float, 0.2))
+                            * Matrix4::from_angle_z(theta)
+                            * Matrix4::from_scale(0.3),
                     )
                     .with_light_pos(camera_pos_float);
                 let model = setup.resource_man.get_item_model(stack.item);
@@ -422,6 +407,7 @@ impl Renderer {
                 &mut self.gpu.extra_resources.indirect_buffer,
             );
 
+            // TODO rename the fucking "extra" stuff
             let mut extra_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Extra Render Pass"),
                 color_attachments: &[
@@ -443,10 +429,10 @@ impl Renderer {
                     }),
                 ],
                 depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                    view: &self.gpu.extra_resources.depth_texture().1,
+                    view: &self.gpu.depth_texture().1,
                     depth_ops: Some(Operations {
-                        load: LoadOp::Clear(0.0),
-                        store: true,
+                        load: LoadOp::Load,
+                        store: false,
                     }),
                     stencil_ops: None,
                 }),
@@ -480,6 +466,7 @@ impl Renderer {
                 );
             }
         }
+
         {
             let mut post_effects_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Game Post Effects Render Pass"),

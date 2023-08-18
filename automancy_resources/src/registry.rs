@@ -73,6 +73,8 @@ pub struct ModelIds {
     pub missing: Id,
     #[namespace(core)]
     pub items_missing: Id,
+    #[namespace(core)]
+    pub cube1x1: Id,
 }
 
 /// The list of GUI translation keys.

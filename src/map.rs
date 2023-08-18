@@ -198,9 +198,9 @@ impl Map {
                 let tile_entity =
                     game::new_tile(resource_man.clone(), game.clone(), coord, id, tile_modifier)
                         .await;
-                let data = data.to_data(&resource_man);
+                let data = data.to_data(&resource_man).into_inner();
 
-                for (key, value) in data.0 {
+                for (key, value) in data {
                     tile_entity
                         .send_message(TileEntityMsg::SetDataValue(key, value))
                         .unwrap();

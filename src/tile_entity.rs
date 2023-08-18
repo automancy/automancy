@@ -448,7 +448,7 @@ impl Actor for TileEntity {
                 state.data = data;
             }
             SetDataValue(key, value) => {
-                state.data.0.insert(key, value);
+                state.data.insert(key, value);
             }
             TakeData(reply) => {
                 reply.send(mem::take(&mut state.data)).unwrap();
@@ -539,7 +539,7 @@ fn send_to_tile(state: &mut TileEntityState, coord: TileCoord, message: TileEnti
     {
         Ok(_) => {}
         Err(_) => {
-            state.data.0.clear();
+            state.data.clear();
         }
     }
 }

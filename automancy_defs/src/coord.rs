@@ -1,9 +1,9 @@
 use std::fmt::{Display, Formatter};
-use std::ops::{Add, Div, Mul, Neg, RangeInclusive, Sub};
+use std::ops::{Add, Deref, Div, Mul, Neg, RangeInclusive, Sub};
 
 use hexagon_tiles::fractional::FractionalHex;
 use hexagon_tiles::hex::{hex, Hex};
-use hexagon_tiles::traits::{HexDirection, HexMath, HexRotate, HexRound};
+use hexagon_tiles::traits::{HexDirection, HexRound};
 use serde::de::{SeqAccess, Visitor};
 use serde::ser::SerializeTuple;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -20,9 +20,25 @@ pub type TileHex = Hex<TileUnit>;
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct TileCoord(TileHex);
 
+impl Deref for TileCoord {
+    type Target = TileHex;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 /// Represents a chunk's position.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct ChunkCoord(TileHex);
+
+impl Deref for ChunkCoord {
+    type Target = TileHex;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 /// Copied from https://youtu.be/Zz296fdB8rc
 impl From<TileCoord> for ChunkCoord {
@@ -63,27 +79,6 @@ impl TileCoord {
 }
 
 impl TileCoord {
-    pub fn rotate_right(self) -> Self {
-        Self(self.0.rotate_right())
-    }
-
-    pub fn rotate_left(self) -> Self {
-        Self(self.0.rotate_left())
-    }
-
-    /// Gets the q component of the coordinate.
-    pub fn q(self) -> TileUnit {
-        self.0.q()
-    }
-    /// Gets the r component of the coordinate.
-    pub fn r(self) -> TileUnit {
-        self.0.r()
-    }
-    /// Gets the s component of the coordinate.
-    pub fn s(self) -> TileUnit {
-        self.0.s()
-    }
-
     /// Creates a minimal string of the coordinate.
     pub fn to_minimal_string(self) -> String {
         format!("{},{}", self.q(), self.r())
@@ -141,19 +136,6 @@ impl TileCoord {
 }
 
 impl ChunkCoord {
-    /// Gets the q component of the coordinate.
-    pub fn q(self) -> TileUnit {
-        self.0.q()
-    }
-    /// Gets the r component of the coordinate.
-    pub fn r(self) -> TileUnit {
-        self.0.r()
-    }
-    /// Gets the s component of the coordinate.
-    pub fn s(self) -> TileUnit {
-        self.0.s()
-    }
-
     /// Creates a minimal string of the coordinate.
     pub fn to_minimal_string(self) -> String {
         format!("{},{}", self.q(), self.r())
@@ -319,13 +301,6 @@ impl From<TileHex> for TileCoord {
 impl From<TileCoord> for TileHex {
     fn from(value: TileCoord) -> Self {
         value.0
-    }
-}
-
-impl TileCoord {
-    /// Gets the distance between two tiles.
-    pub fn distance(self, other: TileCoord) -> TileUnit {
-        self.0.distance(other.0)
     }
 }
 

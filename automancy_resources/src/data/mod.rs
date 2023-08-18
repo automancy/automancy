@@ -1,5 +1,6 @@
 use std::any::TypeId;
 use std::collections::BTreeMap;
+use std::ops::{Deref, DerefMut};
 
 use rhai::{Dynamic, ImmutableString};
 use serde::{Deserialize, Serialize};
@@ -227,9 +228,69 @@ impl TryFrom<Dynamic> for Data {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct DataMap(pub BTreeMap<Id, Data>);
+pub struct DataMap(BTreeMap<Id, Data>);
+
+impl From<DataMap> for BTreeMap<Id, Data> {
+    fn from(value: DataMap) -> Self {
+        value.0
+    }
+}
+
+impl From<BTreeMap<Id, Data>> for DataMap {
+    fn from(value: BTreeMap<Id, Data>) -> Self {
+        Self(value)
+    }
+}
+
+impl Deref for DataMap {
+    type Target = BTreeMap<Id, Data>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for DataMap {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 
 impl DataMap {
+    pub fn into_inner(self) -> BTreeMap<Id, Data> {
+        self.0
+    }
+
+    pub fn to_raw(&self, interner: &Interner) -> DataMapRaw {
+        DataMapRaw(
+            self.0
+                .iter()
+                .flat_map(|(key, value)| {
+                    interner.resolve(*key).map(|key| {
+                        (
+                            key.to_string(),
+                            match value {
+                                Data::Inventory(v) => DataRaw::Inventory(v.to_raw(interner)),
+                                Data::Coord(v) => DataRaw::Coord(*v),
+                                Data::VecCoord(v) => DataRaw::VecCoord(v.clone()),
+                                Data::Id(v) => {
+                                    DataRaw::Id(IdRaw::parse(interner.resolve(*v).unwrap()))
+                                }
+                                Data::VecId(v) => DataRaw::VecId(
+                                    v.iter()
+                                        .map(|id| IdRaw::parse(interner.resolve(*id).unwrap()))
+                                        .collect(),
+                                ),
+                                Data::Amount(v) => DataRaw::Amount(*v),
+                                Data::Bool(v) => DataRaw::Bool(*v),
+                            },
+                        )
+                    })
+                })
+                .collect(),
+        )
+    }
+
     fn rhai_parse(ty: ImmutableString) -> Option<Data> {
         let ty = ty.to_lowercase();
 
@@ -262,50 +323,6 @@ impl DataMap {
             .clone()
             .rhai_value()
     }
-
-    pub fn get(&self, id: &Id) -> Option<&Data> {
-        self.0.get(id)
-    }
-
-    pub fn get_mut(&mut self, id: &Id) -> Option<&mut Data> {
-        self.0.get_mut(id)
-    }
-
-    pub fn remove(&mut self, id: &Id) -> Option<Data> {
-        self.0.remove(id)
-    }
-}
-
-impl DataMap {
-    pub fn to_raw(&self, interner: &Interner) -> DataMapRaw {
-        DataMapRaw(
-            self.0
-                .iter()
-                .flat_map(|(key, value)| {
-                    interner.resolve(*key).map(|key| {
-                        (
-                            key.to_string(),
-                            match value {
-                                Data::Inventory(v) => DataRaw::Inventory(v.to_raw(interner)),
-                                Data::Coord(v) => DataRaw::Coord(*v),
-                                Data::VecCoord(v) => DataRaw::VecCoord(v.clone()),
-                                Data::Id(v) => {
-                                    DataRaw::Id(IdRaw::parse(interner.resolve(*v).unwrap()))
-                                }
-                                Data::VecId(v) => DataRaw::VecId(
-                                    v.iter()
-                                        .map(|id| IdRaw::parse(interner.resolve(*id).unwrap()))
-                                        .collect(),
-                                ),
-                                Data::Amount(v) => DataRaw::Amount(*v),
-                                Data::Bool(v) => DataRaw::Bool(*v),
-                            },
-                        )
-                    })
-                })
-                .collect(),
-        )
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -320,19 +337,25 @@ pub enum DataRaw {
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
-pub struct DataMapRaw(pub HashMap<String, DataRaw>);
+pub struct DataMapRaw(HashMap<String, DataRaw>);
 
-impl DataMapRaw {
-    pub fn get(&self, id: &str) -> Option<&DataRaw> {
-        self.0.get(id)
+impl From<DataMapRaw> for HashMap<String, DataRaw> {
+    fn from(value: DataMapRaw) -> Self {
+        value.0
     }
+}
 
-    pub fn get_mut(&mut self, id: &str) -> Option<&mut DataRaw> {
-        self.0.get_mut(id)
+impl From<HashMap<String, DataRaw>> for DataMapRaw {
+    fn from(value: HashMap<String, DataRaw>) -> Self {
+        Self(value)
     }
 }
 
 impl DataMapRaw {
+    pub fn into_inner(self) -> HashMap<String, DataRaw> {
+        self.0
+    }
+
     pub fn intern_to_data(&self, resource_man: &mut ResourceManager) -> DataMap {
         DataMap(
             self.0

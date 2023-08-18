@@ -25,7 +25,7 @@ use automancy_defs::gui::Gui;
 use automancy_defs::hashbrown::{HashMap, HashSet};
 use automancy_defs::id::Id;
 use automancy_defs::math::{Float, Matrix4, FAR};
-use automancy_defs::rendering::{make_line, InstanceData};
+use automancy_defs::rendering::{make_line, InstanceData, RawInstanceData};
 use automancy_defs::{colors, log, math, window};
 use automancy_resources::data::item::Item;
 use automancy_resources::data::Data;
@@ -421,8 +421,8 @@ pub fn on_event(
         loop_store.frame_start = Instant::now();
 
         let mut gui_instances = vec![];
-        let extra_instances = vec![];
-        let mut overlay = vec![];
+        let mut extra_instances: Vec<(RawInstanceData, Id)> = vec![];
+        let overlay = vec![];
 
         setup.camera.update_pointing_at(
             setup.input_handler.main_pos,
@@ -436,7 +436,8 @@ pub fn on_event(
 
         let (width, height) = window::window_size_float(&renderer.gpu.window);
         let aspect = width / height;
-        let matrix = math::matrix(setup.camera.get_pos().cast().unwrap(), aspect, PI);
+        let camera_pos_float = setup.camera.get_pos().cast().unwrap();
+        let matrix = math::matrix(camera_pos_float, aspect, PI);
 
         let (selection_send, mut selection_recv) = mpsc::channel(1);
 
@@ -496,13 +497,13 @@ pub fn on_event(
                             }
                         }
 
-                        let mouse_pos = math::screen_to_world(
+                        let cursor_pos = math::screen_to_world(
                             window::window_size_double(&renderer.gpu.window),
                             setup.input_handler.main_pos,
                             setup.camera.get_pos().z,
                         );
-                        let mouse_pos = point2(mouse_pos.x, mouse_pos.y);
-                        let mouse_pos = mouse_pos + setup.camera.get_pos().to_vec().truncate();
+                        let cursor_pos = point2(cursor_pos.x, cursor_pos.y);
+                        let cursor_pos = cursor_pos + setup.camera.get_pos().to_vec().truncate();
 
                         if let Some(id) = loop_store.selected_id {
                             if let Some(model) = resource_man.registry.tile(id).and_then(|v| {
@@ -517,33 +518,37 @@ pub fn on_event(
                                     )
                                     .cloned()
                             }) {
-                                let instance = InstanceData {
-                                    model_matrix: matrix
-                                        * Matrix4::from_translation(vec3(
-                                            mouse_pos.x as Float,
-                                            mouse_pos.y as Float,
-                                            FAR as Float,
-                                        )),
-                                    color_offset: colors::TRANSPARENT.with_alpha(0.8).to_array(),
-                                    light_pos: setup.camera.get_pos().cast().unwrap(),
-                                };
-
-                                gui_instances.push((instance, model, None, None, None));
+                                gui_instances.push((
+                                    InstanceData {
+                                        color_offset: colors::TRANSPARENT
+                                            .with_alpha(0.8)
+                                            .to_array(),
+                                        light_pos: camera_pos_float,
+                                        model_matrix: matrix
+                                            * Matrix4::from_translation(vec3(
+                                                cursor_pos.x as Float,
+                                                cursor_pos.y as Float,
+                                                FAR as Float,
+                                            )),
+                                    },
+                                    model,
+                                    None,
+                                    None,
+                                    None,
+                                ));
                             }
                         }
 
                         if let Some(coord) = loop_store.linking_tile {
-                            let (a, w) = math::hex_to_normalized(
-                                window::window_size_double(&renderer.gpu.window),
-                                setup.camera.get_pos(),
-                                coord,
-                            );
-                            let b = math::screen_to_normalized(
-                                window::window_size_double(&renderer.gpu.window),
-                                setup.input_handler.main_pos,
-                            );
-
-                            overlay.extend_from_slice(&make_line(a, b, w, colors::RED));
+                            extra_instances.push((
+                                InstanceData {
+                                    color_offset: colors::RED.to_array(),
+                                    light_pos: camera_pos_float,
+                                    model_matrix: make_line(math::hex_to_pixel(*coord), cursor_pos),
+                                }
+                                .into(),
+                                setup.resource_man.registry.model_ids.cube1x1,
+                            ));
                         }
                     }
                 }
@@ -584,18 +589,18 @@ pub fn on_event(
             if let Some(start) = loop_store.initial_cursor_position {
                 let direction = setup.camera.pointing_at - start;
 
-                let (a, w0) = math::hex_to_normalized(
-                    window::window_size_double(&renderer.gpu.window),
-                    setup.camera.get_pos(),
-                    start,
-                );
-                let (b, w1) = math::hex_to_normalized(
-                    window::window_size_double(&renderer.gpu.window),
-                    setup.camera.get_pos(),
-                    setup.camera.pointing_at,
-                );
-
-                overlay.extend_from_slice(&make_line(a, b, (w0 + w1) * 0.5, colors::LIGHT_BLUE));
+                extra_instances.push((
+                    InstanceData {
+                        color_offset: colors::LIGHT_BLUE.to_array(),
+                        light_pos: camera_pos_float,
+                        model_matrix: make_line(
+                            math::hex_to_pixel(*start),
+                            math::hex_to_pixel(*setup.camera.pointing_at),
+                        ),
+                    }
+                    .into(),
+                    setup.resource_man.registry.model_ids.cube1x1,
+                ));
 
                 for selected in &loop_store.selected_tiles {
                     let dest = *selected + direction;

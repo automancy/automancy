@@ -52,16 +52,16 @@ fn draw_tile_selection(
 
             let hover = if response.hovered() {
                 ui.ctx()
-                    .animate_value_with_time(ui.next_auto_id(), 1.0, 0.3)
+                    .animate_value_with_time(ui.next_auto_id(), 1.5, 0.3)
             } else {
                 ui.ctx()
-                    .animate_value_with_time(ui.next_auto_id(), 0.15, 0.3)
+                    .animate_value_with_time(ui.next_auto_id(), 0.6, 0.3)
             };
             if response.clicked() {
                 selection_send.try_send(id).unwrap();
             }
 
-            let pos = point3(0.0, hover, 3.0 - hover / 2.0);
+            let pos = point3(0.0, hover * 1.25, 3.0 - hover * 0.25);
             let matrix = math::perspective(FRAC_PI_4, 1.0, 0.01, 100.0)
                 * Matrix4::look_to_rh(pos, vec3(0.0, hover / 2.0, 1.0), Vector3::unit_y());
 

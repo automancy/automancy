@@ -58,7 +58,7 @@ pub fn info(
                 .and_then(Data::as_inventory)
                 .cloned()
             {
-                for (item, amount) in inventory.0.iter().flat_map(|(id, amount)| {
+                for (item, amount) in inventory.iter().flat_map(|(id, amount)| {
                     setup
                         .resource_man
                         .registry
