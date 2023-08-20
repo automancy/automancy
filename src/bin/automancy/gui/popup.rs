@@ -9,7 +9,6 @@ use automancy_defs::log;
 
 use crate::event::EventLoopStorage;
 use crate::gui::{default_frame, GuiState, PopupState};
-use crate::renderer::Renderer;
 use crate::setup::GameSetup;
 
 pub fn invalid_name_popup(setup: &GameSetup, gui: &mut Gui, loop_store: &mut EventLoopStorage) {
@@ -91,12 +90,7 @@ pub fn map_delete_popup(
 }
 
 /// Draws the map creation popup.
-pub fn map_create_popup(
-    setup: &GameSetup,
-    gui: &mut Gui,
-    loop_store: &mut EventLoopStorage,
-    renderer: &mut Renderer,
-) {
+pub fn map_create_popup(setup: &GameSetup, gui: &mut Gui, loop_store: &mut EventLoopStorage) {
     Window::new(
         setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.create_map].as_str(),
     )
@@ -122,7 +116,6 @@ pub fn map_create_popup(
                 .game
                 .send_message(GameMsg::LoadMap(setup.resource_man.clone(), name))
                 .unwrap();
-            renderer.reset_last_tiles_update();
             loop_store.map_name_input.clear();
             loop_store.popup_state = PopupState::None;
             loop_store.switch_gui_state(GuiState::Ingame);

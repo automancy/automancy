@@ -1,7 +1,5 @@
 use std::mem::size_of;
 
-use crate::coord::TileCoord;
-use crate::math;
 use bytemuck::{Pod, Zeroable};
 use cgmath::{point3, vec3, EuclideanSpace, MetricSpace, SquareMatrix};
 use egui::ecolor::{linear_f32_from_gamma_u8, linear_f32_from_linear_u8};
@@ -10,7 +8,9 @@ use hexagon_tiles::traits::HexRound;
 use ply_rs::ply::{Property, PropertyAccess};
 use wgpu::{vertex_attr_array, BufferAddress, VertexAttribute, VertexBufferLayout, VertexStepMode};
 
-use crate::math::{direction_to_angle, DPoint2, Double, Float, Matrix4, Point3, Vector3, FAR};
+use crate::coord::TileCoord;
+use crate::math;
+use crate::math::{direction_to_angle, DPoint2, Double, Float, Matrix4, Point3, Vector3};
 
 pub fn lerp_coords_to_pixel(a: TileCoord, b: TileCoord, t: Double) -> DPoint2 {
     let a = FractionalHex::new(a.q() as Double, a.r() as Double);

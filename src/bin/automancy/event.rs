@@ -556,13 +556,13 @@ pub fn on_event(
                     menu::main_menu(setup, &gui.context, control_flow, loop_store)
                 }
                 GuiState::MapLoad => {
-                    menu::map_menu(setup, &gui.context, loop_store, renderer);
+                    menu::map_menu(setup, &gui.context, loop_store);
                 }
                 GuiState::Options => {
                     menu::options_menu(setup, &gui.context, loop_store);
                 }
                 GuiState::Paused => {
-                    menu::pause_menu(runtime, setup, &gui.context, loop_store, renderer);
+                    menu::pause_menu(runtime, setup, &gui.context, loop_store);
                 }
                 GuiState::Research => {}
             }
@@ -570,7 +570,7 @@ pub fn on_event(
 
         match loop_store.popup_state.clone() {
             PopupState::None => {}
-            PopupState::MapCreate => popup::map_create_popup(setup, gui, loop_store, renderer),
+            PopupState::MapCreate => popup::map_create_popup(setup, gui, loop_store),
             PopupState::MapDeleteConfirmation(map_name) => {
                 popup::map_delete_popup(setup, gui, loop_store, &map_name);
             }
@@ -627,7 +627,7 @@ pub fn on_event(
             setup,
             gui,
             matrix,
-            &render_info,
+            render_info,
             tile_tints,
             gui_instances,
             extra_instances,

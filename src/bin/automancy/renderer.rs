@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-
 use std::time::Instant;
 
 use arboard::{Clipboard, ImageData};
@@ -7,7 +6,6 @@ use egui::{Rect, Rgba};
 use egui_wgpu::renderer::ScreenDescriptor;
 use image::{EncodableLayout, RgbaImage};
 use num::PrimInt;
-use ractor::rpc::CallResult;
 use tokio::runtime::Runtime;
 use tokio::sync::oneshot;
 use wgpu::{
@@ -20,48 +18,33 @@ use wgpu::{
 };
 
 use automancy::game::{
-    GameMsg, RenderInfo, RenderUnit, TickUnit, TransactionRecord, TRANSACTION_ANIMATION_SPEED,
+    GameMsg, RenderInfo, RenderUnit, TransactionRecord, TRANSACTION_ANIMATION_SPEED,
 };
 use automancy::gpu;
 use automancy::gpu::{Gpu, NORMAL_CLEAR, SCREENSHOT_FORMAT, UPSCALE_LEVEL};
 use automancy::input::KeyActions;
-use automancy::tile_entity::TileEntityMsg;
-use automancy::util::actor::multi_call_iter;
 use automancy_defs::cgmath::{vec3, EuclideanSpace, SquareMatrix};
 use automancy_defs::coord::TileCoord;
 use automancy_defs::gui::Gui;
 use automancy_defs::hashbrown::HashMap;
-
 use automancy_defs::id::Id;
-use automancy_defs::math::{deg, direction_to_angle, Float, Matrix4, FAR};
+use automancy_defs::math::{deg, direction_to_angle, is_in_culling_range, Float, Matrix4, FAR};
 use automancy_defs::rendering::{
     lerp_coords_to_pixel, make_line, GameUBO, InstanceData, OverlayUBO, PostEffectsUBO,
     RawInstanceData, Vertex,
 };
 use automancy_defs::{bytemuck, colors, math};
-use automancy_resources::data::{Data, DataMap};
+use automancy_resources::data::Data;
 
 use crate::setup::GameSetup;
 
 pub struct Renderer {
     pub gpu: Gpu,
-
-    data_cache: HashMap<TileCoord, DataMap>,
-    last_tiles_update: Option<TickUnit>,
 }
 
 impl Renderer {
-    pub fn reset_last_tiles_update(&mut self) {
-        self.last_tiles_update = None;
-    }
-
     pub fn new(gpu: Gpu) -> Self {
-        Self {
-            gpu,
-
-            data_cache: Default::default(),
-            last_tiles_update: None,
-        }
+        Self { gpu }
     }
 }
 
@@ -96,7 +79,7 @@ impl Renderer {
         setup: &GameSetup,
         gui: &mut Gui,
         matrix: Matrix4,
-        map_render_info: &RenderInfo,
+        map_render_info: RenderInfo,
         tile_tints: HashMap<TileCoord, Rgba>,
         gui_instances: GuiInstances,
         mut extra_instances: Vec<(RawInstanceData, Id)>,
@@ -129,35 +112,10 @@ impl Renderer {
                 .unwrap()
                 .models[0];
 
-            let mut instances = map_render_info.clone();
-
-            let tile_entities = runtime
-                .block_on(setup.game.call(
-                    |reply| GameMsg::GetTileEntities {
-                        center: camera_coord,
-                        culling_range,
-                        reply,
-                    },
-                    None,
-                ))
-                .unwrap()
-                .unwrap(); // TODO just ask the game for everyone's data lmfao
-
-            self.data_cache = runtime
-                .block_on(multi_call_iter(
-                    tile_entities.values(),
-                    tile_entities.values().len(),
-                    TileEntityMsg::GetDataWithCoord,
-                    None,
-                ))
-                .unwrap()
-                .into_iter()
-                .map(CallResult::unwrap)
-                .collect();
+            let (mut instances, all_data) = map_render_info;
 
             for (coord, instance) in instances.iter_mut() {
-                if let Some(theta) = self
-                    .data_cache
+                if let Some(theta) = all_data
                     .get(coord)
                     .and_then(|data| data.get(&setup.resource_man.registry.data_ids.target))
                     .and_then(get_angle_from_direction)
@@ -176,11 +134,11 @@ impl Renderer {
                 {
                     instance.model = setup.resource_man.get_model(*inactive);
                 }
+            }
 
-                if let Some(link) = self
-                    .data_cache
-                    .get(coord)
-                    .and_then(|data| data.get(&setup.resource_man.registry.data_ids.link))
+            for (coord, data) in all_data {
+                if let Some(link) = data
+                    .get(&setup.resource_man.registry.data_ids.link)
                     .and_then(Data::as_coord)
                     .cloned()
                 {
@@ -189,7 +147,7 @@ impl Renderer {
                             color_offset: colors::RED.to_array(),
                             light_pos: camera_pos_float,
                             model_matrix: make_line(
-                                math::hex_to_pixel(**coord),
+                                math::hex_to_pixel(*coord),
                                 math::hex_to_pixel(*link),
                             ),
                         }
@@ -253,35 +211,41 @@ impl Renderer {
             map.into_values().flatten().collect::<Vec<_>>()
         };
 
-        let transaction_records = runtime
+        let transaction_records_mutex = runtime
             .block_on(setup.game.call(GameMsg::GetRecordedTransactions, None))
             .unwrap()
             .unwrap();
+        let transaction_records = transaction_records_mutex.lock().unwrap();
         let now = Instant::now();
 
-        let transaction_records_read = transaction_records.read().unwrap();
+        for ((source_coord, coord), instants) in transaction_records.iter() {
+            if is_in_culling_range(camera_coord, *source_coord, culling_range)
+                && is_in_culling_range(camera_coord, *coord, culling_range)
+            {
+                for (instant, TransactionRecord { stack, .. }) in instants {
+                    let duration = now.duration_since(*instant);
+                    let t = duration.as_secs_f64() / TRANSACTION_ANIMATION_SPEED.as_secs_f64();
 
-        for ((source_coord, coord), instants) in transaction_records_read.iter() {
-            for (instant, TransactionRecord { stack, .. }) in instants {
-                let duration = now.duration_since(*instant);
-                let t = duration.as_secs_f64() / TRANSACTION_ANIMATION_SPEED.as_secs_f64();
+                    let point = lerp_coords_to_pixel(*source_coord, *coord, t);
 
-                let point = lerp_coords_to_pixel(*source_coord, *coord, t);
+                    let direction = *coord - *source_coord;
+                    let direction = math::hex_to_pixel(direction.into());
+                    let theta = direction_to_angle(direction.to_vec());
 
-                let direction = *coord - *source_coord;
-                let direction = math::hex_to_pixel(direction.into());
-                let theta = direction_to_angle(direction.to_vec());
+                    let instance = InstanceData::default()
+                        .with_model_matrix(
+                            Matrix4::from_translation(vec3(
+                                point.x as Float,
+                                point.y as Float,
+                                0.2,
+                            )) * Matrix4::from_angle_z(theta)
+                                * Matrix4::from_scale(0.3),
+                        )
+                        .with_light_pos(camera_pos_float);
+                    let model = setup.resource_man.get_item_model(stack.item);
 
-                let instance = InstanceData::default()
-                    .with_model_matrix(
-                        Matrix4::from_translation(vec3(point.x as Float, point.y as Float, 0.2))
-                            * Matrix4::from_angle_z(theta)
-                            * Matrix4::from_scale(0.3),
-                    )
-                    .with_light_pos(camera_pos_float);
-                let model = setup.resource_man.get_item_model(stack.item);
-
-                extra_instances.push((instance.into(), model));
+                    extra_instances.push((instance.into(), model));
+                }
             }
         }
 

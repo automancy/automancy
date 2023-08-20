@@ -89,33 +89,16 @@ fn sobel(uv: vec2<f32>) -> f32 {
 const THRESHOLD: f32 = 0.01;
 
 fn normal_edge(uv: vec2<f32>) -> f32 {
-    let texel_size = 1.0 / vec2<f32>(textureDimensions(normal_texture));
+    let texel_size = 2.0 / vec2<f32>(textureDimensions(normal_texture));
 
     let c  = textureSample(normal_texture, normal_sampler, uv).rgb;
-    let n  = textureSample(normal_texture, normal_sampler, uv + texel_size * vec2<f32>( 0.0,  1.0)).rgb;
-    let e  = textureSample(normal_texture, normal_sampler, uv + texel_size * vec2<f32>( 1.0,  0.0)).rgb;
+    let n  = abs(dot(c, textureSample(normal_texture, normal_sampler, uv + texel_size * vec2<f32>( 0.0,  1.0)).rgb));
+    let e  = abs(dot(c, textureSample(normal_texture, normal_sampler, uv + texel_size * vec2<f32>( 1.0,  0.0)).rgb));
 
-    var r = 0.0;
-
-    if (1.0 - abs(dot(n, c)) > THRESHOLD) {
-        r += 0.5;
-    }
-
-    if (1.0 - abs(dot(e, c)) > THRESHOLD) {
-        r += 0.5;
-    }
-
-    return r;
-}
-
-fn normal_edge_color(color: vec4<f32>, normal_edge_r: f32) -> vec4<f32> {
-    if (normal_edge_r > 0.0) {
-        var hsl = rgb2hsl(color.rgb);
-        hsl.z = normal_edge_r;
-
-        return vec4(hsl2rgb(hsl), color.a);
+    if (1.0 - n > THRESHOLD || 1.0 - e > THRESHOLD) {
+        return 0.4;
     } else {
-        return color;
+        return 0.0;
     }
 }
 
@@ -137,15 +120,26 @@ fn hsl2rgb(c: vec3<f32>) -> vec3<f32> {
   return c.z * mix(K.xxx, clamp(p - K.xxx, vec3(0.0, 0.0, 0.0), vec3(1.0, 1.0, 1.0)), c.y);
 }
 
+fn normal_edge_color(color: vec4<f32>, normal_edge_r: f32) -> vec4<f32> {
+    if (normal_edge_r > 0.0) {
+        var hsl = rgb2hsl(color.rgb);
+        hsl.z = normal_edge_r;
+
+        return vec4(hsl2rgb(hsl), color.a);
+    } else {
+        return color;
+    }
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let color = textureSample(frame_texture, frame_sampler, in.uv);
 
     let sobel_r = sobel(in.uv);
-    let sobel_c = color + color * vec4(vec3(sobel_r), 0.0);
+    let sobel_c = color * vec4(vec3(sobel_r), 0.0);
 
     let normal_edge_r = normal_edge(in.uv);
     let normal_edge_c = normal_edge_color(color, normal_edge_r);
 
-    return mix(sobel_c, normal_edge_c, 0.5);
+    return normal_edge_c + sobel_c * 0.5;
 }

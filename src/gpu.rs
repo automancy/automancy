@@ -394,85 +394,14 @@ fn gui_setup(
     (uniform_buffer, bind_group, pipeline)
 }
 
-fn extra_setup(
-    device: &Device,
-    config: &SurfaceConfiguration,
-    shader: &ShaderModule,
-) -> (Buffer, BindGroup, RenderPipeline) {
+fn extra_setup(device: &Device) -> Buffer {
     let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
         label: Some("Extra Uniform Buffer"),
         contents: bytemuck::cast_slice(&[GameUBO::default()]),
         usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
     });
 
-    let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-        entries: &[BindGroupLayoutEntry {
-            binding: 0,
-            visibility: ShaderStages::VERTEX_FRAGMENT,
-            ty: BindingType::Buffer {
-                ty: BufferBindingType::Uniform,
-                has_dynamic_offset: false,
-                min_binding_size: None,
-            },
-            count: None,
-        }],
-        label: Some("extra_bind_group_layout"),
-    });
-
-    let bind_group = device.create_bind_group(&BindGroupDescriptor {
-        layout: &bind_group_layout,
-        entries: &[BindGroupEntry {
-            binding: 0,
-            resource: uniform_buffer.as_entire_binding(),
-        }],
-        label: Some("extra_bind_group"),
-    });
-
-    let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
-        label: Some("Extra Render Pipeline Layout"),
-        bind_group_layouts: &[&bind_group_layout],
-        push_constant_ranges: &[],
-    });
-
-    let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
-        label: Some("Extra Render Pipeline"),
-        layout: Some(&pipeline_layout),
-        vertex: VertexState {
-            module: shader,
-            entry_point: "vs_main",
-            buffers: &[Vertex::desc(), RawInstanceData::desc()],
-        },
-        fragment: Some(FragmentState {
-            module: shader,
-            entry_point: "fs_main",
-            targets: &[Some(ColorTargetState {
-                format: config.format,
-                blend: Some(BlendState::REPLACE),
-                write_mask: ColorWrites::ALL,
-            })],
-        }),
-        primitive: PrimitiveState {
-            topology: PrimitiveTopology::TriangleList,
-            front_face: FrontFace::Ccw,
-            cull_mode: None,
-            ..Default::default()
-        },
-        depth_stencil: Some(DepthStencilState {
-            format: DEPTH_FORMAT,
-            depth_write_enabled: true,
-            depth_compare: CompareFunction::GreaterEqual,
-            stencil: Default::default(),
-            bias: Default::default(),
-        }),
-        multisample: MultisampleState {
-            count: 1,
-            mask: !0,
-            alpha_to_coverage_enabled: false,
-        },
-        multiview: None,
-    });
-
-    (uniform_buffer, bind_group, pipeline)
+    uniform_buffer
 }
 
 fn make_post_effects_bind_group_layout(device: &Device) -> BindGroupLayout {
@@ -1132,8 +1061,7 @@ impl Gpu {
         let egui_resources = EguiResources { texture: None };
 
         let extra_resources = {
-            let (uniform_buffer, bind_group, pipeline) =
-                extra_setup(&device, &config, &game_shader);
+            let uniform_buffer = extra_setup(&device);
 
             ExtraResources {
                 instance_buffer: device.create_buffer_init(&BufferInitDescriptor {

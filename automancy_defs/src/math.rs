@@ -162,7 +162,7 @@ pub fn screen_to_normalized((width, height): (Double, Double), c: DPoint2) -> DP
     let c = c.zip(size, Sub::sub);
     let c = c.zip(size, Div::div);
 
-    point3(c.x, c.y, 0.0)
+    point3(c.x, c.y, 0.1)
 }
 
 /// Converts screen coordinates to world coordinates.
@@ -215,7 +215,9 @@ pub fn is_in_culling_range(
     other: TileCoord,
     culling_range: (TileUnit, TileUnit),
 ) -> bool {
-    center.distance(*other) < culling_range.0 && center.distance(*other) < culling_range.1
+    let d = center.distance(*other);
+
+    d < culling_range.0 && d < culling_range.1
 }
 
 /// Gets the culling range from the camera's position

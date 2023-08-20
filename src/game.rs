@@ -1,10 +1,11 @@
 use std::collections::VecDeque;
 use std::mem;
 use std::ops::Div;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use arraydeque::{ArrayDeque, Wrapping};
+use ractor::rpc::CallResult;
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort, SupervisionEvent};
 use rayon::prelude::*;
 
@@ -25,6 +26,7 @@ use automancy_resources::ResourceManager;
 use crate::game::GameMsg::*;
 use crate::map::{Map, MapInfo, TileEntities};
 use crate::tile_entity::{TileEntity, TileEntityMsg, TileModifier};
+use crate::util::actor::multi_call_iter;
 
 /// Miscellaneous updates per second -- e.g. Camera Position.
 pub const UPS: u64 = 60;
@@ -54,27 +56,26 @@ pub struct RenderUnit {
     pub model: Id,
 }
 
-pub type RenderInfo = HashMap<TileCoord, RenderUnit>;
+pub type RenderInfo = (HashMap<TileCoord, RenderUnit>, HashMap<TileCoord, DataMap>);
 pub type TransactionRecords =
     HashMap<(TileCoord, TileCoord), VecDeque<(Instant, TransactionRecord)>>;
 
 #[derive(Debug)]
 pub struct GameState {
+    /// a count of all the ticks that have happened
+    tick_count: TickUnit,
+    /// is the game stopped
+    stopped: bool,
+
     /// the tile entities
     tile_entities: TileEntities,
     /// the map
     map: Map,
 
-    /// a count of all the ticks that have happened
-    tick_count: TickUnit,
-    /// render cache
-    render_cache: HashMap<(TileCoord, (TileUnit, TileUnit)), Arc<RenderInfo>>,
-    /// is the game stopped
-    stopped: bool,
     /// what to do to undo the last UNDO_CACHE_SIZE user events
     undo_steps: ArrayDeque<Vec<GameMsg>, 16, Wrapping>,
     /// records transactions to be drawn
-    transaction_records: Arc<RwLock<TransactionRecords>>,
+    transaction_records: Arc<Mutex<TransactionRecords>>,
 }
 
 /// Represents a message the game receives
@@ -82,12 +83,9 @@ pub struct GameState {
 pub enum GameMsg {
     /// tick the tile once
     Tick,
-    /// get rendering information
-    RenderInfoRequest {
-        center: TileCoord,
-        culling_range: (TileUnit, TileUnit),
-        reply: RpcReplyPort<Arc<RenderInfo>>,
-    },
+    StopTicking,
+    /// send a message to a tile entity
+    ForwardMsgToTile(TileCoord, TileEntityMsg),
     /// place a tile at the given position
     PlaceTile {
         coord: TileCoord,
@@ -96,41 +94,41 @@ pub enum GameMsg {
         record: bool,
         reply: Option<RpcReplyPort<PlaceTileResponse>>,
     },
+    MoveTiles(Vec<TileCoord>, TileCoord, bool),
     Undo,
-    /// send a message to a tile entity
-    ForwardMsgToTile(TileCoord, TileEntityMsg),
     /// checks for the adjacent tiles against the script
     CheckAdjacent {
         script: Script,
         coord: TileCoord,
         self_coord: TileCoord,
     },
+
+    /// load a map
+    LoadMap(Arc<ResourceManager>, String),
+    /// take the map
+    TakeMap(RpcReplyPort<Map>),
+    SaveMap(Arc<ResourceManager>, RpcReplyPort<()>),
+    GetMapInfo(RpcReplyPort<(MapInfo, String)>),
+
     /// get the tile at the given position
     GetTile(TileCoord, RpcReplyPort<Option<(Id, TileModifier)>>),
     /// get the tile entity at the given position
     GetTileEntity(TileCoord, RpcReplyPort<Option<ActorRef<TileEntityMsg>>>),
-    /// get all the tile entities
-    GetTileEntities {
-        center: TileCoord,
-        culling_range: (TileUnit, TileUnit),
-        reply: RpcReplyPort<TileEntities>,
-    },
-    /// take the tile entities
-    TakeTileEntities(RpcReplyPort<TileEntities>),
-    /// take the map
-    TakeMap(RpcReplyPort<Map>),
-    SaveMap(Arc<ResourceManager>, RpcReplyPort<()>),
-    MoveTiles(Vec<TileCoord>, TileCoord, bool),
-    /// load a map
-    LoadMap(Arc<ResourceManager>, String),
-    GetMapInfo(RpcReplyPort<(MapInfo, String)>),
+
     TakeDataMap(RpcReplyPort<DataMap>),
-    GetDataValue(Id, RpcReplyPort<Option<Data>>),
     SetDataMap(DataMap),
+    GetDataValue(Id, RpcReplyPort<Option<Data>>),
     SetData(Id, Data),
     RemoveData(Id),
-    StopTicking,
-    GetRecordedTransactions(RpcReplyPort<Arc<RwLock<TransactionRecords>>>),
+
+    /// get rendering information
+    RenderInfoRequest {
+        center: TileCoord,
+        culling_range: (TileUnit, TileUnit),
+        reply: RpcReplyPort<RenderInfo>,
+    },
+
+    GetRecordedTransactions(RpcReplyPort<Arc<Mutex<TransactionRecords>>>),
     RecordTransaction(ItemStack, TileCoord, TileCoord),
 }
 
@@ -143,63 +141,6 @@ pub enum PlaceTileResponse {
 
 pub struct Game {
     pub resource_man: Arc<ResourceManager>,
-}
-
-impl Game {
-    fn render_info(
-        &self,
-        state: &mut GameState,
-        center: TileCoord,
-        culling_range: (TileUnit, TileUnit),
-    ) -> Arc<RenderInfo> {
-        if let Some(info) = state.render_cache.get(&(center, culling_range)) {
-            return info.clone();
-        }
-
-        let instances: RenderInfo = state
-            .map
-            .tiles
-            .iter()
-            .filter(|(coord, _)| math::is_in_culling_range(center, **coord, culling_range))
-            .flat_map(|(coord, (id, tile_modifier))| {
-                self.resource_man
-                    .registry
-                    .tile(*id)
-                    .and_then(|r| r.models.get(*tile_modifier as usize).cloned())
-                    .map(|id| self.resource_man.get_model(id))
-                    .map(|model| {
-                        let p = math::hex_to_pixel((*coord).into());
-
-                        (
-                            *coord,
-                            RenderUnit {
-                                instance: InstanceData::default().with_model_matrix(
-                                    Matrix4::from_translation(vec3(
-                                        p.x as Float,
-                                        p.y as Float,
-                                        FAR as Float,
-                                    )),
-                                ),
-                                tile: *id,
-                                model,
-                            },
-                        )
-                    })
-            })
-            .collect();
-
-        let info = Arc::new(instances);
-
-        if state.render_cache.len() > 16 {
-            state.render_cache.clear();
-        }
-
-        state
-            .render_cache
-            .insert((center, culling_range), info.clone());
-
-        info
-    }
 }
 
 #[async_trait::async_trait]
@@ -223,11 +164,6 @@ impl Actor for Game {
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         match message {
-            TakeTileEntities(reply) => {
-                reply.send(mem::take(&mut state.tile_entities)).unwrap();
-
-                return Ok(());
-            }
             TakeMap(reply) => {
                 let map_name = state.map.map_name.clone();
 
@@ -246,8 +182,7 @@ impl Actor for Game {
 
                 state.map = map;
                 state.tile_entities = tile_entities;
-                state.render_cache.clear();
-                state.transaction_records.write().unwrap().clear();
+                state.transaction_records.lock().unwrap().clear();
                 state.undo_steps.clear();
 
                 log::info!("Successfully loaded map {name}!");
@@ -299,14 +234,65 @@ impl Actor for Game {
                     Tick => {
                         tick(state);
                     }
+                    SetData(key, value) => {
+                        state.map.data.insert(key, value);
+                    }
+                    RemoveData(key) => {
+                        state.map.data.remove(&key);
+                    }
                     RenderInfoRequest {
                         center,
                         culling_range,
                         reply,
                     } => {
-                        let render_info = self.render_info(state, center, culling_range);
+                        let instances = state
+                            .map
+                            .tiles
+                            .iter()
+                            .filter(|(coord, _)| {
+                                math::is_in_culling_range(center, **coord, culling_range)
+                            })
+                            .flat_map(|(coord, (id, tile_modifier))| {
+                                self.resource_man
+                                    .registry
+                                    .tile(*id)
+                                    .and_then(|r| r.models.get(*tile_modifier as usize).cloned())
+                                    .map(|id| self.resource_man.get_model(id))
+                                    .map(|model| {
+                                        let p = math::hex_to_pixel((*coord).into());
 
-                        reply.send(render_info).unwrap();
+                                        (
+                                            *coord,
+                                            RenderUnit {
+                                                instance: InstanceData::default()
+                                                    .with_model_matrix(Matrix4::from_translation(
+                                                        vec3(
+                                                            p.x as Float,
+                                                            p.y as Float,
+                                                            FAR as Float,
+                                                        ),
+                                                    )),
+                                                tile: *id,
+                                                model,
+                                            },
+                                        )
+                                    })
+                            })
+                            .collect();
+
+                        let all_data = multi_call_iter(
+                            state.tile_entities.values(),
+                            state.tile_entities.len(),
+                            TileEntityMsg::GetDataWithCoord,
+                            None,
+                        )
+                        .await
+                        .unwrap()
+                        .into_iter()
+                        .map(CallResult::unwrap)
+                        .collect();
+
+                        reply.send((instances, all_data)).unwrap();
                     }
                     PlaceTile {
                         coord,
@@ -376,34 +362,10 @@ impl Actor for Game {
                             .send(state.tile_entities.get(&coord).cloned())
                             .unwrap();
                     }
-                    GetTileEntities {
-                        center,
-                        culling_range,
-                        reply,
-                    } => {
-                        reply
-                            .send(
-                                state
-                                    .tile_entities
-                                    .iter()
-                                    .filter(|(coord, _)| {
-                                        math::is_in_culling_range(center, **coord, culling_range)
-                                    })
-                                    .map(|(coord, entity)| (*coord, entity.clone()))
-                                    .collect(),
-                            )
-                            .unwrap();
-                    }
                     ForwardMsgToTile(coord, msg) => {
                         if let Some(tile_entity) = state.tile_entities.get(&coord) {
                             tile_entity.send_message(msg).unwrap();
                         }
-                    }
-                    SetData(key, value) => {
-                        state.map.data.insert(key, value);
-                    }
-                    RemoveData(key) => {
-                        state.map.data.remove(&key);
                     }
                     CheckAdjacent {
                         script,
@@ -444,11 +406,11 @@ impl Actor for Game {
                         }
                     }
                     GetRecordedTransactions(reply) => {
-                        let now = Instant::now();
-
+                        let mut transaction_records = state.transaction_records.lock().unwrap();
                         let mut to_remove = HashMap::new();
 
-                        for (coord, deque) in state.transaction_records.read().unwrap().iter() {
+                        let now = Instant::now();
+                        for (coord, deque) in transaction_records.iter() {
                             to_remove.insert(
                                 *coord,
                                 deque
@@ -460,20 +422,18 @@ impl Actor for Game {
                             );
                         }
 
-                        let mut record = state.transaction_records.write().unwrap();
                         for (coord, v) in to_remove {
                             for _ in 0..v {
-                                record.get_mut(&coord).unwrap().pop_front();
+                                transaction_records.get_mut(&coord).unwrap().pop_front();
                             }
                         }
 
                         reply.send(state.transaction_records.clone()).unwrap();
                     }
                     RecordTransaction(stack, source_coord, coord) => {
-                        if let Some((instant, _)) = state
-                            .transaction_records
-                            .read()
-                            .unwrap()
+                        let mut transaction_records = state.transaction_records.lock().unwrap();
+
+                        if let Some((instant, _)) = transaction_records
                             .get(&(source_coord, coord))
                             .and_then(|v| v.back())
                         {
@@ -491,10 +451,7 @@ impl Actor for Game {
                             .cloned()
                             .zip(state.map.tiles.get(&coord).cloned())
                         {
-                            state
-                                .transaction_records
-                                .write()
-                                .unwrap()
+                            transaction_records
                                 .entry((source_coord, coord))
                                 .or_insert_with(Default::default)
                                 .push_back((
@@ -537,8 +494,6 @@ impl Actor for Game {
                                 .undo_steps
                                 .push_back(vec![MoveTiles(undo, -direction, false)]);
                         }
-
-                        state.render_cache.clear();
                     }
                     _ => {}
                 }
@@ -574,8 +529,6 @@ impl Actor for Game {
 
 /// Stops a tile and removes it from the game
 fn remove_tile(state: &mut GameState, coord: TileCoord) -> Option<(Id, TileModifier)> {
-    state.render_cache.clear();
-
     if let Some(tile_entity) = state.tile_entities.get(&coord) {
         tile_entity.stop(Some("Removed from game".to_string()));
     }
@@ -660,12 +613,12 @@ pub fn tick(state: &mut GameState) {
 impl Default for GameState {
     fn default() -> Self {
         Self {
+            tick_count: 0,
+            stopped: false,
+
             map: Map::new_empty("".to_string()),
             tile_entities: Default::default(),
 
-            tick_count: 0,
-            render_cache: Default::default(),
-            stopped: false,
             undo_steps: Default::default(),
             transaction_records: Arc::new(Default::default()),
         }

@@ -15,7 +15,6 @@ use automancy_resources::{format, format_time};
 
 use crate::event::{shutdown_graceful, EventLoopStorage};
 use crate::gui::{default_frame, GuiState, PopupState};
-use crate::renderer::Renderer;
 use crate::setup::GameSetup;
 
 /// Draws the main menu.
@@ -113,7 +112,6 @@ pub fn pause_menu(
     setup: &GameSetup,
     context: &Context,
     loop_store: &mut EventLoopStorage,
-    renderer: &mut Renderer,
 ) {
     Window::new("Game Paused")
         .resizable(false)
@@ -177,7 +175,6 @@ pub fn pause_menu(
                                 MAIN_MENU.to_string(),
                             ))
                             .unwrap();
-                        renderer.reset_last_tiles_update();
                         loop_store.switch_gui_state(GuiState::MainMenu)
                     };
                     ui.label(VERSION)
@@ -187,12 +184,7 @@ pub fn pause_menu(
 }
 
 /// Draws the map loading menu.
-pub fn map_menu(
-    setup: &mut GameSetup,
-    context: &Context,
-    loop_store: &mut EventLoopStorage,
-    renderer: &mut Renderer,
-) {
+pub fn map_menu(setup: &mut GameSetup, context: &Context, loop_store: &mut EventLoopStorage) {
     Window::new(
         setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.load_map].as_str(),
     )
@@ -275,7 +267,6 @@ pub fn map_menu(
                                     map_name.clone(),
                                 ))
                                 .unwrap();
-                            renderer.reset_last_tiles_update();
                             loop_store.switch_gui_state(GuiState::Ingame);
                         }
 
