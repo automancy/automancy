@@ -1,6 +1,5 @@
 use egui::{Context, Window};
-use ractor::ActorRef;
-use tokio::runtime::Runtime;
+use futures::executor::block_on;
 
 use automancy::game::GameMsg;
 
@@ -9,13 +8,7 @@ use crate::gui::default_frame;
 use crate::setup::GameSetup;
 
 /// Draws the debug menu (F3).
-pub fn debugger(
-    setup: &GameSetup,
-    context: &Context,
-    runtime: &Runtime,
-    game: ActorRef<GameMsg>,
-    loop_store: &mut EventLoopStorage,
-) {
+pub fn debugger(setup: &GameSetup, loop_store: &mut EventLoopStorage, context: &Context) {
     let resource_man = setup.resource_man.clone();
 
     let fps = 1.0 / loop_store.elapsed.as_secs_f64();
@@ -28,8 +21,7 @@ pub fn debugger(
     let audio = resource_man.audio.len();
     let meshes = resource_man.meshes.len();
 
-    let (info, map_name) = runtime
-        .block_on(game.call(GameMsg::GetMapInfo, Some(loop_store.elapsed)))
+    let (info, map_name) = block_on(setup.game.call(GameMsg::GetMapInfo, None))
         .unwrap()
         .unwrap();
 

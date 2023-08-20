@@ -4,9 +4,9 @@ use std::time::Instant;
 use arboard::{Clipboard, ImageData};
 use egui::{Rect, Rgba};
 use egui_wgpu::renderer::ScreenDescriptor;
+use futures::executor::block_on;
 use image::{EncodableLayout, RgbaImage};
 use num::PrimInt;
-use tokio::runtime::Runtime;
 use tokio::sync::oneshot;
 use wgpu::{
     BindGroupDescriptor, BindGroupEntry, BindingResource, BufferAddress, BufferDescriptor,
@@ -17,9 +17,7 @@ use wgpu::{
     COPY_BYTES_PER_ROW_ALIGNMENT,
 };
 
-use automancy::game::{
-    GameMsg, RenderInfo, RenderUnit, TransactionRecord, TRANSACTION_ANIMATION_SPEED,
-};
+use automancy::game::{GameMsg, RenderUnit, TransactionRecord, TRANSACTION_ANIMATION_SPEED};
 use automancy::gpu;
 use automancy::gpu::{Gpu, NORMAL_CLEAR, SCREENSHOT_FORMAT, UPSCALE_LEVEL};
 use automancy::input::KeyActions;
@@ -75,11 +73,9 @@ pub type GuiInstances = Vec<(
 impl Renderer {
     pub fn render(
         &mut self,
-        runtime: &Runtime,
         setup: &GameSetup,
         gui: &mut Gui,
         matrix: Matrix4,
-        map_render_info: RenderInfo,
         tile_tints: HashMap<TileCoord, Rgba>,
         gui_instances: GuiInstances,
         mut extra_instances: Vec<(RawInstanceData, Id)>,
@@ -103,6 +99,17 @@ impl Renderer {
         let camera_coord = setup.camera.get_tile_coord();
         let camera_pos = setup.camera.get_pos();
         let camera_pos_float = camera_pos.cast::<Float>().unwrap();
+
+        let map_render_info = block_on(setup.game.call(
+            |reply| GameMsg::RenderInfoRequest {
+                culling_range,
+                center: camera_coord,
+                reply,
+            },
+            None,
+        ))
+        .unwrap()
+        .unwrap();
 
         let instances = {
             let none = setup
@@ -211,10 +218,10 @@ impl Renderer {
             map.into_values().flatten().collect::<Vec<_>>()
         };
 
-        let transaction_records_mutex = runtime
-            .block_on(setup.game.call(GameMsg::GetRecordedTransactions, None))
-            .unwrap()
-            .unwrap();
+        let transaction_records_mutex =
+            block_on(setup.game.call(GameMsg::GetRecordedTransactions, None))
+                .unwrap()
+                .unwrap();
         let transaction_records = transaction_records_mutex.lock().unwrap();
         let now = Instant::now();
 

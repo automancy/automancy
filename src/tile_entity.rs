@@ -417,7 +417,7 @@ impl Actor for TileEntity {
 
                         let mut rhai_state = Dynamic::from_map(state.rhai_map.clone());
 
-                        let _result = self.resource_man.engine.call_fn_with_options::<Dynamic>(
+                        _ = self.resource_man.engine.call_fn_with_options::<Dynamic>(
                             rhai_call_options(&mut rhai_state),
                             scope,
                             ast,

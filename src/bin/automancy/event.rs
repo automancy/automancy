@@ -9,7 +9,6 @@ use egui::Rect;
 use fuse_rust::Fuse;
 use futures::channel::mpsc;
 use futures::executor::block_on;
-use tokio::runtime::Runtime;
 use wgpu::SurfaceError;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::ControlFlow;
@@ -137,7 +136,7 @@ impl EventLoopStorage {
 pub fn shutdown_graceful(
     setup: &mut GameSetup,
     control_flow: &mut ControlFlow,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<bool, Box<dyn Error>> {
     setup.game.send_message(GameMsg::StopTicking)?;
 
     block_on(setup.game.call(
@@ -153,18 +152,21 @@ pub fn shutdown_graceful(
     control_flow.set_exit();
 
     log::info!("Shut down gracefully");
-    Ok(())
+
+    Ok(true)
 }
+
 /// Triggers every time the event loop is run once.
 pub fn on_event(
-    runtime: &Runtime,
     setup: &mut GameSetup,
     loop_store: &mut EventLoopStorage,
     renderer: &mut Renderer,
     gui: &mut Gui,
     event: Event<()>,
     control_flow: &mut ControlFlow,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<bool, Box<dyn Error>> {
+    let mut result = Ok(false);
+
     let mut window_event = None;
     let mut device_event = None;
 
@@ -177,9 +179,7 @@ pub fn on_event(
             ..
         } => {
             // game shutdown
-            shutdown_graceful(setup, control_flow)?;
-
-            return Ok(());
+            return shutdown_graceful(setup, control_flow);
         }
 
         Event::WindowEvent { event, .. } => {
@@ -191,12 +191,12 @@ pub fn on_event(
                 WindowEvent::Resized(size) => {
                     renderer.gpu.resize(*size);
 
-                    return Ok(());
+                    return Ok(false);
                 }
                 WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
                     renderer.gpu.resize(**new_inner_size);
 
-                    return Ok(());
+                    return Ok(false);
                 }
                 _ => {}
             }
@@ -212,10 +212,6 @@ pub fn on_event(
 
         _ => {}
     };
-
-    if *control_flow == ControlFlow::Exit {
-        return Ok(());
-    }
 
     if window_event.is_some() || device_event.is_some() {
         setup.input_handler.reset();
@@ -244,12 +240,11 @@ pub fn on_event(
             // one by one
             if loop_store.selected_id.take().is_none() && loop_store.linking_tile.take().is_none() {
                 if loop_store.switch_gui_state_when(&|s| s == GuiState::Ingame, GuiState::Paused) {
-                    runtime
-                        .block_on(setup.game.call(
-                            |reply| GameMsg::SaveMap(setup.resource_man.clone(), reply),
-                            None,
-                        ))?
-                        .unwrap();
+                    block_on(setup.game.call(
+                        |reply| GameMsg::SaveMap(setup.resource_man.clone(), reply),
+                        None,
+                    ))?
+                    .unwrap();
                 } else {
                     loop_store.switch_gui_state_when(&|s| s == GuiState::Paused, GuiState::Ingame);
                 }
@@ -265,19 +260,18 @@ pub fn on_event(
         {
             if let Some(id) = loop_store.selected_id {
                 if loop_store.already_placed_at != Some(setup.camera.pointing_at) {
-                    let response = runtime
-                        .block_on(setup.game.call(
-                            |reply| GameMsg::PlaceTile {
-                                coord: setup.camera.pointing_at,
-                                id,
-                                tile_modifier:
-                                    *loop_store.selected_tile_modifiers.get(&id).unwrap_or(&0),
-                                record: true,
-                                reply: Some(reply),
-                            },
-                            None,
-                        ))?
-                        .unwrap();
+                    let response = block_on(setup.game.call(
+                        |reply| GameMsg::PlaceTile {
+                            coord: setup.camera.pointing_at,
+                            id,
+                            tile_modifier:
+                                *loop_store.selected_tile_modifiers.get(&id).unwrap_or(&0),
+                            record: true,
+                            reply: Some(reply),
+                        },
+                        None,
+                    ))?
+                    .unwrap();
 
                     match response {
                         PlaceTileResponse::Placed => {
@@ -302,19 +296,17 @@ pub fn on_event(
 
         if !setup.input_handler.control_held && setup.input_handler.alternate_pressed {
             if let Some(linking_tile) = loop_store.linking_tile {
-                let tile = runtime
-                    .block_on(setup.game.call(
-                        |reply| GameMsg::GetTile(setup.camera.pointing_at, reply),
-                        None,
-                    ))?
-                    .unwrap();
+                let tile = block_on(setup.game.call(
+                    |reply| GameMsg::GetTile(setup.camera.pointing_at, reply),
+                    None,
+                ))?
+                .unwrap();
 
-                let tile_entity = runtime
-                    .block_on(setup.game.call(
-                        |reply| GameMsg::GetTileEntity(setup.camera.pointing_at, reply),
-                        None,
-                    ))?
-                    .unwrap();
+                let tile_entity = block_on(setup.game.call(
+                    |reply| GameMsg::GetTileEntity(setup.camera.pointing_at, reply),
+                    None,
+                ))?
+                .unwrap();
 
                 if let Some((linked, tile_entity)) = tile
                     .and_then(|(id, _)| {
@@ -327,17 +319,16 @@ pub fn on_event(
                     .zip(tile_entity)
                 {
                     if linked {
-                        let old = runtime
-                            .block_on(tile_entity.call(
-                                |reply| {
-                                    TileEntityMsg::GetDataValue(
-                                        resource_man.registry.data_ids.link,
-                                        reply,
-                                    )
-                                },
-                                None,
-                            ))?
-                            .unwrap();
+                        let old = block_on(tile_entity.call(
+                            |reply| {
+                                TileEntityMsg::GetDataValue(
+                                    resource_man.registry.data_ids.link,
+                                    reply,
+                                )
+                            },
+                            None,
+                        ))?
+                        .unwrap();
 
                         if old.is_some() {
                             tile_entity.send_message(TileEntityMsg::RemoveData(
@@ -418,8 +409,6 @@ pub fn on_event(
     }
 
     if event == Event::RedrawRequested(renderer.gpu.window.id()) {
-        loop_store.frame_start = Instant::now();
-
         let mut gui_instances = vec![];
         let mut extra_instances: Vec<(RawInstanceData, Id)> = vec![];
         let overlay = vec![];
@@ -447,7 +436,7 @@ pub fn on_event(
         if setup.input_handler.key_active(KeyActions::Debug) {
             gui.context.set_debug_on_hover(true);
 
-            debug::debugger(setup, &gui.context, runtime, setup.game.clone(), loop_store);
+            debug::debugger(setup, loop_store, &gui.context);
         } else {
             gui.context.set_debug_on_hover(false);
         }
@@ -457,21 +446,14 @@ pub fn on_event(
                 GuiState::Ingame => {
                     if !setup.input_handler.key_active(KeyActions::HideGui) {
                         if setup.input_handler.key_active(KeyActions::Player) {
-                            player::player(
-                                runtime,
-                                setup,
-                                loop_store,
-                                &mut gui_instances,
-                                &gui.context,
-                            );
+                            player::player(setup, loop_store, &mut gui_instances, &gui.context);
                         }
 
                         // tile_info
-                        info::info(runtime, setup, &mut gui_instances, &gui.context);
+                        info::info(setup, &mut gui_instances, &gui.context);
 
                         // tile_config
                         tile_config::tile_config(
-                            runtime,
                             setup,
                             loop_store,
                             &mut gui_instances,
@@ -553,7 +535,7 @@ pub fn on_event(
                     }
                 }
                 GuiState::MainMenu => {
-                    menu::main_menu(setup, &gui.context, control_flow, loop_store)
+                    result = menu::main_menu(setup, &gui.context, control_flow, loop_store)
                 }
                 GuiState::MapLoad => {
                     menu::map_menu(setup, &gui.context, loop_store);
@@ -562,7 +544,7 @@ pub fn on_event(
                     menu::options_menu(setup, &gui.context, loop_store);
                 }
                 GuiState::Paused => {
-                    menu::pause_menu(runtime, setup, &gui.context, loop_store);
+                    menu::pause_menu(setup, &gui.context, loop_store);
                 }
                 GuiState::Research => {}
             }
@@ -611,37 +593,31 @@ pub fn on_event(
 
         error::error_popup(setup, gui);
 
-        let render_info = runtime
-            .block_on(setup.game.call(
-                |reply| GameMsg::RenderInfoRequest {
-                    culling_range: setup.camera.culling_range,
-                    center: setup.camera.get_tile_coord(),
-                    reply,
-                },
-                None,
-            ))?
-            .unwrap();
+        if !matches!(result, Ok(true)) {
+            loop_store.frame_start = Instant::now();
 
-        match renderer.render(
-            runtime,
-            setup,
-            gui,
-            matrix,
-            render_info,
-            tile_tints,
-            gui_instances,
-            extra_instances,
-            overlay,
-        ) {
-            Ok(_) => {}
-            Err(SurfaceError::Lost) => renderer
-                .gpu
-                .create_textures(renderer.gpu.window.inner_size()),
-            Err(SurfaceError::OutOfMemory) => shutdown_graceful(setup, control_flow)?,
-            Err(e) => log::error!("{e:?}"),
+            match renderer.render(
+                setup,
+                gui,
+                matrix,
+                tile_tints,
+                gui_instances,
+                extra_instances,
+                overlay,
+            ) {
+                Ok(_) => {}
+                Err(SurfaceError::Lost) => renderer
+                    .gpu
+                    .create_textures(renderer.gpu.window.inner_size()),
+                Err(SurfaceError::OutOfMemory) => {
+                    return shutdown_graceful(setup, control_flow);
+                }
+                Err(e) => log::error!("{e:?}"),
+            }
+
+            loop_store.elapsed = Instant::now().duration_since(loop_store.frame_start);
         }
-
-        loop_store.elapsed = Instant::now().duration_since(loop_store.frame_start);
     }
-    Ok(())
+
+    result
 }

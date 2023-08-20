@@ -23,7 +23,7 @@ pub struct Camera {
 
 impl Camera {
     pub fn new((width, height): (Double, Double)) -> Self {
-        let pos = point3(0.0, 0.0, 2.0);
+        let pos = point3(0.0, 0.0, 3.0);
 
         Self {
             pos,

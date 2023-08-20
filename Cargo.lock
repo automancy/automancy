@@ -130,7 +130,56 @@ version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "819e7219dbd41043ac279b19830f2efc897156490d7fd6ea916720117ee66311"
 dependencies = [
- "libc",
+    "libc",
+]
+
+[[package]]
+name = "anstream"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ca84f3628370c59db74ee214b3263d58f9aadd9b4fe7e711fd87dc452b7f163"
+dependencies = [
+    "anstyle",
+    "anstyle-parse",
+    "anstyle-query",
+    "anstyle-wincon",
+    "colorchoice",
+    "is-terminal",
+    "utf8parse",
+]
+
+[[package]]
+name = "anstyle"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3a30da5c5f2d5e72842e00bcb57657162cdabef0931f40e2deb9b4140440cecd"
+
+[[package]]
+name = "anstyle-parse"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "938874ff5980b03a87c5524b3ae5b59cf99b1d6bc836848df7bc5ada9643c333"
+dependencies = [
+    "utf8parse",
+]
+
+[[package]]
+name = "anstyle-query"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5ca11d4be1bab0c8bc8734a9aa7bf4ee8316d462a08c6ac5052f888fef5b494b"
+dependencies = [
+    "windows-sys 0.48.0",
+]
+
+[[package]]
+name = "anstyle-wincon"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c677ab05e09154296dd37acecd46420c17b9713e8366facafa8fc0885167cf4c"
+dependencies = [
+    "anstyle",
+    "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -139,7 +188,7 @@ version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f2a05fd1bd10b2527e20a2cd32d8873d115b8b39fe219ee25f42a8aca6ba278"
 dependencies = [
- "num-traits",
+    "num-traits",
 ]
 
 [[package]]
@@ -231,29 +280,30 @@ dependencies = [
  "arboard",
  "arraydeque",
  "async-trait",
- "automancy_defs",
- "automancy_macros",
- "automancy_resources",
- "egui",
- "egui-wgpu",
- "egui-winit",
- "enum-ordinalize",
- "env_logger",
- "expect-dialog",
- "fuse-rust",
- "futures",
- "image",
- "lazy_static",
- "num",
- "ractor",
- "rand",
- "rayon",
- "rhai",
- "serde",
- "serde_json",
- "slice-group-by",
- "tokio",
- "toml",
+    "automancy_defs",
+    "automancy_macros",
+    "automancy_resources",
+    "egui",
+    "egui-wgpu",
+    "egui-winit",
+    "enum-ordinalize",
+    "env_logger",
+    "fuse-rust",
+    "futures",
+    "human-panic",
+    "image",
+    "lazy_static",
+    "native-dialog",
+    "num",
+    "ractor",
+    "rand",
+    "rayon",
+    "rhai",
+    "serde",
+    "serde_json",
+    "slice-group-by",
+    "tokio",
+    "toml",
  "wgpu",
  "winit",
  "zstd",
@@ -622,6 +672,12 @@ name = "color_quant"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d7b894f5411737b7867f4827955924d7c254fc9f4d91a6aad6b097804b1018b"
+
+[[package]]
+name = "colorchoice"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "acbf1af155f9b9ef647e42cdc158db4b64a1b61f743629225fde6f3e0be2a7c7"
 
 [[package]]
 name = "com-rs"
@@ -1053,15 +1109,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "expect-dialog"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2cffe942687cc5740f3509be69c5a8d110815938c4eec39618107475b9eb8d9c"
-dependencies = [
- "native-dialog",
-]
-
-[[package]]
 name = "exr"
 version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1456,7 +1503,23 @@ version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5444c27eef6923071f7ebcc33e3444508466a76f7a2b93da00ed6e19f30c1ddb"
 dependencies = [
- "windows-sys 0.48.0",
+    "windows-sys 0.48.0",
+]
+
+[[package]]
+name = "human-panic"
+version = "1.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "38a841f87949b0dd751864e769a870be79dc34abcee1cf31d737a61d498b22b6"
+dependencies = [
+    "anstream",
+    "anstyle",
+    "backtrace",
+    "os_info",
+    "serde",
+    "serde_derive",
+    "toml",
+    "uuid",
 ]
 
 [[package]]
@@ -2207,7 +2270,18 @@ version = "0.3.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8378ac0dfbd4e7895f2d2c1f1345cab3836910baf3a300b000d04250f0c8428f"
 dependencies = [
- "redox_syscall 0.3.5",
+    "redox_syscall 0.3.5",
+]
+
+[[package]]
+name = "os_info"
+version = "3.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "006e42d5b888366f1880eda20371fedde764ed2213dc8496f49622fa0c99cd5e"
+dependencies = [
+    "log",
+    "serde",
+    "winapi",
 ]
 
 [[package]]
@@ -2216,7 +2290,7 @@ version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "706de7e2214113d63a8238d1910463cfce781129a6f263d13fdb09ff64355ba4"
 dependencies = [
- "ttf-parser",
+    "ttf-parser",
 ]
 
 [[package]]
@@ -3318,9 +3392,24 @@ version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "50bff7831e19200a85b17131d085c25d7811bc4e186efdaf54bbd132994a88cb"
 dependencies = [
- "form_urlencoded",
- "idna",
- "percent-encoding",
+    "form_urlencoded",
+    "idna",
+    "percent-encoding",
+]
+
+[[package]]
+name = "utf8parse"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "711b9620af191e0cdc7468a8d14e709c3dcdb115b36f838e601583af800a370a"
+
+[[package]]
+name = "uuid"
+version = "1.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "79daa5ed5740825c40b389c5e50312b9c86df53fccd33f281df655642b43869d"
+dependencies = [
+    "getrandom",
 ]
 
 [[package]]

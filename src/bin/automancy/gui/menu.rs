@@ -1,9 +1,10 @@
+use std::error::Error;
 use std::fs;
 
 use egui::{
     vec2, Align, Align2, Button, Context, RichText, ScrollArea, TextEdit, TextStyle, Window,
 };
-use tokio::runtime::Runtime;
+use futures::executor::block_on;
 use winit::event_loop::ControlFlow;
 
 use automancy::game::GameMsg;
@@ -23,7 +24,9 @@ pub fn main_menu(
     context: &Context,
     control_flow: &mut ControlFlow,
     loop_store: &mut EventLoopStorage,
-) {
+) -> Result<bool, Box<dyn Error>> {
+    let mut result = Ok(false);
+
     Window::new("main_menu")
         .resizable(false)
         .title_bar(false)
@@ -98,21 +101,18 @@ pub fn main_menu(
                         )
                         .clicked()
                     {
-                        shutdown_graceful(setup, control_flow).unwrap();
+                        result = shutdown_graceful(setup, control_flow);
                     };
                     ui.label(VERSION)
                 },
             );
         });
+
+    result
 }
 
 /// Draws the pause menu.
-pub fn pause_menu(
-    runtime: &Runtime,
-    setup: &GameSetup,
-    context: &Context,
-    loop_store: &mut EventLoopStorage,
-) {
+pub fn pause_menu(setup: &GameSetup, context: &Context, loop_store: &mut EventLoopStorage) {
     Window::new("Game Paused")
         .resizable(false)
         .collapsible(false)
@@ -162,12 +162,11 @@ pub fn pause_menu(
                         )
                         .clicked()
                     {
-                        runtime
-                            .block_on(setup.game.call(
-                                |reply| GameMsg::SaveMap(setup.resource_man.clone(), reply),
-                                None,
-                            ))
-                            .unwrap();
+                        block_on(setup.game.call(
+                            |reply| GameMsg::SaveMap(setup.resource_man.clone(), reply),
+                            None,
+                        ))
+                        .unwrap();
                         setup
                             .game
                             .send_message(GameMsg::LoadMap(

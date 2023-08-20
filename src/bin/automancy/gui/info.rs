@@ -1,5 +1,5 @@
 use egui::{vec2, Align2, Context, Window};
-use tokio::runtime::Runtime;
+use futures::executor::block_on;
 
 use automancy::game::GameMsg;
 use automancy::tile_entity::TileEntityMsg;
@@ -13,12 +13,7 @@ use crate::renderer::GuiInstances;
 use crate::setup::GameSetup;
 
 /// Draws the info GUI.
-pub fn info(
-    runtime: &Runtime,
-    setup: &GameSetup,
-    gui_instances: &mut GuiInstances,
-    context: &Context,
-) {
+pub fn info(setup: &GameSetup, gui_instances: &mut GuiInstances, context: &Context) {
     Window::new(
         setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.info].as_str(),
     )
@@ -29,27 +24,24 @@ pub fn info(
     .show(context, |ui| {
         ui.colored_label(colors::DARK_GRAY, setup.camera.pointing_at.to_string());
 
-        let tile_entity = runtime
-            .block_on(setup.game.call(
-                |reply| GameMsg::GetTileEntity(setup.camera.pointing_at, reply),
-                None,
-            ))
-            .unwrap()
-            .unwrap();
+        let tile_entity = block_on(setup.game.call(
+            |reply| GameMsg::GetTileEntity(setup.camera.pointing_at, reply),
+            None,
+        ))
+        .unwrap()
+        .unwrap();
 
-        let tile = runtime
-            .block_on(setup.game.call(
-                |reply| GameMsg::GetTile(setup.camera.pointing_at, reply),
-                None,
-            ))
-            .unwrap()
-            .unwrap();
+        let tile = block_on(setup.game.call(
+            |reply| GameMsg::GetTile(setup.camera.pointing_at, reply),
+            None,
+        ))
+        .unwrap()
+        .unwrap();
 
         if let Some((tile_entity, (id, _))) = tile_entity.zip(tile) {
             ui.label(setup.resource_man.tile_name(&id));
 
-            let data = runtime
-                .block_on(tile_entity.call(TileEntityMsg::GetData, None))
+            let data = block_on(tile_entity.call(TileEntityMsg::GetData, None))
                 .unwrap()
                 .unwrap();
 

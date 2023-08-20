@@ -1,6 +1,12 @@
+use std::fmt::Write;
+use std::panic;
+use std::panic::PanicInfo;
+use std::path::Path;
+
 use env_logger::Env;
-use expect_dialog::ExpectDialog;
 use futures::executor::block_on;
+use human_panic::handle_dump;
+use native_dialog::{MessageDialog, MessageType};
 use tokio::runtime::Runtime;
 use winit::dpi::PhysicalSize;
 use winit::event_loop::EventLoop;
@@ -32,10 +38,76 @@ fn get_icon() -> Icon {
     Icon::from_rgba(image.into_flat_samples().samples, width, height).unwrap() // unwrap ok
 }
 
+fn write_msg<P: AsRef<Path>>(buffer: &mut impl Write, file_path: Option<P>) -> std::fmt::Result {
+    writeln!(buffer, "Well, this is embarrassing.\n")?;
+    writeln!(
+        buffer,
+        "automancy had a problem and crashed. To help us diagnose the problem you can send us a crash report.\n"
+    )?;
+    writeln!(
+        buffer,
+        "We have generated a report file at\n{}\n\nSubmit an issue or tag us on Fedi/Discord and include the report as an attachment.\n",
+        match file_path {
+            Some(fp) => format!("{}", fp.as_ref().display()),
+            None => "<Failed to store file to disk>".to_string(),
+        },
+    )?;
+
+    writeln!(
+        buffer,
+        "- Git: https://github.com/sorcerers-class/automancy"
+    )?;
+    writeln!(buffer, "- Fedi(Mastodon): https://gamedev.lgbt/@automancy")?;
+    writeln!(buffer, "- Discord: https://discord.gg/jcJbUh3QX2")?;
+
+    writeln!(
+        buffer,
+        "\nAlternatively, send an email to the main developer Madeline Sparkles (madeline@mouse.lgbt) directly.\n"
+    )?;
+
+    writeln!(
+        buffer,
+        "We take privacy seriously, and do not perform any automated error collection. In order to improve the software, we rely on people to submit reports.\n"
+    )?;
+    writeln!(buffer, "Thank you kindly!")?;
+
+    Ok(())
+}
+
 fn main() {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
-    let runtime = Runtime::new().unwrap();
+    {
+        panic::set_hook(Box::new(move |info: &PanicInfo| {
+            let file_path = handle_dump(
+                &human_panic::Metadata {
+                    name: "automancy".into(),
+                    version: env!("CARGO_PKG_VERSION").into(),
+                    authors: "Madeline Sparkles <madeline@mouse.lgbt>".into(),
+                    homepage: "https://github.com/sorcerers-class/automancy".into(),
+                },
+                info,
+            );
+
+            let mut message = String::new();
+
+            _ = write_msg(&mut message, file_path);
+
+            let stderr = std::io::stderr();
+            let mut stderr = stderr.lock();
+
+            use std::io::Write;
+
+            _ = write!(stderr, "{}", message);
+            log::error!("{}", info);
+
+            _ = MessageDialog::new()
+                .set_type(MessageType::Error)
+                .set_title("automancy crash dialog")
+                .set_text(&message)
+                .show_alert();
+        }));
+    }
 
     // --- window ---
     let event_loop = EventLoop::new();
@@ -45,14 +117,16 @@ fn main() {
         .with_window_icon(Some(get_icon()))
         .with_min_inner_size(PhysicalSize::new(200, 200))
         .build(&event_loop)
-        .expect_dialog("Failed to open window!");
+        .expect("Failed to open window!");
 
     let camera = Camera::new(window::window_size_double(&window));
 
     // --- setup ---
+    let runtime = Runtime::new().unwrap();
+
     let (mut setup, vertices, indices) = runtime
         .block_on(GameSetup::setup(camera))
-        .expect_dialog("Critical failure in game setup!");
+        .expect("Critical failure in game setup!");
 
     // --- render ---
     log::info!("setting up rendering...");
@@ -77,9 +151,14 @@ fn main() {
 
     let mut storage = EventLoopStorage::default();
 
+    let mut closed = false;
+
     event_loop.run(move |event, _, control_flow| {
-        if let Err(e) = on_event(
-            &runtime,
+        if closed {
+            return;
+        }
+
+        match on_event(
             &mut setup,
             &mut storage,
             &mut renderer,
@@ -87,7 +166,14 @@ fn main() {
             event,
             control_flow,
         ) {
-            log::warn!("Event loop returned error: {e}");
+            Ok(to_exit) => {
+                if to_exit {
+                    closed = true;
+                }
+            }
+            Err(e) => {
+                log::warn!("Event loop returned error: {e}");
+            }
         }
 
         renderer

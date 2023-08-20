@@ -12,6 +12,10 @@ lto = "fat"         # turn on Link-Time Optimizations
 codegen-units = 1   # trade compile time with maximum optimization
 opt-level = "z"     # optimize for size
 
+[profile]
+dev.lto = "off"
+release.lto = "off"
+
 
 
 [workspace]
@@ -72,9 +76,9 @@ rhai = { workspace = true }
 
 automancy_resources = { path = "automancy_resources" }
 
-expect-dialog = "1.0.1"
-
 env_logger = "0.10.0"
+native-dialog = "0.6.4"
+human-panic = "1.1.5"
 
 enum-ordinalize = "3.1.13"
 slice-group-by = "0.3.0"

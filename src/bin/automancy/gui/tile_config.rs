@@ -2,8 +2,8 @@ use std::time::Instant;
 
 use egui::Context;
 use egui::{vec2, DragValue, Margin, Ui, Window};
+use futures::executor::block_on;
 use ractor::ActorRef;
-use tokio::runtime::Runtime;
 
 use automancy::game::GameMsg;
 use automancy::tile_entity::TileEntityMsg;
@@ -365,39 +365,34 @@ fn config_script(
 
 /// Draws the tile configuration menu.
 pub fn tile_config(
-    runtime: &Runtime,
     setup: &GameSetup,
     loop_store: &mut EventLoopStorage,
     gui_instances: &mut GuiInstances,
     context: &Context,
 ) {
     if let Some(config_open) = loop_store.config_open {
-        let mut game_data = runtime
-            .block_on(setup.game.call(GameMsg::TakeDataMap, None))
+        let mut game_data = block_on(setup.game.call(GameMsg::TakeDataMap, None))
             .unwrap()
             .unwrap();
 
-        let tile = runtime
-            .block_on(
-                setup
-                    .game
-                    .call(|reply| GameMsg::GetTile(config_open, reply), None),
-            )
-            .unwrap()
-            .unwrap();
+        let tile = block_on(
+            setup
+                .game
+                .call(|reply| GameMsg::GetTile(config_open, reply), None),
+        )
+        .unwrap()
+        .unwrap();
 
-        let tile_entity = runtime
-            .block_on(
-                setup
-                    .game
-                    .call(|reply| GameMsg::GetTileEntity(config_open, reply), None),
-            )
-            .unwrap()
-            .unwrap();
+        let tile_entity = block_on(
+            setup
+                .game
+                .call(|reply| GameMsg::GetTileEntity(config_open, reply), None),
+        )
+        .unwrap()
+        .unwrap();
 
         if let Some(((id, _), tile_entity)) = tile.zip(tile_entity) {
-            let data = runtime
-                .block_on(tile_entity.call(TileEntityMsg::GetData, None))
+            let data = block_on(tile_entity.call(TileEntityMsg::GetData, None))
                 .unwrap()
                 .unwrap();
 

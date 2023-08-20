@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use egui::{Context, Rect, ScrollArea, Window};
-use tokio::runtime::Runtime;
+use futures::executor::block_on;
 
 use automancy::game::{GameMsg, TAKE_ITEM_ANIMATION_SPEED};
 use automancy_defs::hashbrown::HashMap;
@@ -64,7 +64,6 @@ fn take_item_animation(
 }
 
 pub fn player(
-    runtime: &Runtime,
     setup: &GameSetup,
     loop_store: &mut EventLoopStorage,
     gui_instances: &mut GuiInstances,
@@ -84,18 +83,14 @@ pub fn player(
                 .as_str(),
         );
 
-        if let Some(Data::Inventory(inventory)) = runtime
-            .block_on(setup.game.call(
-                |reply| {
-                    GameMsg::GetDataValue(
-                        setup.resource_man.registry.data_ids.player_inventory,
-                        reply,
-                    )
-                },
-                None,
-            ))
-            .unwrap()
-            .unwrap()
+        if let Some(Data::Inventory(inventory)) = block_on(setup.game.call(
+            |reply| {
+                GameMsg::GetDataValue(setup.resource_man.registry.data_ids.player_inventory, reply)
+            },
+            None,
+        ))
+        .unwrap()
+        .unwrap()
         {
             ScrollArea::vertical().show(ui, |ui| {
                 for (item, amount) in inventory.iter().flat_map(|(id, amount)| {

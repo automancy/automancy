@@ -1,5 +1,4 @@
-pub static VERSION: &str = include_str!("../version.txt");
-
+pub static VERSION: &str = env!("CARGO_PKG_VERSION");
 pub mod camera;
 pub mod game;
 pub mod gpu;

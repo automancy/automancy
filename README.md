@@ -52,10 +52,7 @@ running `make_assets.sh`**
 
 ### Software
 
-The rendering is single-threaded. Game logic integration is run on Tokio runtime (which will block the rendering thread
-until the runtime completes the future).
-
-The game logic is run with an actor system.
+The rendering is single-threaded, the game logic is run with an actor system on top of a Tokio runtime.
 
 "Scripts" are called "functions" as the name is taken in-game by what would otherwise be called "recipes."
 
