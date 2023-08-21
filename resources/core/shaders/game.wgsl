@@ -49,7 +49,7 @@ fn vs_main(
     out.model_pos = model_pos.xyz / model_pos.w;
     out.normal = model.normal;
 
-    out.color = vec4(model.color.rgb + instance.color_offset.rgb, model.color.a * instance.color_offset.a);
+    out.color = vec4(mix(instance.color_offset.rgb, model.color.rgb, model.color.a - instance.color_offset.a), abs(model.color.a - instance.color_offset.a));
     out.light_pos = instance.light_pos;
 
     return out;

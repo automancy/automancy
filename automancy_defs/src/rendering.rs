@@ -136,7 +136,7 @@ impl From<InstanceData> for RawInstanceData {
 impl Default for InstanceData {
     fn default() -> Self {
         Self {
-            color_offset: [0.0, 0.0, 0.0, 1.0],
+            color_offset: [0.0, 0.0, 0.0, 0.0],
             light_pos: point3(0.0, 0.0, 6.0),
             model_matrix: Matrix4::identity(),
         }

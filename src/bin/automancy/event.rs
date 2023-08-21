@@ -502,9 +502,7 @@ pub fn on_event(
                             }) {
                                 gui_instances.push((
                                     InstanceData {
-                                        color_offset: colors::TRANSPARENT
-                                            .with_alpha(0.8)
-                                            .to_array(),
+                                        color_offset: colors::BLACK.with_alpha(0.5).to_array(),
                                         light_pos: camera_pos_float,
                                         model_matrix: matrix
                                             * Matrix4::from_translation(vec3(
@@ -561,10 +559,10 @@ pub fn on_event(
             }
         }
 
-        tile_tints.insert(setup.camera.pointing_at, colors::RED.mul(0.2));
+        tile_tints.insert(setup.camera.pointing_at, colors::RED.with_alpha(0.2));
 
         for selected in &loop_store.selected_tiles {
-            tile_tints.insert(*selected, colors::ORANGE.mul(0.3));
+            tile_tints.insert(*selected, colors::ORANGE.with_alpha(0.3));
         }
 
         if setup.input_handler.control_held {

@@ -37,9 +37,7 @@ impl ColorAdj for Rgba {
 
     #[inline]
     fn mul(&self, m: Float) -> Self {
-        let mut r = Rgba::from_rgba_unmultiplied(self.r(), self.g(), self.b(), m);
-        r[3] = 1.0;
-        r
+        Rgba::from_rgba_unmultiplied(self.r(), self.g(), self.b(), (self.a() + m) * 0.5)
     }
 }
 
@@ -51,4 +49,3 @@ pub const LIGHT_GRAY: Rgba = hex_color!("#b6b6b6");
 pub const GRAY: Rgba = hex_color!("#747474");
 pub const DARK_GRAY: Rgba = hex_color!("#474747");
 pub const BLACK: Rgba = hex_color!("#000000");
-pub const TRANSPARENT: Rgba = hex_color!("#00000000");

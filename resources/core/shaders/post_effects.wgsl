@@ -86,20 +86,27 @@ fn sobel(uv: vec2<f32>) -> f32 {
     return smoothstep(0.2, 0.8, sqrt(g));
 }
 
-const THRESHOLD: f32 = 0.01;
-
 fn normal_edge(uv: vec2<f32>) -> f32 {
-    let texel_size = 2.0 / vec2<f32>(textureDimensions(normal_texture));
+    let texel_size = 1.0 / vec2<f32>(textureDimensions(normal_texture));
 
     let c  = textureSample(normal_texture, normal_sampler, uv).rgb;
-    let n  = abs(dot(c, textureSample(normal_texture, normal_sampler, uv + texel_size * vec2<f32>( 0.0,  1.0)).rgb));
-    let e  = abs(dot(c, textureSample(normal_texture, normal_sampler, uv + texel_size * vec2<f32>( 1.0,  0.0)).rgb));
+    let n  = dot(c, textureSample(normal_texture, normal_sampler, uv + texel_size * vec2<f32>( 0.0,  1.0)).rgb);
+    let e  = dot(c, textureSample(normal_texture, normal_sampler, uv + texel_size * vec2<f32>( 1.0,  0.0)).rgb);
+    let s  = dot(c, textureSample(normal_texture, normal_sampler, uv + texel_size * vec2<f32>( 0.0, -1.0)).rgb);
+    let w  = dot(c, textureSample(normal_texture, normal_sampler, uv + texel_size * vec2<f32>(-1.0,  0.0)).rgb);
 
-    if (1.0 - n > THRESHOLD || 1.0 - e > THRESHOLD) {
-        return 0.4;
-    } else {
-        return 0.0;
-    }
+    let m = mat3x3(
+        vec3(1.0,   s, 1.0),
+        vec3(  w, 1.0,   e),
+        vec3(1.0,   n, 1.0),
+    );
+
+    let gx = dot(SOBEL_X[0], m[0]) + dot(SOBEL_X[1], m[1]) + dot(SOBEL_X[2], m[2]);
+    let gy = dot(SOBEL_Y[0], m[0]) + dot(SOBEL_Y[1], m[1]) + dot(SOBEL_Y[2], m[2]);
+
+    let g = length(vec2(gx, gy));
+
+    return step(0.2, sqrt(g));
 }
 
 fn rgb2hsl(c: vec3<f32>) -> vec3<f32> {
@@ -123,7 +130,7 @@ fn hsl2rgb(c: vec3<f32>) -> vec3<f32> {
 fn normal_edge_color(color: vec4<f32>, normal_edge_r: f32) -> vec4<f32> {
     if (normal_edge_r > 0.0) {
         var hsl = rgb2hsl(color.rgb);
-        hsl.z = normal_edge_r;
+        hsl.z = 0.3;
 
         return vec4(hsl2rgb(hsl), color.a);
     } else {
