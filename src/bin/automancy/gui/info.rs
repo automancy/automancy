@@ -13,7 +13,7 @@ use crate::renderer::GuiInstances;
 use crate::setup::GameSetup;
 
 /// Draws the info GUI.
-pub fn info(setup: &GameSetup, gui_instances: &mut GuiInstances, context: &Context) {
+pub fn info(setup: &GameSetup, item_instances: &mut GuiInstances, context: &Context) {
     Window::new(
         setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.info].as_str(),
     )
@@ -60,7 +60,7 @@ pub fn info(setup: &GameSetup, gui_instances: &mut GuiInstances, context: &Conte
                     draw_item(
                         &setup.resource_man,
                         ui,
-                        gui_instances,
+                        item_instances,
                         None,
                         ItemStack { item, amount },
                         SMALL_ITEM_ICON_SIZE,

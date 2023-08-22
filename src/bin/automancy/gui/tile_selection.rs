@@ -68,11 +68,10 @@ fn draw_tile_selection(
             gui_instances.push((
                 InstanceData::default()
                     .with_model_matrix(matrix)
-                    .with_light_pos(point3(0.0, 0.0, 6.0)),
+                    .with_light_pos(point3(0.0, 1.0, 5.0)),
                 model,
                 Some(rect),
                 Some(ui.clip_rect().shrink2(Vec2::new(2.0, 0.0))),
-                None,
             ));
         });
 }
@@ -96,7 +95,7 @@ pub fn tile_selections(
                 .scroll_bar_visibility(ScrollBarVisibility::AlwaysHidden)
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.set_height(70.0);
+                        ui.set_height(80.0);
 
                         draw_tile_selection(
                             setup,

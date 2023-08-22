@@ -409,9 +409,11 @@ pub fn on_event(
     }
 
     if event == Event::RedrawRequested(renderer.gpu.window.id()) {
-        let mut gui_instances = vec![];
+        loop_store.frame_start = Instant::now();
+
         let mut extra_instances: Vec<(RawInstanceData, Id)> = vec![];
-        let overlay = vec![];
+        let mut gui_instances = vec![];
+        let mut item_instances = vec![];
 
         setup.camera.update_pointing_at(
             setup.input_handler.main_pos,
@@ -446,17 +448,17 @@ pub fn on_event(
                 GuiState::Ingame => {
                     if !setup.input_handler.key_active(KeyActions::HideGui) {
                         if setup.input_handler.key_active(KeyActions::Player) {
-                            player::player(setup, loop_store, &mut gui_instances, &gui.context);
+                            player::player(setup, loop_store, &mut item_instances, &gui.context);
                         }
 
                         // tile_info
-                        info::info(setup, &mut gui_instances, &gui.context);
+                        info::info(setup, &mut item_instances, &gui.context);
 
                         // tile_config
                         tile_config::tile_config(
                             setup,
                             loop_store,
-                            &mut gui_instances,
+                            &mut item_instances,
                             &gui.context,
                         );
 
@@ -512,7 +514,6 @@ pub fn on_event(
                                             )),
                                     },
                                     model,
-                                    None,
                                     None,
                                     None,
                                 ));
@@ -592,16 +593,14 @@ pub fn on_event(
         error::error_popup(setup, gui);
 
         if !matches!(result, Ok(true)) {
-            loop_store.frame_start = Instant::now();
-
             match renderer.render(
                 setup,
                 gui,
                 matrix,
                 tile_tints,
-                gui_instances,
                 extra_instances,
-                overlay,
+                gui_instances,
+                item_instances,
             ) {
                 Ok(_) => {}
                 Err(SurfaceError::Lost) => renderer

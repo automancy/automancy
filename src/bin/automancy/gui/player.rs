@@ -20,7 +20,7 @@ fn take_item_animation(
     dst_rect: Rect,
     setup: &GameSetup,
     loop_store: &mut EventLoopStorage,
-    gui_instances: &mut GuiInstances,
+    item_instances: &mut GuiInstances,
 ) {
     let now = Instant::now();
 
@@ -55,7 +55,7 @@ fn take_item_animation(
 
             paint_item(
                 &setup.resource_man,
-                gui_instances,
+                item_instances,
                 item,
                 src_rect.lerp_towards(&dst_rect, d),
             );
@@ -66,7 +66,7 @@ fn take_item_animation(
 pub fn player(
     setup: &GameSetup,
     loop_store: &mut EventLoopStorage,
-    gui_instances: &mut GuiInstances,
+    item_instances: &mut GuiInstances,
     context: &Context,
 ) {
     Window::new(
@@ -103,13 +103,13 @@ pub fn player(
                     let (dst_rect, _) = draw_item(
                         &setup.resource_man,
                         ui,
-                        gui_instances,
+                        item_instances,
                         None,
                         ItemStack { item, amount },
                         MEDIUM_ITEM_ICON_SIZE,
                     );
 
-                    take_item_animation(item, dst_rect, setup, loop_store, gui_instances);
+                    take_item_animation(item, dst_rect, setup, loop_store, item_instances);
                 }
             });
         }

@@ -137,7 +137,7 @@ impl Default for InstanceData {
     fn default() -> Self {
         Self {
             color_offset: [0.0, 0.0, 0.0, 0.0],
-            light_pos: point3(0.0, 0.0, 6.0),
+            light_pos: point3(0.0, 0.0, 5.0),
             model_matrix: Matrix4::identity(),
         }
     }
@@ -225,22 +225,8 @@ impl GameUBO {
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
-pub struct OverlayUBO {
-    world: RawMat4,
-}
-
-impl OverlayUBO {
-    pub fn new(world: Matrix4) -> Self {
-        Self {
-            world: (Matrix4::from(FIX_COORD) * world).into(),
-        }
-    }
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
 pub struct PostEffectsUBO {
-    pub depth_threshold: Float,
+    pub _empty: Float,
 }
 
 #[derive(Clone, Debug)]

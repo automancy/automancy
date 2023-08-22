@@ -21,15 +21,14 @@ use automancy::game::{GameMsg, RenderUnit, TransactionRecord, TRANSACTION_ANIMAT
 use automancy::gpu;
 use automancy::gpu::{Gpu, NORMAL_CLEAR, SCREENSHOT_FORMAT, UPSCALE_LEVEL};
 use automancy::input::KeyActions;
-use automancy_defs::cgmath::{vec3, EuclideanSpace, SquareMatrix};
+use automancy_defs::cgmath::{vec3, EuclideanSpace};
 use automancy_defs::coord::TileCoord;
 use automancy_defs::gui::Gui;
 use automancy_defs::hashbrown::HashMap;
 use automancy_defs::id::Id;
 use automancy_defs::math::{deg, direction_to_angle, is_in_culling_range, Float, Matrix4, FAR};
 use automancy_defs::rendering::{
-    lerp_coords_to_pixel, make_line, GameUBO, InstanceData, OverlayUBO, PostEffectsUBO,
-    RawInstanceData, Vertex,
+    lerp_coords_to_pixel, make_line, GameUBO, InstanceData, PostEffectsUBO, RawInstanceData,
 };
 use automancy_defs::{bytemuck, colors, math};
 use automancy_resources::data::Data;
@@ -62,13 +61,7 @@ fn get_angle_from_direction(target: &Data) -> Option<Float> {
     }
 }
 
-pub type GuiInstances = Vec<(
-    InstanceData,
-    Id,
-    Option<Rect>,
-    Option<Rect>,
-    Option<(Float, Float)>,
-)>;
+pub type GuiInstances = Vec<(InstanceData, Id, Option<Rect>, Option<Rect>)>;
 
 impl Renderer {
     pub fn render(
@@ -77,9 +70,9 @@ impl Renderer {
         gui: &mut Gui,
         matrix: Matrix4,
         tile_tints: HashMap<TileCoord, Rgba>,
-        gui_instances: GuiInstances,
         mut extra_instances: Vec<(RawInstanceData, Id)>,
-        overlay: Vec<Vertex>,
+        gui_instances: GuiInstances,
+        item_instances: GuiInstances,
     ) -> Result<(), SurfaceError> {
         let size = self.gpu.window.inner_size();
 
@@ -265,7 +258,7 @@ impl Renderer {
             &instances,
             &extra_instances,
             gui_instances,
-            overlay,
+            item_instances,
         )
     }
 
@@ -277,7 +270,7 @@ impl Renderer {
         instances: &[(RawInstanceData, Id)],
         extra_instances: &[(RawInstanceData, Id)],
         gui_instances: GuiInstances,
-        overlay: Vec<Vertex>,
+        item_instances: GuiInstances,
     ) -> Result<(), SurfaceError> {
         let size = self.gpu.window.inner_size();
         let output = self.gpu.surface.get_current_texture()?;
@@ -369,6 +362,35 @@ impl Renderer {
         }
 
         {
+            let mut post_effects_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some("Game Post Effects Render Pass"),
+                color_attachments: &[Some(RenderPassColorAttachment {
+                    view: &self.gpu.post_effects_resources.texture().1,
+                    resolve_target: None,
+                    ops: Operations {
+                        load: LoadOp::Clear(Color::BLACK),
+                        store: true,
+                    },
+                })],
+                depth_stencil_attachment: None,
+            });
+
+            self.gpu.queue.write_buffer(
+                &self.gpu.game_resources.post_effects_uniform_buffer,
+                0,
+                bytemuck::cast_slice(&[PostEffectsUBO::default()]),
+            );
+
+            post_effects_pass.set_pipeline(&self.gpu.post_effects_resources.pipeline);
+            post_effects_pass.set_bind_group(
+                0,
+                self.gpu.game_resources.post_effects_bind_group(),
+                &[],
+            );
+            post_effects_pass.draw(0..3, 0..1);
+        }
+
+        {
             let count = gpu::indirect_instance(
                 &self.gpu.device,
                 &self.gpu.queue,
@@ -383,7 +405,7 @@ impl Renderer {
                 label: Some("Extra Render Pass"),
                 color_attachments: &[
                     Some(RenderPassColorAttachment {
-                        view: &self.gpu.game_texture().1,
+                        view: &self.gpu.post_effects_resources.texture().1,
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Load,
@@ -395,7 +417,7 @@ impl Renderer {
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Load,
-                            store: true,
+                            store: false,
                         },
                     }),
                 ],
@@ -435,82 +457,6 @@ impl Renderer {
                     0,
                     count,
                 );
-            }
-        }
-
-        {
-            let mut post_effects_pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("Game Post Effects Render Pass"),
-                color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.post_effects_resources.texture().1,
-                    resolve_target: None,
-                    ops: Operations {
-                        load: LoadOp::Clear(Color::BLACK),
-                        store: true,
-                    },
-                })],
-                depth_stencil_attachment: None,
-            });
-
-            self.gpu.queue.write_buffer(
-                &self.gpu.game_resources.post_effects_uniform_buffer,
-                0,
-                bytemuck::cast_slice(&[PostEffectsUBO {
-                    depth_threshold: 0.00001,
-                }]),
-            );
-
-            post_effects_pass.set_pipeline(&self.gpu.post_effects_resources.pipeline);
-            post_effects_pass.set_bind_group(
-                0,
-                self.gpu.game_resources.post_effects_bind_group(),
-                &[],
-            );
-            post_effects_pass.draw(0..3, 0..1);
-        }
-
-        {
-            gpu::create_or_write_buffer(
-                &self.gpu.device,
-                &self.gpu.queue,
-                &mut self.gpu.overlay_resources.vertex_buffer,
-                bytemuck::cast_slice(overlay.as_slice()),
-            );
-
-            let mut overlay_pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("Overlay Render Pass"),
-                color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.post_effects_resources.texture().1,
-                    resolve_target: None,
-                    ops: Operations {
-                        load: LoadOp::Load,
-                        store: true,
-                    },
-                })],
-                depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                    view: &self.gpu.depth_texture().1,
-                    depth_ops: Some(Operations {
-                        load: LoadOp::Load,
-                        store: false,
-                    }),
-                    stencil_ops: None,
-                }),
-            });
-
-            if !overlay.is_empty() {
-                self.gpu.queue.write_buffer(
-                    &self.gpu.overlay_resources.uniform_buffer,
-                    0,
-                    bytemuck::cast_slice(&[OverlayUBO::new(Matrix4::identity())]),
-                );
-
-                let vertex_count = overlay.len() as u32;
-
-                overlay_pass.set_pipeline(&self.gpu.overlay_resources.pipeline);
-                overlay_pass.set_bind_group(0, &self.gpu.overlay_resources.bind_group, &[]);
-                overlay_pass
-                    .set_vertex_buffer(0, self.gpu.overlay_resources.vertex_buffer.slice(..));
-                overlay_pass.draw(0..vertex_count, 0..1);
             }
         }
 
@@ -584,11 +530,8 @@ impl Renderer {
         {
             let (instances, draws): (Vec<_>, Vec<_>) = gui_instances
                 .into_iter()
-                .map(|(instance, id, viewport, scissor, depth)| {
-                    (
-                        RawInstanceData::from(instance),
-                        (id, viewport, scissor, depth),
-                    )
+                .map(|(instance, id, viewport, scissor)| {
+                    (RawInstanceData::from(instance), (id, viewport, scissor))
                 })
                 .unzip();
 
@@ -636,16 +579,14 @@ impl Renderer {
                     bytemuck::cast_slice(&[GameUBO::default()]),
                 );
 
-                gui_pass.set_pipeline(&self.gpu.gui_resources.pipeline);
+                gui_pass.set_pipeline(&self.gpu.game_resources.pipeline);
                 gui_pass.set_bind_group(0, &self.gpu.gui_resources.bind_group, &[]);
                 gui_pass.set_vertex_buffer(0, self.gpu.vertex_buffer.slice(..));
                 gui_pass.set_vertex_buffer(1, self.gpu.gui_resources.instance_buffer.slice(..));
                 gui_pass.set_index_buffer(self.gpu.index_buffer.slice(..), IndexFormat::Uint16);
 
-                for (idx, (id, viewport, scissor, depth)) in draws.into_iter().enumerate() {
+                for (idx, (id, viewport, scissor)) in draws.into_iter().enumerate() {
                     let idx = idx as u32;
-
-                    let depth = depth.unwrap_or((1.0, 0.0));
 
                     if let Some(viewport) = viewport {
                         gui_pass.set_viewport(
@@ -653,8 +594,8 @@ impl Renderer {
                             viewport.top() * factor * UPSCALE_LEVEL as Float,
                             viewport.width() * factor * UPSCALE_LEVEL as Float,
                             viewport.height() * factor * UPSCALE_LEVEL as Float,
-                            depth.0,
-                            depth.1,
+                            1.0,
+                            0.0,
                         );
                     } else {
                         gui_pass.set_viewport(
@@ -662,8 +603,8 @@ impl Renderer {
                             0.0,
                             (size.width * UPSCALE_LEVEL) as Float,
                             (size.height * UPSCALE_LEVEL) as Float,
-                            depth.0,
-                            depth.1,
+                            1.0,
+                            0.0,
                         );
                     }
 
@@ -709,9 +650,7 @@ impl Renderer {
             self.gpu.queue.write_buffer(
                 &self.gpu.gui_resources.post_effects_uniform_buffer,
                 0,
-                bytemuck::cast_slice(&[PostEffectsUBO {
-                    depth_threshold: 0.00025,
-                }]),
+                bytemuck::cast_slice(&[PostEffectsUBO::default()]),
             );
 
             post_effects_pass.set_pipeline(&self.gpu.post_effects_resources.pipeline);
@@ -721,6 +660,112 @@ impl Renderer {
                 &[],
             );
             post_effects_pass.draw(0..3, 0..1);
+        }
+
+        {
+            let (instances, draws): (Vec<_>, Vec<_>) = item_instances
+                .into_iter()
+                .map(|(instance, id, viewport, scissor)| {
+                    (RawInstanceData::from(instance), (id, viewport, scissor))
+                })
+                .unzip();
+
+            gpu::create_or_write_buffer(
+                &self.gpu.device,
+                &self.gpu.queue,
+                &mut self.gpu.item_resources.instance_buffer,
+                bytemuck::cast_slice(instances.as_slice()),
+            );
+
+            let mut item_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some("Item Render Pass"),
+                color_attachments: &[
+                    Some(RenderPassColorAttachment {
+                        view: &self.gpu.post_effects_resources.texture().1,
+                        resolve_target: None,
+                        ops: Operations {
+                            load: LoadOp::Load,
+                            store: true,
+                        },
+                    }),
+                    Some(RenderPassColorAttachment {
+                        view: &self.gpu.normal_texture().1,
+                        resolve_target: None,
+                        ops: Operations {
+                            load: LoadOp::Load,
+                            store: false,
+                        },
+                    }),
+                ],
+                depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
+                    view: &self.gpu.depth_texture().1,
+                    depth_ops: Some(Operations {
+                        load: LoadOp::Load,
+                        store: false,
+                    }),
+                    stencil_ops: None,
+                }),
+            });
+
+            if !draws.is_empty() {
+                self.gpu.queue.write_buffer(
+                    &self.gpu.item_resources.uniform_buffer,
+                    0,
+                    bytemuck::cast_slice(&[GameUBO::default()]),
+                );
+
+                item_pass.set_pipeline(&self.gpu.game_resources.pipeline);
+                item_pass.set_bind_group(0, &self.gpu.item_resources.bind_group, &[]);
+                item_pass.set_vertex_buffer(0, self.gpu.vertex_buffer.slice(..));
+                item_pass.set_vertex_buffer(1, self.gpu.item_resources.instance_buffer.slice(..));
+                item_pass.set_index_buffer(self.gpu.index_buffer.slice(..), IndexFormat::Uint16);
+
+                for (idx, (id, viewport, scissor)) in draws.into_iter().enumerate() {
+                    let idx = idx as u32;
+
+                    if let Some(viewport) = viewport {
+                        item_pass.set_viewport(
+                            viewport.left() * factor * UPSCALE_LEVEL as Float,
+                            viewport.top() * factor * UPSCALE_LEVEL as Float,
+                            viewport.width() * factor * UPSCALE_LEVEL as Float,
+                            viewport.height() * factor * UPSCALE_LEVEL as Float,
+                            0.0,
+                            1.0,
+                        );
+                    } else {
+                        item_pass.set_viewport(
+                            0.0,
+                            0.0,
+                            (size.width * UPSCALE_LEVEL) as Float,
+                            (size.height * UPSCALE_LEVEL) as Float,
+                            0.0,
+                            1.0,
+                        );
+                    }
+
+                    if let Some(scissor) = scissor {
+                        item_pass.set_scissor_rect(
+                            (scissor.left() * factor) as u32 * UPSCALE_LEVEL,
+                            (scissor.top() * factor) as u32 * UPSCALE_LEVEL,
+                            (scissor.width() * factor) as u32 * UPSCALE_LEVEL,
+                            (scissor.height() * factor) as u32 * UPSCALE_LEVEL,
+                        );
+                    } else {
+                        item_pass.set_scissor_rect(
+                            0,
+                            0,
+                            size.width * UPSCALE_LEVEL,
+                            size.height * UPSCALE_LEVEL,
+                        );
+                    }
+
+                    let index_range = setup.resource_man.index_ranges[&id];
+
+                    let a = index_range.offset;
+                    let b = a + index_range.size;
+                    item_pass.draw_indexed(a..b, 0, idx..(idx + 1));
+                }
+            }
         }
 
         {

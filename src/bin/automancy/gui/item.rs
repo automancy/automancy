@@ -14,26 +14,20 @@ pub const LARGE_ITEM_ICON_SIZE: Float = 96.0;
 
 pub fn paint_item(
     resource_man: &ResourceManager,
-    gui_instances: &mut GuiInstances,
+    item_instances: &mut GuiInstances,
     item: Item,
     rect: Rect,
 ) {
     let model = resource_man.get_item_model(item);
 
-    gui_instances.push((
-        InstanceData::default(),
-        model,
-        Some(rect),
-        None,
-        Some((0.0, 1.0)),
-    ))
+    item_instances.push((InstanceData::default(), model, Some(rect), None))
 }
 
 /// Draws an Item's icon.
 pub fn draw_item(
     resource_man: &ResourceManager,
     ui: &mut Ui,
-    gui_instances: &mut GuiInstances,
+    item_instances: &mut GuiInstances,
     prefix: Option<&'static str>,
     stack: ItemStack,
     size: Float,
@@ -59,7 +53,7 @@ pub fn draw_item(
             ui.label(resource_man.item_name(&stack.item.id).to_string())
         };
 
-        paint_item(resource_man, gui_instances, stack.item, rect);
+        paint_item(resource_man, item_instances, stack.item, rect);
 
         (rect, icon_response.union(label_response))
     })

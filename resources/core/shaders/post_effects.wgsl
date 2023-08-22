@@ -1,5 +1,5 @@
 struct Uniform {
-    depth_threshold: f32,
+    _empty: f32,
 }
 
 @group(0) @binding(0)
@@ -81,9 +81,9 @@ fn sobel(uv: vec2<f32>) -> f32 {
     let gx = dot(SOBEL_X[0], m[0]) + dot(SOBEL_X[1], m[1]) + dot(SOBEL_X[2], m[2]);
     let gy = dot(SOBEL_Y[0], m[0]) + dot(SOBEL_Y[1], m[1]) + dot(SOBEL_Y[2], m[2]);
 
-    let g = length(vec2(gx, gy));
+    let g = smoothstep(0.5, 1.0, length(vec2(gx, gy)));
 
-    return smoothstep(0.2, 0.8, sqrt(g));
+    return g;
 }
 
 fn normal_edge(uv: vec2<f32>) -> f32 {
@@ -106,7 +106,7 @@ fn normal_edge(uv: vec2<f32>) -> f32 {
 
     let g = length(vec2(gx, gy));
 
-    return step(0.2, sqrt(g));
+    return g;
 }
 
 fn rgb2hsl(c: vec3<f32>) -> vec3<f32> {
@@ -127,8 +127,8 @@ fn hsl2rgb(c: vec3<f32>) -> vec3<f32> {
   return c.z * mix(K.xxx, clamp(p - K.xxx, vec3(0.0, 0.0, 0.0), vec3(1.0, 1.0, 1.0)), c.y);
 }
 
-fn normal_edge_color(color: vec4<f32>, normal_edge_r: f32) -> vec4<f32> {
-    if (normal_edge_r > 0.0) {
+fn edge_color(color: vec4<f32>, r: f32) -> vec4<f32> {
+    if (r > 0.2) {
         var hsl = rgb2hsl(color.rgb);
         hsl.z = 0.3;
 
@@ -143,10 +143,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let color = textureSample(frame_texture, frame_sampler, in.uv);
 
     let sobel_r = sobel(in.uv);
-    let sobel_c = color * vec4(vec3(sobel_r), 0.0);
+    let sobel_c = edge_color(color, sobel_r);
 
     let normal_edge_r = normal_edge(in.uv);
-    let normal_edge_c = normal_edge_color(color, normal_edge_r);
+    let normal_edge_c = color * vec4(vec3(sqrt(normal_edge_r)), 0.0);
 
-    return normal_edge_c + sobel_c * 0.5;
+    return sobel_c + normal_edge_c;
 }

@@ -1,13 +1,16 @@
 use std::fmt::Write;
-use std::panic;
+use std::fs::File;
 use std::panic::PanicInfo;
 use std::path::Path;
+use std::{env, panic};
 
+use color_eyre::owo_colors::OwoColorize;
+use color_eyre::{config, eyre};
 use env_logger::Env;
 use futures::executor::block_on;
-use human_panic::handle_dump;
 use native_dialog::{MessageDialog, MessageType};
 use tokio::runtime::Runtime;
+use uuid::Uuid;
 use winit::dpi::PhysicalSize;
 use winit::event_loop::EventLoop;
 use winit::window::{Fullscreen, Icon, WindowBuilder};
@@ -38,7 +41,7 @@ fn get_icon() -> Icon {
     Icon::from_rgba(image.into_flat_samples().samples, width, height).unwrap() // unwrap ok
 }
 
-fn write_msg<P: AsRef<Path>>(buffer: &mut impl Write, file_path: Option<P>) -> std::fmt::Result {
+fn write_msg<P: AsRef<Path>>(buffer: &mut impl Write, file_path: P) -> std::fmt::Result {
     writeln!(buffer, "Well, this is embarrassing.\n")?;
     writeln!(
         buffer,
@@ -46,11 +49,8 @@ fn write_msg<P: AsRef<Path>>(buffer: &mut impl Write, file_path: Option<P>) -> s
     )?;
     writeln!(
         buffer,
-        "We have generated a report file at\n{}\n\nSubmit an issue or tag us on Fedi/Discord and include the report as an attachment.\n",
-        match file_path {
-            Some(fp) => format!("{}", fp.as_ref().display()),
-            None => "<Failed to store file to disk>".to_string(),
-        },
+        "We have generated a report file at\nfile://{}\n\nSubmit an issue or tag us on Fedi/Discord and include the report as an attachment.\n",
+        file_path.as_ref().display(),
     )?;
 
     writeln!(
@@ -74,38 +74,58 @@ fn write_msg<P: AsRef<Path>>(buffer: &mut impl Write, file_path: Option<P>) -> s
     Ok(())
 }
 
-fn main() {
+fn main() -> eyre::Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
     {
+        let eyre = config::HookBuilder::default();
+
+        let (panic_hook, eyre_hook) = eyre.into_hooks();
+
+        eyre_hook.install()?;
+
         panic::set_hook(Box::new(move |info: &PanicInfo| {
-            let file_path = handle_dump(
-                &human_panic::Metadata {
-                    name: "automancy".into(),
-                    version: env!("CARGO_PKG_VERSION").into(),
-                    authors: "Madeline Sparkles <madeline@mouse.lgbt>".into(),
-                    homepage: "https://github.com/sorcerers-class/automancy".into(),
-                },
-                info,
-            );
+            let file_path = {
+                let report = panic_hook.panic_report(info);
 
-            let mut message = String::new();
+                let uuid = Uuid::new_v4().hyphenated().to_string();
+                let tmp_dir = env::temp_dir();
+                let file_name = format!("automancy-report-{uuid}.txt");
+                let file_path = tmp_dir.join(file_name);
+                if let Ok(mut file) = File::create(&file_path) {
+                    use std::io::Write;
 
-            _ = write_msg(&mut message, file_path);
+                    _ = write!(
+                        file,
+                        "{}",
+                        strip_ansi_escapes::strip_str(report.to_string())
+                    );
+                }
+                eprintln!("{}", report);
 
-            let stderr = std::io::stderr();
-            let mut stderr = stderr.lock();
+                file_path
+            };
 
-            use std::io::Write;
+            if let Some(location) = info.location() {
+                if !["src/game.rs", "src/tile_entity.rs"].contains(&location.file()) {
+                    let message = {
+                        let mut message = String::new();
+                        _ = write_msg(&mut message, &file_path);
 
-            _ = write!(stderr, "{}", message);
-            log::error!("{}", info);
+                        message
+                    };
 
-            _ = MessageDialog::new()
-                .set_type(MessageType::Error)
-                .set_title("automancy crash dialog")
-                .set_text(&message)
-                .show_alert();
+                    {
+                        eprintln!("\n\n\n{}\n\n\n", message.bright_red());
+
+                        _ = MessageDialog::new()
+                            .set_type(MessageType::Error)
+                            .set_title("automancy crash dialog")
+                            .set_text(&message)
+                            .show_alert();
+                    }
+                }
+            }
         }));
     }
 

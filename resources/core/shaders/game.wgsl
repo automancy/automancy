@@ -62,23 +62,15 @@ struct FragmentOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> FragmentOutput {
-    let light_color = ubo.light_color.rgb * 0.15;
-    let light_dir = in.light_pos.xyz - in.model_pos;
+    let light_dir = normalize(in.light_pos.xyz - in.model_pos);
+    let reflect_dir = reflect(-light_dir, in.normal);
 
-    let reflected = -reflect(normalize(light_dir), in.normal);
-    let eye = normalize(-in.model_pos);
-    let halfway = normalize(light_dir + eye);
-
-    var diffuse_intensity = max(dot(in.normal, reflected), 0.0);
-    diffuse_intensity = pow(diffuse_intensity, 4.0);
-    let diffuse = light_color * diffuse_intensity;
-
-    let specular_intensity = dot(in.normal, halfway);
-    let specular = light_color * specular_intensity;
+    let diffuse = round(max(dot(in.normal, light_dir), 0.0) * 64.0) / 48.0;
+    let specular = max(dot(light_dir, reflect_dir), 0.0);
 
     var out: FragmentOutput;
 
-    out.color = vec4(in.color.rgb * (vec3(0.5) + diffuse + specular), in.color.a);
+    out.color = vec4(in.color.rgb * ubo.light_color.rgb * min(0.2 + mix(diffuse, specular, 0.5), ubo.light_color.a), in.color.a);
     out.normal = vec4(in.normal, 0.0);
 
     return out;

@@ -13,6 +13,7 @@ codegen-units = 1   # trade compile time with maximum optimization
 opt-level = "z"     # optimize for size
 
 [profile]
+dev.opt-level = 3
 dev.lto = "off"
 release.lto = "off"
 
@@ -79,6 +80,8 @@ automancy_resources = { path = "automancy_resources" }
 env_logger = "0.10.0"
 native-dialog = "0.6.4"
 human-panic = "1.1.5"
+color-eyre = "0.6"
+strip-ansi-escapes = "0.2.0"
 
 enum-ordinalize = "3.1.13"
 slice-group-by = "0.3.0"
@@ -86,16 +89,16 @@ arraydeque = "0.5.1"
 fuse-rust = "0.3.1"
 arboard = "3.2.0"
 
-rayon = "1.7.0"
 rand = "0.8.5"
+uuid = "1.4.1"
 num = "0.4.0"
 
+toml = "0.7.4"
 image = "0.24.6"
 zstd = "0.12.3"
-
-toml = "0.7.4"
 
 async-trait = "0.1.68"
 futures = "0.3.28"
 ractor = "0.9.0"
 tokio = { version = "1", features = ["full"] }
+rayon = "1.7.0"
