@@ -1607,9 +1607,9 @@ version = "0.24.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6f3dfdbdd72063086ff443e297b61695500514b1e41095b6fb9a5ab48a70a711"
 dependencies = [
- "bytemuck",
- "byteorder",
- "color_quant",
+    "bytemuck",
+    "byteorder",
+    "color_quant",
     "exr",
     "gif",
     "jpeg-decoder",
@@ -2883,11 +2883,11 @@ dependencies = [
 
 [[package]]
 name = "slab"
-version = "0.4.8"
+version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6528351c9bc8ab22353f9d776db39a20288e8d6c37ef8cfe3317cf875eecfc2d"
+checksum = "8f92a496fb766b417c996b9c5e57daf2f7ad3b0bebe1ccfca4856390e3d3bb67"
 dependencies = [
- "autocfg",
+    "autocfg",
 ]
 
 [[package]]
@@ -3026,12 +3026,12 @@ dependencies = [
     "lazy_static",
     "symphonia-bundle-flac",
     "symphonia-bundle-mp3",
- "symphonia-codec-pcm",
- "symphonia-codec-vorbis",
- "symphonia-core",
- "symphonia-format-ogg",
- "symphonia-format-wav",
- "symphonia-metadata",
+    "symphonia-codec-pcm",
+    "symphonia-codec-vorbis",
+    "symphonia-core",
+    "symphonia-format-ogg",
+    "symphonia-format-wav",
+    "symphonia-metadata",
 ]
 
 [[package]]
@@ -3366,8 +3366,8 @@ version = "0.1.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5f4f31f56159e98206da9efd823404b79b6ef3143b4a7ab76e67b1751b25a4ab"
 dependencies = [
- "proc-macro2",
- "quote",
+    "proc-macro2",
+    "quote",
     "syn 2.0.29",
 ]
 
