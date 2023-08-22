@@ -81,9 +81,9 @@ fn sobel(uv: vec2<f32>) -> f32 {
     let gx = dot(SOBEL_X[0], m[0]) + dot(SOBEL_X[1], m[1]) + dot(SOBEL_X[2], m[2]);
     let gy = dot(SOBEL_Y[0], m[0]) + dot(SOBEL_Y[1], m[1]) + dot(SOBEL_Y[2], m[2]);
 
-    let g = smoothstep(0.5, 1.0, length(vec2(gx, gy)));
+    let g = length(vec2(gx, gy));
 
-    return g;
+    return smoothstep(0.35, 1.0, sqrt(g));
 }
 
 fn normal_edge(uv: vec2<f32>) -> f32 {
@@ -106,7 +106,7 @@ fn normal_edge(uv: vec2<f32>) -> f32 {
 
     let g = length(vec2(gx, gy));
 
-    return g;
+    return smoothstep(0.2, 0.8, sqrt(g));
 }
 
 fn rgb2hsl(c: vec3<f32>) -> vec3<f32> {
