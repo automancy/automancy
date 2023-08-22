@@ -83,7 +83,7 @@ fn sobel(uv: vec2<f32>) -> f32 {
 
     let g = length(vec2(gx, gy));
 
-    return smoothstep(0.35, 1.0, sqrt(g));
+    return smoothstep(0.4, 1.0, g);
 }
 
 fn normal_edge(uv: vec2<f32>) -> f32 {
@@ -96,9 +96,9 @@ fn normal_edge(uv: vec2<f32>) -> f32 {
     let w  = dot(c, textureSample(normal_texture, normal_sampler, uv + texel_size * vec2<f32>(-1.0,  0.0)).rgb);
 
     let m = mat3x3(
-        vec3(1.0,   s, 1.0),
+        vec3(0.5,   s, 0.5),
         vec3(  w, 1.0,   e),
-        vec3(1.0,   n, 1.0),
+        vec3(0.5,   n, 0.5),
     );
 
     let gx = dot(SOBEL_X[0], m[0]) + dot(SOBEL_X[1], m[1]) + dot(SOBEL_X[2], m[2]);
