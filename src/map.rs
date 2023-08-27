@@ -143,9 +143,7 @@ impl Map {
         let path = Self::tiles(map_name);
 
         let file = File::open(path).ok()?;
-
-        let reader = BufReader::with_capacity(MAP_BUFFER_SIZE, file);
-        let decoder = Decoder::new(reader).unwrap();
+        let decoder = Decoder::new(file).unwrap();
 
         let decoded: serde_json::Result<Vec<(TileCoord, SerdeTile)>> =
             serde_json::from_reader(decoder);

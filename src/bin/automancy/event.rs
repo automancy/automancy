@@ -1,5 +1,4 @@
 use std::collections::VecDeque;
-use std::error::Error;
 use std::f32::consts::PI;
 use std::mem;
 use std::sync::Arc;
@@ -24,7 +23,7 @@ use automancy_defs::gui::Gui;
 use automancy_defs::hashbrown::{HashMap, HashSet};
 use automancy_defs::id::Id;
 use automancy_defs::math::{Float, Matrix4, FAR};
-use automancy_defs::rendering::{make_line, InstanceData, RawInstanceData};
+use automancy_defs::rendering::{make_line, InstanceData};
 use automancy_defs::{colors, log, math, window};
 use automancy_resources::data::item::Item;
 use automancy_resources::data::Data;
@@ -136,7 +135,7 @@ impl EventLoopStorage {
 pub fn shutdown_graceful(
     setup: &mut GameSetup,
     control_flow: &mut ControlFlow,
-) -> Result<bool, Box<dyn Error>> {
+) -> anyhow::Result<bool> {
     setup.game.send_message(GameMsg::StopTicking)?;
 
     block_on(setup.game.call(
@@ -164,7 +163,7 @@ pub fn on_event(
     gui: &mut Gui,
     event: Event<()>,
     control_flow: &mut ControlFlow,
-) -> Result<bool, Box<dyn Error>> {
+) -> anyhow::Result<bool> {
     let mut result = Ok(false);
 
     let mut window_event = None;
@@ -411,7 +410,7 @@ pub fn on_event(
     if event == Event::RedrawRequested(renderer.gpu.window.id()) {
         loop_store.frame_start = Instant::now();
 
-        let mut extra_instances: Vec<(RawInstanceData, Id)> = vec![];
+        let mut extra_instances = vec![];
         let mut gui_instances = vec![];
         let mut item_instances = vec![];
 
@@ -526,8 +525,7 @@ pub fn on_event(
                                     color_offset: colors::RED.to_array(),
                                     light_pos: camera_pos_float,
                                     model_matrix: make_line(math::hex_to_pixel(*coord), cursor_pos),
-                                }
-                                .into(),
+                                },
                                 setup.resource_man.registry.model_ids.cube1x1,
                             ));
                         }
@@ -578,8 +576,7 @@ pub fn on_event(
                             math::hex_to_pixel(*start),
                             math::hex_to_pixel(*setup.camera.pointing_at),
                         ),
-                    }
-                    .into(),
+                    },
                     setup.resource_man.registry.model_ids.cube1x1,
                 ));
 

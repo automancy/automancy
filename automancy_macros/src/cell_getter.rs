@@ -28,7 +28,7 @@ pub fn derive_option_getter(item: TokenStream) -> TokenStream {
                     let name = field
                         .ident
                         .clone()
-                        .expect("somehow the field doesn't have a name")
+                        .expect("Somehow the field doesn't have a name")
                         .to_string();
 
                     if attrs.contains(&GET.to_string()) {
@@ -59,10 +59,10 @@ pub fn derive_option_getter(item: TokenStream) -> TokenStream {
                 "
                 impl {name} {{
                     pub fn {item_name}(&self) -> &{item_type} {{
-                        self.{item_name}.as_ref().expect(\"no value has been set for {name}.{item_name}\")
+                        self.{item_name}.as_ref().expect(\"No value has been set for {name}.{item_name}\")
                     }}
                     pub fn {item_name}_mut(&mut self) -> &mut {item_type} {{
-                        self.{item_name}.as_mut().expect(\"no value has been set for {name}.{item_name}\")
+                        self.{item_name}.as_mut().expect(\"No value has been set for {name}.{item_name}\")
                     }}
                 }}
                 "

@@ -2,15 +2,16 @@ use std::mem::size_of;
 
 use bytemuck::{Pod, Zeroable};
 use cgmath::{point3, vec3, EuclideanSpace, MetricSpace, SquareMatrix};
-use egui::ecolor::{linear_f32_from_gamma_u8, linear_f32_from_linear_u8};
+use gltf::animation::Interpolation;
 use hexagon_tiles::fractional::FractionalHex;
 use hexagon_tiles::traits::HexRound;
-use ply_rs::ply::{Property, PropertyAccess};
 use wgpu::{vertex_attr_array, BufferAddress, VertexAttribute, VertexBufferLayout, VertexStepMode};
 
 use crate::coord::TileCoord;
 use crate::math;
-use crate::math::{direction_to_angle, DPoint2, Double, Float, Matrix4, Point3, Vector3};
+use crate::math::{
+    direction_to_angle, DPoint2, Double, Float, Matrix4, Point3, Quaternion, Vector3,
+};
 
 pub fn lerp_coords_to_pixel(a: TileCoord, b: TileCoord, t: Double) -> DPoint2 {
     let a = FractionalHex::new(a.q() as Double, a.r() as Double);
@@ -38,7 +39,7 @@ pub type VertexColor = [Float; 4];
 pub type RawMat4 = [[Float; 4]; 4];
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, Default, Zeroable, Pod)]
+#[derive(Debug, Clone, Copy, Default, PartialOrd, PartialEq, Zeroable, Pod)]
 pub struct Vertex {
     pub pos: VertexPos,
     pub normal: VertexPos,
@@ -61,76 +62,13 @@ impl Vertex {
     }
 }
 
-impl PropertyAccess for Vertex {
-    fn new() -> Self {
-        Self {
-            pos: [0.0, 0.0, 0.0],
-            color: [0.0, 0.0, 0.0, 0.0],
-            normal: [0.0, 0.0, 0.0],
-        }
-    }
-
-    fn set_property(&mut self, key: String, property: Property) {
-        match (key.as_ref(), property) {
-            ("x", Property::Float(v)) => self.pos[0] = v,
-            ("y", Property::Float(v)) => self.pos[1] = v,
-            ("z", Property::Float(v)) => self.pos[2] = v,
-            ("nx", Property::Float(v)) => self.normal[0] = v,
-            ("ny", Property::Float(v)) => self.normal[1] = v,
-            ("nz", Property::Float(v)) => self.normal[2] = v,
-            ("red", Property::UChar(v)) => self.color[0] = linear_f32_from_gamma_u8(v),
-            ("green", Property::UChar(v)) => self.color[1] = linear_f32_from_gamma_u8(v),
-            ("blue", Property::UChar(v)) => self.color[2] = linear_f32_from_gamma_u8(v),
-            ("alpha", Property::UChar(v)) => self.color[3] = linear_f32_from_linear_u8(v),
-            (_, _) => {}
-        }
-    }
-}
-
 // instance
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
-pub struct RawInstanceData {
-    pub color_offset: VertexColor,
-    pub light_pos: VertexColor,
-    pub model_matrix: RawMat4,
-}
-
-impl RawInstanceData {
-    pub fn desc() -> VertexBufferLayout<'static> {
-        static ATTRIBUTES: &[VertexAttribute] = &vertex_attr_array![
-            3 => Float32x4,
-            4 => Float32x4,
-            5 => Float32x4,
-            6 => Float32x4,
-            7 => Float32x4,
-            8 => Float32x4,
-        ];
-
-        VertexBufferLayout {
-            array_stride: size_of::<RawInstanceData>() as BufferAddress,
-            step_mode: VertexStepMode::Instance,
-            attributes: ATTRIBUTES,
-        }
-    }
-}
 
 #[derive(Clone, Copy, Debug)]
 pub struct InstanceData {
     pub color_offset: VertexColor,
     pub light_pos: Point3,
     pub model_matrix: Matrix4,
-}
-
-impl From<InstanceData> for RawInstanceData {
-    fn from(value: InstanceData) -> Self {
-        Self {
-            color_offset: value.color_offset,
-            light_pos: [value.light_pos.x, value.light_pos.y, value.light_pos.z, 1.0],
-            model_matrix: value.model_matrix.into(),
-        }
-    }
 }
 
 impl Default for InstanceData {
@@ -187,6 +125,43 @@ impl InstanceData {
     }
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
+pub struct RawInstanceData {
+    pub color_offset: VertexColor,
+    pub light_pos: VertexColor,
+    pub model_matrix: RawMat4,
+}
+
+impl From<InstanceData> for RawInstanceData {
+    fn from(value: InstanceData) -> Self {
+        Self {
+            color_offset: value.color_offset,
+            light_pos: [value.light_pos.x, value.light_pos.y, value.light_pos.z, 1.0],
+            model_matrix: value.model_matrix.into(),
+        }
+    }
+}
+
+impl RawInstanceData {
+    pub fn desc() -> VertexBufferLayout<'static> {
+        static ATTRIBUTES: &[VertexAttribute] = &vertex_attr_array![
+            3 => Float32x4,
+            4 => Float32x4,
+            5 => Float32x4,
+            6 => Float32x4,
+            7 => Float32x4,
+            8 => Float32x4,
+        ];
+
+        VertexBufferLayout {
+            array_stride: size_of::<RawInstanceData>() as BufferAddress,
+            step_mode: VertexStepMode::Instance,
+            attributes: ATTRIBUTES,
+        }
+    }
+}
+
 // UBO
 
 pub static DEFAULT_LIGHT_COLOR: VertexColor = [0.9, 0.9, 0.9, 0.9];
@@ -229,42 +204,30 @@ pub struct PostEffectsUBO {
     pub _empty: Float,
 }
 
-#[derive(Clone, Debug)]
-pub struct Face {
-    pub indices: Vec<u16>,
-}
-
-impl Face {
-    pub fn index_offset(mut self, offset: u16) -> Self {
-        self.indices.iter_mut().for_each(|v| *v += offset);
-
-        self
-    }
-}
-
-impl PropertyAccess for Face {
-    fn new() -> Self {
-        Face {
-            indices: Vec::new(),
-        }
-    }
-    fn set_property(&mut self, key: String, property: Property) {
-        if let ("vertex_indices", Property::ListUInt(vec)) = (key.as_ref(), property) {
-            self.indices = vec.into_iter().map(|v| v as u16).collect();
-        }
-    }
-}
-
 // model
 
-#[derive(Debug, Clone)]
-pub struct Mesh {
+#[derive(Debug, Clone, PartialEq)]
+pub struct Model {
     pub vertices: Vec<Vertex>,
-    pub faces: Vec<Face>,
+    pub indices: Vec<u16>,
+    pub name: String,
+    pub matrix: Matrix4,
+    pub index: usize,
 }
 
-impl Mesh {
-    pub fn new(vertices: Vec<Vertex>, faces: Vec<Face>) -> Self {
-        Self { vertices, faces }
-    }
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum AnimationUnit {
+    Translation(Vector3),
+    Scale(Vector3),
+    Rotate(Quaternion),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Animation {
+    pub target: usize,
+    pub min: Float,
+    pub max: Float,
+    pub interpolation: Interpolation,
+    pub inputs: Vec<Float>,
+    pub outputs: Vec<AnimationUnit>,
 }

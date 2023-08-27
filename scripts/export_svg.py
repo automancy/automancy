@@ -49,8 +49,7 @@ def main():
         new_dim.x = new_dim.x / 8.0
         new_dim.y = new_dim.y / 8.0
         new_obj.dimensions = new_dim
-        new_obj.rotation_euler.y = 3.141593
-        new_obj.location.xy = 1.0, -1.0
+        new_obj.location.xy = 1.0, 1.0
 
         bpy.context.view_layer.objects.active = new_obj
         bpy.ops.object.mode_set(mode='EDIT')

@@ -13,6 +13,7 @@ codegen-units = 1   # trade compile time with maximum optimization
 opt-level = "z"     # optimize for size
 
 [profile]
+
 dev.opt-level = 3
 dev.lto = "off"
 release.lto = "off"
@@ -49,6 +50,8 @@ egui-wgpu = { version = "0.22.0" }
 egui-winit = "0.22.0"
 
 lazy_static = "1.4.0"
+anyhow = "1.0.72"
+thiserror = "1.0.43"
 
 rhai = { git = "https://github.com/rhaiscript/rhai.git", features = ["sync", "no_time", "no_custom_syntax", "no_closure", "no_float", "only_i32"] }
 
@@ -70,6 +73,8 @@ egui-winit = { workspace = true }
 winit = { workspace = true }
 
 lazy_static = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
 
 rhai = { workspace = true }
 
@@ -84,7 +89,6 @@ color-eyre = "0.6"
 strip-ansi-escapes = "0.2.0"
 
 enum-ordinalize = "3.1.13"
-slice-group-by = "0.3.0"
 arraydeque = "0.5.1"
 fuse-rust = "0.3.1"
 arboard = "3.2.0"

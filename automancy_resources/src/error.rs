@@ -1,4 +1,3 @@
-use std::collections::VecDeque;
 use std::sync::{Arc, RwLock};
 
 use automancy_defs::id::Id;
@@ -9,7 +8,7 @@ use crate::{format, ResourceManager};
 /// An ErrorManager contains a queue of errors to be displayed.
 #[derive(Default)]
 pub struct ErrorManager {
-    queue: Arc<RwLock<VecDeque<GameError>>>,
+    queue: Arc<RwLock<Vec<GameError>>>,
 }
 
 pub type GameError = (Id, Vec<String>);
@@ -27,7 +26,7 @@ pub fn error_to_string((id, args): &GameError, resource_man: &ResourceManager) -
 
 /// Gets the unlocalized key of an error's ID.
 pub fn error_to_key((id, ..): &GameError, resource_man: &ResourceManager) -> String {
-    resource_man.interner.resolve(*id).unwrap().to_string()
+    resource_man.interner.resolve(*id).unwrap_or("").to_string()
 }
 
 impl ErrorManager {
@@ -36,24 +35,21 @@ impl ErrorManager {
         log::error!("ERR: {}", error_to_key(&error, resource_man));
         self.queue
             .write()
-            .expect("could not write error")
-            .push_front(error);
+            .expect("Could not write error")
+            .push(error);
     }
 
     /// Removes the top error off of the stack and returns it or None if the queue is empty.
     pub fn pop(&self) -> Option<GameError> {
-        self.queue
-            .write()
-            .expect("could not write error")
-            .pop_front()
+        self.queue.write().expect("Could not write error").pop()
     }
 
     /// Copies the top error of the queue and returns it, or None if the queue is empty.
     pub fn peek(&self) -> Option<GameError> {
         self.queue
             .read()
-            .expect("could not read error")
-            .front()
+            .expect("Could not read error")
+            .last()
             .cloned()
     }
 

@@ -1,4 +1,3 @@
-use std::error::Error;
 use std::fs;
 
 use egui::{
@@ -24,7 +23,7 @@ pub fn main_menu(
     context: &Context,
     control_flow: &mut ControlFlow,
     loop_store: &mut EventLoopStorage,
-) -> Result<bool, Box<dyn Error>> {
+) -> anyhow::Result<bool> {
     let mut result = Ok(false);
 
     Window::new("main_menu")

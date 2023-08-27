@@ -70,7 +70,7 @@ impl Renderer {
         gui: &mut Gui,
         matrix: Matrix4,
         tile_tints: HashMap<TileCoord, Rgba>,
-        mut extra_instances: Vec<(RawInstanceData, Id)>,
+        mut extra_instances: Vec<(InstanceData, Id)>,
         gui_instances: GuiInstances,
         item_instances: GuiInstances,
     ) -> Result<(), SurfaceError> {
@@ -150,8 +150,7 @@ impl Renderer {
                                 math::hex_to_pixel(*coord),
                                 math::hex_to_pixel(*link),
                             ),
-                        }
-                        .into(),
+                        },
                         setup.resource_man.registry.model_ids.cube1x1,
                     ));
                 }
@@ -202,10 +201,7 @@ impl Renderer {
             {
                 map.entry(model)
                     .or_insert_with(|| Vec::with_capacity(32))
-                    .push((
-                        RawInstanceData::from(instance.with_light_pos(camera_pos_float)),
-                        model,
-                    ))
+                    .push((instance.with_light_pos(camera_pos_float), model))
             }
 
             map.into_values().flatten().collect::<Vec<_>>()
@@ -244,7 +240,7 @@ impl Renderer {
                         .with_light_pos(camera_pos_float);
                     let model = setup.resource_man.get_item_model(stack.item);
 
-                    extra_instances.push((instance.into(), model));
+                    extra_instances.push((instance, model));
                 }
             }
         }
@@ -257,8 +253,8 @@ impl Renderer {
             matrix,
             &instances,
             &extra_instances,
-            gui_instances,
-            item_instances,
+            &gui_instances,
+            &item_instances,
         )
     }
 
@@ -267,10 +263,10 @@ impl Renderer {
         setup: &GameSetup,
         gui: &mut Gui,
         matrix: Matrix4,
-        instances: &[(RawInstanceData, Id)],
-        extra_instances: &[(RawInstanceData, Id)],
-        gui_instances: GuiInstances,
-        item_instances: GuiInstances,
+        instances: &[(InstanceData, Id)],
+        extra_instances: &[(InstanceData, Id)],
+        gui_instances: &GuiInstances,
+        item_instances: &GuiInstances,
     ) -> Result<(), SurfaceError> {
         let size = self.gpu.window.inner_size();
         let output = self.gpu.surface.get_current_texture()?;
@@ -293,13 +289,25 @@ impl Renderer {
             });
 
         {
-            let count = gpu::indirect_instance(
+            let (raw_instances, indirect_commands, draw_count) =
+                gpu::indirect_instance(&setup.resource_man, instances);
+
+            gpu::create_or_write_buffer(
                 &self.gpu.device,
                 &self.gpu.queue,
-                &setup.resource_man,
-                instances,
                 &mut self.gpu.game_resources.instance_buffer,
+                bytemuck::cast_slice(raw_instances.as_slice()),
+            );
+            let mut indirect_buffer = vec![];
+            indirect_commands
+                .into_iter()
+                .flat_map(|v| v.1)
+                .for_each(|v| indirect_buffer.extend_from_slice(v.as_bytes()));
+            gpu::create_or_write_buffer(
+                &self.gpu.device,
+                &self.gpu.queue,
                 &mut self.gpu.game_resources.indirect_buffer,
+                indirect_buffer.as_slice(),
             );
 
             let mut game_pass = encoder.begin_render_pass(&RenderPassDescriptor {
@@ -332,7 +340,7 @@ impl Renderer {
                 }),
             });
 
-            if count > 0 {
+            if draw_count > 0 {
                 self.gpu.queue.write_buffer(
                     &self.gpu.game_resources.uniform_buffer,
                     0,
@@ -356,7 +364,7 @@ impl Renderer {
                 game_pass.multi_draw_indexed_indirect(
                     &self.gpu.game_resources.indirect_buffer,
                     0,
-                    count,
+                    draw_count,
                 );
             }
         }
@@ -391,13 +399,25 @@ impl Renderer {
         }
 
         {
-            let count = gpu::indirect_instance(
+            let (raw_instances, indirect_commands, draw_count) =
+                gpu::indirect_instance(&setup.resource_man, extra_instances);
+
+            gpu::create_or_write_buffer(
                 &self.gpu.device,
                 &self.gpu.queue,
-                &setup.resource_man,
-                extra_instances,
                 &mut self.gpu.extra_resources.instance_buffer,
+                bytemuck::cast_slice(raw_instances.as_slice()),
+            );
+            let mut indirect_buffer = vec![];
+            indirect_commands
+                .into_iter()
+                .flat_map(|v| v.1)
+                .for_each(|v| indirect_buffer.extend_from_slice(v.as_bytes()));
+            gpu::create_or_write_buffer(
+                &self.gpu.device,
+                &self.gpu.queue,
                 &mut self.gpu.extra_resources.indirect_buffer,
+                indirect_buffer.as_slice(),
             );
 
             // TODO rename the fucking "extra" stuff
@@ -431,7 +451,7 @@ impl Renderer {
                 }),
             });
 
-            if count > 0 {
+            if draw_count > 0 {
                 self.gpu.queue.write_buffer(
                     &self.gpu.extra_resources.uniform_buffer,
                     0,
@@ -455,7 +475,7 @@ impl Renderer {
                 extra_pass.multi_draw_indexed_indirect(
                     &self.gpu.extra_resources.indirect_buffer,
                     0,
-                    count,
+                    draw_count,
                 );
             }
         }
@@ -528,10 +548,18 @@ impl Renderer {
         }
 
         {
-            let (instances, draws): (Vec<_>, Vec<_>) = gui_instances
-                .into_iter()
-                .map(|(instance, id, viewport, scissor)| {
-                    (RawInstanceData::from(instance), (id, viewport, scissor))
+            let (raw_instances, draws): (Vec<_>, Vec<_>) = gui_instances
+                .iter()
+                .flat_map(|(instance, id, viewport, scissor)| {
+                    setup.resource_man.all_models[id]
+                        .0
+                        .iter()
+                        .map(|(index, model)| {
+                            (
+                                RawInstanceData::from(instance.add_model_matrix(model.matrix)),
+                                (*index, *id, *viewport, *scissor),
+                            )
+                        })
                 })
                 .unzip();
 
@@ -539,7 +567,7 @@ impl Renderer {
                 &self.gpu.device,
                 &self.gpu.queue,
                 &mut self.gpu.gui_resources.instance_buffer,
-                bytemuck::cast_slice(instances.as_slice()),
+                bytemuck::cast_slice(raw_instances.as_slice()),
             );
 
             let mut gui_pass = encoder.begin_render_pass(&RenderPassDescriptor {
@@ -585,8 +613,8 @@ impl Renderer {
                 gui_pass.set_vertex_buffer(1, self.gpu.gui_resources.instance_buffer.slice(..));
                 gui_pass.set_index_buffer(self.gpu.index_buffer.slice(..), IndexFormat::Uint16);
 
-                for (idx, (id, viewport, scissor)) in draws.into_iter().enumerate() {
-                    let idx = idx as u32;
+                for (i, (index, id, viewport, scissor)) in draws.into_iter().enumerate() {
+                    let i = i as u32;
 
                     if let Some(viewport) = viewport {
                         gui_pass.set_viewport(
@@ -624,11 +652,11 @@ impl Renderer {
                         );
                     }
 
-                    let index_range = setup.resource_man.index_ranges[&id];
+                    let index_range = setup.resource_man.all_index_ranges[&id][&index];
 
                     let a = index_range.offset;
                     let b = a + index_range.size;
-                    gui_pass.draw_indexed(a..b, 0, idx..(idx + 1));
+                    gui_pass.draw_indexed(a..b, 0, i..(i + 1));
                 }
             }
         }
@@ -663,10 +691,18 @@ impl Renderer {
         }
 
         {
-            let (instances, draws): (Vec<_>, Vec<_>) = item_instances
-                .into_iter()
-                .map(|(instance, id, viewport, scissor)| {
-                    (RawInstanceData::from(instance), (id, viewport, scissor))
+            let (raw_instances, draws): (Vec<_>, Vec<_>) = item_instances
+                .iter()
+                .flat_map(|(instance, id, viewport, scissor)| {
+                    setup.resource_man.all_models[id]
+                        .0
+                        .iter()
+                        .map(|(index, model)| {
+                            (
+                                RawInstanceData::from(instance.add_model_matrix(model.matrix)),
+                                (*index, *id, *viewport, *scissor),
+                            )
+                        })
                 })
                 .unzip();
 
@@ -674,7 +710,7 @@ impl Renderer {
                 &self.gpu.device,
                 &self.gpu.queue,
                 &mut self.gpu.item_resources.instance_buffer,
-                bytemuck::cast_slice(instances.as_slice()),
+                bytemuck::cast_slice(raw_instances.as_slice()),
             );
 
             let mut item_pass = encoder.begin_render_pass(&RenderPassDescriptor {
@@ -720,8 +756,8 @@ impl Renderer {
                 item_pass.set_vertex_buffer(1, self.gpu.item_resources.instance_buffer.slice(..));
                 item_pass.set_index_buffer(self.gpu.index_buffer.slice(..), IndexFormat::Uint16);
 
-                for (idx, (id, viewport, scissor)) in draws.into_iter().enumerate() {
-                    let idx = idx as u32;
+                for (i, (index, id, viewport, scissor)) in draws.into_iter().enumerate() {
+                    let i = i as u32;
 
                     if let Some(viewport) = viewport {
                         item_pass.set_viewport(
@@ -759,11 +795,11 @@ impl Renderer {
                         );
                     }
 
-                    let index_range = setup.resource_man.index_ranges[&id];
+                    let index_range = setup.resource_man.all_index_ranges[&id][&index];
 
                     let a = index_range.offset;
                     let b = a + index_range.size;
-                    item_pass.draw_indexed(a..b, 0, idx..(idx + 1));
+                    item_pass.draw_indexed(a..b, 0, i..(i + 1));
                 }
             }
         }

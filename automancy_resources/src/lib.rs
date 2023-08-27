@@ -12,6 +12,7 @@ pub use kira;
 use kira::sound::static_sound::StaticSoundData;
 use kira::track::TrackHandle;
 use rhai::{Dynamic, Engine, Module, Scope, AST, INT};
+use thiserror::Error;
 use walkdir::WalkDir;
 
 use automancy_defs::coord::TileCoord;
@@ -20,7 +21,7 @@ use automancy_defs::hashbrown::HashMap;
 use automancy_defs::hexagon_tiles::traits::HexRotate;
 use automancy_defs::id;
 use automancy_defs::id::{id_static, Id, Interner};
-use automancy_defs::rendering::Mesh;
+use automancy_defs::rendering::{Animation, Model};
 
 use crate::data::inventory::Inventory;
 use crate::data::item::{rhai_item_match, rhai_item_matches, rhai_item_stack_matches, Item};
@@ -46,6 +47,16 @@ pub mod shader;
 pub mod tag;
 pub mod tile;
 pub mod translate;
+
+static COULD_NOT_GET_FILE_STEM: &str = "could not get file stem";
+
+#[derive(Error, Debug)]
+pub enum LoadResourceError {
+    #[error("the file {0} is invalid: {1}")]
+    InvalidFileError(PathBuf, &'static str),
+    #[error("could not convert OsString to String")]
+    OsStringError(PathBuf),
+}
 
 pub static RESOURCE_MAN: RwLock<Option<Arc<ResourceManager>>> = RwLock::new(None);
 
@@ -101,8 +112,8 @@ pub struct ResourceManager {
 
     pub ordered_tiles: Vec<Id>,
     pub ordered_items: Vec<Id>,
-    pub index_ranges: HashMap<Id, IndexRange>,
-    pub meshes: HashMap<Id, Mesh>,
+    pub all_models: HashMap<Id, (HashMap<usize, Model>, Vec<Animation>)>,
+    pub all_index_ranges: HashMap<Id, HashMap<usize, IndexRange>>,
 }
 
 impl Debug for ResourceManager {
@@ -118,7 +129,7 @@ impl ResourceManager {
         let any = id_static("automancy", "#any").to_id(&mut interner);
 
         let mut engine = Engine::new();
-        engine.set_max_expr_depths(64, 32);
+        engine.set_max_expr_depths(0, 0);
         engine.set_fast_operators(false);
 
         engine.register_fn("item_match", rhai_item_match);
@@ -293,8 +304,8 @@ impl ResourceManager {
 
             ordered_tiles: vec![],
             ordered_items: vec![],
-            index_ranges: Default::default(),
-            meshes: Default::default(),
+            all_index_ranges: Default::default(),
+            all_models: Default::default(),
         }
     }
 }

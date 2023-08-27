@@ -1,4 +1,3 @@
-use std::error::Error;
 use std::fs;
 use std::sync::Arc;
 
@@ -26,21 +25,31 @@ fn load_resources(track: TrackHandle) -> (Arc<ResourceManager>, Vec<Vertex>, Vec
     let mut resource_man = ResourceManager::new(track);
 
     fs::read_dir(RESOURCES_PATH)
-        .unwrap()
+        .expect("The resources folder doesn't exist- this is very wrong")
         .flatten()
         .map(|v| v.path())
         .for_each(|dir| {
             let namespace = dir.file_name().unwrap().to_str().unwrap();
             log::info!("loading namespace {namespace}...");
-            resource_man.load_models(&dir);
-            resource_man.load_audio(&dir);
-            resource_man.load_tiles(&dir);
-            resource_man.load_items(&dir);
-            resource_man.load_tags(&dir);
-            resource_man.load_scripts(&dir);
-            resource_man.load_translates(&dir);
-            resource_man.load_shaders(&dir);
-            resource_man.load_functions(&dir);
+            resource_man
+                .load_models(&dir)
+                .expect("Error loading models");
+            resource_man.load_audio(&dir).expect("Error loading audio");
+            resource_man.load_tiles(&dir).expect("Error loading tiles");
+            resource_man.load_items(&dir).expect("Error loading items");
+            resource_man.load_tags(&dir).expect("Error loading tags");
+            resource_man
+                .load_scripts(&dir)
+                .expect("Error loading scripts");
+            resource_man
+                .load_translates(&dir)
+                .expect("Error loading translates");
+            resource_man
+                .load_shaders(&dir)
+                .expect("Error loading shaders");
+            resource_man
+                .load_functions(&dir)
+                .expect("Error loading functions");
             log::info!("loaded namespace {namespace}.");
         });
 
@@ -76,7 +85,7 @@ pub struct GameSetup {
 
 impl GameSetup {
     /// Initializes the game, filling all the necessary fields as well as returns the loaded vertices and indices.
-    pub async fn setup(camera: Camera) -> Result<(Self, Vec<Vertex>, Vec<u16>), Box<dyn Error>> {
+    pub async fn setup(camera: Camera) -> anyhow::Result<(Self, Vec<Vertex>, Vec<u16>)> {
         // --- resources & data ---
         log::info!("initializing audio backend...");
         let mut audio_man = AudioManager::<CpalBackend>::new(AudioManagerSettings::default())?;
@@ -148,7 +157,7 @@ impl GameSetup {
         drop(fs::create_dir_all(MAP_PATH));
 
         self.maps = fs::read_dir(MAP_PATH)
-            .unwrap()
+            .expect("Map folder doesn't exist- is the disk full?")
             .flatten()
             .map(|f| f.file_name().to_str().unwrap().to_string())
             .filter(|f| !f.starts_with('.'))

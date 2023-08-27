@@ -274,6 +274,7 @@ impl DataMap {
                                 Data::Coord(v) => DataRaw::Coord(*v),
                                 Data::VecCoord(v) => DataRaw::VecCoord(v.clone()),
                                 Data::Id(v) => {
+                                    // TODO dont unwrap
                                     DataRaw::Id(IdRaw::parse(interner.resolve(*v).unwrap()))
                                 }
                                 Data::VecId(v) => DataRaw::VecId(

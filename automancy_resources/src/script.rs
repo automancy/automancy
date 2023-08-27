@@ -38,13 +38,10 @@ pub struct InstructionsJson {
 }
 
 impl ResourceManager {
-    fn load_script(&mut self, file: &Path) -> Option<()> {
+    fn load_script(&mut self, file: &Path) -> anyhow::Result<()> {
         log::info!("loading script at: {file:?}");
 
-        let script: ScriptJson = serde_json::from_str(
-            &read_to_string(file).unwrap_or_else(|e| panic!("error loading {file:?} {e:?}")),
-        )
-        .unwrap_or_else(|e| panic!("error loading {file:?}: {e:?}"));
+        let script: ScriptJson = serde_json::from_str(&read_to_string(file)?)?;
 
         let id = script.id.to_id(&mut self.interner);
 
@@ -82,16 +79,16 @@ impl ResourceManager {
 
         self.registry.scripts.insert(id, script);
 
-        Some(())
+        Ok(())
     }
 
-    pub fn load_scripts(&mut self, dir: &Path) -> Option<()> {
+    pub fn load_scripts(&mut self, dir: &Path) -> anyhow::Result<()> {
         let scripts = dir.join("scripts");
 
         for file in load_recursively(&scripts, OsStr::new(JSON_EXT)) {
-            self.load_script(&file);
+            self.load_script(&file)?;
         }
 
-        Some(())
+        Ok(())
     }
 }

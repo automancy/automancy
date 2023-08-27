@@ -1,15 +1,16 @@
 use std::ffi::OsStr;
-use std::fs::{read_to_string, File};
-use std::io::BufReader;
+use std::fs::read_to_string;
 use std::path::Path;
 
 use serde::Deserialize;
 
+use automancy_defs::gltf::animation::util::ReadOutputs;
+use automancy_defs::gltf::json;
 use automancy_defs::hashbrown::HashMap;
 use automancy_defs::id::{Id, IdRaw};
-use automancy_defs::ply_rs::parser::Parser;
-use automancy_defs::rendering::{Face, Mesh, Vertex};
-use automancy_defs::{id, log};
+use automancy_defs::math::{Matrix4, Quaternion, Vector3};
+use automancy_defs::rendering::{Animation, AnimationUnit, Model, Vertex};
+use automancy_defs::{gltf, id, log};
 
 use crate::data::item::Item;
 use crate::{load_recursively, ResourceManager, JSON_EXT};
@@ -28,7 +29,7 @@ pub struct ModelJson {
 
 impl ResourceManager {
     pub fn get_model(&self, model: Id) -> Id {
-        if self.index_ranges.contains_key(&model) {
+        if self.all_index_ranges.contains_key(&model) {
             model
         } else {
             self.registry.model_ids.missing
@@ -36,20 +37,17 @@ impl ResourceManager {
     }
 
     pub fn get_item_model(&self, item: Item) -> Id {
-        if self.index_ranges.contains_key(&item.model) {
+        if self.all_index_ranges.contains_key(&item.model) {
             item.model
         } else {
             self.registry.model_ids.items_missing
         }
     }
 
-    fn load_model(&mut self, file: &Path) -> Option<()> {
+    fn load_model(&mut self, file: &Path) -> anyhow::Result<()> {
         log::info!("loading model at: {file:?}");
 
-        let model: ModelJson = serde_json::from_str(
-            &read_to_string(file).unwrap_or_else(|e| panic!("error loading {file:?} {e:?}")),
-        )
-        .unwrap_or_else(|e| panic!("error loading {file:?} {e:?}"));
+        let model: ModelJson = serde_json::from_str(&read_to_string(file)?)?;
 
         let file = file
             .parent()
@@ -59,51 +57,129 @@ impl ResourceManager {
 
         log::info!("loading model file at: {file:?}");
 
-        let file = File::open(file).unwrap();
-        let mut read = BufReader::new(file);
+        let (document, buffers, _images) = gltf::import(file)?;
 
-        let vertex_parser = Parser::<Vertex>::new();
-        let face_parser = Parser::<Face>::new();
+        let mut models = HashMap::new();
+        let mut animations = vec![];
 
-        let header = vertex_parser.read_header(&mut read).unwrap();
+        for animation in document.animations() {
+            for channel in animation.channels() {
+                let reader = channel.reader(|buffer| Some(&buffers[buffer.index()]));
 
-        let mut vertices = None;
-        let mut faces = None;
+                let target = channel.target().node().index();
+                let sampler = channel.sampler();
+                let interpolation = sampler.interpolation();
+                let mut read_inputs = vec![];
+                let mut read_outputs = vec![];
 
-        for (_, element) in &header.elements {
-            match element.name.as_ref() {
-                "vertex" => {
-                    vertices = vertex_parser
-                        .read_payload_for_element(&mut read, element, &header)
-                        .ok();
+                if let Some((inputs, outputs)) = reader.read_inputs().zip(reader.read_outputs()) {
+                    let max = sampler
+                        .output()
+                        .max()
+                        .as_ref()
+                        .and_then(json::Value::as_f64)
+                        .unwrap_or(0.0) as f32;
+                    let min = sampler
+                        .output()
+                        .min()
+                        .as_ref()
+                        .and_then(json::Value::as_f64)
+                        .unwrap_or(0.0) as f32;
+
+                    match outputs {
+                        ReadOutputs::Translations(outputs) => {
+                            for (input, output) in inputs.zip(outputs) {
+                                read_inputs.push(input);
+                                read_outputs
+                                    .push(AnimationUnit::Translation(Vector3::from(output)));
+                            }
+                        }
+                        ReadOutputs::Scales(outputs) => {
+                            for (input, output) in inputs.zip(outputs) {
+                                read_inputs.push(input);
+                                read_outputs.push(AnimationUnit::Scale(Vector3::from(output)));
+                            }
+                        }
+                        ReadOutputs::Rotations(outputs) => {
+                            for (input, output) in inputs.zip(outputs.into_f32()) {
+                                read_inputs.push(input);
+                                read_outputs.push(AnimationUnit::Rotate(Quaternion::from(output)));
+                            }
+                        }
+                        _ => {}
+                    }
+
+                    animations.push(Animation {
+                        target,
+                        min,
+                        max,
+                        interpolation,
+                        inputs: read_inputs,
+                        outputs: read_outputs,
+                    })
                 }
-                "face" => {
-                    faces = face_parser
-                        .read_payload_for_element(&mut read, element, &header)
-                        .ok();
-                }
-                _ => {}
             }
         }
 
-        let raw_model = vertices
-            .zip(faces)
-            .map(|(vertices, faces)| Mesh::new(vertices, faces))?;
+        for scene in document.scenes() {
+            for node in scene.nodes() {
+                if let Some(mesh) = node.mesh() {
+                    let name = mesh.name().unwrap_or("").to_string();
+                    let matrix = Matrix4::from(node.transform().matrix());
+                    let index = node.index();
 
-        self.meshes
-            .insert(model.id.to_id(&mut self.interner), raw_model);
+                    let mut read_vertices = vec![];
+                    let mut read_indices = vec![];
 
-        Some(())
+                    for primitive in mesh.primitives() {
+                        let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
+
+                        if let Some((positions, (normals, colors))) = reader
+                            .read_positions()
+                            .zip(reader.read_normals().zip(reader.read_colors(0)))
+                        {
+                            for (pos, (normal, color)) in
+                                positions.zip(normals.zip(colors.into_rgba_f32()))
+                            {
+                                read_vertices.push(Vertex { pos, normal, color })
+                            }
+                        }
+
+                        if let Some(indices) = reader.read_indices() {
+                            for index in indices.into_u32() {
+                                read_indices.push(index as u16)
+                            }
+                        }
+                    }
+
+                    models.insert(
+                        mesh.index(),
+                        Model {
+                            vertices: read_vertices,
+                            indices: read_indices,
+                            name,
+                            matrix,
+                            index,
+                        },
+                    );
+                }
+            }
+        }
+
+        self.all_models
+            .insert(model.id.to_id(&mut self.interner), (models, animations));
+
+        Ok(())
     }
 
-    pub fn load_models(&mut self, dir: &Path) -> Option<()> {
+    pub fn load_models(&mut self, dir: &Path) -> anyhow::Result<()> {
         let models = dir.join("models");
 
         for file in load_recursively(&models, OsStr::new(JSON_EXT)) {
-            self.load_model(&file);
+            self.load_model(&file)?;
         }
 
-        Some(())
+        Ok(())
     }
 
     pub fn compile_models(&mut self) -> (Vec<Vertex>, Vec<u16>) {
@@ -139,60 +215,59 @@ impl ResourceManager {
         self.ordered_tiles = ids;
 
         // indices vertices
-        let (vertices, raw_faces): (Vec<_>, Vec<_>) = self
-            .meshes
-            .iter()
-            .map(|(id, model)| (model.vertices.clone(), (id, model.faces.clone())))
-            .unzip();
+        let mut vertices = vec![];
+        let mut indices = HashMap::new();
 
-        let mut index_offsets = vertices
-            .iter()
-            .scan(0, |offset, v| {
-                *offset += v.len();
-                Some(*offset)
-            })
-            .collect::<Vec<_>>();
+        let mut index_offset_counter = 0;
 
-        drop(index_offsets.split_off(index_offsets.len() - 1));
-        index_offsets.insert(0, 0);
+        self.all_models.iter().for_each(|(id, (model, _))| {
+            model.iter().for_each(|(index, model)| {
+                vertices.push(model.vertices.clone());
+
+                indices.entry(*id).or_insert_with(Vec::new).push((
+                    *index,
+                    model
+                        .indices
+                        .iter()
+                        .map(|v| *v + index_offset_counter)
+                        .collect::<Vec<_>>(),
+                ));
+
+                index_offset_counter += model.vertices.len() as u16;
+            });
+        });
 
         let vertices = vertices.into_iter().flatten().collect::<Vec<_>>();
 
         let mut offset_count = 0;
 
-        let (faces, meshes): (Vec<_>, Vec<_>) = raw_faces
+        let all_index_ranges = indices.iter().map(|(id, indices)| {
+            let ranges = indices
+                .iter()
+                .map(|(index, v)| {
+                    let size = v.len() as u32;
+
+                    let range = IndexRange {
+                        offset: offset_count,
+                        size,
+                    };
+
+                    offset_count += size;
+
+                    (*index, range)
+                })
+                .collect::<HashMap<_, _>>();
+
+            (*id, ranges)
+        });
+
+        self.all_index_ranges = HashMap::from_iter(all_index_ranges);
+
+        let indices = indices
             .into_iter()
-            .enumerate()
-            .filter_map(|(i, (id, raw_faces))| {
-                let face = raw_faces
-                    .into_iter()
-                    .map(|face| face.index_offset(index_offsets[i] as u16))
-                    .reduce(|mut a, mut b| {
-                        a.indices.append(&mut b.indices);
+            .flat_map(|(_id, indices)| indices.into_iter().flat_map(move |v| v.1))
+            .collect();
 
-                        a
-                    });
-
-                face.map(|face| (*id, face))
-            })
-            .map(|(id, face)| {
-                let size: u32 = face.indices.len() as u32;
-
-                let range = IndexRange {
-                    offset: offset_count,
-                    size,
-                };
-
-                offset_count += range.size;
-
-                (face, (id, range))
-            })
-            .unzip();
-
-        let faces = faces.into_iter().flat_map(|face| face.indices).collect();
-
-        self.index_ranges = HashMap::from_iter(meshes.into_iter());
-
-        (vertices, faces)
+        (vertices, indices)
     }
 }

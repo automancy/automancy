@@ -28,13 +28,10 @@ pub struct Tile {
 }
 
 impl ResourceManager {
-    fn load_tile(&mut self, file: &Path) -> Option<()> {
+    fn load_tile(&mut self, file: &Path) -> anyhow::Result<()> {
         log::info!("loading tile at {file:?}");
 
-        let tile: TileJson = serde_json::from_str(
-            &read_to_string(file).unwrap_or_else(|e| panic!("error loading {file:?} {e:?}")),
-        )
-        .unwrap_or_else(|e| panic!("error loading {file:?} {e:?}"));
+        let tile: TileJson = serde_json::from_str(&read_to_string(file)?)?;
 
         let id = tile.id.to_id(&mut self.interner);
 
@@ -57,16 +54,16 @@ impl ResourceManager {
             },
         );
 
-        Some(())
+        Ok(())
     }
-    pub fn load_tiles(&mut self, dir: &Path) -> Option<()> {
+    pub fn load_tiles(&mut self, dir: &Path) -> anyhow::Result<()> {
         let tiles = dir.join("tiles");
 
         for file in load_recursively(&tiles, OsStr::new(JSON_EXT)) {
-            self.load_tile(&file);
+            self.load_tile(&file)?;
         }
 
-        Some(())
+        Ok(())
     }
 
     pub fn item_name(&self, id: &Id) -> &str {

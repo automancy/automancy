@@ -26,7 +26,9 @@ Links:
 
 ### All
 
-*Run `make_assets.sh` to process certain assets into what the game can consume.*
+***Run `make_assets.sh` to process certain assets into what the game can consume.***
+
+***You must run it after cloning if you want the game to work.***
 
 ### Designers
 

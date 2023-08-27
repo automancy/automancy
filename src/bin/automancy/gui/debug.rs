@@ -19,7 +19,7 @@ pub fn debugger(setup: &GameSetup, loop_store: &mut EventLoopStorage, context: &
     //let functions = resource_man.functions.len();
     let scripts = resource_man.registry.scripts.len();
     let audio = resource_man.audio.len();
-    let meshes = resource_man.meshes.len();
+    let meshes = resource_man.all_models.len();
 
     let (info, map_name) = block_on(setup.game.call(GameMsg::GetMapInfo, None))
         .unwrap()

@@ -34,13 +34,10 @@ impl Tag {
 }
 
 impl ResourceManager {
-    fn load_tag(&mut self, file: &Path) -> Option<()> {
+    fn load_tag(&mut self, file: &Path) -> anyhow::Result<()> {
         log::info!("loading tag at: {file:?}");
 
-        let tag: TagJson = serde_json::from_str(
-            &read_to_string(file).unwrap_or_else(|e| panic!("error loading {file:?} {e:?}")),
-        )
-        .unwrap_or_else(|e| panic!("error loading {file:?} {e:?}"));
+        let tag: TagJson = serde_json::from_str(&read_to_string(file)?)?;
 
         let id = tag.id.to_id(&mut self.interner);
 
@@ -55,16 +52,16 @@ impl ResourceManager {
 
         self.registry.tags.insert(id, tag);
 
-        Some(())
+        Ok(())
     }
 
-    pub fn load_tags(&mut self, dir: &Path) -> Option<()> {
+    pub fn load_tags(&mut self, dir: &Path) -> anyhow::Result<()> {
         let tags = dir.join("tags");
 
         for file in load_recursively(&tags, OsStr::new(JSON_EXT)) {
-            self.load_tag(&file);
+            self.load_tag(&file)?;
         }
 
-        Some(())
+        Ok(())
     }
 }

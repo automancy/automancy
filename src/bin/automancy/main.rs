@@ -4,8 +4,9 @@ use std::panic::PanicInfo;
 use std::path::Path;
 use std::{env, panic};
 
+use color_eyre::config::HookBuilder;
+use color_eyre::eyre;
 use color_eyre::owo_colors::OwoColorize;
-use color_eyre::{config, eyre};
 use env_logger::Env;
 use futures::executor::block_on;
 use native_dialog::{MessageDialog, MessageType};
@@ -73,12 +74,13 @@ fn write_msg<P: AsRef<Path>>(buffer: &mut impl Write, file_path: P) -> std::fmt:
 
     Ok(())
 }
-
 fn main() -> eyre::Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
     {
-        let eyre = config::HookBuilder::default();
+        let eyre = HookBuilder::blank()
+            .capture_span_trace_by_default(true)
+            .display_env_section(false);
 
         let (panic_hook, eyre_hook) = eyre.into_hooks();
 

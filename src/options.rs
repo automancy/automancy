@@ -1,4 +1,3 @@
-use std::error::Error;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, Read, Write};
 
@@ -32,7 +31,7 @@ impl Default for Options {
 static OPTIONS_PATH: &str = "options.toml";
 
 impl Options {
-    pub fn load() -> Result<Self, Box<dyn Error>> {
+    pub fn load() -> anyhow::Result<Options> {
         log::info!("Loading options...");
 
         let file = OpenOptions::new()
@@ -55,7 +54,7 @@ impl Options {
         Ok(this)
     }
 
-    pub fn save(&self) -> Result<(), Box<dyn Error>> {
+    pub fn save(&self) -> anyhow::Result<()> {
         let mut file = File::create(OPTIONS_PATH)?;
 
         let document = toml::ser::to_string_pretty(&self)?;

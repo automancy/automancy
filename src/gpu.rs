@@ -1,7 +1,6 @@
 use std::rc::Rc;
 use std::sync::Arc;
 
-use slice_group_by::GroupBy;
 use wgpu::util::{BufferInitDescriptor, DeviceExt, DrawIndexedIndirect};
 use wgpu::{
     AddressMode, Backends, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout,
@@ -20,8 +19,10 @@ use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
 use automancy_defs::bytemuck;
+use automancy_defs::hashbrown::{HashMap, HashSet};
 use automancy_defs::id::Id;
-use automancy_defs::rendering::{GameUBO, PostEffectsUBO, RawInstanceData, Vertex};
+use automancy_defs::rendering::{GameUBO, InstanceData, PostEffectsUBO, RawInstanceData, Vertex};
+use automancy_defs::slice_group_by::GroupBy;
 use automancy_macros::OptionGetter;
 use automancy_resources::ResourceManager;
 
@@ -53,65 +54,79 @@ pub const UPSCALE_LEVEL: u32 = 2;
 pub const DEPTH_FORMAT: TextureFormat = TextureFormat::Depth32Float;
 pub const SCREENSHOT_FORMAT: TextureFormat = TextureFormat::Rgba8UnormSrgb;
 
-pub fn indirect_instance(
-    device: &Device,
-    queue: &Queue,
+pub fn compile_instances(
     resource_man: &ResourceManager,
-    raw_instances: &[(RawInstanceData, Id)],
-    instance_buffer: &mut Buffer,
-    indirect_buffer: &mut Buffer,
-) -> u32 {
-    if raw_instances.is_empty() {
-        return 0;
-    }
+    instances: &[(InstanceData, Id)],
+) -> HashMap<(Id, usize), Vec<RawInstanceData>> {
+    let mut raw_instances = HashMap::new();
 
-    let mut instances = vec![];
-    let mut ids = vec![];
+    let mut seen = HashSet::new();
+
+    instances.binary_group_by_key(|v| v.1).for_each(|v| {
+        let id = v[0].1;
+        if seen.contains(&id) {
+            panic!("Duplicate id when collecting instances - are the instances sorted?");
+        }
+        seen.insert(id);
+
+        let models = &resource_man.all_models[&id].0;
+
+        for (instance, _) in v.iter().cloned() {
+            models.values().for_each(|model| {
+                raw_instances
+                    .entry((id, model.index))
+                    .or_insert_with(Vec::new)
+                    .push(RawInstanceData::from(
+                        instance.add_model_matrix(model.matrix),
+                    ));
+            });
+        }
+    });
 
     raw_instances
-        .exponential_group_by(|a, b| a.1 == b.1)
-        .for_each(|v| {
-            instances.append(&mut v.iter().map(|v| v.0).collect::<Vec<_>>());
-            ids.push(v.iter().map(|v| v.1).collect::<Vec<_>>())
-        });
+}
 
-    let mut indirect_commands = vec![];
+pub fn indirect_instance(
+    resource_man: &ResourceManager,
+    instances: &[(InstanceData, Id)],
+) -> (
+    Vec<RawInstanceData>,
+    HashMap<Id, Vec<DrawIndexedIndirect>>,
+    u32,
+) {
+    let raw_instances = compile_instances(resource_man, instances);
 
-    let count = ids.len();
+    let mut base_instance_counter = 0;
+    let mut indirect_commands = HashMap::new();
+    let mut draw_count = 0;
 
-    if count == 0 {
-        return 0;
-    }
+    raw_instances.iter().for_each(|((id, index), instances)| {
+        let size = instances.len() as u32;
+        let index_range = resource_man.all_index_ranges[id][index];
 
-    ids.into_iter()
-        .scan(0, |init, ids| {
-            let instance_count = ids.len() as u32;
+        let command = DrawIndexedIndirect {
+            base_index: index_range.offset,
+            vertex_offset: 0,
+            vertex_count: index_range.size,
+            base_instance: base_instance_counter,
+            instance_count: size,
+        };
 
-            let index_range = resource_man.index_ranges[&ids[0]];
+        base_instance_counter += size;
+        draw_count += 1;
 
-            let command = DrawIndexedIndirect {
-                base_index: index_range.offset,
-                vertex_offset: 0,
-                vertex_count: index_range.size,
-                base_instance: *init,
-                instance_count,
-            };
+        indirect_commands
+            .entry(*id)
+            .or_insert_with(Vec::new)
+            .push(command);
+    });
 
-            *init += instance_count;
+    let raw_instances = raw_instances
+        .into_iter()
+        .flat_map(|v| v.1)
+        .collect::<Vec<_>>();
 
-            Some(command)
-        })
-        .for_each(|command| indirect_commands.extend_from_slice(command.as_bytes()));
-
-    create_or_write_buffer(
-        device,
-        queue,
-        instance_buffer,
-        bytemuck::cast_slice(instances.as_slice()),
-    );
-    create_or_write_buffer(device, queue, indirect_buffer, &indirect_commands);
-
-    count as u32
+    (raw_instances, indirect_commands, draw_count)
 }
 
 pub fn create_or_write_buffer(
@@ -445,13 +460,6 @@ pub struct ExtraResources {
     pub uniform_buffer: Buffer,
 }
 
-pub struct OverlayResources {
-    pub vertex_buffer: Buffer,
-    pub uniform_buffer: Buffer,
-    pub bind_group: BindGroup,
-    pub pipeline: RenderPipeline,
-}
-
 #[derive(OptionGetter)]
 pub struct CombineResources {
     pub bind_group_layout: Rc<BindGroupLayout>,
@@ -488,7 +496,6 @@ pub struct Gpu {
     pub window: Arc<Window>,
 
     pub game_shader: ShaderModule,
-    pub overlay_shader: ShaderModule,
     pub post_effects_shader: ShaderModule,
     pub combine_shader: ShaderModule,
     pub intermediate_shader: ShaderModule,
@@ -605,11 +612,6 @@ impl Gpu {
         let game_shader = device.create_shader_module(ShaderModuleDescriptor {
             label: Some("Game Shader"),
             source: ShaderSource::Wgsl(resource_man.shaders["game"].as_str().into()),
-        });
-
-        let overlay_shader = device.create_shader_module(ShaderModuleDescriptor {
-            label: Some("Overlay Shader"),
-            source: ShaderSource::Wgsl(resource_man.shaders["overlay"].as_str().into()),
         });
 
         let post_effects_shader = device.create_shader_module(ShaderModuleDescriptor {
@@ -1056,7 +1058,6 @@ impl Gpu {
             window: Arc::new(window),
 
             game_shader,
-            overlay_shader,
             post_effects_shader,
             combine_shader,
             intermediate_shader,

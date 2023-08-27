@@ -19,30 +19,27 @@ struct ItemJson {
 }
 
 impl ResourceManager {
-    fn load_item(&mut self, file: &Path) -> Option<()> {
+    fn load_item(&mut self, file: &Path) -> anyhow::Result<()> {
         log::info!("loading item at: {file:?}");
 
-        let item: ItemJson = serde_json::from_str(
-            &read_to_string(file).unwrap_or_else(|e| panic!("error loading {file:?} {e:?}")),
-        )
-        .unwrap_or_else(|e| panic!("error loading {file:?} {e:?}"));
+        let item: ItemJson = serde_json::from_str(&read_to_string(file)?)?;
 
         let id = item.id.to_id(&mut self.interner);
         let model = item.model.to_id(&mut self.interner);
 
         self.registry.items.insert(id, Item { id, model });
 
-        Some(())
+        Ok(())
     }
 
-    pub fn load_items(&mut self, dir: &Path) -> Option<()> {
+    pub fn load_items(&mut self, dir: &Path) -> anyhow::Result<()> {
         let items = dir.join("items");
 
         for file in load_recursively(&items, OsStr::new(JSON_EXT)) {
-            self.load_item(&file);
+            self.load_item(&file)?;
         }
 
-        Some(())
+        Ok(())
     }
 
     pub fn get_items(&self, id: Id, tag_cache: &mut HashMap<Id, Arc<Vec<Item>>>) -> Arc<Vec<Item>> {

@@ -10,31 +10,28 @@ use automancy_defs::log;
 use crate::{ResourceManager, FUNCTION_EXT};
 
 impl ResourceManager {
-    pub fn load_functions(&mut self, dir: &Path) -> Option<()> {
+    pub fn load_functions(&mut self, dir: &Path) -> anyhow::Result<()> {
         let functions = dir.join("functions");
-        let functions = read_dir(functions).ok()?;
-
-        functions
-            .into_iter()
-            .flatten()
-            .map(|v| v.path())
-            .filter(|v| v.extension() == Some(OsStr::new(FUNCTION_EXT)))
-            .for_each(|file| {
+        if let Ok(functions) = read_dir(functions) {
+            for file in functions
+                .into_iter()
+                .flatten()
+                .map(|v| v.path())
+                .filter(|v| v.extension() == Some(OsStr::new(FUNCTION_EXT)))
+            {
                 log::info!("loading function at {file:?}");
                 let mut scope = Scope::new();
-                let ast = self.engine.compile_file(file).unwrap();
+                let ast = self.engine.compile_file(file)?;
 
-                let str_id = self
-                    .engine
-                    .call_fn::<ImmutableString>(&mut scope, &ast, "function_id", ())
-                    .unwrap();
+                let str_id =
+                    self.engine
+                        .call_fn::<ImmutableString>(&mut scope, &ast, "function_id", ())?;
                 let str_id = IdRaw::parse(&str_id).to_string();
                 let id = self.interner.get_or_intern(&str_id);
 
                 let id_deps = self
                     .engine
-                    .call_fn::<Dynamic>(&mut scope, &ast, "id_deps", ())
-                    .unwrap();
+                    .call_fn::<Dynamic>(&mut scope, &ast, "id_deps", ())?;
 
                 if let Some(id_deps) = id_deps.try_cast::<rhai::Array>() {
                     id_deps.into_iter().for_each(|v| {
@@ -53,8 +50,9 @@ impl ResourceManager {
                 self.functions.insert(id, (ast, scope));
 
                 log::info!("registered function with id {str_id} ({id:?})");
-            });
+            }
+        }
 
-        Some(())
+        Ok(())
     }
 }

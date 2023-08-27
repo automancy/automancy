@@ -9,5 +9,7 @@ __pycache__
 map
 options.toml
 
+*.gltf
+*.glb
 *.blend1
 *.cap

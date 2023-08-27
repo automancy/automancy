@@ -34,13 +34,10 @@ pub struct Translate {
 }
 
 impl ResourceManager {
-    fn load_translate(&mut self, file: &Path) -> Option<()> {
+    fn load_translate(&mut self, file: &Path) -> anyhow::Result<()> {
         log::info!("loading translate at: {file:?}");
 
-        let translate: TranslateJson = serde_json::from_str(
-            &read_to_string(file).unwrap_or_else(|e| panic!("error loading {file:?} {e:?}")),
-        )
-        .unwrap_or_else(|e| panic!("error loading {file:?} {e:?}"));
+        let translate: TranslateJson = serde_json::from_str(&read_to_string(file)?)?;
 
         let none = translate.none.to_shared_str();
         let unnamed = translate.unnamed.to_shared_str();
@@ -81,25 +78,27 @@ impl ResourceManager {
             error,
         };
 
-        Some(())
+        Ok(())
     }
 
-    pub fn load_translates(&mut self, dir: &Path) -> Option<()> {
+    pub fn load_translates(&mut self, dir: &Path) -> anyhow::Result<()> {
         let translates = dir.join("translates");
-        let translates = read_dir(translates).ok()?;
+        let translates = read_dir(translates);
 
-        translates
-            .into_iter()
-            .flatten()
-            .map(|v| v.path())
-            .filter(|v| v.extension() == Some(OsStr::new(JSON_EXT)))
-            .for_each(|file| {
+        if let Ok(translates) = translates {
+            for file in translates
+                .into_iter()
+                .flatten()
+                .map(|v| v.path())
+                .filter(|v| v.extension() == Some(OsStr::new(JSON_EXT)))
+            {
                 // TODO language selection
                 if file.file_stem() == Some(OsStr::new("en_US")) {
-                    self.load_translate(&file);
+                    self.load_translate(&file)?;
                 }
-            });
+            }
+        }
 
-        Some(())
+        Ok(())
     }
 }
