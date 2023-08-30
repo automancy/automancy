@@ -25,8 +25,11 @@ macro_rules! hex_color {
 }
 
 pub trait ColorAdj {
+    /// Change the alpha
     fn with_alpha(&self, a: Float) -> Self;
-    fn mul(&self, m: Float) -> Self;
+
+    /// Multiply the color with the alpha
+    fn mul_with_alpha(&self, m: Float) -> Self;
 }
 
 impl ColorAdj for Rgba {
@@ -36,8 +39,8 @@ impl ColorAdj for Rgba {
     }
 
     #[inline]
-    fn mul(&self, m: Float) -> Self {
-        Rgba::from_rgba_unmultiplied(self.r(), self.g(), self.b(), (self.a() + m) * 0.5)
+    fn mul_with_alpha(&self, m: Float) -> Self {
+        Rgba::from_rgba_unmultiplied(self.r(), self.g(), self.b(), self.a() * m)
     }
 }
 

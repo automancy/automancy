@@ -411,6 +411,8 @@ pub fn on_event(
         loop_store.frame_start = Instant::now();
 
         let mut extra_instances = vec![];
+        let mut overlay_instances = vec![];
+        let mut in_world_item_instances = vec![];
         let mut gui_instances = vec![];
         let mut item_instances = vec![];
 
@@ -501,20 +503,18 @@ pub fn on_event(
                                     )
                                     .cloned()
                             }) {
-                                gui_instances.push((
+                                overlay_instances.push((
                                     InstanceData {
-                                        color_offset: colors::BLACK.with_alpha(0.5).to_array(),
+                                        alpha: 0.6,
                                         light_pos: camera_pos_float,
-                                        model_matrix: matrix
-                                            * Matrix4::from_translation(vec3(
-                                                cursor_pos.x as Float,
-                                                cursor_pos.y as Float,
-                                                FAR as Float,
-                                            )),
+                                        model_matrix: Matrix4::from_translation(vec3(
+                                            cursor_pos.x as Float,
+                                            cursor_pos.y as Float,
+                                            FAR as Float,
+                                        )),
+                                        ..Default::default()
                                     },
                                     model,
-                                    None,
-                                    None,
                                 ));
                             }
                         }
@@ -525,6 +525,7 @@ pub fn on_event(
                                     color_offset: colors::RED.to_array(),
                                     light_pos: camera_pos_float,
                                     model_matrix: make_line(math::hex_to_pixel(*coord), cursor_pos),
+                                    ..Default::default()
                                 },
                                 setup.resource_man.registry.model_ids.cube1x1,
                             ));
@@ -561,7 +562,7 @@ pub fn on_event(
         tile_tints.insert(setup.camera.pointing_at, colors::RED.with_alpha(0.2));
 
         for selected in &loop_store.selected_tiles {
-            tile_tints.insert(*selected, colors::ORANGE.with_alpha(0.3));
+            tile_tints.insert(*selected, colors::ORANGE.with_alpha(0.4));
         }
 
         if setup.input_handler.control_held {
@@ -576,13 +577,14 @@ pub fn on_event(
                             math::hex_to_pixel(*start),
                             math::hex_to_pixel(*setup.camera.pointing_at),
                         ),
+                        ..Default::default()
                     },
                     setup.resource_man.registry.model_ids.cube1x1,
                 ));
 
                 for selected in &loop_store.selected_tiles {
                     let dest = *selected + direction;
-                    tile_tints.insert(dest, colors::LIGHT_BLUE.mul(0.3));
+                    tile_tints.insert(dest, colors::LIGHT_BLUE.with_alpha(0.3));
                 }
             }
         }
@@ -596,6 +598,8 @@ pub fn on_event(
                 matrix,
                 tile_tints,
                 extra_instances,
+                overlay_instances,
+                in_world_item_instances,
                 gui_instances,
                 item_instances,
             ) {

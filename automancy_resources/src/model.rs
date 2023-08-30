@@ -8,7 +8,7 @@ use automancy_defs::gltf::animation::util::ReadOutputs;
 use automancy_defs::gltf::json;
 use automancy_defs::hashbrown::HashMap;
 use automancy_defs::id::{Id, IdRaw};
-use automancy_defs::math::{Matrix4, Quaternion, Vector3};
+use automancy_defs::math::{Quaternion, Vector3};
 use automancy_defs::rendering::{Animation, AnimationUnit, Model, Vertex};
 use automancy_defs::{gltf, id, log};
 
@@ -125,7 +125,7 @@ impl ResourceManager {
             for node in scene.nodes() {
                 if let Some(mesh) = node.mesh() {
                     let name = mesh.name().unwrap_or("").to_string();
-                    let matrix = Matrix4::from(node.transform().matrix());
+
                     let index = node.index();
 
                     let mut read_vertices = vec![];
@@ -158,7 +158,6 @@ impl ResourceManager {
                             vertices: read_vertices,
                             indices: read_indices,
                             name,
-                            matrix,
                             index,
                         },
                     );

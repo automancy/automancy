@@ -1,15 +1,12 @@
-use std::f32::consts::FRAC_PI_4;
-
 use egui::scroll_area::ScrollBarVisibility;
 use egui::{vec2, Context, CursorIcon, Margin, ScrollArea, Sense, TopBottomPanel, Ui, Vec2};
 use futures::channel::mpsc;
 
 use automancy::tile_entity::TileModifier;
-use automancy_defs::cgmath::{point3, vec3};
+use automancy_defs::cgmath::point3;
 use automancy_defs::hashbrown::HashMap;
 use automancy_defs::id::Id;
-use automancy_defs::math;
-use automancy_defs::math::{Matrix4, Vector3};
+use automancy_defs::math::{rad, Matrix4};
 use automancy_defs::rendering::InstanceData;
 
 use crate::gui::default_frame;
@@ -52,26 +49,26 @@ fn draw_tile_selection(
 
             let hover = if response.hovered() {
                 ui.ctx()
-                    .animate_value_with_time(ui.next_auto_id(), 1.5, 0.3)
+                    .animate_value_with_time(ui.next_auto_id(), 0.7, 0.3)
             } else {
                 ui.ctx()
-                    .animate_value_with_time(ui.next_auto_id(), 0.6, 0.3)
+                    .animate_value_with_time(ui.next_auto_id(), 0.2, 0.3)
             };
             if response.clicked() {
                 selection_send.try_send(id).unwrap();
             }
 
-            let pos = point3(0.0, hover * 1.25, 3.0 - hover * 0.25);
-            let matrix = math::perspective(FRAC_PI_4, 1.0, 0.01, 100.0)
-                * Matrix4::look_to_rh(pos, vec3(0.0, hover / 2.0, 1.0), Vector3::unit_y());
+            let matrix = Matrix4::from_angle_x(rad(hover));
 
             gui_instances.push((
                 InstanceData::default()
                     .with_model_matrix(matrix)
-                    .with_light_pos(point3(0.0, 1.0, 5.0)),
+                    .with_light_pos(point3(0.0, 1.0, 8.0)),
                 model,
-                Some(rect),
-                Some(ui.clip_rect().shrink2(Vec2::new(2.0, 0.0))),
+                (
+                    Some(rect),
+                    Some(ui.clip_rect().shrink2(Vec2::new(2.0, 0.0))),
+                ),
             ));
         });
 }

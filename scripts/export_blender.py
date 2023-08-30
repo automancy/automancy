@@ -1,4 +1,7 @@
+import bmesh
 import bpy
+import copy
+import mathutils
 import sys
 
 
@@ -8,26 +11,31 @@ def main():
     bpy.context.active_object.select_set(False)
 
     for obj in filter(lambda o: o.type == 'MESH', bpy.data.objects):
-        mesh = obj.data
-        material = obj.active_material
+        obj.rotation_euler.z += -3.1415926536
 
-        if mesh.is_editmode:
-            bpy.ops.object.editmode_toggle()
+        bpy.context.view_layer.objects.active = obj
+        bpy.ops.object.mode_set(mode='EDIT')
+        bm = bmesh.from_edit_mesh(bpy.context.edit_object.data)
+        for v in bm.faces:
+            v.select = True
+        for v in bm.edges:
+            v.select = True
+        for v in bm.verts:
+            v.select = True
 
-        obj.select_set(True)
-        bpy.ops.transform.rotate(value=-3.1415926536, orient_axis='Z')
-        obj.select_set(False)
+        matrix = copy.copy(obj.matrix_basis)
+        obj.matrix_basis = mathutils.Matrix.Identity(4)
+        bmesh.ops.transform(bm, matrix=matrix, verts=bm.verts)
 
-        _triangulate = obj.modifiers.new(name='Triangulate', type='TRIANGULATE')
-        edge_split = obj.modifiers.new(name='EdgeSplit', type='EDGE_SPLIT')
-        edge_split.split_angle = 0.0
+        bmesh.update_edit_mesh(bpy.context.edit_object.data)
+        bpy.ops.object.mode_set(mode='OBJECT')
 
-        if not mesh.color_attributes and material:
-            mesh.color_attributes.new(name='Col', type='BYTE_COLOR', domain='CORNER')
+        if not obj.data.color_attributes and obj.active_material:
+            obj.data.color_attributes.new(name='Col', type='BYTE_COLOR', domain='CORNER')
 
-            color = material.diffuse_color
+            color = obj.active_material.diffuse_color
 
-            for datum in mesh.attributes.active_color.data:
+            for datum in obj.data.attributes.active_color.data:
                 datum.color = color
 
     bpy.ops.export_scene.gltf(filepath=dst, check_existing=False, export_format='GLTF_EMBEDDED',

@@ -20,7 +20,7 @@ pub fn paint_item(
 ) {
     let model = resource_man.get_item_model(item);
 
-    item_instances.push((InstanceData::default(), model, Some(rect), None))
+    item_instances.push((InstanceData::default(), model, (Some(rect), None)))
 }
 
 /// Draws an Item's icon.

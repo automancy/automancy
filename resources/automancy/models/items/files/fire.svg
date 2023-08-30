@@ -9,7 +9,7 @@
         _id="SVGRoot"
         id="svg26"
         sodipodi:docname="fire.svg"
-        inkscape:version="1.2.2 (b0a8486541, 2022-12-01)"
+        inkscape:version="1.3 (0e150ed6c4, 2023-07-21)"
         xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
         xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
         xmlns="http://www.w3.org/2000/svg"
@@ -26,8 +26,8 @@
             inkscape:document-units="cm"
             showgrid="false"
             inkscape:zoom="0.079999996"
-            inkscape:cx="2825.0001"
-            inkscape:cy="4293.7502"
+            inkscape:cx="2800.0001"
+            inkscape:cy="2900.0001"
             inkscape:window-width="1870"
             inkscape:window-height="1051"
             inkscape:window-x="1920"
@@ -38,12 +38,9 @@
             _id="defs402"
             id="defs8"/>
     <path
-            id="path394"
-            style="fill:#4a362d;stroke-linecap:square;paint-order:stroke fill markers;stop-color:#000000"
-            inkscape:transform-center-x="1.0547742e-05"
-            inkscape:transform-center-y="-9.9755122e-06"
-            transform="translate(-1.2918347e-5,-1.2346118e-5)"
-            d="M 112.99397,160 46.761711,159.89881 -1.5669997e-5,112.99397 0.10117769,46.761711 47.006013,-1.5669997e-5 113.23827,0.10117769 160,47.006013 159.89881,113.23827 Z"/>
+            id="path1"
+            style="fill:#4b2c16;stroke-linecap:square;paint-order:stroke fill markers"
+            d="M 159.99998,79.999992 A 79.999992,79.999992 0 0 1 79.999992,159.99998 79.999992,79.999992 0 0 1 0,79.999992 79.999992,79.999992 0 0 1 79.999992,0 79.999992,79.999992 0 0 1 159.99998,79.999992 Z"/>
     <path
             id="path1598"
             style="color:#000000;display:inline;fill:#e1771d;stroke-width:17.659;stroke-linecap:square;-inkscape-stroke:none;paint-order:stroke fill markers"

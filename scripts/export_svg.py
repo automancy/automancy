@@ -26,8 +26,6 @@ def main():
     ids = dict(map(lambda e: (e[1][0], e[0]), enumerate(paths)))
     styles = dict(map(lambda e: (e[0], e[1]), paths))
 
-    offset = 1.0 - 1.0 / total
-
     bpy.ops.import_curve.svg(filepath=src)
 
     curves = list(filter(lambda o: o.type == 'CURVE', bpy.data.objects))
@@ -38,7 +36,7 @@ def main():
         new_obj = bpy.data.objects.new(obj.name, mesh)
 
         new_obj.matrix_world = obj.matrix_world
-        new_obj.delta_location.z = (offset + ids[obj.name] / total) / 8.0
+        new_obj.delta_location.z = (ids[obj.name] / total) / 64.0
         alpha = styles[obj.name].get('fill-opacity')
         if alpha:
             new_obj.active_material.diffuse_color[3] = float(alpha)
@@ -49,7 +47,7 @@ def main():
         new_dim.x = new_dim.x / 8.0
         new_dim.y = new_dim.y / 8.0
         new_obj.dimensions = new_dim
-        new_obj.location.xy = 1.0, 1.0
+        new_obj.rotation_euler.y = 3.141593
 
         bpy.context.view_layer.objects.active = new_obj
         bpy.ops.object.mode_set(mode='EDIT')
@@ -61,13 +59,12 @@ def main():
         for v in bm.verts:
             v.select = True
 
+        bmesh.ops.translate(bm, vec=(1.0, -1.0, 0.0), space=bpy.context.object.matrix_world, verts=bm.verts)
         bpy.ops.mesh.beautify_fill()
-        bpy.ops.mesh.tris_convert_to_quads(face_threshold=3.141593, shape_threshold=3.141593)
-        bpy.ops.mesh.remove_doubles(threshold=0.25)
+        bpy.ops.mesh.remove_doubles(threshold=0.20)
         bpy.ops.mesh.flip_normals()
 
         bmesh.update_edit_mesh(bpy.context.edit_object.data)
-
         bpy.ops.object.mode_set(mode='OBJECT')
 
     bpy.ops.wm.save_mainfile(filepath=dst)

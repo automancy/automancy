@@ -106,7 +106,7 @@ fn normal_edge(uv: vec2<f32>) -> f32 {
 
     let g = length(vec2(gx, gy));
 
-    return smoothstep(0.2, 0.8, sqrt(g));
+    return sqrt(g);
 }
 
 fn rgb2hsl(c: vec3<f32>) -> vec3<f32> {

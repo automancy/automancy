@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::f32::consts::FRAC_PI_2;
 use std::time::Instant;
 
 use arboard::{Clipboard, ImageData};
@@ -21,14 +22,14 @@ use automancy::game::{GameMsg, RenderUnit, TransactionRecord, TRANSACTION_ANIMAT
 use automancy::gpu;
 use automancy::gpu::{Gpu, NORMAL_CLEAR, SCREENSHOT_FORMAT, UPSCALE_LEVEL};
 use automancy::input::KeyActions;
-use automancy_defs::cgmath::{vec3, EuclideanSpace};
+use automancy_defs::cgmath::{point3, vec3, EuclideanSpace};
 use automancy_defs::coord::TileCoord;
 use automancy_defs::gui::Gui;
 use automancy_defs::hashbrown::HashMap;
 use automancy_defs::id::Id;
 use automancy_defs::math::{deg, direction_to_angle, is_in_culling_range, Float, Matrix4, FAR};
 use automancy_defs::rendering::{
-    lerp_coords_to_pixel, make_line, GameUBO, InstanceData, PostEffectsUBO, RawInstanceData,
+    lerp_coords_to_pixel, make_line, GameUBO, InstanceData, PostEffectsUBO,
 };
 use automancy_defs::{bytemuck, colors, math};
 use automancy_resources::data::Data;
@@ -61,7 +62,7 @@ fn get_angle_from_direction(target: &Data) -> Option<Float> {
     }
 }
 
-pub type GuiInstances = Vec<(InstanceData, Id, Option<Rect>, Option<Rect>)>;
+pub type GuiInstances = Vec<(InstanceData, Id, (Option<Rect>, Option<Rect>))>;
 
 impl Renderer {
     pub fn render(
@@ -71,8 +72,10 @@ impl Renderer {
         matrix: Matrix4,
         tile_tints: HashMap<TileCoord, Rgba>,
         mut extra_instances: Vec<(InstanceData, Id)>,
-        gui_instances: GuiInstances,
-        item_instances: GuiInstances,
+        mut overlay_instances: Vec<(InstanceData, Id)>,
+        mut in_world_item_instances: Vec<(InstanceData, Id)>,
+        mut gui_instances: GuiInstances,
+        mut item_instances: GuiInstances,
     ) -> Result<(), SurfaceError> {
         let size = self.gpu.window.inner_size();
 
@@ -104,57 +107,96 @@ impl Renderer {
         .unwrap()
         .unwrap();
 
-        let instances = {
+        let (mut instances, all_data) = map_render_info;
+
+        for (coord, instance) in instances.iter_mut() {
+            if let Some(theta) = all_data
+                .get(coord)
+                .and_then(|data| data.get(&setup.resource_man.registry.data_ids.target))
+                .and_then(get_angle_from_direction)
+            {
+                let m = &mut instance.instance.model_matrix;
+
+                *m = *m * Matrix4::from_angle_z(deg(theta))
+            } else if let Some(inactive) = setup
+                .resource_man
+                .registry
+                .tile_data(
+                    instance.tile,
+                    setup.resource_man.registry.data_ids.inactive_model,
+                )
+                .and_then(Data::as_id)
+            {
+                instance.model = setup.resource_man.get_model(*inactive);
+            }
+        }
+
+        for (coord, data) in all_data {
+            if let Some(link) = data
+                .get(&setup.resource_man.registry.data_ids.link)
+                .and_then(Data::as_coord)
+                .cloned()
+            {
+                extra_instances.push((
+                    InstanceData {
+                        color_offset: colors::RED.to_array(),
+                        light_pos: camera_pos_float,
+                        model_matrix: make_line(
+                            math::hex_to_pixel(*coord),
+                            math::hex_to_pixel(*link),
+                        ),
+                        ..Default::default()
+                    },
+                    setup.resource_man.registry.model_ids.cube1x1,
+                ));
+            }
+        }
+
+        let transaction_records_mutex =
+            block_on(setup.game.call(GameMsg::GetRecordedTransactions, None))
+                .unwrap()
+                .unwrap();
+        let transaction_records = transaction_records_mutex.lock().unwrap();
+        let now = Instant::now();
+
+        for ((source_coord, coord), instants) in transaction_records.iter() {
+            if is_in_culling_range(camera_coord, *source_coord, culling_range)
+                && is_in_culling_range(camera_coord, *coord, culling_range)
+            {
+                for (instant, TransactionRecord { stack, .. }) in instants {
+                    let duration = now.duration_since(*instant);
+                    let t = duration.as_secs_f64() / TRANSACTION_ANIMATION_SPEED.as_secs_f64();
+
+                    let point = lerp_coords_to_pixel(*source_coord, *coord, t);
+
+                    let direction = *coord - *source_coord;
+                    let direction = math::hex_to_pixel(direction.into());
+                    let theta = direction_to_angle(direction.to_vec());
+
+                    let instance = InstanceData::default()
+                        .with_model_matrix(
+                            Matrix4::from_translation(vec3(
+                                point.x as Float,
+                                point.y as Float,
+                                FAR as Float,
+                            )) * Matrix4::from_angle_z(theta)
+                                * Matrix4::from_scale(0.3),
+                        )
+                        .with_light_pos(camera_pos_float);
+                    let model = setup.resource_man.get_item_model(stack.item);
+
+                    in_world_item_instances.push((instance, model));
+                }
+            }
+        }
+
+        let mut instances = {
             let none = setup
                 .resource_man
                 .registry
                 .tile(setup.resource_man.registry.none)
                 .unwrap()
                 .models[0];
-
-            let (mut instances, all_data) = map_render_info;
-
-            for (coord, instance) in instances.iter_mut() {
-                if let Some(theta) = all_data
-                    .get(coord)
-                    .and_then(|data| data.get(&setup.resource_man.registry.data_ids.target))
-                    .and_then(get_angle_from_direction)
-                {
-                    let m = &mut instance.instance.model_matrix;
-
-                    *m = *m * Matrix4::from_angle_z(deg(theta))
-                } else if let Some(inactive) = setup
-                    .resource_man
-                    .registry
-                    .tile_data(
-                        instance.tile,
-                        setup.resource_man.registry.data_ids.inactive_model,
-                    )
-                    .and_then(Data::as_id)
-                {
-                    instance.model = setup.resource_man.get_model(*inactive);
-                }
-            }
-
-            for (coord, data) in all_data {
-                if let Some(link) = data
-                    .get(&setup.resource_man.registry.data_ids.link)
-                    .and_then(Data::as_coord)
-                    .cloned()
-                {
-                    extra_instances.push((
-                        InstanceData {
-                            color_offset: colors::RED.to_array(),
-                            light_pos: camera_pos_float,
-                            model_matrix: make_line(
-                                math::hex_to_pixel(*coord),
-                                math::hex_to_pixel(*link),
-                            ),
-                        },
-                        setup.resource_man.registry.model_ids.cube1x1,
-                    ));
-                }
-            }
 
             let q0 = camera_coord.q() - culling_range.0 / 2;
             let q1 = camera_coord.q() + culling_range.0 / 2;
@@ -201,58 +243,41 @@ impl Renderer {
             {
                 map.entry(model)
                     .or_insert_with(|| Vec::with_capacity(32))
-                    .push((instance.with_light_pos(camera_pos_float), model))
+                    .push((instance.with_light_pos(camera_pos_float), model, ()))
             }
 
             map.into_values().flatten().collect::<Vec<_>>()
         };
 
-        let transaction_records_mutex =
-            block_on(setup.game.call(GameMsg::GetRecordedTransactions, None))
-                .unwrap()
-                .unwrap();
-        let transaction_records = transaction_records_mutex.lock().unwrap();
-        let now = Instant::now();
-
-        for ((source_coord, coord), instants) in transaction_records.iter() {
-            if is_in_culling_range(camera_coord, *source_coord, culling_range)
-                && is_in_culling_range(camera_coord, *coord, culling_range)
-            {
-                for (instant, TransactionRecord { stack, .. }) in instants {
-                    let duration = now.duration_since(*instant);
-                    let t = duration.as_secs_f64() / TRANSACTION_ANIMATION_SPEED.as_secs_f64();
-
-                    let point = lerp_coords_to_pixel(*source_coord, *coord, t);
-
-                    let direction = *coord - *source_coord;
-                    let direction = math::hex_to_pixel(direction.into());
-                    let theta = direction_to_angle(direction.to_vec());
-
-                    let instance = InstanceData::default()
-                        .with_model_matrix(
-                            Matrix4::from_translation(vec3(
-                                point.x as Float,
-                                point.y as Float,
-                                0.2,
-                            )) * Matrix4::from_angle_z(theta)
-                                * Matrix4::from_scale(0.3),
-                        )
-                        .with_light_pos(camera_pos_float);
-                    let model = setup.resource_man.get_item_model(stack.item);
-
-                    extra_instances.push((instance, model));
-                }
-            }
-        }
-
         extra_instances.sort_by_key(|v| v.1);
+        let mut extra_instances = extra_instances
+            .into_iter()
+            .map(|(instance, id)| (instance, id, ()))
+            .collect::<Vec<_>>();
+        instances.append(&mut extra_instances);
+
+        overlay_instances.sort_by_key(|v| v.1);
+        let overlay_instances = overlay_instances
+            .into_iter()
+            .map(|(instance, id)| (instance, id, ()))
+            .collect::<Vec<_>>();
+
+        in_world_item_instances.sort_by_key(|v| v.1);
+        let in_world_item_instances = in_world_item_instances
+            .into_iter()
+            .map(|(instance, id)| (instance, id, ()))
+            .collect::<Vec<_>>();
+
+        gui_instances.sort_by_key(|v| v.1);
+        item_instances.sort_by_key(|v| v.1);
 
         self.inner_render(
             setup,
             gui,
             matrix,
             &instances,
-            &extra_instances,
+            &overlay_instances,
+            &in_world_item_instances,
             &gui_instances,
             &item_instances,
         )
@@ -263,8 +288,9 @@ impl Renderer {
         setup: &GameSetup,
         gui: &mut Gui,
         matrix: Matrix4,
-        instances: &[(InstanceData, Id)],
-        extra_instances: &[(InstanceData, Id)],
+        instances: &[(InstanceData, Id, ())],
+        overlay_instances: &[(InstanceData, Id, ())],
+        in_world_item_instances: &[(InstanceData, Id, ())],
         gui_instances: &GuiInstances,
         item_instances: &GuiInstances,
     ) -> Result<(), SurfaceError> {
@@ -290,7 +316,7 @@ impl Renderer {
 
         {
             let (raw_instances, indirect_commands, draw_count) =
-                gpu::indirect_instance(&setup.resource_man, instances);
+                gpu::indirect_instance(&setup.resource_man, instances, true);
 
             gpu::create_or_write_buffer(
                 &self.gpu.device,
@@ -302,7 +328,7 @@ impl Renderer {
             indirect_commands
                 .into_iter()
                 .flat_map(|v| v.1)
-                .for_each(|v| indirect_buffer.extend_from_slice(v.as_bytes()));
+                .for_each(|v| indirect_buffer.extend_from_slice(v.0.as_bytes()));
             gpu::create_or_write_buffer(
                 &self.gpu.device,
                 &self.gpu.queue,
@@ -400,29 +426,28 @@ impl Renderer {
 
         {
             let (raw_instances, indirect_commands, draw_count) =
-                gpu::indirect_instance(&setup.resource_man, extra_instances);
+                gpu::indirect_instance(&setup.resource_man, in_world_item_instances, true);
 
             gpu::create_or_write_buffer(
                 &self.gpu.device,
                 &self.gpu.queue,
-                &mut self.gpu.extra_resources.instance_buffer,
+                &mut self.gpu.in_world_item_resources.instance_buffer,
                 bytemuck::cast_slice(raw_instances.as_slice()),
             );
             let mut indirect_buffer = vec![];
             indirect_commands
                 .into_iter()
                 .flat_map(|v| v.1)
-                .for_each(|v| indirect_buffer.extend_from_slice(v.as_bytes()));
+                .for_each(|v| indirect_buffer.extend_from_slice(v.0.as_bytes()));
             gpu::create_or_write_buffer(
                 &self.gpu.device,
                 &self.gpu.queue,
-                &mut self.gpu.extra_resources.indirect_buffer,
+                &mut self.gpu.in_world_item_resources.indirect_buffer,
                 indirect_buffer.as_slice(),
             );
 
-            // TODO rename the fucking "extra" stuff
-            let mut extra_pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("Extra Render Pass"),
+            let mut in_world_item_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some("In-world Item Render Pass"),
                 color_attachments: &[
                     Some(RenderPassColorAttachment {
                         view: &self.gpu.post_effects_resources.texture().1,
@@ -453,12 +478,12 @@ impl Renderer {
 
             if draw_count > 0 {
                 self.gpu.queue.write_buffer(
-                    &self.gpu.extra_resources.uniform_buffer,
+                    &self.gpu.in_world_item_resources.uniform_buffer,
                     0,
                     bytemuck::cast_slice(&[GameUBO::new(matrix)]),
                 );
 
-                extra_pass.set_viewport(
+                in_world_item_pass.set_viewport(
                     0.0,
                     0.0,
                     (size.width * UPSCALE_LEVEL) as Float,
@@ -466,14 +491,18 @@ impl Renderer {
                     1.0,
                     0.0,
                 );
-                extra_pass.set_pipeline(&self.gpu.game_resources.pipeline);
-                extra_pass.set_bind_group(0, &self.gpu.game_resources.bind_group, &[]);
-                extra_pass.set_vertex_buffer(0, self.gpu.vertex_buffer.slice(..));
-                extra_pass.set_vertex_buffer(1, self.gpu.extra_resources.instance_buffer.slice(..));
-                extra_pass.set_index_buffer(self.gpu.index_buffer.slice(..), IndexFormat::Uint16);
+                in_world_item_pass.set_pipeline(&self.gpu.game_resources.pipeline);
+                in_world_item_pass.set_bind_group(0, &self.gpu.game_resources.bind_group, &[]);
+                in_world_item_pass.set_vertex_buffer(0, self.gpu.vertex_buffer.slice(..));
+                in_world_item_pass.set_vertex_buffer(
+                    1,
+                    self.gpu.in_world_item_resources.instance_buffer.slice(..),
+                );
+                in_world_item_pass
+                    .set_index_buffer(self.gpu.index_buffer.slice(..), IndexFormat::Uint16);
 
-                extra_pass.multi_draw_indexed_indirect(
-                    &self.gpu.extra_resources.indirect_buffer,
+                in_world_item_pass.multi_draw_indexed_indirect(
+                    &self.gpu.in_world_item_resources.indirect_buffer,
                     0,
                     draw_count,
                 );
@@ -548,21 +577,8 @@ impl Renderer {
         }
 
         {
-            let (raw_instances, draws): (Vec<_>, Vec<_>) = gui_instances
-                .iter()
-                .flat_map(|(instance, id, viewport, scissor)| {
-                    setup.resource_man.all_models[id]
-                        .0
-                        .iter()
-                        .map(|(index, model)| {
-                            (
-                                RawInstanceData::from(instance.add_model_matrix(model.matrix)),
-                                (*index, *id, *viewport, *scissor),
-                            )
-                        })
-                })
-                .unzip();
-
+            let (raw_instances, draws, count) =
+                gpu::indirect_instance(&setup.resource_man, gui_instances, false);
             gpu::create_or_write_buffer(
                 &self.gpu.device,
                 &self.gpu.queue,
@@ -600,11 +616,15 @@ impl Renderer {
                 }),
             });
 
-            if !draws.is_empty() {
+            if count > 0 {
                 self.gpu.queue.write_buffer(
                     &self.gpu.gui_resources.uniform_buffer,
                     0,
-                    bytemuck::cast_slice(&[GameUBO::default()]),
+                    bytemuck::cast_slice(&[GameUBO::new(math::matrix(
+                        point3(0.0, 0.0, 3.0),
+                        1.0,
+                        FRAC_PI_2,
+                    ))]),
                 );
 
                 gui_pass.set_pipeline(&self.gpu.game_resources.pipeline);
@@ -613,9 +633,7 @@ impl Renderer {
                 gui_pass.set_vertex_buffer(1, self.gpu.gui_resources.instance_buffer.slice(..));
                 gui_pass.set_index_buffer(self.gpu.index_buffer.slice(..), IndexFormat::Uint16);
 
-                for (i, (index, id, viewport, scissor)) in draws.into_iter().enumerate() {
-                    let i = i as u32;
-
+                for (draw, (viewport, scissor)) in draws.values().flatten() {
                     if let Some(viewport) = viewport {
                         gui_pass.set_viewport(
                             viewport.left() * factor * UPSCALE_LEVEL as Float,
@@ -652,12 +670,93 @@ impl Renderer {
                         );
                     }
 
-                    let index_range = setup.resource_man.all_index_ranges[&id][&index];
-
-                    let a = index_range.offset;
-                    let b = a + index_range.size;
-                    gui_pass.draw_indexed(a..b, 0, i..(i + 1));
+                    gui_pass.draw_indexed(
+                        draw.base_index..(draw.base_index + draw.vertex_count),
+                        draw.vertex_offset,
+                        draw.base_instance..(draw.base_instance + draw.instance_count),
+                    );
                 }
+            }
+        }
+
+        {
+            let (raw_instances, indirect_commands, draw_count) =
+                gpu::indirect_instance(&setup.resource_man, overlay_instances, true);
+
+            gpu::create_or_write_buffer(
+                &self.gpu.device,
+                &self.gpu.queue,
+                &mut self.gpu.overlay_resources.instance_buffer,
+                bytemuck::cast_slice(raw_instances.as_slice()),
+            );
+            let mut indirect_buffer = vec![];
+            indirect_commands
+                .into_iter()
+                .flat_map(|v| v.1)
+                .for_each(|v| indirect_buffer.extend_from_slice(v.0.as_bytes()));
+            gpu::create_or_write_buffer(
+                &self.gpu.device,
+                &self.gpu.queue,
+                &mut self.gpu.overlay_resources.indirect_buffer,
+                indirect_buffer.as_slice(),
+            );
+
+            let mut overlay = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some("Overlay Render Pass"),
+                color_attachments: &[
+                    Some(RenderPassColorAttachment {
+                        view: &self.gpu.game_texture().1,
+                        resolve_target: None,
+                        ops: Operations {
+                            load: LoadOp::Load,
+                            store: true,
+                        },
+                    }),
+                    Some(RenderPassColorAttachment {
+                        view: &self.gpu.normal_texture().1,
+                        resolve_target: None,
+                        ops: Operations {
+                            load: LoadOp::Load,
+                            store: true,
+                        },
+                    }),
+                ],
+                depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
+                    view: &self.gpu.depth_texture().1,
+                    depth_ops: Some(Operations {
+                        load: LoadOp::Load,
+                        store: true,
+                    }),
+                    stencil_ops: None,
+                }),
+            });
+
+            if draw_count > 0 {
+                self.gpu.queue.write_buffer(
+                    &self.gpu.overlay_resources.uniform_buffer,
+                    0,
+                    bytemuck::cast_slice(&[GameUBO::new(matrix)]),
+                );
+
+                overlay.set_viewport(
+                    0.0,
+                    0.0,
+                    (size.width * UPSCALE_LEVEL) as Float,
+                    (size.height * UPSCALE_LEVEL) as Float,
+                    1.0,
+                    0.0,
+                );
+                overlay.set_pipeline(&self.gpu.game_resources.pipeline);
+                overlay.set_bind_group(0, &self.gpu.game_resources.bind_group, &[]);
+                overlay.set_vertex_buffer(0, self.gpu.vertex_buffer.slice(..));
+                overlay.set_vertex_buffer(1, self.gpu.overlay_resources.instance_buffer.slice(..));
+                overlay.set_index_buffer(self.gpu.index_buffer.slice(..), IndexFormat::Uint16);
+
+                overlay.multi_draw_indexed_indirect(
+                    &self.gpu.overlay_resources.indirect_buffer,
+                    0,
+                    draw_count,
+                );
             }
         }
 
@@ -691,21 +790,8 @@ impl Renderer {
         }
 
         {
-            let (raw_instances, draws): (Vec<_>, Vec<_>) = item_instances
-                .iter()
-                .flat_map(|(instance, id, viewport, scissor)| {
-                    setup.resource_man.all_models[id]
-                        .0
-                        .iter()
-                        .map(|(index, model)| {
-                            (
-                                RawInstanceData::from(instance.add_model_matrix(model.matrix)),
-                                (*index, *id, *viewport, *scissor),
-                            )
-                        })
-                })
-                .unzip();
-
+            let (raw_instances, draws, count) =
+                gpu::indirect_instance(&setup.resource_man, item_instances, false);
             gpu::create_or_write_buffer(
                 &self.gpu.device,
                 &self.gpu.queue,
@@ -743,7 +829,7 @@ impl Renderer {
                 }),
             });
 
-            if !draws.is_empty() {
+            if count > 0 {
                 self.gpu.queue.write_buffer(
                     &self.gpu.item_resources.uniform_buffer,
                     0,
@@ -756,9 +842,7 @@ impl Renderer {
                 item_pass.set_vertex_buffer(1, self.gpu.item_resources.instance_buffer.slice(..));
                 item_pass.set_index_buffer(self.gpu.index_buffer.slice(..), IndexFormat::Uint16);
 
-                for (i, (index, id, viewport, scissor)) in draws.into_iter().enumerate() {
-                    let i = i as u32;
-
+                for (draw, (viewport, scissor)) in draws.values().flatten() {
                     if let Some(viewport) = viewport {
                         item_pass.set_viewport(
                             viewport.left() * factor * UPSCALE_LEVEL as Float,
@@ -795,11 +879,11 @@ impl Renderer {
                         );
                     }
 
-                    let index_range = setup.resource_man.all_index_ranges[&id][&index];
-
-                    let a = index_range.offset;
-                    let b = a + index_range.size;
-                    item_pass.draw_indexed(a..b, 0, i..(i + 1));
+                    item_pass.draw_indexed(
+                        draw.base_index..(draw.base_index + draw.vertex_count),
+                        draw.vertex_offset,
+                        draw.base_instance..(draw.base_instance + draw.instance_count),
+                    );
                 }
             }
         }
@@ -944,12 +1028,13 @@ impl Renderer {
 
                 // TODO does screenshotting work on windows
 
-                let texture_width = texture_dim.width * block_size;
-
+                let texture_width = (texture_dim.width * block_size) as usize;
                 let data = slice.get_mapped_range();
                 let mut result = Vec::<u8>::new();
                 for chunk in data.chunks_exact(padded_width as usize) {
-                    result.extend(&chunk[..texture_width as usize]);
+                    for pixel in chunk[..texture_width].chunks_exact(4) {
+                        result.extend(&[pixel[0], pixel[1], pixel[2], 255]);
+                    }
                 }
 
                 if let Some(image) =

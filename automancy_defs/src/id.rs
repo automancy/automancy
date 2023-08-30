@@ -9,15 +9,13 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use string_interner::backend::StringBackend;
 use string_interner::{StringInterner, Symbol};
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct IdRaw(SharedStr, SharedStr);
-
-pub static NONE: IdRaw = id_static("automancy", "none");
+pub type Interner = StringInterner<StringBackend<Id>>;
 
 #[repr(C)]
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Zeroable, Pod, Serialize, Deserialize,
 )]
+#[serde(transparent)]
 pub struct Id(u64);
 
 impl From<Id> for INT {
@@ -42,7 +40,18 @@ impl Symbol for Id {
     }
 }
 
-pub type Interner = StringInterner<StringBackend<Id>>;
+pub fn id(a: &str, b: &str) -> IdRaw {
+    IdRaw(SharedStr::from_ref(a), SharedStr::from_ref(b))
+}
+
+pub const fn id_static(a: &'static str, b: &'static str) -> IdRaw {
+    IdRaw(SharedStr::from_static(a), SharedStr::from_static(b))
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct IdRaw(SharedStr, SharedStr);
+
+pub static NONE: IdRaw = id_static("automancy", "none");
 
 impl Display for IdRaw {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -54,14 +63,12 @@ impl IdRaw {
     pub fn to_id(&self, interner: &mut Interner) -> Id {
         interner.get_or_intern(self.to_string())
     }
-}
 
-pub fn id(a: &str, b: &str) -> IdRaw {
-    IdRaw(SharedStr::from_ref(a), SharedStr::from_ref(b))
-}
-
-pub const fn id_static(a: &'static str, b: &'static str) -> IdRaw {
-    IdRaw(SharedStr::from_static(a), SharedStr::from_static(b))
+    pub fn parse(s: &str) -> IdRaw {
+        s.split_once(':')
+            .map(|(a, b)| id(a, b))
+            .unwrap_or_else(|| id("automancy", s))
+    }
 }
 
 impl Serialize for IdRaw {
@@ -73,9 +80,9 @@ impl Serialize for IdRaw {
     }
 }
 
-struct IdVisitor;
+struct IdRawVisitor;
 
-impl<'de> Visitor<'de> for IdVisitor {
+impl<'de> Visitor<'de> for IdRawVisitor {
     type Value = IdRaw;
 
     fn expecting(&self, formatter: &mut Formatter) -> fmt::Result {
@@ -102,14 +109,6 @@ impl<'de> Deserialize<'de> for IdRaw {
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_str(IdVisitor)
-    }
-}
-
-impl IdRaw {
-    pub fn parse(s: &str) -> IdRaw {
-        s.split_once(':')
-            .map(|(a, b)| id(a, b))
-            .unwrap_or_else(|| id("automancy", s))
+        deserializer.deserialize_str(IdRawVisitor)
     }
 }

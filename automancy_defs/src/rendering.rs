@@ -1,7 +1,7 @@
 use std::mem::size_of;
 
 use bytemuck::{Pod, Zeroable};
-use cgmath::{point3, vec3, EuclideanSpace, MetricSpace, SquareMatrix};
+use cgmath::{point3, vec3, EuclideanSpace, Matrix, MetricSpace, SquareMatrix};
 use gltf::animation::Interpolation;
 use hexagon_tiles::fractional::FractionalHex;
 use hexagon_tiles::traits::HexRound;
@@ -10,7 +10,7 @@ use wgpu::{vertex_attr_array, BufferAddress, VertexAttribute, VertexBufferLayout
 use crate::coord::TileCoord;
 use crate::math;
 use crate::math::{
-    direction_to_angle, DPoint2, Double, Float, Matrix4, Point3, Quaternion, Vector3,
+    direction_to_angle, DPoint2, Double, Float, Matrix3, Matrix4, Point3, Quaternion, Vector3,
 };
 
 pub fn lerp_coords_to_pixel(a: TileCoord, b: TileCoord, t: Double) -> DPoint2 {
@@ -37,6 +37,7 @@ pub fn make_line(a: DPoint2, b: DPoint2) -> Matrix4 {
 pub type VertexPos = [Float; 3];
 pub type VertexColor = [Float; 4];
 pub type RawMat4 = [[Float; 4]; 4];
+pub type RawMat3 = [[Float; 3]; 3];
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default, PartialOrd, PartialEq, Zeroable, Pod)]
@@ -67,6 +68,7 @@ impl Vertex {
 #[derive(Clone, Copy, Debug)]
 pub struct InstanceData {
     pub color_offset: VertexColor,
+    pub alpha: Float,
     pub light_pos: Point3,
     pub model_matrix: Matrix4,
 }
@@ -75,7 +77,8 @@ impl Default for InstanceData {
     fn default() -> Self {
         Self {
             color_offset: [0.0, 0.0, 0.0, 0.0],
-            light_pos: point3(0.0, 0.0, 5.0),
+            alpha: 1.0,
+            light_pos: point3(0.0, 0.0, 8.0),
             model_matrix: Matrix4::identity(),
         }
     }
@@ -85,6 +88,13 @@ impl InstanceData {
     #[inline]
     pub fn add_model_matrix(mut self, model_matrix: Matrix4) -> Self {
         self.model_matrix = self.model_matrix * model_matrix;
+
+        self
+    }
+
+    #[inline]
+    pub fn add_alpha(mut self, alpha: Float) -> Self {
+        self.alpha *= alpha;
 
         self
     }
@@ -111,6 +121,13 @@ impl InstanceData {
     }
 
     #[inline]
+    pub fn with_alpha(mut self, alpha: Float) -> Self {
+        self.alpha = alpha;
+
+        self
+    }
+
+    #[inline]
     pub fn with_light_pos(mut self, light_pos: Point3) -> Self {
         self.light_pos = light_pos;
 
@@ -125,20 +142,36 @@ impl InstanceData {
     }
 }
 
+fn invert_transpose(matrix: Matrix4) -> Matrix4 {
+    matrix.invert().unwrap().transpose()
+}
+
+fn mat4_to_3(matrix: Matrix4) -> Matrix3 {
+    Matrix3::from_cols(
+        matrix.x.truncate(),
+        matrix.y.truncate(),
+        matrix.z.truncate(),
+    )
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
 pub struct RawInstanceData {
-    pub color_offset: VertexColor,
-    pub light_pos: VertexColor,
-    pub model_matrix: RawMat4,
+    color_offset: VertexColor,
+    alpha: Float,
+    light_pos: VertexPos,
+    model_matrix: RawMat4,
+    normal_matrix: RawMat3,
 }
 
 impl From<InstanceData> for RawInstanceData {
     fn from(value: InstanceData) -> Self {
         Self {
             color_offset: value.color_offset,
-            light_pos: [value.light_pos.x, value.light_pos.y, value.light_pos.z, 1.0],
+            alpha: value.alpha,
+            light_pos: [value.light_pos.x, value.light_pos.y, value.light_pos.z],
             model_matrix: value.model_matrix.into(),
+            normal_matrix: mat4_to_3(invert_transpose(value.model_matrix)).into(),
         }
     }
 }
@@ -147,11 +180,15 @@ impl RawInstanceData {
     pub fn desc() -> VertexBufferLayout<'static> {
         static ATTRIBUTES: &[VertexAttribute] = &vertex_attr_array![
             3 => Float32x4,
-            4 => Float32x4,
-            5 => Float32x4,
+            4 => Float32,
+            5 => Float32x3,
             6 => Float32x4,
             7 => Float32x4,
             8 => Float32x4,
+            9 => Float32x4,
+            10 => Float32x3,
+            11 => Float32x3,
+            12 => Float32x3,
         ];
 
         VertexBufferLayout {
@@ -164,13 +201,13 @@ impl RawInstanceData {
 
 // UBO
 
-pub static DEFAULT_LIGHT_COLOR: VertexColor = [0.9, 0.9, 0.9, 0.9];
+pub static DEFAULT_LIGHT_COLOR: VertexColor = [1.0; 4];
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Zeroable, Pod)]
 pub struct GameUBO {
     light_color: VertexColor,
-    world: RawMat4,
+    world_matrix: RawMat4,
 }
 
 static FIX_COORD: RawMat4 = [
@@ -184,15 +221,17 @@ impl Default for GameUBO {
     fn default() -> Self {
         Self {
             light_color: DEFAULT_LIGHT_COLOR,
-            world: FIX_COORD,
+            world_matrix: FIX_COORD,
         }
     }
 }
 
 impl GameUBO {
     pub fn new(world: Matrix4) -> Self {
+        let world = Matrix4::from(FIX_COORD) * world;
+
         Self {
-            world: (Matrix4::from(FIX_COORD) * world).into(),
+            world_matrix: world.into(),
             ..Default::default()
         }
     }
@@ -211,7 +250,6 @@ pub struct Model {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u16>,
     pub name: String,
-    pub matrix: Matrix4,
     pub index: usize,
 }
 
