@@ -1,16 +1,19 @@
 [package]
-authors = ["Madeline Sparkles <madeline@mouse.lgbt>", "Mae Rosaline <mae@maestoso.online>"]
+authors = [
+    "Madeline Sparkles <madeline@mouse.lgbt>",
+    "Mae Rosaline <mae@maestoso.online>",
+]
 name = "automancy"
 version = "0.1.0"
 edition = "2021"
-
+build = "build.rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [profile.release-bin]
 inherits = "release"
-lto = "fat"         # turn on Link-Time Optimizations
-codegen-units = 1   # trade compile time with maximum optimization
-opt-level = "z"     # optimize for size
+lto = "fat"          # turn on Link-Time Optimizations
+codegen-units = 1    # trade compile time with maximum optimization
+opt-level = "z"      # optimize for size
 
 [profile]
 
@@ -19,19 +22,12 @@ dev.lto = "off"
 release.lto = "off"
 
 
-
 [workspace]
-members = [
-    "automancy_defs",
-    "automancy_macros",
-    "automancy_resources"
-]
-
+members = ["automancy_defs", "automancy_macros", "automancy_resources"]
 
 
 [[bin]]
 name = "automancy"
-
 
 
 [workspace.dependencies]
@@ -43,7 +39,10 @@ serde = { version = "1.0", features = ["derive"] }
 
 wgpu = { version = "0.16.3" }
 
-winit = { version = "0.28.6", features = ["x11", "serde"], default-features = false }
+winit = { version = "0.28.6", features = [
+    "x11",
+    "serde",
+], default-features = false }
 
 egui = { version = "0.22.0", default-features = false, features = ["log"] }
 egui-wgpu = { version = "0.22.0" }
@@ -53,8 +52,14 @@ lazy_static = "1.4.0"
 anyhow = "1.0.72"
 thiserror = "1.0.43"
 
-rhai = { git = "https://github.com/rhaiscript/rhai.git", features = ["sync", "no_time", "no_custom_syntax", "no_closure", "no_float", "only_i32"] }
-
+rhai = { git = "https://github.com/rhaiscript/rhai.git", features = [
+    "sync",
+    "no_time",
+    "no_custom_syntax",
+    "no_closure",
+    "no_float",
+    "only_i32",
+] }
 
 
 [dependencies]
@@ -77,7 +82,6 @@ anyhow = { workspace = true }
 thiserror = { workspace = true }
 
 rhai = { workspace = true }
-
 
 
 automancy_resources = { path = "automancy_resources" }
@@ -106,3 +110,6 @@ futures = "0.3.28"
 ractor = "0.9.0"
 tokio = { version = "1", features = ["full"] }
 rayon = "1.7.0"
+
+[build-dependencies]
+walkdir = "2.3.3"

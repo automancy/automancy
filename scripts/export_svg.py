@@ -2,10 +2,6 @@ import bmesh
 import bpy
 import sys
 import xml.etree.ElementTree as ET
-
-from frozendict import frozendict
-
-
 def main():
     src = sys.argv[-2]
     print(src)
@@ -19,7 +15,7 @@ def main():
     root = tree.getroot()
 
     paths = [tuple([path.attrib['id'],
-                    frozendict(map(lambda x: tuple(x.split(':')), path.attrib['style'].split(';')))
+                    dict(map(lambda x: tuple(x.split(':')), path.attrib['style'].split(';')))
                     ])
              for path in root.iter('{http://www.w3.org/2000/svg}path')]
     total = float(len(paths))
