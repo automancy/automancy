@@ -1,10 +1,9 @@
 use std::ffi::OsStr;
-use std::fs::{self, metadata};
-use std::io::Read;
+use std::fs::metadata;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::str;
-use std::{env, thread};
+use std::thread;
 use walkdir::WalkDir;
 
 fn load_recursively(path: &Path, extension: &OsStr) -> Vec<PathBuf> {
