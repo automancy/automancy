@@ -24,12 +24,6 @@ Links:
 
 ## Development Notes
 
-### All
-
-***Run `make_assets.sh` to process certain assets into what the game can consume.***
-
-***You must run it after cloning if you want the game to work.***
-
 ### Designers
 
 For SVG files, in order for them to be correctly converted to Blender files, the file needs to fit the following
@@ -45,8 +39,7 @@ criteria:
 
 **Currently, the game supports neither materials nor textures,** ***and has no plans to support them.***
 
-**Use either Vertex Paint or a material with only the base color (they get turned into vertex colors upon
-running `make_assets.sh`**
+**Use either Vertex Paint or a material with only the base color (they get turned into vertex colors)**
 
 ### Scripts
 
