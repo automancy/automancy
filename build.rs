@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::str;
 use std::thread;
+
 use walkdir::WalkDir;
 
 fn load_recursively(path: &Path, extension: &OsStr) -> Vec<PathBuf> {
@@ -19,6 +20,7 @@ fn load_recursively(path: &Path, extension: &OsStr) -> Vec<PathBuf> {
 fn file_check(path: &Path, out_path: &Path) -> bool {
     let Ok(in_meta) = metadata(path) else { return true };
     let Ok(out_meta) = metadata(out_path) else { return true };
+
     !out_path.is_file()
         || in_meta
             .modified()
@@ -36,9 +38,11 @@ fn main() {
         panic!()
     }
 
+    let resources = Path::new("resources/");
+
     // SVG blender runs (parallel)
     let mut svg_handles = Vec::new();
-    for svg_path in load_recursively(Path::new("resources/"), OsStr::new("svg")) {
+    for svg_path in load_recursively(resources, OsStr::new("svg")) {
         let out_path = svg_path.with_extension("blend");
 
         if file_check(&svg_path, &out_path) {
@@ -62,20 +66,20 @@ fn main() {
                     .unwrap();
                 if !output.status.success() {
                     println!("{}", str::from_utf8(&output.stdout).unwrap());
-                    panic!("Process bad status code")
+                    panic!("Process bad status code: {}", output.status)
                 }
             }));
         }
     }
-    for thandle in svg_handles {
-        if thandle.join().is_err() {
-            panic!("Issue with svg to blend");
+    for handle in svg_handles {
+        if let Err(e) = handle.join() {
+            panic!("Issue with svg to blend: {e:?}");
         }
     }
 
     // Model blender runs (parallel)
     let mut model_handles = Vec::new();
-    for blend_path in load_recursively(Path::new("resources/"), OsStr::new("blend")) {
+    for blend_path in load_recursively(resources, OsStr::new("blend")) {
         let out_path = blend_path.with_extension("gltf");
 
         if file_check(&blend_path, &out_path) {
@@ -99,14 +103,14 @@ fn main() {
                     .unwrap();
                 if !output.status.success() {
                     println!("{}", str::from_utf8(&output.stdout).unwrap());
-                    panic!("Process bad status code")
+                    panic!("Process bad status code: {}", output.status)
                 }
             }));
         }
     }
-    for thandle in model_handles {
-        if thandle.join().is_err() {
-            panic!("Issue with model exports");
+    for handle in model_handles {
+        if let Err(e) = handle.join() {
+            panic!("Issue with svg to blend: {e:?}");
         }
     }
 }
