@@ -15,11 +15,13 @@ lto = "fat"          # turn on Link-Time Optimizations
 codegen-units = 1    # trade compile time with maximum optimization
 opt-level = "z"      # optimize for size
 
-[profile]
 
+
+[profile]
 dev.opt-level = 3
 dev.lto = "off"
 release.lto = "off"
+
 
 
 [workspace]

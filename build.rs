@@ -3,6 +3,7 @@ use std::fs::metadata;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::str;
+use std::str::FromStr;
 use std::thread;
 
 use walkdir::WalkDir;
@@ -18,6 +19,14 @@ fn load_recursively(path: &Path, extension: &OsStr) -> Vec<PathBuf> {
 }
 
 fn file_check(path: &Path, out_path: &Path) -> bool {
+    if std::env::var("SKIP_CHECK")
+        .ok()
+        .and_then(|v| bool::from_str(v.as_str()).ok())
+        .unwrap_or(false)
+    {
+        return true;
+    }
+
     let Ok(in_meta) = metadata(path) else { return true };
     let Ok(out_meta) = metadata(out_path) else { return true };
 
@@ -29,7 +38,6 @@ fn file_check(path: &Path, out_path: &Path) -> bool {
 }
 
 fn main() {
-    println!("cargo:rerun-if-changed=resources/");
     if Command::new("blender").arg("--help").output().is_err() {
         println!("\n\n==============");
         println!("Failed to find blender command: please add blender to your PATH.");
@@ -64,6 +72,7 @@ fn main() {
                     .expect("blender processing couldn't start")
                     .wait_with_output()
                     .unwrap();
+
                 if !output.status.success() {
                     println!("{}", str::from_utf8(&output.stdout).unwrap());
                     panic!("Process bad status code: {}", output.status)
