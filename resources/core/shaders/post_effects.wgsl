@@ -146,7 +146,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let sobel_c = edge_color(color, sobel_r);
 
     let normal_edge_r = normal_edge(in.uv);
-    let normal_edge_c = color * vec4(vec3(sqrt(normal_edge_r)), 0.0);
+    let normal_edge_c = color * vec4(vec3(normal_edge_r), 0.0);
 
     return sobel_c + normal_edge_c;
 }

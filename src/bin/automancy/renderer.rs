@@ -509,6 +509,25 @@ impl Renderer {
             }
         }
 
+        {
+            let mut downscale_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some("Game Downscale Render Pass"),
+                color_attachments: &[Some(RenderPassColorAttachment {
+                    view: &self.gpu.downscale_resources.texture().1,
+                    resolve_target: None,
+                    ops: Operations {
+                        load: LoadOp::Clear(Color::BLACK),
+                        store: true,
+                    },
+                })],
+                depth_stencil_attachment: None,
+            });
+
+            downscale_pass.set_pipeline(&self.gpu.downscale_resources.pipeline);
+            downscale_pass.set_bind_group(0, self.gpu.game_resources.downscale_bind_group(), &[]);
+            downscale_pass.draw(0..3, 0..1);
+        }
+
         let user_commands = {
             let egui_out = gui.context.end_frame();
             let egui_primitives = gui.context.tessellate(egui_out.shapes);
@@ -886,6 +905,25 @@ impl Renderer {
                     );
                 }
             }
+        }
+
+        {
+            let mut downscale_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some("Gui Downscale Render Pass"),
+                color_attachments: &[Some(RenderPassColorAttachment {
+                    view: &self.gpu.downscale_resources.texture().1,
+                    resolve_target: None,
+                    ops: Operations {
+                        load: LoadOp::Clear(Color::BLACK),
+                        store: true,
+                    },
+                })],
+                depth_stencil_attachment: None,
+            });
+
+            downscale_pass.set_pipeline(&self.gpu.downscale_resources.pipeline);
+            downscale_pass.set_bind_group(0, self.gpu.gui_resources.downscale_bind_group(), &[]);
+            downscale_pass.draw(0..3, 0..1);
         }
 
         {

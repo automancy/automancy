@@ -265,72 +265,6 @@ fn extent3d(config: &SurfaceConfiguration, scale: u32) -> Extent3d {
     }
 }
 
-fn make_post_effects_bind_group_layout(device: &Device) -> BindGroupLayout {
-    device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-        entries: &[
-            BindGroupLayoutEntry {
-                binding: 0,
-                visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Buffer {
-                    ty: BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-            BindGroupLayoutEntry {
-                binding: 1,
-                visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Texture {
-                    sample_type: TextureSampleType::Float { filterable: false },
-                    view_dimension: TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
-            },
-            BindGroupLayoutEntry {
-                binding: 2,
-                visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
-                count: None,
-            },
-            BindGroupLayoutEntry {
-                binding: 3,
-                visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Texture {
-                    sample_type: TextureSampleType::Float { filterable: false },
-                    view_dimension: TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
-            },
-            BindGroupLayoutEntry {
-                binding: 4,
-                visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
-                count: None,
-            },
-            BindGroupLayoutEntry {
-                binding: 5,
-                visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Texture {
-                    sample_type: TextureSampleType::Float { filterable: false },
-                    view_dimension: TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
-            },
-            BindGroupLayoutEntry {
-                binding: 6,
-                visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
-                count: None,
-            },
-        ],
-        label: Some("post_effects_bind_group_layout"),
-    })
-}
-
 fn make_post_effects_bind_group(
     device: &Device,
     bind_group_layout: &BindGroupLayout,
@@ -378,46 +312,6 @@ fn make_post_effects_bind_group(
     })
 }
 
-fn combine_bind_group_layout(device: &Device) -> BindGroupLayout {
-    device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-        entries: &[
-            BindGroupLayoutEntry {
-                binding: 0,
-                visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Texture {
-                    multisampled: false,
-                    view_dimension: TextureViewDimension::D2,
-                    sample_type: TextureSampleType::Float { filterable: true },
-                },
-                count: None,
-            },
-            BindGroupLayoutEntry {
-                binding: 1,
-                visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Sampler(SamplerBindingType::Filtering),
-                count: None,
-            },
-            BindGroupLayoutEntry {
-                binding: 2,
-                visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Texture {
-                    multisampled: false,
-                    view_dimension: TextureViewDimension::D2,
-                    sample_type: TextureSampleType::Float { filterable: true },
-                },
-                count: None,
-            },
-            BindGroupLayoutEntry {
-                binding: 3,
-                visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Sampler(SamplerBindingType::Filtering),
-                count: None,
-            },
-        ],
-        label: Some("combine_bind_group_layout"),
-    })
-}
-
 fn make_combine_bind_group(
     device: &Device,
     bind_group_layout: &BindGroupLayout,
@@ -450,6 +344,21 @@ fn make_combine_bind_group(
     })
 }
 
+fn make_downscale_bind_group(
+    device: &Device,
+    bind_group_layout: &BindGroupLayout,
+    texture: &TextureView,
+) -> BindGroup {
+    device.create_bind_group(&BindGroupDescriptor {
+        layout: bind_group_layout,
+        entries: &[BindGroupEntry {
+            binding: 0,
+            resource: BindingResource::TextureView(texture),
+        }],
+        label: Some("downscale_bind_group"),
+    })
+}
+
 #[derive(OptionGetter)]
 pub struct GameResources {
     pub instance_buffer: Buffer,
@@ -460,6 +369,8 @@ pub struct GameResources {
     pub post_effects_uniform_buffer: Buffer,
     #[getters(get)]
     post_effects_bind_group: Option<BindGroup>,
+    #[getters(get)]
+    downscale_bind_group: Option<BindGroup>,
 }
 
 #[derive(OptionGetter)]
@@ -477,6 +388,8 @@ pub struct GuiResources {
     pub post_effects_uniform_buffer: Buffer,
     #[getters(get)]
     post_effects_bind_group: Option<BindGroup>,
+    #[getters(get)]
+    downscale_bind_group: Option<BindGroup>,
 }
 
 #[derive(OptionGetter)]
@@ -511,6 +424,14 @@ pub struct CombineResources {
 
 #[derive(OptionGetter)]
 pub struct PostEffectsResources {
+    pub bind_group_layout: BindGroupLayout,
+    pub pipeline: RenderPipeline,
+    #[getters(get)]
+    texture: Option<(Texture, TextureView)>,
+}
+
+#[derive(OptionGetter)]
+pub struct DownscaleResources {
     pub bind_group_layout: BindGroupLayout,
     pub pipeline: RenderPipeline,
     #[getters(get)]
@@ -558,6 +479,7 @@ pub struct Gpu {
     pub first_combine_resources: CombineResources,
     pub post_effects_resources: PostEffectsResources,
     pub second_combine_resources: CombineResources,
+    pub downscale_resources: DownscaleResources,
     pub intermediate_resources: IntermediateResources,
 }
 
@@ -662,6 +584,11 @@ impl Gpu {
         let combine_shader = device.create_shader_module(ShaderModuleDescriptor {
             label: Some("Combine Shader"),
             source: ShaderSource::Wgsl(resource_man.shaders["combine"].as_str().into()),
+        });
+
+        let downscale_shader = device.create_shader_module(ShaderModuleDescriptor {
+            label: Some("Downscale Shader"),
+            source: ShaderSource::Wgsl(resource_man.shaders["downscale"].as_str().into()),
         });
 
         let intermediate_shader = device.create_shader_module(ShaderModuleDescriptor {
@@ -800,6 +727,7 @@ impl Gpu {
                     usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
                 }),
                 post_effects_bind_group: None,
+                downscale_bind_group: None,
             }
         };
 
@@ -869,6 +797,7 @@ impl Gpu {
                     usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
                 }),
                 post_effects_bind_group: None,
+                downscale_bind_group: None,
             }
         };
 
@@ -937,7 +866,44 @@ impl Gpu {
             }
         };
 
-        let combine_bind_group_layout = Rc::new(combine_bind_group_layout(&device));
+        let combine_bind_group_layout =
+            Rc::new(device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+                entries: &[
+                    BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: TextureViewDimension::D2,
+                            sample_type: TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
+                    },
+                    BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Sampler(SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                    BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: TextureViewDimension::D2,
+                            sample_type: TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
+                    },
+                    BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Sampler(SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+                label: Some("combine_bind_group_layout"),
+            }));
 
         let combine_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some("Combine Render Pipeline Layout"),
@@ -986,7 +952,69 @@ impl Gpu {
         };
 
         let post_effects_resources = {
-            let bind_group_layout = make_post_effects_bind_group_layout(&device);
+            let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+                entries: &[
+                    BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Buffer {
+                            ty: BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Texture {
+                            sample_type: TextureSampleType::Float { filterable: false },
+                            view_dimension: TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
+                        count: None,
+                    },
+                    BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Texture {
+                            sample_type: TextureSampleType::Float { filterable: false },
+                            view_dimension: TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    BindGroupLayoutEntry {
+                        binding: 4,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
+                        count: None,
+                    },
+                    BindGroupLayoutEntry {
+                        binding: 5,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Texture {
+                            sample_type: TextureSampleType::Float { filterable: false },
+                            view_dimension: TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    BindGroupLayoutEntry {
+                        binding: 6,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
+                        count: None,
+                    },
+                ],
+                label: Some("post_effects_bind_group_layout"),
+            });
 
             let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
                 label: Some("Post Effects Render Pipeline Layout"),
@@ -1038,6 +1066,66 @@ impl Gpu {
             pipeline: combine_pipeline.clone(),
             bind_group: None,
             texture: None,
+        };
+
+        let downscale_resources = {
+            let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+                entries: &[BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Texture {
+                        multisampled: false,
+                        view_dimension: TextureViewDimension::D2,
+                        sample_type: TextureSampleType::Float { filterable: false },
+                    },
+                    count: None,
+                }],
+                label: Some("downscale_bind_group_layout"),
+            });
+
+            let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+                label: Some("Downscale Render Pipeline Layout"),
+                bind_group_layouts: &[&bind_group_layout],
+                push_constant_ranges: &[],
+            });
+
+            let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+                label: Some("Downscale Render Pipeline"),
+                layout: Some(&pipeline_layout),
+                vertex: VertexState {
+                    module: &downscale_shader,
+                    entry_point: "vs_main",
+                    buffers: &[],
+                },
+                fragment: Some(FragmentState {
+                    module: &downscale_shader,
+                    entry_point: "fs_main",
+                    targets: &[Some(ColorTargetState {
+                        format: config.format,
+                        blend: None,
+                        write_mask: ColorWrites::ALL,
+                    })],
+                }),
+                primitive: PrimitiveState {
+                    topology: PrimitiveTopology::TriangleList,
+                    front_face: FrontFace::Ccw,
+                    cull_mode: None,
+                    ..Default::default()
+                },
+                depth_stencil: None,
+                multisample: MultisampleState {
+                    count: 1,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                multiview: None,
+            });
+
+            DownscaleResources {
+                bind_group_layout,
+                pipeline,
+                texture: None,
+            }
         };
 
         let intermediate_resources = {
@@ -1143,6 +1231,7 @@ impl Gpu {
             first_combine_resources,
             post_effects_resources,
             second_combine_resources,
+            downscale_resources,
             intermediate_resources,
         };
 
@@ -1222,6 +1311,24 @@ impl Gpu {
         self.post_effects_resources.texture =
             Some(create_surface_texture(device, config.format, upscale, None));
 
+        self.downscale_resources.texture = Some(create_surface_texture(
+            device,
+            config.format,
+            original,
+            None,
+        ));
+
+        self.game_resources.downscale_bind_group = Some(make_downscale_bind_group(
+            device,
+            &self.downscale_resources.bind_group_layout,
+            &self.post_effects_resources.texture().1,
+        ));
+        self.gui_resources.downscale_bind_group = Some(make_downscale_bind_group(
+            device,
+            &self.downscale_resources.bind_group_layout,
+            &self.post_effects_resources.texture().1,
+        ));
+
         self.first_combine_resources.texture = Some(create_surface_texture(
             device,
             config.format,
@@ -1231,10 +1338,10 @@ impl Gpu {
         self.first_combine_resources.bind_group = Some(make_combine_bind_group(
             device,
             &self.first_combine_resources.bind_group_layout,
-            &self.post_effects_resources.texture().1,
-            &self.filtering_sampler,
+            &self.downscale_resources.texture().1,
+            &self.non_filtering_sampler,
             &self.egui_resources.texture().1,
-            &self.filtering_sampler,
+            &self.non_filtering_sampler,
         ));
 
         self.second_combine_resources.texture = Some(create_surface_texture(
@@ -1247,9 +1354,9 @@ impl Gpu {
             device,
             &self.second_combine_resources.bind_group_layout,
             &self.first_combine_resources.texture().1,
-            &self.filtering_sampler,
-            &self.post_effects_resources.texture().1,
-            &self.filtering_sampler,
+            &self.non_filtering_sampler,
+            &self.downscale_resources.texture().1,
+            &self.non_filtering_sampler,
         ));
     }
 }
