@@ -487,8 +487,8 @@ pub fn on_event(
                             setup.input_handler.main_pos,
                             setup.camera.get_pos().z,
                         );
-                        let cursor_pos = point2(cursor_pos.x, cursor_pos.y);
-                        let cursor_pos = cursor_pos + setup.camera.get_pos().to_vec().truncate();
+                        let cursor_pos = point2(cursor_pos.x, cursor_pos.y)
+                            + setup.camera.get_pos().to_vec().truncate();
 
                         if let Some(id) = loop_store.selected_id {
                             if let Some(model) = resource_man.registry.tile(id).and_then(|v| {

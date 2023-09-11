@@ -348,13 +348,20 @@ fn make_downscale_bind_group(
     device: &Device,
     bind_group_layout: &BindGroupLayout,
     texture: &TextureView,
+    sampler: &Sampler,
 ) -> BindGroup {
     device.create_bind_group(&BindGroupDescriptor {
         layout: bind_group_layout,
-        entries: &[BindGroupEntry {
-            binding: 0,
-            resource: BindingResource::TextureView(texture),
-        }],
+        entries: &[
+            BindGroupEntry {
+                binding: 0,
+                resource: BindingResource::TextureView(texture),
+            },
+            BindGroupEntry {
+                binding: 1,
+                resource: BindingResource::Sampler(sampler),
+            },
+        ],
         label: Some("downscale_bind_group"),
     })
 }
@@ -1070,16 +1077,24 @@ impl Gpu {
 
         let downscale_resources = {
             let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-                entries: &[BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: TextureViewDimension::D2,
-                        sample_type: TextureSampleType::Float { filterable: false },
+                entries: &[
+                    BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: TextureViewDimension::D2,
+                            sample_type: TextureSampleType::Float { filterable: false },
+                        },
+                        count: None,
                     },
-                    count: None,
-                }],
+                    BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
+                        count: None,
+                    },
+                ],
                 label: Some("downscale_bind_group_layout"),
             });
 
@@ -1322,11 +1337,13 @@ impl Gpu {
             device,
             &self.downscale_resources.bind_group_layout,
             &self.post_effects_resources.texture().1,
+            &self.non_filtering_sampler,
         ));
         self.gui_resources.downscale_bind_group = Some(make_downscale_bind_group(
             device,
             &self.downscale_resources.bind_group_layout,
             &self.post_effects_resources.texture().1,
+            &self.non_filtering_sampler,
         ));
 
         self.first_combine_resources.texture = Some(create_surface_texture(

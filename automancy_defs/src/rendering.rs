@@ -23,13 +23,13 @@ pub fn lerp_coords_to_pixel(a: TileCoord, b: TileCoord, t: Double) -> DPoint2 {
 
 /// Produces a line shape.
 pub fn make_line(a: DPoint2, b: DPoint2) -> Matrix4 {
-    let mid = a.midpoint(b).cast().unwrap();
+    let mid = a.midpoint(b);
     let d = a.distance(b) as Float;
     let theta = direction_to_angle(b - a);
 
-    Matrix4::from_translation(vec3(mid.x, mid.y, 0.1))
+    Matrix4::from_translation(vec3(mid.x as Float, mid.y as Float, 0.1))
         * Matrix4::from_angle_z(theta)
-        * Matrix4::from_nonuniform_scale(d, 0.1, 0.01)
+        * Matrix4::from_nonuniform_scale(d, 0.1, 0.001)
 }
 
 // vertex

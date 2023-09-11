@@ -94,11 +94,15 @@ fn normal_edge(uv: vec2<f32>) -> f32 {
     let e  = dot(c, textureSample(normal_texture, normal_sampler, uv + texel_size * vec2<f32>( 1.0,  0.0)).rgb);
     let s  = dot(c, textureSample(normal_texture, normal_sampler, uv + texel_size * vec2<f32>( 0.0, -1.0)).rgb);
     let w  = dot(c, textureSample(normal_texture, normal_sampler, uv + texel_size * vec2<f32>(-1.0,  0.0)).rgb);
+    let ne = dot(c, textureSample(normal_texture, normal_sampler, uv + texel_size * vec2<f32>( 1.0,  1.0)).rgb);
+    let nw = dot(c, textureSample(normal_texture, normal_sampler, uv + texel_size * vec2<f32>(-1.0,  1.0)).rgb);
+    let se = dot(c, textureSample(normal_texture, normal_sampler, uv + texel_size * vec2<f32>( 1.0, -1.0)).rgb);
+    let sw = dot(c, textureSample(normal_texture, normal_sampler, uv + texel_size * vec2<f32>(-1.0, -1.0)).rgb);
 
     let m = mat3x3(
-        vec3(0.5,   s, 0.5),
-        vec3(  w, 1.0,   e),
-        vec3(0.5,   n, 0.5),
+        vec3(sw,   s, se),
+        vec3( w, 0.0,  e),
+        vec3(nw,   n, ne),
     );
 
     let gx = dot(SOBEL_X[0], m[0]) + dot(SOBEL_X[1], m[1]) + dot(SOBEL_X[2], m[2]);
@@ -106,7 +110,7 @@ fn normal_edge(uv: vec2<f32>) -> f32 {
 
     let g = length(vec2(gx, gy));
 
-    return sqrt(g);
+    return smoothstep(0.2, 1.0, g);
 }
 
 fn rgb2hsl(c: vec3<f32>) -> vec3<f32> {
@@ -127,7 +131,7 @@ fn hsl2rgb(c: vec3<f32>) -> vec3<f32> {
   return c.z * mix(K.xxx, clamp(p - K.xxx, vec3(0.0, 0.0, 0.0), vec3(1.0, 1.0, 1.0)), c.y);
 }
 
-fn edge_color(color: vec4<f32>, r: f32) -> vec4<f32> {
+fn sobel_color(color: vec4<f32>, r: f32) -> vec4<f32> {
     if (r > 0.2) {
         var hsl = rgb2hsl(color.rgb);
         hsl.z = 0.3;
@@ -143,7 +147,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let color = textureSample(frame_texture, frame_sampler, in.uv);
 
     let sobel_r = sobel(in.uv);
-    let sobel_c = edge_color(color, sobel_r);
+    let sobel_c = sobel_color(color, sobel_r);
 
     let normal_edge_r = normal_edge(in.uv);
     let normal_edge_c = color * vec4(vec3(normal_edge_r), 0.0);

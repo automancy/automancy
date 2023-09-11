@@ -1,5 +1,7 @@
 @group(0) @binding(0)
 var frame_texture: texture_2d<f32>;
+@group(0) @binding(1)
+var frame_sampler: sampler;
 
 struct VertexInput {
     @builtin(vertex_index) idx: u32,
@@ -35,36 +37,35 @@ fn cubic(v: f32) -> vec4<f32> {
     let z = s.z - 4.0 * s.y + 6.0 * s.x;
     let w = 6.0 - x - y - z;
 
-    return vec4(x, y, z, w) / 6.0;
+    return vec4(x, y, z, w) * 0.1666666666666667;
 }
 
+fn textureSampleBicubic(t: texture_2d<f32>, s: sampler, uv: vec2<f32>) -> vec4<f32> {
+    let dim = vec2<f32>(textureDimensions(t));
 
-fn textureBicubic(uv: vec2<f32>) -> vec4<f32> {
-    let dim = vec2<f32>(textureDimensions(frame_texture));
-
-    var coord = uv * dim - 0.5;
-
+    let coord = (uv * dim) - vec2(0.5);
     let fxy = fract(coord);
-    coord -= fxy;
+    let ixy = floor(coord);
 
     let xcubic = cubic(fxy.x);
     let ycubic = cubic(fxy.y);
 
-    let s = vec4(xcubic.xz + xcubic.yw, ycubic.xz + ycubic.yw);
-    let offset = clamp(vec4(0.0), (coord.xxyy + vec2(-0.5, 1.5).xyxy) + vec4(xcubic.yw, ycubic.yw) / s, dim.xxyy);
+    let center = ixy.xxyy + vec2(-0.5, 1.5).xyxy;
+    let size = vec4(xcubic.xz + xcubic.yw, ycubic.xz + ycubic.yw);
+    let offset = (center + vec4(xcubic.yw, ycubic.yw) / size) / dim.xxyy;
 
-    let a = textureLoad(frame_texture, vec2<i32>(offset.xz), 0);
-    let b = textureLoad(frame_texture, vec2<i32>(offset.yz), 0);
-    let c = textureLoad(frame_texture, vec2<i32>(offset.xw), 0);
-    let d = textureLoad(frame_texture, vec2<i32>(offset.yw), 0);
+    let sample0 = textureSample(t, s, offset.xz);
+    let sample1 = textureSample(t, s, offset.yz);
+    let sample2 = textureSample(t, s, offset.xw);
+    let sample3 = textureSample(t, s, offset.yw);
 
-    let sx = s.x / (s.x + s.y);
-    let sy = s.z / (s.z + s.w);
+    let sx = size.x / (size.x + size.y);
+    let sy = size.z / (size.z + size.w);
 
-    return mix(mix(d, c, sx), mix(b, a, sx), sy);
+    return mix(mix(sample3, sample2, sx), mix(sample1, sample0, sx), sy);
 }
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return textureBicubic(in.uv);
+    return textureSampleBicubic(frame_texture, frame_sampler, in.uv);
 }
