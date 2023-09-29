@@ -35,7 +35,7 @@ pub struct Translate {
 
 impl ResourceManager {
     fn load_translate(&mut self, file: &Path) -> anyhow::Result<()> {
-        log::info!("loading translate at: {file:?}");
+        log::info!("Loading translate at: {file:?}");
 
         let translate: TranslateJson = serde_json::from_str(&read_to_string(file)?)?;
 

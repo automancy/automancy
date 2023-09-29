@@ -10,7 +10,7 @@ use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort, SupervisionEvent
 use rayon::prelude::*;
 
 use automancy_defs::cgmath::vec3;
-use automancy_defs::coord::{TileCoord, TileHex, TileUnit};
+use automancy_defs::coord::{TileCoord, TileHex, TileRange};
 use automancy_defs::hashbrown::HashMap;
 use automancy_defs::hexagon_tiles::traits::HexDirection;
 use automancy_defs::id::Id;
@@ -123,8 +123,7 @@ pub enum GameMsg {
 
     /// get rendering information
     RenderInfoRequest {
-        center: TileCoord,
-        culling_range: (TileUnit, TileUnit),
+        culling_range: TileRange,
         reply: RpcReplyPort<RenderInfo>,
     },
 
@@ -241,7 +240,6 @@ impl Actor for Game {
                         state.map.data.remove(&key);
                     }
                     RenderInfoRequest {
-                        center,
                         culling_range,
                         reply,
                     } => {
@@ -249,9 +247,7 @@ impl Actor for Game {
                             .map
                             .tiles
                             .iter()
-                            .filter(|(coord, _)| {
-                                math::is_in_culling_range(center, **coord, culling_range)
-                            })
+                            .filter(|(coord, _)| culling_range.contains(**coord))
                             .flat_map(|(coord, (id, tile_modifier))| {
                                 self.resource_man
                                     .registry
@@ -603,7 +599,7 @@ pub fn tick(state: &mut GameState) {
 
     if tick_time >= MAX_ALLOWED_TICK_INTERVAL {
         log::warn!(
-            "tick took longer than allowed maximum! tick_time: {:?}, maximum: {:?}",
+            "Tick took longer than allowed maximum! tick_time: {:?}, maximum: {:?}",
             tick_time,
             MAX_ALLOWED_TICK_INTERVAL
         );

@@ -17,7 +17,7 @@ impl ResourceManager {
                 .map(|v| v.path())
                 .filter(|v| v.extension() == Some(OsStr::new(SHADER_EXT)))
             {
-                log::info!("loading shader at {file:?}");
+                log::info!("Loading shader at {file:?}");
 
                 if let Ok(shader) = read_to_string(&file) {
                     self.shaders.insert(

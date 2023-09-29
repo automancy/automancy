@@ -118,10 +118,13 @@ impl Map {
         match decoded {
             Ok(v) => Some((v, time)),
             Err(e) => {
-                log::error!("serde: {e:?}");
+                log::error!("Serde: {e:?}");
 
-                let err_map_name =
-                    format!("{}-ERR-{}", map_name, Local::now().format("%y%m%d%H%M%S"));
+                let err_map_name = format!(
+                    "{}-ERR-{}",
+                    map_name,
+                    Local::now().format("%y-%m-%d-%H:%M:%S")
+                );
 
                 resource_man.error_man.push(
                     (
@@ -151,7 +154,7 @@ impl Map {
         match decoded {
             Ok(v) => Some(v),
             Err(e) => {
-                log::error!("serde: {e:?}");
+                log::error!("Serde: {e:?}");
 
                 let err_map_name =
                     format!("{}-ERR-{}", map_name, Local::now().format("%y%m%d%H%M%S"));

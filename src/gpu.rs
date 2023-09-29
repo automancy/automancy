@@ -453,7 +453,6 @@ pub struct IntermediateResources {
 
 pub struct Gpu {
     vsync: bool,
-    new_size: Option<PhysicalSize<u32>>,
 
     pub instance: Instance,
     pub device: Device,
@@ -1213,7 +1212,6 @@ impl Gpu {
 
         let mut this = Self {
             vsync: false,
-            new_size: None,
 
             instance,
             device,
@@ -1253,14 +1251,6 @@ impl Gpu {
         this.create_textures(size);
 
         this
-    }
-
-    pub fn take_new_size(&mut self) -> Option<PhysicalSize<u32>> {
-        self.new_size.take()
-    }
-
-    pub fn resize(&mut self, size: PhysicalSize<u32>) {
-        self.new_size = Some(size);
     }
 
     pub fn create_textures(&mut self, size: PhysicalSize<u32>) {

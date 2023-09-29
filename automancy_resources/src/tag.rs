@@ -35,7 +35,7 @@ impl Tag {
 
 impl ResourceManager {
     fn load_tag(&mut self, file: &Path) -> anyhow::Result<()> {
-        log::info!("loading tag at: {file:?}");
+        log::info!("Loading tag at: {file:?}");
 
         let tag: TagJson = serde_json::from_str(&read_to_string(file)?)?;
 

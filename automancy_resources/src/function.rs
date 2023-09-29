@@ -19,7 +19,7 @@ impl ResourceManager {
                 .map(|v| v.path())
                 .filter(|v| v.extension() == Some(OsStr::new(FUNCTION_EXT)))
             {
-                log::info!("loading function at {file:?}");
+                log::info!("Loading function at {file:?}");
                 let mut scope = Scope::new();
                 let ast = self.engine.compile_file(file)?;
 
@@ -41,7 +41,7 @@ impl ResourceManager {
                             .to_string();
                         let key = v[1].clone().cast::<ImmutableString>();
 
-                        log::info!("adding {key} -> {id} into scope of function {str_id}");
+                        log::info!("Adding {key} -> {id} into scope of function {str_id}");
 
                         scope.push_constant(key.as_str(), self.interner.get_or_intern(&id));
                     });
@@ -49,7 +49,7 @@ impl ResourceManager {
 
                 self.functions.insert(id, (ast, scope));
 
-                log::info!("registered function with id {str_id} ({id:?})");
+                log::info!("Registered function with id {str_id} ({id:?})");
             }
         }
 

@@ -29,7 +29,7 @@ pub struct Tile {
 
 impl ResourceManager {
     fn load_tile(&mut self, file: &Path) -> anyhow::Result<()> {
-        log::info!("loading tile at {file:?}");
+        log::info!("Loading tile at {file:?}");
 
         let tile: TileJson = serde_json::from_str(&read_to_string(file)?)?;
 

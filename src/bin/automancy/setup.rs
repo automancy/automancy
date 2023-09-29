@@ -30,7 +30,7 @@ fn load_resources(track: TrackHandle) -> (Arc<ResourceManager>, Vec<Vertex>, Vec
         .map(|v| v.path())
         .for_each(|dir| {
             let namespace = dir.file_name().unwrap().to_str().unwrap();
-            log::info!("loading namespace {namespace}...");
+            log::info!("Loading namespace {namespace}...");
             resource_man
                 .load_models(&dir)
                 .expect("Error loading models");
@@ -50,7 +50,7 @@ fn load_resources(track: TrackHandle) -> (Arc<ResourceManager>, Vec<Vertex>, Vec
             resource_man
                 .load_functions(&dir)
                 .expect("Error loading functions");
-            log::info!("loaded namespace {namespace}.");
+            log::info!("Loaded namespace {namespace}.");
         });
 
     resource_man.ordered_items();
@@ -87,24 +87,23 @@ impl GameSetup {
     /// Initializes the game, filling all the necessary fields as well as returns the loaded vertices and indices.
     pub async fn setup(camera: Camera) -> anyhow::Result<(Self, Vec<Vertex>, Vec<u16>)> {
         // --- resources & data ---
-        log::info!("initializing audio backend...");
+        log::info!("Initializing audio backend...");
         let mut audio_man = AudioManager::<CpalBackend>::new(AudioManagerSettings::default())?;
         let track = audio_man.add_sub_track({
             let builder = TrackBuilder::new();
 
             builder
         })?;
-        log::info!("audio backend initialized");
+        log::info!("Audio backend initialized");
 
-        log::info!("loading resources...");
+        log::info!("Loading resources...");
         let (resource_man, vertices, indices) = load_resources(track);
         RESOURCE_MAN.write().unwrap().replace(resource_man.clone());
 
-        log::info!("loaded resources.");
+        log::info!("Loaded resources.");
 
         // --- game ---
-        log::info!("creating game...");
-
+        log::info!("Creating game...");
         let (game, game_handle) = Actor::spawn(
             Some("game".to_string()),
             Game {
@@ -121,13 +120,13 @@ impl GameSetup {
 
         game.send_interval(TICK_INTERVAL, || GameMsg::Tick);
 
-        log::info!("game created.");
+        log::info!("Game created.");
 
-        log::info!("loading options...");
+        log::info!("Loading options...");
         let options = Options::load()?;
-        log::info!("loaded options.");
+        log::info!("Loaded options.");
 
-        log::info!("loading completed!");
+        log::info!("Loading completed!");
 
         // --- last setup ---
         let frame = gui::default_frame();

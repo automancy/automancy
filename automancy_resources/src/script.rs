@@ -39,7 +39,7 @@ pub struct InstructionsJson {
 
 impl ResourceManager {
     fn load_script(&mut self, file: &Path) -> anyhow::Result<()> {
-        log::info!("loading script at: {file:?}");
+        log::info!("Loading script at: {file:?}");
 
         let script: ScriptJson = serde_json::from_str(&read_to_string(file)?)?;
 

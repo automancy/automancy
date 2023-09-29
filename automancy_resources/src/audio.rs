@@ -20,7 +20,7 @@ impl ResourceManager {
                 .map(|v| v.path())
                 .filter(|v| v.extension() == Some(OsStr::new(AUDIO_EXT)))
             {
-                log::info!("loading audio at {file:?}");
+                log::info!("Loading audio at {file:?}");
 
                 if let Ok(audio) = StaticSoundData::from_file(
                     &file,
@@ -39,7 +39,7 @@ impl ResourceManager {
 
                     self.audio.insert(name.to_shared_str(), audio);
 
-                    log::info!("registered audio with name {name}");
+                    log::info!("Registered audio with name {name}");
                 }
             }
         }

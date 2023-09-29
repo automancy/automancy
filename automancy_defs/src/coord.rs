@@ -192,6 +192,43 @@ impl ChunkCoord {
     }
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub struct TileRange {
+    start: TileCoord,
+    end: TileCoord,
+}
+
+impl TileRange {
+    pub fn start(&self) -> TileCoord {
+        self.start
+    }
+
+    pub fn end(&self) -> TileCoord {
+        self.end
+    }
+
+    pub fn extend(self, n: TileUnit) -> Self {
+        let n = TileCoord::new(n.abs(), n.abs());
+
+        Self {
+            start: self.start - n,
+            end: self.end + n,
+        }
+    }
+
+    pub fn new(a: TileCoord, b: TileCoord) -> Self {
+        Self {
+            start: TileCoord::new(a.q().min(b.q()), a.r().min(b.r())),
+            end: TileCoord::new(a.q().max(b.q()), a.r().max(b.r())),
+        }
+    }
+
+    pub fn contains(&self, coord: TileCoord) -> bool {
+        (self.start.q()..=self.end.q()).contains(&coord.q())
+            && (self.start.r()..=self.end.r()).contains(&coord.r())
+    }
+}
+
 impl ChunkCoord {
     pub fn iter(&self) -> impl Iterator<Item = TileCoord> {
         let center: TileCoord = (*self).into();

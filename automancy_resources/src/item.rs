@@ -20,7 +20,7 @@ struct ItemJson {
 
 impl ResourceManager {
     fn load_item(&mut self, file: &Path) -> anyhow::Result<()> {
-        log::info!("loading item at: {file:?}");
+        log::info!("Loading item at: {file:?}");
 
         let item: ItemJson = serde_json::from_str(&read_to_string(file)?)?;
 

@@ -7,9 +7,9 @@ use cgmath::{point2, point3, vec2, Angle, BaseFloat, EuclideanSpace};
 use hexagon_tiles::fractional::FractionalHex;
 use hexagon_tiles::layout::{Layout, LAYOUT_ORIENTATION_POINTY};
 use hexagon_tiles::point::Point;
-use hexagon_tiles::traits::{HexMath, HexRound};
+use hexagon_tiles::traits::HexRound;
 
-use crate::coord::{TileCoord, TileHex, TileUnit};
+use crate::coord::{TileCoord, TileHex, TileRange};
 
 const HEX_GRID_LAYOUT: Layout = Layout {
     orientation: LAYOUT_ORIENTATION_POINTY,
@@ -147,8 +147,7 @@ pub fn main_pos_to_hex(
     camera_pos: DPoint3,
     main_pos: DPoint2,
 ) -> FractionalHex<Double> {
-    let p = screen_to_world((width, height), main_pos, camera_pos.z);
-    let p = p + camera_pos.to_vec();
+    let p = screen_to_world((width, height), main_pos, camera_pos);
 
     pixel_to_hex(point2(p.x, p.y))
 }
@@ -162,31 +161,38 @@ pub fn screen_to_normalized((width, height): (Double, Double), c: DPoint2) -> DP
     let c = c.zip(size, Sub::sub);
     let c = c.zip(size, Div::div);
 
-    point3(c.x, c.y, 0.1)
+    point3(c.x, c.y, 0.0)
 }
 
 /// Converts screen coordinates to world coordinates.
 #[inline]
-pub fn screen_to_world((width, height): (Double, Double), c: DPoint2, camera_z: Double) -> DPoint3 {
-    let c = screen_to_normalized((width, height), c);
+pub fn screen_to_world(
+    (width, height): (Double, Double),
+    pos: DPoint2,
+    camera_pos: DPoint3,
+) -> DPoint3 {
+    let pos = screen_to_normalized((width, height), pos);
 
-    normalized_to_world((width, height), point2(c.x, c.y), camera_z)
+    normalized_to_world((width, height), point2(pos.x, pos.y), camera_pos)
 }
 
 /// Converts normalized screen coordinates to world coordinates.
 #[inline]
-pub fn normalized_to_world((width, height): (Double, Double), p: DPoint2, z: Double) -> DPoint3 {
+pub fn normalized_to_world(
+    (width, height): (Double, Double),
+    pos: DPoint2,
+    camera_pos: DPoint3,
+) -> DPoint3 {
     let aspect = width / height;
+    let aspect_squared = aspect * aspect;
 
-    let matrix = matrix(point3(0.0, 0.0, z), aspect, PI);
+    let matrix = matrix(point3(0.0, 0.0, camera_pos.z), aspect, PI);
 
-    let p = p.to_vec();
-    let p = matrix * p.extend(FAR).extend(1.0);
-    let p = p.truncate() * p.w;
+    let pos = pos.to_vec();
+    let pos = matrix * pos.extend(FAR).extend(1.0);
+    let pos = pos.truncate() * pos.w;
 
-    let aspect_squared = aspect.powi(2);
-
-    point3(p.x * aspect_squared, p.y, p.z)
+    point3(pos.x * aspect_squared, pos.y, pos.z) + camera_pos.to_vec()
 }
 
 /// Converts hex coordinates to normalized screen coordinates.
@@ -209,32 +215,15 @@ pub fn hex_to_normalized(
     point3(p.x, p.y, p.z)
 }
 
-#[inline]
-pub fn is_in_culling_range(
-    center: TileCoord,
-    other: TileCoord,
-    culling_range: (TileUnit, TileUnit),
-) -> bool {
-    let d = center.distance(*other);
-
-    d < culling_range.0 && d < culling_range.1
-}
-
 /// Gets the culling range from the camera's position
-pub fn get_culling_range((width, height): (Double, Double), z: Double) -> (TileUnit, TileUnit) {
-    let a = normalized_to_world((width, height), point2(-1.0, -1.0), z);
-    let b = normalized_to_world((width, height), point2(1.0, 1.0), z);
+pub fn get_culling_range((width, height): (Double, Double), camera_pos: DPoint3) -> TileRange {
+    let a = normalized_to_world((width, height), point2(-1.0, -1.0), camera_pos);
+    let b = normalized_to_world((width, height), point2(1.0, 1.0), camera_pos);
 
-    let a = pixel_to_hex(point2(a.x, a.y));
-    let b = pixel_to_hex(point2(b.x, b.y));
+    let a = pixel_to_hex(point2(a.x, a.y)).round().into();
+    let b = pixel_to_hex(point2(b.x, b.y)).round().into();
 
-    let a = a + FractionalHex::new(2.0, -2.0);
-    let b = b + FractionalHex::new(-2.0, 2.0);
-
-    let o = b - a;
-    let o: TileHex = o.round();
-
-    (o.q().abs(), o.r().abs())
+    TileRange::new(a, b).extend(4)
 }
 
 pub fn direction_to_angle(d: DVector2) -> Rad {

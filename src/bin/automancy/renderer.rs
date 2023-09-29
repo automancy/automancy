@@ -27,7 +27,7 @@ use automancy_defs::coord::TileCoord;
 use automancy_defs::gui::Gui;
 use automancy_defs::hashbrown::HashMap;
 use automancy_defs::id::Id;
-use automancy_defs::math::{deg, direction_to_angle, is_in_culling_range, Float, Matrix4, FAR};
+use automancy_defs::math::{deg, direction_to_angle, Float, Matrix4, FAR};
 use automancy_defs::rendering::{
     lerp_coords_to_pixel, make_line, GameUBO, InstanceData, PostEffectsUBO,
 };
@@ -83,23 +83,13 @@ impl Renderer {
             return Ok(());
         }
 
-        if let Some(size) = self.gpu.take_new_size() {
-            if size.width == 0 || size.height == 0 {
-                return Ok(());
-            }
-
-            self.gpu.create_textures(size);
-        }
-
         let culling_range = setup.camera.culling_range;
-        let camera_coord = setup.camera.get_tile_coord();
         let camera_pos = setup.camera.get_pos();
         let camera_pos_float = camera_pos.cast::<Float>().unwrap();
 
         let map_render_info = block_on(setup.game.call(
             |reply| GameMsg::RenderInfoRequest {
                 culling_range,
-                center: camera_coord,
                 reply,
             },
             None,
@@ -160,9 +150,7 @@ impl Renderer {
         let now = Instant::now();
 
         for ((source_coord, coord), instants) in transaction_records.iter() {
-            if is_in_culling_range(camera_coord, *source_coord, culling_range)
-                && is_in_culling_range(camera_coord, *coord, culling_range)
-            {
+            if culling_range.contains(*source_coord) && culling_range.contains(*coord) {
                 for (instant, TransactionRecord { stack, .. }) in instants {
                     let duration = now.duration_since(*instant);
                     let t = duration.as_secs_f64() / TRANSACTION_ANIMATION_SPEED.as_secs_f64();
@@ -190,7 +178,7 @@ impl Renderer {
             }
         }
 
-        let mut instances = {
+        let mut game_instances = {
             let none = setup
                 .resource_man
                 .registry
@@ -198,14 +186,8 @@ impl Renderer {
                 .unwrap()
                 .models[0];
 
-            let q0 = camera_coord.q() - culling_range.0 / 2;
-            let q1 = camera_coord.q() + culling_range.0 / 2;
-
-            let r0 = camera_coord.r() - culling_range.1 / 2;
-            let r1 = camera_coord.r() + culling_range.1 / 2;
-
-            for q in q0..q1 {
-                for r in r0..r1 {
+            for q in culling_range.start().q()..=culling_range.end().q() {
+                for r in culling_range.start().r()..=culling_range.end().r() {
                     let coord = TileCoord::new(q, r);
 
                     if !instances.contains_key(&coord) {
@@ -254,7 +236,7 @@ impl Renderer {
             .into_iter()
             .map(|(instance, id)| (instance, id, ()))
             .collect::<Vec<_>>();
-        instances.append(&mut extra_instances);
+        game_instances.append(&mut extra_instances);
 
         overlay_instances.sort_by_key(|v| v.1);
         let overlay_instances = overlay_instances
@@ -275,7 +257,7 @@ impl Renderer {
             setup,
             gui,
             matrix,
-            &instances,
+            &game_instances,
             &overlay_instances,
             &in_world_item_instances,
             &gui_instances,
@@ -288,13 +270,37 @@ impl Renderer {
         setup: &GameSetup,
         gui: &mut Gui,
         matrix: Matrix4,
-        instances: &[(InstanceData, Id, ())],
+        game_instances: &[(InstanceData, Id, ())],
         overlay_instances: &[(InstanceData, Id, ())],
         in_world_item_instances: &[(InstanceData, Id, ())],
         gui_instances: &GuiInstances,
         item_instances: &GuiInstances,
     ) -> Result<(), SurfaceError> {
         let size = self.gpu.window.inner_size();
+        let factor = gui.context.pixels_per_point();
+
+        let (game_instances, game_draws, game_draw_count) =
+            gpu::indirect_instance(&setup.resource_man, game_instances, true);
+
+        let (in_world_item_instances, in_world_item_draws, in_world_item_draw_count) =
+            gpu::indirect_instance(&setup.resource_man, in_world_item_instances, true);
+
+        let egui_out = gui.context.end_frame();
+        let egui_primitives = gui.context.tessellate(egui_out.shapes);
+        let egui_desc = ScreenDescriptor {
+            size_in_pixels: [size.width, size.height],
+            pixels_per_point: factor,
+        };
+
+        let (gui_instances, gui_draws, gui_draw_count) =
+            gpu::indirect_instance(&setup.resource_man, gui_instances, false);
+
+        let (item_instances, item_draws, item_draw_count) =
+            gpu::indirect_instance(&setup.resource_man, item_instances, false);
+
+        let (overlay_instances, overlay_draws, overlay_draw_count) =
+            gpu::indirect_instance(&setup.resource_man, overlay_instances, true);
+
         let output = self.gpu.surface.get_current_texture()?;
 
         {
@@ -305,8 +311,6 @@ impl Renderer {
             }
         }
 
-        let factor = gui.context.pixels_per_point();
-
         let mut encoder = self
             .gpu
             .device
@@ -315,17 +319,14 @@ impl Renderer {
             });
 
         {
-            let (raw_instances, indirect_commands, draw_count) =
-                gpu::indirect_instance(&setup.resource_man, instances, true);
-
             gpu::create_or_write_buffer(
                 &self.gpu.device,
                 &self.gpu.queue,
                 &mut self.gpu.game_resources.instance_buffer,
-                bytemuck::cast_slice(raw_instances.as_slice()),
+                bytemuck::cast_slice(game_instances.as_slice()),
             );
             let mut indirect_buffer = vec![];
-            indirect_commands
+            game_draws
                 .into_iter()
                 .flat_map(|v| v.1)
                 .for_each(|v| indirect_buffer.extend_from_slice(v.0.as_bytes()));
@@ -366,7 +367,7 @@ impl Renderer {
                 }),
             });
 
-            if draw_count > 0 {
+            if game_draw_count > 0 {
                 self.gpu.queue.write_buffer(
                     &self.gpu.game_resources.uniform_buffer,
                     0,
@@ -390,7 +391,7 @@ impl Renderer {
                 game_pass.multi_draw_indexed_indirect(
                     &self.gpu.game_resources.indirect_buffer,
                     0,
-                    draw_count,
+                    game_draw_count,
                 );
             }
         }
@@ -425,17 +426,14 @@ impl Renderer {
         }
 
         {
-            let (raw_instances, indirect_commands, draw_count) =
-                gpu::indirect_instance(&setup.resource_man, in_world_item_instances, true);
-
             gpu::create_or_write_buffer(
                 &self.gpu.device,
                 &self.gpu.queue,
                 &mut self.gpu.in_world_item_resources.instance_buffer,
-                bytemuck::cast_slice(raw_instances.as_slice()),
+                bytemuck::cast_slice(in_world_item_instances.as_slice()),
             );
             let mut indirect_buffer = vec![];
-            indirect_commands
+            in_world_item_draws
                 .into_iter()
                 .flat_map(|v| v.1)
                 .for_each(|v| indirect_buffer.extend_from_slice(v.0.as_bytes()));
@@ -476,7 +474,7 @@ impl Renderer {
                 }),
             });
 
-            if draw_count > 0 {
+            if in_world_item_draw_count > 0 {
                 self.gpu.queue.write_buffer(
                     &self.gpu.in_world_item_resources.uniform_buffer,
                     0,
@@ -504,7 +502,7 @@ impl Renderer {
                 in_world_item_pass.multi_draw_indexed_indirect(
                     &self.gpu.in_world_item_resources.indirect_buffer,
                     0,
-                    draw_count,
+                    in_world_item_draw_count,
                 );
             }
         }
@@ -529,13 +527,6 @@ impl Renderer {
         }
 
         let user_commands = {
-            let egui_out = gui.context.end_frame();
-            let egui_primitives = gui.context.tessellate(egui_out.shapes);
-            let egui_desc = ScreenDescriptor {
-                size_in_pixels: [size.width, size.height],
-                pixels_per_point: factor,
-            };
-
             let user_commands = {
                 for (id, delta) in egui_out.textures_delta.set {
                     gui.renderer
@@ -596,13 +587,11 @@ impl Renderer {
         }
 
         {
-            let (raw_instances, draws, count) =
-                gpu::indirect_instance(&setup.resource_man, gui_instances, false);
             gpu::create_or_write_buffer(
                 &self.gpu.device,
                 &self.gpu.queue,
                 &mut self.gpu.gui_resources.instance_buffer,
-                bytemuck::cast_slice(raw_instances.as_slice()),
+                bytemuck::cast_slice(gui_instances.as_slice()),
             );
 
             let mut gui_pass = encoder.begin_render_pass(&RenderPassDescriptor {
@@ -635,7 +624,7 @@ impl Renderer {
                 }),
             });
 
-            if count > 0 {
+            if gui_draw_count > 0 {
                 self.gpu.queue.write_buffer(
                     &self.gpu.gui_resources.uniform_buffer,
                     0,
@@ -652,7 +641,7 @@ impl Renderer {
                 gui_pass.set_vertex_buffer(1, self.gpu.gui_resources.instance_buffer.slice(..));
                 gui_pass.set_index_buffer(self.gpu.index_buffer.slice(..), IndexFormat::Uint16);
 
-                for (draw, (viewport, scissor)) in draws.values().flatten() {
+                for (draw, (viewport, scissor)) in gui_draws.values().flatten() {
                     if let Some(viewport) = viewport {
                         gui_pass.set_viewport(
                             viewport.left() * factor * UPSCALE_LEVEL as Float,
@@ -699,17 +688,14 @@ impl Renderer {
         }
 
         {
-            let (raw_instances, indirect_commands, draw_count) =
-                gpu::indirect_instance(&setup.resource_man, overlay_instances, true);
-
             gpu::create_or_write_buffer(
                 &self.gpu.device,
                 &self.gpu.queue,
                 &mut self.gpu.overlay_resources.instance_buffer,
-                bytemuck::cast_slice(raw_instances.as_slice()),
+                bytemuck::cast_slice(overlay_instances.as_slice()),
             );
             let mut indirect_buffer = vec![];
-            indirect_commands
+            overlay_draws
                 .into_iter()
                 .flat_map(|v| v.1)
                 .for_each(|v| indirect_buffer.extend_from_slice(v.0.as_bytes()));
@@ -750,7 +736,7 @@ impl Renderer {
                 }),
             });
 
-            if draw_count > 0 {
+            if overlay_draw_count > 0 {
                 self.gpu.queue.write_buffer(
                     &self.gpu.overlay_resources.uniform_buffer,
                     0,
@@ -774,7 +760,7 @@ impl Renderer {
                 overlay.multi_draw_indexed_indirect(
                     &self.gpu.overlay_resources.indirect_buffer,
                     0,
-                    draw_count,
+                    overlay_draw_count,
                 );
             }
         }
@@ -809,13 +795,11 @@ impl Renderer {
         }
 
         {
-            let (raw_instances, draws, count) =
-                gpu::indirect_instance(&setup.resource_man, item_instances, false);
             gpu::create_or_write_buffer(
                 &self.gpu.device,
                 &self.gpu.queue,
                 &mut self.gpu.item_resources.instance_buffer,
-                bytemuck::cast_slice(raw_instances.as_slice()),
+                bytemuck::cast_slice(item_instances.as_slice()),
             );
 
             let mut item_pass = encoder.begin_render_pass(&RenderPassDescriptor {
@@ -848,7 +832,7 @@ impl Renderer {
                 }),
             });
 
-            if count > 0 {
+            if item_draw_count > 0 {
                 self.gpu.queue.write_buffer(
                     &self.gpu.item_resources.uniform_buffer,
                     0,
@@ -861,7 +845,7 @@ impl Renderer {
                 item_pass.set_vertex_buffer(1, self.gpu.item_resources.instance_buffer.slice(..));
                 item_pass.set_index_buffer(self.gpu.index_buffer.slice(..), IndexFormat::Uint16);
 
-                for (draw, (viewport, scissor)) in draws.values().flatten() {
+                for (draw, (viewport, scissor)) in item_draws.values().flatten() {
                     if let Some(viewport) = viewport {
                         item_pass.set_viewport(
                             viewport.left() * factor * UPSCALE_LEVEL as Float,
@@ -945,15 +929,13 @@ impl Renderer {
             combine_pass.draw(0..3, 0..1)
         }
 
-        let view = output.texture.as_image_copy();
-
         encoder.copy_texture_to_texture(
             self.gpu
                 .second_combine_resources
                 .texture()
                 .0
                 .as_image_copy(),
-            view,
+            output.texture.as_image_copy(),
             output.texture.size(),
         );
 

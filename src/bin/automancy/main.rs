@@ -139,7 +139,7 @@ fn main() -> eyre::Result<()> {
         .with_window_icon(Some(get_icon()))
         .with_min_inner_size(PhysicalSize::new(200, 200))
         .build(&event_loop)
-        .expect("Failed to open window!");
+        .expect("failed to open window!");
 
     let camera = Camera::new(window::window_size_double(&window));
 
@@ -151,7 +151,7 @@ fn main() -> eyre::Result<()> {
         .expect("Critical failure in game setup!");
 
     // --- render ---
-    log::info!("setting up rendering...");
+    log::info!("Setting up rendering...");
     let gpu = block_on(Gpu::new(
         window,
         &setup.resource_man,
@@ -159,15 +159,15 @@ fn main() -> eyre::Result<()> {
         indices,
         setup.options.graphics.fps_limit == 0.0,
     ));
-    log::info!("render setup.");
+    log::info!("Render setup.");
 
     // --- gui ---
-    log::info!("setting up gui...");
+    log::info!("Setting up gui...");
     let mut gui = init_gui(
         egui_wgpu::Renderer::new(&gpu.device, gpu.config.format, None, 1),
         &gpu.window,
     );
-    log::info!("gui set up.");
+    log::info!("Gui set up.");
 
     let mut renderer = Renderer::new(gpu);
 

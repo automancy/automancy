@@ -4,7 +4,7 @@ use egui::NumExt;
 use num::Zero;
 
 use automancy_defs::cgmath::{point2, point3, vec2};
-use automancy_defs::coord::{TileCoord, TileUnit};
+use automancy_defs::coord::{TileCoord, TileRange};
 use automancy_defs::hexagon_tiles::traits::HexRound;
 use automancy_defs::math;
 use automancy_defs::math::{DPoint2, DPoint3, DVector2, Double};
@@ -17,8 +17,24 @@ pub struct Camera {
     move_vel: DVector2,
     scroll_vel: Double,
 
-    pub culling_range: (TileUnit, TileUnit),
+    pub culling_range: TileRange,
     pub pointing_at: TileCoord,
+}
+
+fn fit_z(mut z: Double) -> Double {
+    if z > 2.0 {
+        if z <= 3.5 {
+            z = 2.0
+        } else {
+            z -= 1.5
+        }
+    }
+
+    7.5 + z.powi(2) * 1.5
+}
+
+fn fit_pos(DPoint3 { x, y, z }: DPoint3) -> DPoint3 {
+    point3(x, y, fit_z(z))
 }
 
 impl Camera {
@@ -30,28 +46,14 @@ impl Camera {
             move_vel: vec2(0.0, 0.0),
             scroll_vel: 0.0,
 
-            culling_range: math::get_culling_range((width, height), Self::get_z(pos.z)),
+            culling_range: math::get_culling_range((width, height), fit_pos(pos)),
             pointing_at: TileCoord::new(0, 0),
         }
     }
 
-    pub fn get_z(mut z: Double) -> Double {
-        if z > 2.0 {
-            if z <= 3.5 {
-                z = 2.0
-            } else {
-                z -= 1.5
-            }
-        }
-
-        7.5 + z.powi(2) * 1.5
-    }
-
     /// Returns the position of the camera.
     pub fn get_pos(&self) -> DPoint3 {
-        let DPoint3 { x, y, z } = self.pos;
-
-        point3(x, y, Self::get_z(z))
+        fit_pos(self.pos)
     }
 }
 
@@ -101,7 +103,7 @@ impl Camera {
             self.scroll_vel -= self.scroll_vel * elapsed.mul(15.0).at_most(0.9);
         }
 
-        self.culling_range = math::get_culling_range((width, height), self.get_pos().z);
+        self.culling_range = math::get_culling_range((width, height), self.get_pos());
     }
 
     /// Called when the camera is scrolled.

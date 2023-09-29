@@ -45,7 +45,7 @@ impl ResourceManager {
     }
 
     fn load_model(&mut self, file: &Path) -> anyhow::Result<()> {
-        log::info!("loading model at: {file:?}");
+        log::info!("Loading model at: {file:?}");
 
         let model: ModelJson = serde_json::from_str(&read_to_string(file)?)?;
 
@@ -55,7 +55,7 @@ impl ResourceManager {
             .join("files")
             .join(model.file.as_str());
 
-        log::info!("loading model file at: {file:?}");
+        log::info!("Loading model file at: {file:?}");
 
         let (document, buffers, _images) = gltf::import(file)?;
 
