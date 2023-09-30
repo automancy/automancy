@@ -2,6 +2,7 @@ use std::mem::size_of;
 
 use bytemuck::{Pod, Zeroable};
 use cgmath::{point3, vec3, EuclideanSpace, Matrix, MetricSpace, SquareMatrix};
+use egui::NumExt;
 use gltf::animation::Interpolation;
 use hexagon_tiles::fractional::FractionalHex;
 use hexagon_tiles::traits::HexRound;
@@ -29,7 +30,7 @@ pub fn make_line(a: DPoint2, b: DPoint2) -> Matrix4 {
 
     Matrix4::from_translation(vec3(mid.x as Float, mid.y as Float, 0.1))
         * Matrix4::from_angle_z(theta)
-        * Matrix4::from_nonuniform_scale(d, 0.1, 0.001)
+        * Matrix4::from_nonuniform_scale(d.at_least(0.001), 0.1, 0.05)
 }
 
 // vertex
@@ -143,7 +144,10 @@ impl InstanceData {
 }
 
 fn invert_transpose(matrix: Matrix4) -> Matrix4 {
-    matrix.invert().unwrap().transpose()
+    matrix
+        .invert()
+        .map(|m| m.transpose())
+        .unwrap_or(Matrix4::identity())
 }
 
 fn mat4_to_3(matrix: Matrix4) -> Matrix3 {

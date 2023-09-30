@@ -329,18 +329,20 @@ fn render(
             if let Some(start) = loop_store.initial_cursor_position {
                 let direction = setup.camera.pointing_at - start;
 
-                extra_instances.push((
-                    InstanceData {
-                        color_offset: colors::LIGHT_BLUE.to_array(),
-                        light_pos: camera_pos_float,
-                        model_matrix: make_line(
-                            math::hex_to_pixel(*start),
-                            math::hex_to_pixel(*setup.camera.pointing_at),
-                        ),
-                        ..Default::default()
-                    },
-                    setup.resource_man.registry.model_ids.cube1x1,
-                ));
+                if start != setup.camera.pointing_at {
+                    extra_instances.push((
+                        InstanceData {
+                            color_offset: colors::LIGHT_BLUE.to_array(),
+                            light_pos: camera_pos_float,
+                            model_matrix: make_line(
+                                math::hex_to_pixel(*start),
+                                math::hex_to_pixel(*setup.camera.pointing_at),
+                            ),
+                            ..Default::default()
+                        },
+                        setup.resource_man.registry.model_ids.cube1x1,
+                    ));
+                }
 
                 for selected in &loop_store.selected_tiles {
                     let dest = *selected + direction;
