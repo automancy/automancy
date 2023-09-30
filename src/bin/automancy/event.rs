@@ -633,5 +633,5 @@ pub fn on_event(
         }
     }
 
-    return Ok(false);
+    Ok(false)
 }

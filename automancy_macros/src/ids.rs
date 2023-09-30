@@ -84,7 +84,7 @@ pub fn derive_id_reg(item: TokenStream) -> TokenStream {
 
     let items = namespaces
         .into_iter()
-        .zip(names.into_iter())
+        .zip(names)
         .map(|((field, namespace), name)| e(&field, &namespace, &name))
         .collect::<Vec<_>>()
         .join("\n");
