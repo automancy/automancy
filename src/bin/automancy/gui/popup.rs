@@ -8,7 +8,7 @@ use automancy_defs::gui::Gui;
 use automancy_defs::log;
 
 use crate::event::EventLoopStorage;
-use crate::gui::{default_frame, GuiState, PopupState};
+use crate::gui::{default_frame, PopupState, Screen};
 use crate::setup::GameSetup;
 
 pub fn invalid_name_popup(setup: &GameSetup, gui: &mut Gui, loop_store: &mut EventLoopStorage) {
@@ -34,7 +34,7 @@ pub fn invalid_name_popup(setup: &GameSetup, gui: &mut Gui, loop_store: &mut Eve
             )
             .clicked()
         {
-            loop_store.popup_state = PopupState::None;
+            loop_store.gui_state.popup = PopupState::None;
         }
     });
 }
@@ -70,7 +70,7 @@ pub fn map_delete_popup(
         {
             fs::remove_dir_all(Map::path(map_name)).unwrap();
             dirty = true;
-            loop_store.popup_state = PopupState::None;
+            loop_store.gui_state.popup = PopupState::None;
             log::info!("Deleted map {map_name}!");
         }
         if ui
@@ -80,7 +80,7 @@ pub fn map_delete_popup(
             )
             .clicked()
         {
-            loop_store.popup_state = PopupState::None
+            loop_store.gui_state.popup = PopupState::None
         }
     });
 
@@ -117,8 +117,8 @@ pub fn map_create_popup(setup: &GameSetup, gui: &mut Gui, loop_store: &mut Event
                 .send_message(GameMsg::LoadMap(setup.resource_man.clone(), name))
                 .unwrap();
             loop_store.map_name_input.clear();
-            loop_store.popup_state = PopupState::None;
-            loop_store.switch_gui_state(GuiState::Ingame);
+            loop_store.gui_state.popup = PopupState::None;
+            loop_store.gui_state.switch_screen(Screen::Ingame);
         }
         if ui
             .button(
@@ -127,7 +127,7 @@ pub fn map_create_popup(setup: &GameSetup, gui: &mut Gui, loop_store: &mut Event
             )
             .clicked()
         {
-            loop_store.popup_state = PopupState::None
+            loop_store.gui_state.popup = PopupState::None
         }
     });
 }

@@ -1,10 +1,9 @@
-use egui::epaint::Shadow;
-use egui::{Frame, Margin, Rounding, ScrollArea, Ui};
-use fuse_rust::Fuse;
-
 use automancy_defs::colors;
 use automancy_defs::id::Id;
 use automancy_resources::ResourceManager;
+use egui::epaint::Shadow;
+use egui::{Frame, Margin, Rounding, ScrollArea, Ui};
+use fuse_rust::Fuse;
 
 pub mod debug;
 pub mod error;
@@ -16,15 +15,35 @@ pub mod popup;
 pub mod tile_config;
 pub mod tile_selection;
 
+#[derive(Eq, PartialEq, Clone)]
+pub struct GuiState {
+    pub screen: Screen,
+    pub substate: SubState,
+    pub popup: PopupState,
+    pub show_debugger: bool,
+    pub previous: Option<Screen>,
+}
 /// The state of the main game GUI.
 #[derive(Eq, PartialEq, Copy, Clone)]
-pub enum GuiState {
+pub enum Screen {
     MainMenu,
     MapLoad,
     Options,
     Ingame,
     Paused,
     Research,
+}
+#[derive(Eq, PartialEq, Copy, Clone)]
+pub enum SubState {
+    None,
+    Options(OptionsMenuState),
+}
+#[derive(Eq, PartialEq, Copy, Clone)]
+pub enum OptionsMenuState {
+    Graphics,
+    Audio,
+    Gui,
+    Controls,
 }
 
 /// The state of popups (which are on top of the main GUI), if any should be displayed.
@@ -47,7 +66,35 @@ pub fn default_frame() -> Frame {
         .rounding(Rounding::same(5.0))
         .inner_margin(Margin::same(10.0))
 }
+impl GuiState {
+    pub fn return_screen(&mut self) {
+        if let Some(prev) = self.previous {
+            self.screen = prev;
+        }
+        self.previous = None;
+    }
+    pub fn switch_screen(&mut self, new: Screen) {
+        self.previous = Some(self.screen);
+        self.screen = new;
+    }
+    pub fn switch_screen_sub(&mut self, new: Screen, sub: SubState) {
+        self.switch_screen(new);
+        self.substate = sub;
+    }
+    pub fn switch_screen_when(
+        &mut self,
+        when: &'static dyn Fn(GuiState) -> bool,
+        new: Screen,
+    ) -> bool {
+        if when(self.clone()) {
+            self.switch_screen(new);
 
+            true
+        } else {
+            false
+        }
+    }
+}
 /// Draws a search bar.
 pub fn searchable_id<'a>(
     ui: &mut Ui,

@@ -11,7 +11,7 @@ use automancy_resources::data::Data;
 
 use crate::event::EventLoopStorage;
 use crate::gui::item::{draw_item, paint_item, MEDIUM_ITEM_ICON_SIZE};
-use crate::gui::{default_frame, GuiState};
+use crate::gui::{default_frame, Screen};
 use crate::renderer::GuiInstances;
 use crate::setup::GameSetup;
 
@@ -122,7 +122,7 @@ pub fn player(
             )
             .clicked()
         {
-            loop_store.switch_gui_state(GuiState::Research);
+            loop_store.gui_state.switch_screen(Screen::Research);
         }
     });
 }

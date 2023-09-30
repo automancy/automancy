@@ -30,6 +30,7 @@ use automancy_resources::data::Data;
 
 use crate::gui::{
     debug, error, info, menu, player, popup, tile_config, tile_selection, GuiState, PopupState,
+    Screen, SubState,
 };
 use crate::renderer::Renderer;
 use crate::setup::GameSetup;
@@ -70,10 +71,7 @@ pub struct EventLoopStorage {
 
     pub take_item_animations: HashMap<Item, VecDeque<(Instant, Rect)>>,
 
-    prev_gui_state: Option<GuiState>,
-    gui_state: GuiState,
-    pub popup_state: PopupState,
-    pub show_debugger: bool,
+    pub gui_state: GuiState,
 }
 
 impl Default for EventLoopStorage {
@@ -96,41 +94,18 @@ impl Default for EventLoopStorage {
             initial_cursor_position: None,
             take_item_animations: Default::default(),
 
-            prev_gui_state: None,
-            gui_state: GuiState::MainMenu,
-            popup_state: PopupState::None,
-            show_debugger: false,
+            gui_state: GuiState {
+                screen: Screen::MainMenu,
+                substate: SubState::None,
+                popup: PopupState::None,
+                show_debugger: false,
+                previous: None,
+            },
         }
     }
 }
 
-impl EventLoopStorage {
-    pub fn return_gui_state(&mut self) {
-        if let Some(prev) = self.prev_gui_state {
-            self.gui_state = prev;
-        }
-        self.prev_gui_state = None;
-    }
-
-    pub fn switch_gui_state(&mut self, new: GuiState) {
-        self.prev_gui_state = Some(self.gui_state);
-        self.gui_state = new;
-    }
-
-    pub fn switch_gui_state_when(
-        &mut self,
-        when: &'static dyn Fn(GuiState) -> bool,
-        new: GuiState,
-    ) -> bool {
-        if when(self.gui_state) {
-            self.switch_gui_state(new);
-
-            true
-        } else {
-            false
-        }
-    }
-}
+impl EventLoopStorage {}
 
 pub fn shutdown_graceful(
     setup: &mut GameSetup,
@@ -204,9 +179,9 @@ fn render(
             gui.context.set_debug_on_hover(false);
         }
 
-        if loop_store.popup_state == PopupState::None {
-            match loop_store.gui_state {
-                GuiState::Ingame => {
+        if loop_store.gui_state.popup == PopupState::None {
+            match loop_store.gui_state.screen {
+                Screen::Ingame => {
                     if !setup.input_handler.key_active(KeyActions::HideGui) {
                         if setup.input_handler.key_active(KeyActions::Player) {
                             player::player(setup, loop_store, &mut item_instances, &gui.context);
@@ -293,23 +268,23 @@ fn render(
                         }
                     }
                 }
-                GuiState::MainMenu => {
+                Screen::MainMenu => {
                     result = menu::main_menu(setup, &gui.context, control_flow, loop_store)
                 }
-                GuiState::MapLoad => {
+                Screen::MapLoad => {
                     menu::map_menu(setup, &gui.context, loop_store);
                 }
-                GuiState::Options => {
+                Screen::Options => {
                     menu::options_menu(setup, &gui.context, loop_store);
                 }
-                GuiState::Paused => {
+                Screen::Paused => {
                     menu::pause_menu(setup, &gui.context, loop_store);
                 }
-                GuiState::Research => {}
+                Screen::Research => {}
             }
         }
 
-        match loop_store.popup_state.clone() {
+        match loop_store.gui_state.popup.clone() {
             PopupState::None => {}
             PopupState::MapCreate => popup::map_create_popup(setup, gui, loop_store),
             PopupState::MapDeleteConfirmation(map_name) => {
@@ -467,18 +442,23 @@ pub fn on_event(
         if setup.input_handler.key_active(KeyActions::Escape) {
             // one by one
             if loop_store.selected_id.take().is_none() && loop_store.linking_tile.take().is_none() {
-                if loop_store.switch_gui_state_when(&|s| s == GuiState::Ingame, GuiState::Paused) {
+                if loop_store
+                    .gui_state
+                    .switch_screen_when(&|s| s.screen == Screen::Ingame, Screen::Paused)
+                {
                     block_on(setup.game.call(
                         |reply| GameMsg::SaveMap(setup.resource_man.clone(), reply),
                         None,
                     ))?
                     .unwrap();
                 } else {
-                    loop_store.switch_gui_state_when(&|s| s == GuiState::Paused, GuiState::Ingame);
+                    loop_store
+                        .gui_state
+                        .switch_screen_when(&|s| s.screen == Screen::Paused, Screen::Ingame);
                 }
 
-                if loop_store.gui_state == GuiState::Research {
-                    loop_store.return_gui_state();
+                if loop_store.gui_state.screen == Screen::Research {
+                    loop_store.gui_state.return_screen();
                 }
             }
         }
@@ -591,7 +571,7 @@ pub fn on_event(
             }
         }
 
-        if setup.input_handler.control_held && loop_store.gui_state == GuiState::Ingame {
+        if setup.input_handler.control_held && loop_store.gui_state.screen == Screen::Ingame {
             if let Some(start) = loop_store.initial_cursor_position {
                 if setup.input_handler.tertiary_pressed {
                     let direction = setup.camera.pointing_at - start;

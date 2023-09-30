@@ -14,7 +14,7 @@ use automancy_defs::log;
 use automancy_resources::{format, format_time};
 
 use crate::event::{shutdown_graceful, EventLoopStorage};
-use crate::gui::{default_frame, GuiState, PopupState};
+use crate::gui::{default_frame, OptionsMenuState, PopupState, Screen, SubState};
 use crate::setup::GameSetup;
 
 /// Draws the main menu.
@@ -51,7 +51,7 @@ pub fn main_menu(
                         .clicked()
                     {
                         setup.refresh_maps();
-                        loop_store.switch_gui_state(GuiState::MapLoad)
+                        loop_store.gui_state.switch_screen(Screen::MapLoad)
                     };
                     if ui
                         .button(
@@ -64,7 +64,7 @@ pub fn main_menu(
                         )
                         .clicked()
                     {
-                        loop_store.switch_gui_state(GuiState::Options)
+                        loop_store.gui_state.switch_screen(Screen::Options)
                     };
 
                     ui.add(HyperlinkWidget::new(
@@ -135,7 +135,7 @@ pub fn pause_menu(setup: &GameSetup, context: &Context, loop_store: &mut EventLo
                         )
                         .clicked()
                     {
-                        loop_store.switch_gui_state(GuiState::Ingame)
+                        loop_store.gui_state.switch_screen(Screen::Ingame)
                     };
                     if ui
                         .button(
@@ -148,7 +148,7 @@ pub fn pause_menu(setup: &GameSetup, context: &Context, loop_store: &mut EventLo
                         )
                         .clicked()
                     {
-                        loop_store.switch_gui_state(GuiState::Options)
+                        loop_store.gui_state.switch_screen(Screen::Options)
                     };
                     if ui
                         .button(
@@ -173,7 +173,7 @@ pub fn pause_menu(setup: &GameSetup, context: &Context, loop_store: &mut EventLo
                                 MAIN_MENU.to_string(),
                             ))
                             .unwrap();
-                        loop_store.switch_gui_state(GuiState::MainMenu)
+                        loop_store.gui_state.switch_screen(Screen::MainMenu)
                     };
                     ui.label(VERSION)
                 },
@@ -228,7 +228,7 @@ pub fn map_menu(setup: &mut GameSetup, context: &Context, loop_store: &mut Event
 
                                     dirty = true;
                                 } else {
-                                    loop_store.popup_state = PopupState::InvalidName;
+                                    loop_store.gui_state.popup = PopupState::InvalidName;
                                 }
 
                                 loop_store.map_name_renaming = None;
@@ -265,7 +265,7 @@ pub fn map_menu(setup: &mut GameSetup, context: &Context, loop_store: &mut Event
                                     map_name.clone(),
                                 ))
                                 .unwrap();
-                            loop_store.switch_gui_state(GuiState::Ingame);
+                            loop_store.gui_state.switch_screen(Screen::Ingame);
                         }
 
                         if ui
@@ -276,7 +276,7 @@ pub fn map_menu(setup: &mut GameSetup, context: &Context, loop_store: &mut Event
                             )
                             .clicked()
                         {
-                            loop_store.popup_state =
+                            loop_store.gui_state.popup =
                                 PopupState::MapDeleteConfirmation(map_name.clone());
 
                             dirty = true;
@@ -306,7 +306,7 @@ pub fn map_menu(setup: &mut GameSetup, context: &Context, loop_store: &mut Event
                 )
                 .clicked()
             {
-                loop_store.popup_state = PopupState::MapCreate
+                loop_store.gui_state.popup = PopupState::MapCreate
             }
             if ui
                 .button(
@@ -319,7 +319,7 @@ pub fn map_menu(setup: &mut GameSetup, context: &Context, loop_store: &mut Event
                 )
                 .clicked()
             {
-                loop_store.switch_gui_state(GuiState::MainMenu)
+                loop_store.gui_state.switch_screen(Screen::MainMenu)
             }
         });
     });
@@ -336,7 +336,38 @@ pub fn options_menu(setup: &mut GameSetup, context: &Context, loop_store: &mut E
     .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0))
     .frame(default_frame())
     .show(context, |ui| {
-        ui.label("Not yet implemented");
+        ui.horizontal(|ui| {
+            ui.vertical(|ui| {
+                if ui.button(RichText::new("Graphics")).clicked() {
+                    loop_store.gui_state.substate = SubState::Options(OptionsMenuState::Graphics)
+                }
+                if ui.button(RichText::new("Audio")).clicked() {
+                    loop_store.gui_state.substate = SubState::Options(OptionsMenuState::Audio)
+                }
+                if ui.button(RichText::new("GUI")).clicked() {
+                    loop_store.gui_state.substate = SubState::Options(OptionsMenuState::Gui)
+                }
+                if ui.button(RichText::new("Controls")).clicked() {
+                    loop_store.gui_state.substate = SubState::Options(OptionsMenuState::Controls)
+                }
+            });
+            if let SubState::Options(menu) = loop_store.gui_state.substate {
+                match menu {
+                    OptionsMenuState::Graphics => {
+                        ui.label(RichText::new("Graphics"));
+                    }
+                    OptionsMenuState::Audio => {
+                        ui.label(RichText::new("Audio"));
+                    }
+                    OptionsMenuState::Gui => {
+                        ui.label(RichText::new("GUI"));
+                    }
+                    OptionsMenuState::Controls => {
+                        ui.label(RichText::new("Controls"));
+                    }
+                }
+            }
+        });
         if ui
             .button(
                 setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.btn_confirm]
@@ -353,7 +384,7 @@ pub fn options_menu(setup: &mut GameSetup, context: &Context, loop_store: &mut E
                     &setup.resource_man,
                 );
             }
-            loop_store.return_gui_state();
+            loop_store.gui_state.return_screen();
         }
     });
 }
