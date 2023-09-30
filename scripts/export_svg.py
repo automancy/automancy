@@ -2,6 +2,7 @@ import bmesh
 import bpy
 import sys
 import xml.etree.ElementTree as ET
+
 def main():
     src = sys.argv[-2]
     print(src)
