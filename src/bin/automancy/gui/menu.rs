@@ -207,20 +207,17 @@ pub fn map_menu(setup: &mut GameSetup, context: &Context, loop_store: &mut Event
                             if ui
                                 .add(
                                     TextEdit::multiline(
-                                        loop_store
-                                            .gui_state
-                                            .text_field
-                                            .get(&TextField::MapRenaming),
+                                        loop_store.gui_state.text_field.get(TextField::MapRenaming),
                                     )
                                     .desired_rows(1),
                                 )
                                 .lost_focus()
                             {
-                                *loop_store.gui_state.text_field.get(&TextField::MapRenaming) =
+                                *loop_store.gui_state.text_field.get(TextField::MapRenaming) =
                                     loop_store
                                         .gui_state
                                         .text_field
-                                        .get(&TextField::MapRenaming)
+                                        .get(TextField::MapRenaming)
                                         .chars()
                                         .filter(|v| v.is_alphanumeric())
                                         .collect();
@@ -228,20 +225,14 @@ pub fn map_menu(setup: &mut GameSetup, context: &Context, loop_store: &mut Event
                                 if fs::rename(
                                     Map::path(map_name),
                                     Map::path(
-                                        loop_store
-                                            .gui_state
-                                            .text_field
-                                            .get(&TextField::MapRenaming),
+                                        loop_store.gui_state.text_field.get(TextField::MapRenaming),
                                     ),
                                 )
                                 .is_ok()
                                 {
                                     log::info!(
                                         "Renamed map {map_name} to {}",
-                                        loop_store
-                                            .gui_state
-                                            .text_field
-                                            .get(&TextField::MapRenaming)
+                                        loop_store.gui_state.text_field.get(TextField::MapRenaming)
                                     );
 
                                     dirty = true;
@@ -250,13 +241,13 @@ pub fn map_menu(setup: &mut GameSetup, context: &Context, loop_store: &mut Event
                                 }
 
                                 loop_store.gui_state.text_field.map_name_renaming = None;
-                                *loop_store.gui_state.text_field.get(&TextField::MapRenaming) =
+                                *loop_store.gui_state.text_field.get(TextField::MapRenaming) =
                                     "".to_string();
                             }
                         } else if ui.selectable_label(false, map_name.as_str()).clicked() {
                             loop_store.gui_state.text_field.map_name_renaming =
                                 Some(map_name.clone());
-                            *loop_store.gui_state.text_field.get(&TextField::MapRenaming) =
+                            *loop_store.gui_state.text_field.get(TextField::MapRenaming) =
                                 map_name.clone();
                         }
                     });

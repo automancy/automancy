@@ -549,7 +549,7 @@ pub fn on_event(
                 loop_store
                     .gui_state
                     .text_field
-                    .get(&TextField::Filter)
+                    .get(TextField::Filter)
                     .clear();
             } else {
                 loop_store.config_open = Some(setup.camera.pointing_at);

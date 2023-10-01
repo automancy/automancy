@@ -275,6 +275,7 @@ dependencies = [
  "egui",
  "egui-wgpu",
  "egui-winit",
+ "enum-map",
  "enum-ordinalize",
  "env_logger",
  "fuse-rust",
@@ -996,6 +997,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7268b386296a025e474d5140678f75d6de9493ae55a5d709eeb9dd08149945e1"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "enum-map"
+version = "3.0.0-0.gat.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9a8cebad462e0fbefff023f78f8f17866a0cf287221d1b1a23aaa487fa42d610"
+dependencies = [
+ "enum-map-derive",
+]
+
+[[package]]
+name = "enum-map-derive"
+version = "1.0.0-0.gat.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "48c69b3965971f5d0ea6a6dd26b55cdd517ae0e1425dc8d94e482a5915bd7ddf"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.37",
 ]
 
 [[package]]

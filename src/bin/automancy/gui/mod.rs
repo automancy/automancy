@@ -4,7 +4,9 @@ use automancy_defs::id::Id;
 use automancy_resources::ResourceManager;
 use egui::epaint::Shadow;
 use egui::{Frame, Margin, Rounding, ScrollArea, Ui};
+use enum_map::{enum_map, Enum, EnumMap};
 use fuse_rust::Fuse;
+use std::ops::IndexMut;
 
 pub mod debug;
 pub mod error;
@@ -108,7 +110,7 @@ impl GuiState {
         }
     }
 }
-#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Enum, Clone, Copy)]
 pub enum TextField {
     Filter,
     MapRenaming,
@@ -117,24 +119,24 @@ pub enum TextField {
 pub struct TextFieldState {
     pub fuse: Fuse,
     pub map_name_renaming: Option<String>,
-    fields: HashMap<TextField, String>,
+    fields: EnumMap<TextField, String>,
 }
 impl Default for TextFieldState {
     fn default() -> Self {
         TextFieldState {
             fuse: Fuse::default(),
             map_name_renaming: None,
-            fields: HashMap::from([
-                (TextField::Filter, String::new()),
-                (TextField::MapName, String::new()),
-                (TextField::MapRenaming, String::new()),
-            ]),
+            fields: enum_map! {
+                TextField::Filter => String::new(),
+                TextField::MapName => String::new(),
+                TextField::MapRenaming => String::new()
+            },
         }
     }
 }
 impl TextFieldState {
-    pub fn get(&mut self, field: &TextField) -> &mut String {
-        self.fields.get_mut(field).unwrap() // actually, this shouldn't panic
+    pub fn get(&mut self, field: TextField) -> &mut String {
+        &mut self.fields[field]
     }
     /// Draws a search bar.
     pub fn searchable_id<'a>(
@@ -146,13 +148,13 @@ impl TextFieldState {
         field: TextField,
         name: &'static impl Fn(&'a ResourceManager, &Id) -> &'a str,
     ) {
-        ui.text_edit_singleline(self.get(&field));
+        ui.text_edit_singleline(self.get(field));
 
         ScrollArea::vertical().max_height(160.0).show(ui, |ui| {
             ui.set_width(ui.available_width());
 
-            let ids = if !self.get(&field).is_empty() {
-                let text = self.get(&field).clone();
+            let ids = if !self.get(field).is_empty() {
+                let text = self.get(field).clone();
                 let mut filtered = ids
                     .iter()
                     .flat_map(|id| {

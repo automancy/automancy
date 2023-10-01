@@ -97,6 +97,7 @@ color-eyre = "0.6"
 strip-ansi-escapes = "0.2.0"
 
 enum-ordinalize = "3.1.13"
+enum-map = "3.0.0-0.gat.0"
 arraydeque = "0.5.1"
 fuse-rust = "0.3.1"
 arboard = "3.2.0"

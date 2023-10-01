@@ -102,7 +102,7 @@ pub fn map_create_popup(setup: &GameSetup, gui: &mut Gui, loop_store: &mut Event
     .show(&gui.context, |ui| {
         ui.horizontal(|ui| {
             ui.label("Name:"); //TODO add this to translation
-            ui.text_edit_singleline(loop_store.gui_state.text_field.get(&TextField::MapName));
+            ui.text_edit_singleline(loop_store.gui_state.text_field.get(TextField::MapName));
         });
         if ui
             .button(
@@ -115,7 +115,7 @@ pub fn map_create_popup(setup: &GameSetup, gui: &mut Gui, loop_store: &mut Event
                 loop_store
                     .gui_state
                     .text_field
-                    .get(&TextField::MapName)
+                    .get(TextField::MapName)
                     .clone(),
             );
             setup
@@ -125,7 +125,7 @@ pub fn map_create_popup(setup: &GameSetup, gui: &mut Gui, loop_store: &mut Event
             loop_store
                 .gui_state
                 .text_field
-                .get(&TextField::MapName)
+                .get(TextField::MapName)
                 .clear();
             loop_store.gui_state.popup = PopupState::None;
             loop_store.gui_state.switch_screen(Screen::Ingame);
