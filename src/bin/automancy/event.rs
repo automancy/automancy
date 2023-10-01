@@ -195,6 +195,7 @@ fn render(
         gui.context
             .begin_frame(gui.state.take_egui_input(&renderer.gpu.window));
 
+        #[cfg(debug_assertions)]
         if setup.input_handler.key_active(KeyActions::Debug) {
             gui.context.set_debug_on_hover(true);
 
