@@ -115,12 +115,14 @@ pub enum TextField {
     MapName,
 }
 pub struct TextFieldState {
+    pub fuse: Fuse,
     pub map_name_renaming: Option<String>,
     fields: HashMap<TextField, String>,
 }
 impl Default for TextFieldState {
     fn default() -> Self {
         TextFieldState {
+            fuse: Fuse::default(),
             map_name_renaming: None,
             fields: HashMap::from([
                 (TextField::Filter, String::new()),
@@ -132,48 +134,50 @@ impl Default for TextFieldState {
 }
 impl TextFieldState {
     pub fn get(&mut self, field: &TextField) -> &mut String {
-        self.fields.get_mut(field).unwrap() //FIXME this will like definitely panic
+        self.fields.get_mut(field).unwrap() // actually, this shouldn't panic
     }
-}
-/// Draws a search bar.
-pub fn searchable_id<'a>(
-    ui: &mut Ui,
-    resource_man: &'a ResourceManager,
-    fuse: &Fuse,
-    ids: &[Id],
-    new_id: &mut Option<Id>,
-    filter: &mut String,
-    name: &'static impl Fn(&'a ResourceManager, &Id) -> &'a str,
-) {
-    ui.text_edit_singleline(filter);
+    /// Draws a search bar.
+    pub fn searchable_id<'a>(
+        &mut self,
+        ui: &mut Ui,
+        resource_man: &'a ResourceManager,
+        ids: &[Id],
+        new_id: &mut Option<Id>,
+        field: TextField,
+        name: &'static impl Fn(&'a ResourceManager, &Id) -> &'a str,
+    ) {
+        ui.text_edit_singleline(self.get(&field));
 
-    ScrollArea::vertical().max_height(160.0).show(ui, |ui| {
-        ui.set_width(ui.available_width());
+        ScrollArea::vertical().max_height(160.0).show(ui, |ui| {
+            ui.set_width(ui.available_width());
 
-        let ids = if !filter.is_empty() {
-            let mut filtered = ids
-                .iter()
-                .flat_map(|id| {
-                    let result = fuse.search_text_in_string(filter, name(resource_man, id));
-                    let score = result.map(|v| v.score);
+            let ids = if !self.get(&field).is_empty() {
+                let text = self.get(&field).clone();
+                let mut filtered = ids
+                    .iter()
+                    .flat_map(|id| {
+                        let result = self
+                            .fuse
+                            .search_text_in_string(&text, name(resource_man, id));
+                        let score = result.map(|v| v.score);
 
-                    if score.unwrap_or(0.0) > 0.4 {
-                        None
-                    } else {
-                        Some(*id).zip(score)
-                    }
-                })
-                .collect::<Vec<_>>();
+                        if score.unwrap_or(0.0) > 0.4 {
+                            None
+                        } else {
+                            Some(*id).zip(score)
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                filtered.sort_unstable_by(|a, b| a.1.total_cmp(&b.1));
 
-            filtered.sort_unstable_by(|a, b| a.1.total_cmp(&b.1));
+                filtered.into_iter().map(|v| v.0).collect::<Vec<_>>()
+            } else {
+                ids.to_vec()
+            };
 
-            filtered.into_iter().map(|v| v.0).collect::<Vec<_>>()
-        } else {
-            ids.to_vec()
-        };
-
-        for id in ids {
-            ui.radio_value(new_id, Some(id), name(resource_man, &id));
-        }
-    });
+            for id in ids {
+                ui.radio_value(new_id, Some(id), name(resource_man, &id));
+            }
+        });
+    }
 }

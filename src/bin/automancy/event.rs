@@ -30,7 +30,7 @@ use automancy_resources::data::Data;
 
 use crate::gui::{
     debug, error, info, menu, player, popup, tile_config, tile_selection, GuiState, PopupState,
-    Screen, SubState, TextField,
+    Screen, TextField,
 };
 use crate::renderer::Renderer;
 use crate::setup::GameSetup;
