@@ -59,7 +59,7 @@ const SOBEL_Y = mat3x3<f32>(
     vec3<f32>( 1.0,  0.0, -1.0),
 );
 
-fn sobel(uv: vec2<f32>) -> f32 {
+fn color_edge(uv: vec2<f32>) -> f32 {
     let texel_size = 1.0 / vec2<f32>(textureDimensions(frame_texture));
 
     let c  = length(textureSample(frame_texture, frame_sampler, uv).rgb);
@@ -83,7 +83,7 @@ fn sobel(uv: vec2<f32>) -> f32 {
 
     let g = length(vec2(gx, gy));
 
-    return smoothstep(0.4, 1.0, g);
+    return smoothstep(0.2, 1.0, g);
 }
 
 fn normal_edge(uv: vec2<f32>) -> f32 {
@@ -110,7 +110,34 @@ fn normal_edge(uv: vec2<f32>) -> f32 {
 
     let g = length(vec2(gx, gy));
 
-    return smoothstep(0.2, 1.0, g);
+    return smoothstep(0.2, 0.7, g);
+}
+
+fn depth_edge(uv: vec2<f32>) -> f32 {
+    let texel_size = 1.0 / vec2<f32>(textureDimensions(depth_texture));
+
+    let c  = textureSample(depth_texture, depth_sampler, uv).r;
+    let n  = textureSample(depth_texture, depth_sampler, uv + texel_size * vec2<f32>( 0.0,  1.0)).r;
+    let e  = textureSample(depth_texture, depth_sampler, uv + texel_size * vec2<f32>( 1.0,  0.0)).r;
+    let s  = textureSample(depth_texture, depth_sampler, uv + texel_size * vec2<f32>( 0.0, -1.0)).r;
+    let w  = textureSample(depth_texture, depth_sampler, uv + texel_size * vec2<f32>(-1.0,  0.0)).r;
+    let ne = textureSample(depth_texture, depth_sampler, uv + texel_size * vec2<f32>( 1.0,  1.0)).r;
+    let nw = textureSample(depth_texture, depth_sampler, uv + texel_size * vec2<f32>(-1.0,  1.0)).r;
+    let se = textureSample(depth_texture, depth_sampler, uv + texel_size * vec2<f32>( 1.0, -1.0)).r;
+    let sw = textureSample(depth_texture, depth_sampler, uv + texel_size * vec2<f32>(-1.0, -1.0)).r;
+
+    let m = mat3x3(
+        vec3(sw,  s, se),
+        vec3( w,  c,  e),
+        vec3(nw,  n, ne),
+    );
+
+    let gx = dot(SOBEL_X[0], m[0]) + dot(SOBEL_X[1], m[1]) + dot(SOBEL_X[2], m[2]);
+    let gy = dot(SOBEL_Y[0], m[0]) + dot(SOBEL_Y[1], m[1]) + dot(SOBEL_Y[2], m[2]);
+
+    let g = length(vec2(gx, gy));
+
+    return smoothstep(0.2, 0.8, 1.0 - g);
 }
 
 fn rgb2hsl(c: vec3<f32>) -> vec3<f32> {
@@ -146,11 +173,9 @@ fn sobel_color(color: vec4<f32>, r: f32) -> vec4<f32> {
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let color = textureSample(frame_texture, frame_sampler, in.uv);
 
-    let sobel_r = sobel(in.uv);
-    let sobel_c = sobel_color(color, sobel_r);
+    let color_edge_c = sobel_color(color, color_edge(in.uv));
+    let normal_edge_c = color * vec4(vec3(normal_edge(in.uv)), 1.0);
+    let depth_edge_c = vec4(vec3(depth_edge(in.uv)), 1.0);
 
-    let normal_edge_r = normal_edge(in.uv);
-    let normal_edge_c = color * vec4(vec3(normal_edge_r), 0.0);
-
-    return sobel_c + normal_edge_c;
+    return (color_edge_c + normal_edge_c) * depth_edge_c;
 }

@@ -356,6 +356,14 @@ impl Renderer {
                             store: true,
                         },
                     }),
+                    Some(RenderPassColorAttachment {
+                        view: &self.gpu.model_depth_texture().1,
+                        resolve_target: None,
+                        ops: Operations {
+                            load: LoadOp::Clear(Color::BLACK),
+                            store: true,
+                        },
+                    }),
                 ],
                 depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
                     view: &self.gpu.depth_texture().1,
@@ -457,6 +465,14 @@ impl Renderer {
                     }),
                     Some(RenderPassColorAttachment {
                         view: &self.gpu.normal_texture().1,
+                        resolve_target: None,
+                        ops: Operations {
+                            load: LoadOp::Load,
+                            store: false,
+                        },
+                    }),
+                    Some(RenderPassColorAttachment {
+                        view: &self.gpu.model_depth_texture().1,
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Load,
@@ -613,6 +629,14 @@ impl Renderer {
                             store: true,
                         },
                     }),
+                    Some(RenderPassColorAttachment {
+                        view: &self.gpu.model_depth_texture().1,
+                        resolve_target: None,
+                        ops: Operations {
+                            load: LoadOp::Clear(Color::BLACK),
+                            store: true,
+                        },
+                    }),
                 ],
                 depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
                     view: &self.gpu.depth_texture().1,
@@ -725,6 +749,14 @@ impl Renderer {
                             store: true,
                         },
                     }),
+                    Some(RenderPassColorAttachment {
+                        view: &self.gpu.model_depth_texture().1,
+                        resolve_target: None,
+                        ops: Operations {
+                            load: LoadOp::Load,
+                            store: true,
+                        },
+                    }),
                 ],
                 depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
                     view: &self.gpu.depth_texture().1,
@@ -815,6 +847,14 @@ impl Renderer {
                     }),
                     Some(RenderPassColorAttachment {
                         view: &self.gpu.normal_texture().1,
+                        resolve_target: None,
+                        ops: Operations {
+                            load: LoadOp::Load,
+                            store: false,
+                        },
+                    }),
+                    Some(RenderPassColorAttachment {
+                        view: &self.gpu.model_depth_texture().1,
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Load,

@@ -472,6 +472,7 @@ pub struct Gpu {
     game_texture: Option<(Texture, TextureView)>,
     normal_texture: Option<(Texture, TextureView)>,
     depth_texture: Option<(Texture, TextureView)>,
+    model_depth_texture: Option<(Texture, TextureView)>,
 
     pub filtering_sampler: Sampler,
     pub non_filtering_sampler: Sampler,
@@ -500,6 +501,10 @@ impl Gpu {
 
     pub fn depth_texture(&self) -> &(Texture, TextureView) {
         self.depth_texture.as_ref().unwrap()
+    }
+
+    pub fn model_depth_texture(&self) -> &(Texture, TextureView) {
+        self.model_depth_texture.as_ref().unwrap()
     }
 
     fn pick_present_mode(vsync: bool) -> PresentMode {
@@ -687,6 +692,11 @@ impl Gpu {
                         }),
                         Some(ColorTargetState {
                             format: TextureFormat::Rgba32Float,
+                            blend: None,
+                            write_mask: ColorWrites::ALL,
+                        }),
+                        Some(ColorTargetState {
+                            format: TextureFormat::R32Float,
                             blend: None,
                             write_mask: ColorWrites::ALL,
                         }),
@@ -1231,6 +1241,7 @@ impl Gpu {
             game_texture: None,
             normal_texture: None,
             depth_texture: None,
+            model_depth_texture: None,
 
             filtering_sampler,
             non_filtering_sampler,
@@ -1277,6 +1288,14 @@ impl Gpu {
             TextureDimension::D2,
             upscale,
             None,
+            TextureUsages::RENDER_ATTACHMENT,
+        ));
+        self.model_depth_texture = Some(create_texture(
+            device,
+            TextureFormat::R32Float,
+            TextureDimension::D2,
+            upscale,
+            None,
             TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
         ));
 
@@ -1297,7 +1316,7 @@ impl Gpu {
             &self.non_filtering_sampler,
             &self.normal_texture().1,
             &self.non_filtering_sampler,
-            &self.depth_texture().1,
+            &self.model_depth_texture().1,
             &self.non_filtering_sampler,
         ));
 
@@ -1309,7 +1328,7 @@ impl Gpu {
             &self.non_filtering_sampler,
             &self.normal_texture().1,
             &self.non_filtering_sampler,
-            &self.depth_texture().1,
+            &self.model_depth_texture().1,
             &self.non_filtering_sampler,
         ));
 

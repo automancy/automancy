@@ -68,6 +68,7 @@ fn vs_main(
 struct FragmentOutput {
     @location(0) color: vec4<f32>,
     @location(1) normal: vec4<f32>,
+    @location(2) depth: f32,
 }
 
 @fragment
@@ -80,6 +81,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
 
     out.color = vec4(in.color.rgb * ubo.light_color.rgb * clamp(diffuse, 0.2, ubo.light_color.a), in.color.a);
     out.normal = vec4(in.normal, 0.0);
+    out.depth = in.model_pos.z;
 
     return out;
 }
