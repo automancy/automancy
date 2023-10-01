@@ -30,7 +30,7 @@ use automancy_resources::data::Data;
 
 use crate::gui::{
     debug, error, info, menu, player, popup, tile_config, tile_selection, GuiState, PopupState,
-    Screen, SubState,
+    Screen, SubState, TextField,
 };
 use crate::renderer::Renderer;
 use crate::setup::GameSetup;
@@ -39,15 +39,6 @@ use crate::setup::GameSetup;
 pub struct EventLoopStorage {
     /// fuzzy search engine
     pub fuse: Fuse,
-    // TODO most of the following elements should be moved out of here...
-    /// the filter for the scripts.
-    pub filter_input: String,
-    /// input for the map name
-    pub map_name_input: String,
-    /// storage which map to rename
-    pub map_name_renaming: Option<String>,
-    /// input for map renaming
-    pub map_name_renaming_input: String,
     /// the tile states of the selected tiles.
     pub selected_tile_modifiers: HashMap<Id, TileModifier>,
     /// the currently selected tile.
@@ -77,11 +68,7 @@ pub struct EventLoopStorage {
 impl Default for EventLoopStorage {
     fn default() -> Self {
         Self {
-            fuse: Default::default(),
-            filter_input: "".to_string(),
-            map_name_input: "".to_string(),
-            map_name_renaming: None,
-            map_name_renaming_input: "".to_string(),
+            fuse: Fuse::default(),
             selected_tile_modifiers: Default::default(),
             selected_id: None,
             already_placed_at: None,
@@ -94,13 +81,7 @@ impl Default for EventLoopStorage {
             initial_cursor_position: None,
             take_item_animations: Default::default(),
 
-            gui_state: GuiState {
-                screen: Screen::MainMenu,
-                substate: SubState::None,
-                popup: PopupState::None,
-                show_debugger: false,
-                previous: None,
-            },
+            gui_state: Default::default(),
         }
     }
 }
@@ -565,7 +546,11 @@ pub fn on_event(
                 setup.audio_man.play(resource_man.audio["click"].clone())?;
             } else if loop_store.config_open == Some(setup.camera.pointing_at) {
                 loop_store.config_open = None;
-                loop_store.filter_input.clear();
+                loop_store
+                    .gui_state
+                    .text_field
+                    .get(&TextField::Filter)
+                    .clear();
             } else {
                 loop_store.config_open = Some(setup.camera.pointing_at);
             }

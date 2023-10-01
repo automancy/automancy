@@ -14,7 +14,7 @@ use automancy_defs::log;
 use automancy_resources::{format, format_time};
 
 use crate::event::{shutdown_graceful, EventLoopStorage};
-use crate::gui::{default_frame, OptionsMenuState, PopupState, Screen, SubState};
+use crate::gui::{default_frame, OptionsMenuState, PopupState, Screen, SubState, TextField};
 use crate::setup::GameSetup;
 
 /// Draws the main menu.
@@ -201,29 +201,47 @@ pub fn map_menu(setup: &mut GameSetup, context: &Context, loop_store: &mut Event
                         ui.style_mut().override_text_style = Some(TextStyle::Heading);
                         ui.set_width(300.0);
 
-                        if Some(map_name) == loop_store.map_name_renaming.as_ref() {
+                        if Some(map_name)
+                            == loop_store.gui_state.text_field.map_name_renaming.as_ref()
+                        {
                             if ui
                                 .add(
-                                    TextEdit::multiline(&mut loop_store.map_name_renaming_input)
-                                        .desired_rows(1),
+                                    TextEdit::multiline(
+                                        loop_store
+                                            .gui_state
+                                            .text_field
+                                            .get(&TextField::MapRenaming),
+                                    )
+                                    .desired_rows(1),
                                 )
                                 .lost_focus()
                             {
-                                loop_store.map_name_renaming_input = loop_store
-                                    .map_name_renaming_input
-                                    .chars()
-                                    .filter(|v| v.is_alphanumeric())
-                                    .collect();
+                                *loop_store.gui_state.text_field.get(&TextField::MapRenaming) =
+                                    loop_store
+                                        .gui_state
+                                        .text_field
+                                        .get(&TextField::MapRenaming)
+                                        .chars()
+                                        .filter(|v| v.is_alphanumeric())
+                                        .collect();
 
                                 if fs::rename(
                                     Map::path(map_name),
-                                    Map::path(&loop_store.map_name_renaming_input),
+                                    Map::path(
+                                        loop_store
+                                            .gui_state
+                                            .text_field
+                                            .get(&TextField::MapRenaming),
+                                    ),
                                 )
                                 .is_ok()
                                 {
                                     log::info!(
                                         "Renamed map {map_name} to {}",
-                                        loop_store.map_name_renaming_input
+                                        loop_store
+                                            .gui_state
+                                            .text_field
+                                            .get(&TextField::MapRenaming)
                                     );
 
                                     dirty = true;
@@ -231,12 +249,15 @@ pub fn map_menu(setup: &mut GameSetup, context: &Context, loop_store: &mut Event
                                     loop_store.gui_state.popup = PopupState::InvalidName;
                                 }
 
-                                loop_store.map_name_renaming = None;
-                                loop_store.map_name_renaming_input = "".to_string();
+                                loop_store.gui_state.text_field.map_name_renaming = None;
+                                *loop_store.gui_state.text_field.get(&TextField::MapRenaming) =
+                                    "".to_string();
                             }
                         } else if ui.selectable_label(false, map_name.as_str()).clicked() {
-                            loop_store.map_name_renaming = Some(map_name.clone());
-                            loop_store.map_name_renaming_input = map_name.clone();
+                            loop_store.gui_state.text_field.map_name_renaming =
+                                Some(map_name.clone());
+                            *loop_store.gui_state.text_field.get(&TextField::MapRenaming) =
+                                map_name.clone();
                         }
                     });
 

@@ -8,7 +8,7 @@ use automancy_defs::gui::Gui;
 use automancy_defs::log;
 
 use crate::event::EventLoopStorage;
-use crate::gui::{default_frame, PopupState, Screen};
+use crate::gui::{default_frame, PopupState, Screen, TextField};
 use crate::setup::GameSetup;
 
 pub fn invalid_name_popup(setup: &GameSetup, gui: &mut Gui, loop_store: &mut EventLoopStorage) {
@@ -102,7 +102,7 @@ pub fn map_create_popup(setup: &GameSetup, gui: &mut Gui, loop_store: &mut Event
     .show(&gui.context, |ui| {
         ui.horizontal(|ui| {
             ui.label("Name:"); //TODO add this to translation
-            ui.text_edit_singleline(&mut loop_store.map_name_input);
+            ui.text_edit_singleline(loop_store.gui_state.text_field.get(&TextField::MapName));
         });
         if ui
             .button(
@@ -111,12 +111,22 @@ pub fn map_create_popup(setup: &GameSetup, gui: &mut Gui, loop_store: &mut Event
             )
             .clicked()
         {
-            let name = Map::sanitize_name(loop_store.map_name_input.clone());
+            let name = Map::sanitize_name(
+                loop_store
+                    .gui_state
+                    .text_field
+                    .get(&TextField::MapName)
+                    .clone(),
+            );
             setup
                 .game
                 .send_message(GameMsg::LoadMap(setup.resource_man.clone(), name))
                 .unwrap();
-            loop_store.map_name_input.clear();
+            loop_store
+                .gui_state
+                .text_field
+                .get(&TextField::MapName)
+                .clear();
             loop_store.gui_state.popup = PopupState::None;
             loop_store.gui_state.switch_screen(Screen::Ingame);
         }

@@ -1,4 +1,5 @@
 use automancy_defs::colors;
+use automancy_defs::hashbrown::HashMap;
 use automancy_defs::id::Id;
 use automancy_resources::ResourceManager;
 use egui::epaint::Shadow;
@@ -15,13 +16,13 @@ pub mod popup;
 pub mod tile_config;
 pub mod tile_selection;
 
-#[derive(Eq, PartialEq, Clone)]
 pub struct GuiState {
     pub screen: Screen,
     pub substate: SubState,
     pub popup: PopupState,
     pub show_debugger: bool,
     pub previous: Option<Screen>,
+    pub text_field: TextFieldState,
 }
 /// The state of the main game GUI.
 #[derive(Eq, PartialEq, Copy, Clone)]
@@ -66,6 +67,18 @@ pub fn default_frame() -> Frame {
         .rounding(Rounding::same(5.0))
         .inner_margin(Margin::same(10.0))
 }
+impl Default for GuiState {
+    fn default() -> Self {
+        GuiState {
+            screen: Screen::MainMenu,
+            substate: SubState::None,
+            popup: PopupState::None,
+            show_debugger: false,
+            previous: None,
+            text_field: Default::default(),
+        }
+    }
+}
 impl GuiState {
     pub fn return_screen(&mut self) {
         if let Some(prev) = self.previous {
@@ -83,16 +96,43 @@ impl GuiState {
     }
     pub fn switch_screen_when(
         &mut self,
-        when: &'static dyn Fn(GuiState) -> bool,
+        when: &'static dyn Fn(&mut GuiState) -> bool,
         new: Screen,
     ) -> bool {
-        if when(self.clone()) {
+        if when(self) {
             self.switch_screen(new);
 
             true
         } else {
             false
         }
+    }
+}
+#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub enum TextField {
+    Filter,
+    MapRenaming,
+    MapName,
+}
+pub struct TextFieldState {
+    pub map_name_renaming: Option<String>,
+    fields: HashMap<TextField, String>,
+}
+impl Default for TextFieldState {
+    fn default() -> Self {
+        TextFieldState {
+            map_name_renaming: None,
+            fields: HashMap::from([
+                (TextField::Filter, String::new()),
+                (TextField::MapName, String::new()),
+                (TextField::MapRenaming, String::new()),
+            ]),
+        }
+    }
+}
+impl TextFieldState {
+    pub fn get(&mut self, field: &TextField) -> &mut String {
+        self.fields.get_mut(field).unwrap() //FIXME this will like definitely panic
     }
 }
 /// Draws a search bar.

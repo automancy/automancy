@@ -19,7 +19,7 @@ use automancy_resources::ResourceManager;
 
 use crate::event::EventLoopStorage;
 use crate::gui::item::{draw_item, MEDIUM_ITEM_ICON_SIZE, SMALL_ITEM_ICON_SIZE};
-use crate::gui::searchable_id;
+use crate::gui::{searchable_id, TextField};
 use crate::renderer::GuiInstances;
 use crate::setup::GameSetup;
 
@@ -258,14 +258,13 @@ fn config_item(
             SMALL_ITEM_ICON_SIZE,
         );
     }
-
     searchable_id(
         ui,
         &setup.resource_man,
         &loop_store.fuse,
         items.as_slice(),
         &mut new_item,
-        &mut loop_store.filter_input,
+        loop_store.gui_state.text_field.get(&TextField::Filter),
         &ResourceManager::item_name,
     );
 
@@ -342,7 +341,7 @@ fn config_script(
         &loop_store.fuse,
         scripts.as_slice(),
         &mut new_script,
-        &mut loop_store.filter_input,
+        loop_store.gui_state.text_field.get(&TextField::Filter),
         &ResourceManager::script_name,
     );
 
