@@ -1,6 +1,6 @@
 # automancy!
 
-A game about Automation, themed around Magic, based on Hexagons, and -- there's no Conveyor Belts.
+A game about automation, hexagons and magic; and there's no Conveyor Belts.
 
 Game's WIP.
 
@@ -20,7 +20,7 @@ Links:
 
 - Fedi(Mastodon): https://gamedev.lgbt/@automancy
 - Git: https://github.com/sorcerers-class/automancy
-- Discord: https://discord.gg/jcJbUh3QX2
+- Discord: https://discord.gg/ee9XebxNaa
 
 ## Development Notes
 
