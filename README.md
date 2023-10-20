@@ -19,7 +19,7 @@ https://user-images.githubusercontent.com/33348966/225474725-9f6494d3-bc51-4969-
 Links:
 
 - Fedi(Mastodon): https://gamedev.lgbt/@automancy
-- Git: https://github.com/sorcerers-class/automancy
+- Git: https://github.com/automancy/automancy
 - Discord: https://discord.gg/ee9XebxNaa
 
 ## Development Notes
