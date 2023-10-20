@@ -97,7 +97,7 @@ color-eyre = "0.6"
 strip-ansi-escapes = "0.2.0"
 
 enum-ordinalize = "3.1.13"
-enum-map = "3.0.0-0.gat.0"
+enum-map = "2.6.3"
 arraydeque = "0.5.1"
 fuse-rust = "0.3.1"
 arboard = "3.2.0"
@@ -108,7 +108,7 @@ num = "0.4.0"
 
 toml = "0.8.0"
 image = "0.24.6"
-zstd = "0.12.3"
+zstd = "0.13.0"
 
 async-trait = "0.1.68"
 futures = "0.3.28"
