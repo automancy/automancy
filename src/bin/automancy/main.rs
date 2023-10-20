@@ -55,12 +55,9 @@ fn write_msg<P: AsRef<Path>>(buffer: &mut impl Write, file_path: P) -> std::fmt:
         file_path.as_ref().display(),
     )?;
 
-    writeln!(
-        buffer,
-        "- Git: https://github.com/sorcerers-class/automancy"
-    )?;
+    writeln!(buffer, "- Git: https://github.com/automancy/automancy")?;
     writeln!(buffer, "- Fedi(Mastodon): https://gamedev.lgbt/@automancy")?;
-    writeln!(buffer, "- Discord: https://discord.gg/jcJbUh3QX2")?;
+    writeln!(buffer, "- Discord: https://discord.gg/ee9XebxNaa")?;
 
     writeln!(
         buffer,

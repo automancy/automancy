@@ -87,7 +87,7 @@ pub fn main_menu(
                             )
                             .heading(),
                         ),
-                        "https://github.com/sorcerers-class/automancy",
+                        "https://github.com/automancy/automancy",
                     ));
                     if ui
                         .button(
