@@ -91,7 +91,7 @@ rhai = { workspace = true }
 automancy_resources = { path = "automancy_resources" }
 
 env_logger = "0.10.0"
-native-dialog = "0.6.4"
+native-dialog = "0.7.0"
 human-panic = "1.1.5"
 color-eyre = "0.6"
 strip-ansi-escapes = "0.2.0"
