@@ -199,7 +199,7 @@ impl Map {
                 let tile_entity =
                     game::new_tile(resource_man.clone(), game.clone(), coord, id, tile_modifier)
                         .await;
-                let data = data.to_data(&resource_man).into_inner();
+                let data = data.to_data(&resource_man.interner).into_inner();
 
                 for (key, value) in data {
                     tile_entity
@@ -212,7 +212,7 @@ impl Map {
             }
         }
 
-        let data = header.data.to_data(&resource_man);
+        let data = header.data.to_data(&resource_man.interner);
 
         (
             Self {

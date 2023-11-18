@@ -37,7 +37,7 @@ impl ResourceManager {
 
         let function = tile.function.map(|v| v.to_id(&mut self.interner));
 
-        let data = tile.data.intern_to_data(self);
+        let data = tile.data.intern_to_data(&mut self.interner);
 
         let models = tile
             .models

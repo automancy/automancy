@@ -20,7 +20,7 @@ use automancy_defs::{log, math};
 use automancy_resources::data::item::item_match;
 use automancy_resources::data::stack::ItemStack;
 use automancy_resources::data::{Data, DataMap};
-use automancy_resources::script::Script;
+use automancy_resources::types::script::Script;
 use automancy_resources::ResourceManager;
 
 use crate::game::GameMsg::*;

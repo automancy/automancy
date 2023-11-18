@@ -1,12 +1,15 @@
+use automancy_defs::graph::graph::NodeIndex;
+use automancy_defs::graph::prelude::StableDiGraph;
 use automancy_defs::hashbrown::HashMap;
 use automancy_defs::id::Id;
 use automancy_macros::IdReg;
 
 use crate::data::item::Item;
 use crate::data::Data;
-use crate::script::Script;
-use crate::tag::Tag;
-use crate::tile::Tile;
+use crate::types::research::Research;
+use crate::types::script::Script;
+use crate::types::tag::Tag;
+use crate::types::tile::Tile;
 
 /// Represents the resource registry.
 #[derive(Clone)]
@@ -15,6 +18,9 @@ pub struct Registry {
     pub scripts: HashMap<Id, Script>,
     pub tags: HashMap<Id, Tag>,
     pub items: HashMap<Id, Item>,
+    pub researches: StableDiGraph<Research, ()>,
+    pub researches_id_map: HashMap<Id, NodeIndex>,
+    pub researches_unlock_map: HashMap<Id, NodeIndex>,
 
     pub none: Id,
     pub any: Id,
@@ -65,6 +71,8 @@ pub struct DataIds {
     pub max_amount: Id,
     pub linked: Id,
     pub linking: Id,
+    pub default_tile: Id,
+    pub unlocked_researches: Id,
 }
 
 #[derive(Copy, Clone, IdReg)]

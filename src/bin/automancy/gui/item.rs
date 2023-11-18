@@ -2,7 +2,6 @@ use egui::{vec2, Rect, Response, Sense, Ui};
 
 use automancy_defs::math::Float;
 use automancy_defs::rendering::InstanceData;
-use automancy_resources::data::item::Item;
 use automancy_resources::data::stack::ItemStack;
 use automancy_resources::ResourceManager;
 
@@ -11,17 +10,6 @@ use crate::renderer::GuiInstances;
 pub const SMALL_ITEM_ICON_SIZE: Float = 24.0;
 pub const MEDIUM_ITEM_ICON_SIZE: Float = 48.0;
 pub const LARGE_ITEM_ICON_SIZE: Float = 96.0;
-
-pub fn paint_item(
-    resource_man: &ResourceManager,
-    item_instances: &mut GuiInstances,
-    item: Item,
-    rect: Rect,
-) {
-    let model = resource_man.get_item_model(item);
-
-    item_instances.push((InstanceData::default(), model, (Some(rect), None)))
-}
 
 /// Draws an Item's icon.
 pub fn draw_item(
@@ -53,7 +41,11 @@ pub fn draw_item(
             ui.label(resource_man.item_name(&stack.item.id).to_string())
         };
 
-        paint_item(resource_man, item_instances, stack.item, rect);
+        item_instances.push((
+            InstanceData::default(),
+            resource_man.get_item_model(stack.item),
+            (Some(rect), None),
+        ));
 
         (rect, icon_response.union(label_response))
     })

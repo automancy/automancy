@@ -28,25 +28,19 @@ use crate::data::item::{rhai_item_match, rhai_item_matches, rhai_item_stack_matc
 use crate::data::stack::{ItemAmount, ItemStack};
 use crate::data::DataMap;
 use crate::error::ErrorManager;
-use crate::model::IndexRange;
 use crate::registry::{DataIds, ErrorIds, GuiIds, ModelIds, Registry};
-use crate::script::{Instructions, Script};
-use crate::tag::Tag;
-use crate::tile::Tile;
-use crate::translate::Translate;
+use crate::types::model::IndexRange;
+use crate::types::script::{Instructions, Script};
+use crate::types::tag::Tag;
+use crate::types::tile::Tile;
+use crate::types::translate::Translate;
 
-pub mod audio;
 pub mod data;
 pub mod error;
-pub mod function;
-pub mod item;
-pub mod model;
+
 pub mod registry;
-pub mod script;
-pub mod shader;
-pub mod tag;
-pub mod tile;
-pub mod translate;
+
+pub mod types;
 
 static COULD_NOT_GET_FILE_STEM: &str = "could not get file stem";
 
@@ -287,6 +281,9 @@ impl ResourceManager {
                 scripts: Default::default(),
                 tags: Default::default(),
                 items: Default::default(),
+                researches: Default::default(),
+                researches_id_map: Default::default(),
+                researches_unlock_map: Default::default(),
 
                 none,
                 any,

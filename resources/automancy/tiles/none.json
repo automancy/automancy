@@ -1,4 +1,9 @@
 {
     "id": "none",
-    "models": ["none"]
+    "models": ["none"],
+    "data": {
+        "default_tile": {
+            "Bool": true
+        }
+    }
 }

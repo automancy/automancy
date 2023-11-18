@@ -7,7 +7,6 @@ use automancy_defs::id::{Id, IdRaw, Interner};
 
 use crate::data::item::Item;
 use crate::data::stack::ItemAmount;
-use crate::ResourceManager;
 
 #[derive(Debug, Default, Clone)]
 pub struct Inventory(BTreeMap<Id, ItemAmount>);
@@ -105,16 +104,11 @@ impl InventoryRaw {
         self.0
     }
 
-    pub fn to_inventory(&self, resource_man: &ResourceManager) -> Inventory {
+    pub fn to_inventory(&self, interner: &Interner) -> Inventory {
         Inventory(
             self.0
                 .iter()
-                .flat_map(|(id, amount)| {
-                    resource_man
-                        .interner
-                        .get(id.to_string())
-                        .map(|item| (item, *amount))
-                })
+                .flat_map(|(id, amount)| interner.get(id.to_string()).map(|item| (item, *amount)))
                 .collect(),
         )
     }

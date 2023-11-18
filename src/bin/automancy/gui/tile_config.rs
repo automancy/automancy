@@ -14,7 +14,7 @@ use automancy_defs::math::Float;
 use automancy_resources::data::inventory::Inventory;
 use automancy_resources::data::stack::ItemStack;
 use automancy_resources::data::{Data, DataMap};
-use automancy_resources::tile::Tile;
+use automancy_resources::types::tile::Tile;
 use automancy_resources::ResourceManager;
 
 use crate::event::EventLoopStorage;
@@ -196,7 +196,7 @@ fn takeable_item(
                     loop_store
                         .take_item_animations
                         .entry(item)
-                        .or_insert_with(Default::default)
+                        .or_default()
                         .push_back((Instant::now(), rect));
                 }
             }
@@ -366,12 +366,9 @@ pub fn tile_config(
     loop_store: &mut EventLoopStorage,
     item_instances: &mut GuiInstances,
     context: &Context,
+    game_data: &mut DataMap,
 ) {
     if let Some(config_open) = loop_store.config_open {
-        let mut game_data = block_on(setup.game.call(GameMsg::TakeDataMap, None))
-            .unwrap()
-            .unwrap();
-
         let tile = block_on(
             setup
                 .game
@@ -449,7 +446,7 @@ pub fn tile_config(
                                 loop_store,
                                 item_instances,
                                 buffer,
-                                &mut game_data,
+                                game_data,
                                 tile_entity.clone(),
                             );
                         });
@@ -509,10 +506,5 @@ pub fn tile_config(
                 }
             });
         }
-
-        setup
-            .game
-            .send_message(GameMsg::SetDataMap(game_data))
-            .unwrap();
     }
 }

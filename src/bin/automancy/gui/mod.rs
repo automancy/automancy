@@ -1,14 +1,15 @@
-use automancy_defs::colors;
-use automancy_defs::hashbrown::HashMap;
-use automancy_defs::id::Id;
-use automancy_resources::ResourceManager;
 use egui::epaint::Shadow;
 use egui::{Frame, Margin, Rounding, ScrollArea, Ui};
 use enum_map::{enum_map, Enum, EnumMap};
 use fuse_rust::Fuse;
-use std::ops::IndexMut;
 
+use automancy_defs::colors;
+use automancy_defs::id::Id;
+use automancy_resources::ResourceManager;
+
+#[cfg(debug_assertions)]
 pub mod debug;
+
 pub mod error;
 pub mod info;
 pub mod item;
@@ -26,6 +27,7 @@ pub struct GuiState {
     pub previous: Option<Screen>,
     pub text_field: TextFieldState,
 }
+
 /// The state of the main game GUI.
 #[derive(Eq, PartialEq, Copy, Clone)]
 pub enum Screen {
@@ -36,11 +38,13 @@ pub enum Screen {
     Paused,
     Research,
 }
+
 #[derive(Eq, PartialEq, Copy, Clone)]
 pub enum SubState {
     None,
     Options(OptionsMenuState),
 }
+
 #[derive(Eq, PartialEq, Copy, Clone)]
 pub enum OptionsMenuState {
     Graphics,
@@ -69,6 +73,7 @@ pub fn default_frame() -> Frame {
         .rounding(Rounding::same(5.0))
         .inner_margin(Margin::same(10.0))
 }
+
 impl Default for GuiState {
     fn default() -> Self {
         GuiState {
@@ -81,6 +86,7 @@ impl Default for GuiState {
         }
     }
 }
+
 impl GuiState {
     pub fn return_screen(&mut self) {
         if let Some(prev) = self.previous {
@@ -88,14 +94,17 @@ impl GuiState {
         }
         self.previous = None;
     }
+
     pub fn switch_screen(&mut self, new: Screen) {
         self.previous = Some(self.screen);
         self.screen = new;
     }
+
     pub fn switch_screen_sub(&mut self, new: Screen, sub: SubState) {
         self.switch_screen(new);
         self.substate = sub;
     }
+
     pub fn switch_screen_when(
         &mut self,
         when: &'static dyn Fn(&mut GuiState) -> bool,
@@ -116,11 +125,13 @@ pub enum TextField {
     MapRenaming,
     MapName,
 }
+
 pub struct TextFieldState {
     pub fuse: Fuse,
     pub map_name_renaming: Option<String>,
     fields: EnumMap<TextField, String>,
 }
+
 impl Default for TextFieldState {
     fn default() -> Self {
         TextFieldState {
@@ -134,6 +145,7 @@ impl Default for TextFieldState {
         }
     }
 }
+
 impl TextFieldState {
     pub fn get(&mut self, field: TextField) -> &mut String {
         &mut self.fields[field]

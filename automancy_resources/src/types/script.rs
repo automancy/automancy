@@ -10,6 +10,19 @@ use automancy_defs::log;
 use crate::data::stack::{ItemAmount, ItemStack};
 use crate::{load_recursively, ResourceManager, JSON_EXT};
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct ScriptJson {
+    pub id: IdRaw,
+    pub adjacent: Option<IdRaw>,
+    pub instructions: InstructionsJson,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct InstructionsJson {
+    pub inputs: Option<Vec<(IdRaw, ItemAmount)>>,
+    pub output: Vec<(IdRaw, ItemAmount)>,
+}
+
 #[derive(Debug, Clone)]
 pub struct Script {
     pub id: Id,
@@ -22,19 +35,6 @@ pub struct Script {
 pub struct Instructions {
     pub inputs: Option<Vec<ItemStack>>,
     pub outputs: Vec<ItemStack>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct ScriptJson {
-    pub id: IdRaw,
-    pub adjacent: Option<IdRaw>,
-    pub instructions: InstructionsJson,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct InstructionsJson {
-    pub inputs: Option<Vec<(IdRaw, ItemAmount)>>,
-    pub output: Vec<(IdRaw, ItemAmount)>,
 }
 
 impl ResourceManager {

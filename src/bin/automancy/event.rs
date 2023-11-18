@@ -29,8 +29,8 @@ use automancy_resources::data::item::Item;
 use automancy_resources::data::Data;
 
 use crate::gui::{
-    debug, error, info, menu, player, popup, tile_config, tile_selection, GuiState, PopupState,
-    Screen, TextField,
+    error, info, menu, player, popup, tile_config, tile_selection, GuiState, PopupState, Screen,
+    TextField,
 };
 use crate::renderer::Renderer;
 use crate::setup::GameSetup;
@@ -153,6 +153,7 @@ fn render(
 
         #[cfg(debug_assertions)]
         if setup.input_handler.key_active(KeyActions::Debug) {
+            use crate::gui::debug;
             gui.context.set_debug_on_hover(true);
 
             debug::debugger(setup, loop_store, &gui.context);
@@ -164,6 +165,10 @@ fn render(
             match loop_store.gui_state.screen {
                 Screen::Ingame => {
                     if !setup.input_handler.key_active(KeyActions::HideGui) {
+                        let mut game_data = block_on(setup.game.call(GameMsg::TakeDataMap, None))
+                            .unwrap()
+                            .unwrap();
+
                         if setup.input_handler.key_active(KeyActions::Player) {
                             player::player(setup, loop_store, &mut item_instances, &gui.context);
                         }
@@ -177,6 +182,7 @@ fn render(
                             loop_store,
                             &mut item_instances,
                             &gui.context,
+                            &mut game_data,
                         );
 
                         // tile_selections
@@ -186,6 +192,7 @@ fn render(
                             &gui.context,
                             &loop_store.selected_tile_modifiers,
                             selection_send,
+                            &game_data,
                         );
 
                         if let Ok(Some(id)) = selection_recv.try_next() {
@@ -247,6 +254,11 @@ fn render(
                                 setup.resource_man.registry.model_ids.cube1x1,
                             ));
                         }
+
+                        setup
+                            .game
+                            .send_message(GameMsg::SetDataMap(game_data))
+                            .unwrap();
                     }
                 }
                 Screen::MainMenu => {

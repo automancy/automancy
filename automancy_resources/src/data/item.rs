@@ -15,7 +15,7 @@ pub struct Item {
 
 impl PartialOrd<Self> for Item {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.id.partial_cmp(&other.id)
+        Some(self.cmp(other))
     }
 }
 

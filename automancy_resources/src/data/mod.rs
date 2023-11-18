@@ -1,5 +1,5 @@
 use std::any::TypeId;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::ops::{Deref, DerefMut};
 
 use rhai::{Dynamic, ImmutableString};
@@ -11,7 +11,6 @@ use automancy_defs::id::{Id, IdRaw, Interner};
 
 use crate::data::inventory::{Inventory, InventoryRaw};
 use crate::data::stack::ItemAmount;
-use crate::ResourceManager;
 
 pub mod inventory;
 pub mod item;
@@ -25,6 +24,7 @@ pub enum Data {
     VecCoord(Vec<TileCoord>),
     Id(Id),
     VecId(Vec<Id>),
+    SetId(HashSet<Id>),
     Amount(ItemAmount),
     Bool(bool),
 }
@@ -83,6 +83,13 @@ impl Data {
         None
     }
 
+    pub fn as_set_id_mut(&mut self) -> Option<&mut HashSet<Id>> {
+        if let Self::SetId(v) = self {
+            return Some(v);
+        }
+        None
+    }
+
     pub fn as_amount_mut(&mut self) -> Option<&mut ItemAmount> {
         if let Self::Amount(v) = self {
             return Some(v);
@@ -132,6 +139,13 @@ impl Data {
         None
     }
 
+    pub fn as_set_id(&self) -> Option<&HashSet<Id>> {
+        if let Self::SetId(v) = self {
+            return Some(v);
+        }
+        None
+    }
+
     pub fn as_amount(&self) -> Option<&ItemAmount> {
         if let Self::Amount(v) = self {
             return Some(v);
@@ -139,64 +153,16 @@ impl Data {
         None
     }
 
-    pub fn rhai_inventory(self) -> Dynamic {
-        if let Self::Inventory(v) = self {
-            return Dynamic::from(v);
-        }
-        Dynamic::UNIT
-    }
-
-    pub fn rhai_coord(self) -> Dynamic {
-        if let Self::Coord(v) = self {
-            return Dynamic::from(v);
-        }
-        Dynamic::UNIT
-    }
-
-    pub fn rhai_bool(self) -> Dynamic {
-        if let Self::Bool(v) = self {
-            return Dynamic::from_bool(v);
-        }
-        Dynamic::UNIT
-    }
-
-    pub fn rhai_vec_coord(self) -> Dynamic {
-        if let Self::VecCoord(v) = self {
-            return Dynamic::from_iter(v);
-        }
-        Dynamic::UNIT
-    }
-
-    pub fn rhai_id(self) -> Dynamic {
-        if let Self::Id(v) = self {
-            return Dynamic::from_int(v.into());
-        }
-        Dynamic::UNIT
-    }
-
-    pub fn rhai_vec_id(self) -> Dynamic {
-        if let Self::VecId(v) = self {
-            return Dynamic::from_iter(v);
-        }
-        Dynamic::UNIT
-    }
-
-    pub fn rhai_amount(self) -> Dynamic {
-        if let Self::Amount(v) = self {
-            return Dynamic::from_int(v);
-        }
-        Dynamic::UNIT
-    }
-
     pub fn rhai_value(self) -> Dynamic {
         match self {
-            v @ Data::Inventory(_) => v.rhai_inventory(),
-            v @ Data::Coord(_) => v.rhai_coord(),
-            v @ Data::VecCoord(_) => v.rhai_vec_coord(),
-            v @ Data::Id(_) => v.rhai_id(),
-            v @ Data::VecId(_) => v.rhai_vec_id(),
-            v @ Data::Amount(_) => v.rhai_amount(),
-            v @ Data::Bool(_) => v.rhai_bool(),
+            Data::Inventory(v) => Dynamic::from(v),
+            Data::Coord(v) => Dynamic::from(v),
+            Data::VecCoord(v) => Dynamic::from_iter(v),
+            Data::Id(v) => Dynamic::from_int(v.into()),
+            Data::VecId(v) => Dynamic::from_iter(v),
+            Data::SetId(v) => Dynamic::from(v),
+            Data::Amount(v) => Dynamic::from_int(v),
+            Data::Bool(v) => Dynamic::from_bool(v),
         }
     }
 }
@@ -224,6 +190,29 @@ impl TryFrom<Dynamic> for Data {
         } else {
             Err(())
         }
+    }
+}
+
+impl Data {
+    fn try_to_raw(&self, interner: &Interner) -> Option<DataRaw> {
+        Some(match self {
+            Data::Inventory(v) => DataRaw::Inventory(v.to_raw(interner)),
+            Data::Coord(v) => DataRaw::Coord(*v),
+            Data::VecCoord(v) => DataRaw::VecCoord(v.clone()),
+            Data::Id(v) => DataRaw::Id(interner.resolve(*v).map(IdRaw::parse)?),
+            Data::VecId(v) => DataRaw::VecId(
+                v.iter()
+                    .flat_map(|id| interner.resolve(*id).map(IdRaw::parse))
+                    .collect(),
+            ),
+            Data::SetId(v) => DataRaw::SetId(
+                v.iter()
+                    .flat_map(|id| interner.resolve(*id).map(IdRaw::parse))
+                    .collect(),
+            ),
+            Data::Amount(v) => DataRaw::Amount(*v),
+            Data::Bool(v) => DataRaw::Bool(*v),
+        })
     }
 }
 
@@ -266,27 +255,9 @@ impl DataMap {
             self.0
                 .iter()
                 .flat_map(|(key, value)| {
-                    interner.resolve(*key).map(|key| {
-                        (
-                            key.to_string(),
-                            match value {
-                                Data::Inventory(v) => DataRaw::Inventory(v.to_raw(interner)),
-                                Data::Coord(v) => DataRaw::Coord(*v),
-                                Data::VecCoord(v) => DataRaw::VecCoord(v.clone()),
-                                Data::Id(v) => {
-                                    // TODO dont unwrap
-                                    DataRaw::Id(IdRaw::parse(interner.resolve(*v).unwrap()))
-                                }
-                                Data::VecId(v) => DataRaw::VecId(
-                                    v.iter()
-                                        .map(|id| IdRaw::parse(interner.resolve(*id).unwrap()))
-                                        .collect(),
-                                ),
-                                Data::Amount(v) => DataRaw::Amount(*v),
-                                Data::Bool(v) => DataRaw::Bool(*v),
-                            },
-                        )
-                    })
+                    interner
+                        .resolve(*key)
+                        .and_then(|key| value.try_to_raw(interner).map(|v| (key.to_string(), v)))
                 })
                 .collect(),
         )
@@ -333,8 +304,32 @@ pub enum DataRaw {
     VecCoord(Vec<TileCoord>),
     Id(IdRaw),
     VecId(Vec<IdRaw>),
+    SetId(Vec<IdRaw>),
     Amount(ItemAmount),
     Bool(bool),
+}
+
+impl DataRaw {
+    pub fn try_to_data(&self, interner: &Interner) -> Option<Data> {
+        Some(match self {
+            DataRaw::Inventory(v) => Data::Inventory(v.to_inventory(interner)),
+            DataRaw::Coord(v) => Data::Coord(*v),
+            DataRaw::VecCoord(v) => Data::VecCoord(v.clone()),
+            DataRaw::Id(v) => Data::Id(interner.get(v.to_string())?),
+            DataRaw::VecId(v) => Data::VecId(
+                v.iter()
+                    .flat_map(|id| interner.get(id.to_string()))
+                    .collect(),
+            ),
+            DataRaw::SetId(v) => Data::VecId(
+                v.iter()
+                    .flat_map(|id| interner.get(id.to_string()))
+                    .collect(),
+            ),
+            DataRaw::Amount(v) => Data::Amount(*v),
+            DataRaw::Bool(v) => Data::Bool(*v),
+        })
+    }
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -357,23 +352,26 @@ impl DataMapRaw {
         self.0
     }
 
-    pub fn intern_to_data(&self, resource_man: &mut ResourceManager) -> DataMap {
+    pub fn intern_to_data(&self, interner: &mut Interner) -> DataMap {
         DataMap(
             self.0
                 .iter()
                 .map(|(key, value)| {
                     (
-                        IdRaw::parse(key).to_id(&mut resource_man.interner),
+                        IdRaw::parse(key).to_id(interner),
                         match value {
-                            DataRaw::Inventory(v) => Data::Inventory(v.to_inventory(resource_man)),
+                            DataRaw::Inventory(v) => Data::Inventory(v.to_inventory(&interner)),
                             DataRaw::Coord(v) => Data::Coord(*v),
                             DataRaw::VecCoord(v) => Data::VecCoord(v.clone()),
-                            DataRaw::Id(v) => {
-                                Data::Id(resource_man.interner.get_or_intern(v.to_string()))
-                            }
+                            DataRaw::Id(v) => Data::Id(interner.get_or_intern(v.to_string())),
                             DataRaw::VecId(v) => Data::VecId(
                                 v.iter()
-                                    .map(|id| resource_man.interner.get_or_intern(id.to_string()))
+                                    .map(|id| interner.get_or_intern(id.to_string()))
+                                    .collect(),
+                            ),
+                            DataRaw::SetId(v) => Data::SetId(
+                                v.iter()
+                                    .map(|id| interner.get_or_intern(id.to_string()))
                                     .collect(),
                             ),
                             DataRaw::Amount(v) => Data::Amount(*v),
@@ -385,38 +383,14 @@ impl DataMapRaw {
         )
     }
 
-    pub fn to_data(&self, resource_man: &ResourceManager) -> DataMap {
+    pub fn to_data(&self, interner: &Interner) -> DataMap {
         DataMap(
             self.0
                 .iter()
                 .flat_map(|(key, value)| {
-                    resource_man
-                        .interner
+                    interner
                         .get(IdRaw::parse(key).to_string())
-                        .map(|key| {
-                            (
-                                key,
-                                match value {
-                                    DataRaw::Inventory(v) => {
-                                        Data::Inventory(v.to_inventory(resource_man))
-                                    }
-                                    DataRaw::Coord(v) => Data::Coord(*v),
-                                    DataRaw::VecCoord(v) => Data::VecCoord(v.clone()),
-                                    DataRaw::Id(v) => {
-                                        Data::Id(resource_man.interner.get(v.to_string()).unwrap())
-                                    }
-                                    DataRaw::VecId(v) => Data::VecId(
-                                        v.iter()
-                                            .flat_map(|id| {
-                                                resource_man.interner.get(id.to_string())
-                                            })
-                                            .collect(),
-                                    ),
-                                    DataRaw::Amount(v) => Data::Amount(*v),
-                                    DataRaw::Bool(v) => Data::Bool(*v),
-                                },
-                            )
-                        })
+                        .and_then(|key| value.try_to_data(interner).map(|v| (key, v)))
                 })
                 .collect(),
         )

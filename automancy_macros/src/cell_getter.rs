@@ -54,8 +54,11 @@ pub fn derive_option_getter(item: TokenStream) -> TokenStream {
 
     items
         .iter()
-        .map(|(item_name, item_type)| {
-            format!(
+        .fold(String::new(), |mut s, (item_name, item_type)| {
+            use std::fmt::Write;
+
+            write!(
+                &mut s,
                 "
                 impl {name} {{
                     pub fn {item_name}(&self) -> &{item_type} {{
@@ -66,9 +69,10 @@ pub fn derive_option_getter(item: TokenStream) -> TokenStream {
                     }}
                 }}
                 "
-            )
+            ).unwrap();
+
+            s
         })
-        .collect::<String>()
         .parse()
         .unwrap()
 }

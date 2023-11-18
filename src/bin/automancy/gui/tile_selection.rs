@@ -8,6 +8,7 @@ use automancy_defs::hashbrown::HashMap;
 use automancy_defs::id::Id;
 use automancy_defs::math::{rad, Matrix4};
 use automancy_defs::rendering::InstanceData;
+use automancy_resources::data::{Data, DataMap};
 
 use crate::gui::default_frame;
 use crate::renderer::GuiInstances;
@@ -20,6 +21,7 @@ fn draw_tile_selection(
     ui: &mut Ui,
     selected_tile_modifiers: &HashMap<Id, TileModifier>,
     mut selection_send: mpsc::Sender<Id>,
+    game_data: &DataMap,
 ) {
     let size = ui.available_height();
 
@@ -27,6 +29,31 @@ fn draw_tile_selection(
         .resource_man
         .ordered_tiles
         .iter()
+        .filter(|id| {
+            if Some(&true)
+                == setup
+                    .resource_man
+                    .registry
+                    .tile(**id)
+                    .unwrap()
+                    .data
+                    .get(&setup.resource_man.registry.data_ids.default_tile)
+                    .and_then(Data::as_bool)
+            {
+                return true;
+            }
+
+            if let Some(research) = setup.resource_man.get_research_by_unlock(**id) {
+                if let Some(unlocked) = game_data
+                    .get(&setup.resource_man.registry.data_ids.unlocked_researches)
+                    .and_then(Data::as_set_id)
+                {
+                    return unlocked.contains(&research.id);
+                }
+            }
+
+            false
+        })
         .flat_map(|id| {
             setup
                 .resource_man
@@ -80,6 +107,7 @@ pub fn tile_selections(
     context: &Context,
     selected_tile_modifiers: &HashMap<Id, TileModifier>,
     selection_send: mpsc::Sender<Id>,
+    game_data: &DataMap,
 ) {
     TopBottomPanel::bottom("tile_selections")
         .show_separator_line(false)
@@ -100,6 +128,7 @@ pub fn tile_selections(
                             ui,
                             selected_tile_modifiers,
                             selection_send,
+                            game_data,
                         );
                     });
                 });

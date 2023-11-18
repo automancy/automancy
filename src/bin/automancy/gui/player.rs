@@ -5,12 +5,13 @@ use futures::executor::block_on;
 
 use automancy::game::{GameMsg, TAKE_ITEM_ANIMATION_SPEED};
 use automancy_defs::hashbrown::HashMap;
+use automancy_defs::rendering::InstanceData;
 use automancy_resources::data::item::Item;
 use automancy_resources::data::stack::ItemStack;
 use automancy_resources::data::Data;
 
 use crate::event::EventLoopStorage;
-use crate::gui::item::{draw_item, paint_item, MEDIUM_ITEM_ICON_SIZE};
+use crate::gui::item::{draw_item, MEDIUM_ITEM_ICON_SIZE};
 use crate::gui::{default_frame, Screen};
 use crate::renderer::GuiInstances;
 use crate::setup::GameSetup;
@@ -53,12 +54,11 @@ fn take_item_animation(
             let d = now.duration_since(*instant).as_secs_f32()
                 / TAKE_ITEM_ANIMATION_SPEED.as_secs_f32();
 
-            paint_item(
-                &setup.resource_man,
-                item_instances,
-                item,
-                src_rect.lerp_towards(&dst_rect, d),
-            );
+            item_instances.push((
+                InstanceData::default(),
+                setup.resource_man.get_item_model(item),
+                (Some(src_rect.lerp_towards(&dst_rect, d)), None),
+            ));
         }
     }
 }

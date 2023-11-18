@@ -5,6 +5,7 @@ pub use gltf;
 pub use hashbrown;
 pub use hexagon_tiles;
 pub use log;
+pub use petgraph as graph;
 pub use slice_group_by;
 pub use string_interner;
 

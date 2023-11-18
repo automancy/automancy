@@ -30,5 +30,6 @@ flexstr = { version = "0.9.2", features = ["serde", "fast_format"] }
 cgmath = "0.18.0"
 color-hex = "0.2.0"
 slice-group-by = "0.3.0"
+petgraph = "0.6.4"
 
 gltf = "1.2.0"
