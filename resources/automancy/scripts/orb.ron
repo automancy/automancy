@@ -1,0 +1,12 @@
+(
+    id: "automancy:orb",
+    adjacent: None,
+    instructions: (
+        inputs: Some([
+            ("automancy:glass", 256),
+        ]),
+        output: [
+            ("automancy:orb", 1),
+        ],
+    ),
+)

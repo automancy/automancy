@@ -1,0 +1,12 @@
+(
+    id: "automancy:mud_to_water",
+    adjacent: None,
+    instructions: (
+        inputs: Some([
+            ("automancy:mud", 1),
+        ]),
+        output: [
+            ("automancy:water", 16),
+        ],
+    ),
+)

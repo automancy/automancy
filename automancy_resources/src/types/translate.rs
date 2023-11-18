@@ -2,17 +2,17 @@ use std::ffi::OsStr;
 use std::fs::{read_dir, read_to_string};
 use std::path::Path;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use automancy_defs::flexstr::{SharedStr, ToSharedStr};
 use automancy_defs::hashbrown::HashMap;
 use automancy_defs::id::{Id, IdRaw};
 use automancy_defs::log;
 
-use crate::{ResourceManager, JSON_EXT};
+use crate::{ResourceManager, RON_EXT};
 
-#[derive(Debug, Default, Clone, Deserialize)]
-pub struct TranslateJson {
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
+pub struct TranslateRaw {
     none: String,
     unnamed: String,
     items: HashMap<IdRaw, String>,
@@ -37,7 +37,7 @@ impl ResourceManager {
     fn load_translate(&mut self, file: &Path) -> anyhow::Result<()> {
         log::info!("Loading translate at: {file:?}");
 
-        let translate: TranslateJson = serde_json::from_str(&read_to_string(file)?)?;
+        let translate: TranslateRaw = ron::from_str(&read_to_string(file)?)?;
 
         let none = translate.none.to_shared_str();
         let unnamed = translate.unnamed.to_shared_str();
@@ -90,7 +90,7 @@ impl ResourceManager {
                 .into_iter()
                 .flatten()
                 .map(|v| v.path())
-                .filter(|v| v.extension() == Some(OsStr::new(JSON_EXT)))
+                .filter(|v| v.extension() == Some(OsStr::new(RON_EXT)))
             {
                 // TODO language selection
                 if file.file_stem() == Some(OsStr::new("en_US")) {

@@ -1,0 +1,20 @@
+(
+    id: "automancy:philosophers_stone",
+    adjacent: None,
+    instructions: (
+        inputs: Some([
+            ("automancy:fire", 256),
+            ("automancy:water", 256),
+            ("automancy:air", 256),
+            ("automancy:earth", 256),
+            ("automancy:order", 256),
+            ("automancy:chaos", 256),
+            ("automancy:gold", 16),
+            ("automancy:silver", 16),
+            ("automancy:orb", 1),
+        ]),
+        output: [
+            ("automancy:philosophers_stone", 1),
+        ],
+    ),
+)

@@ -2,23 +2,23 @@ use std::ffi::OsStr;
 use std::fs::read_to_string;
 use std::path::Path;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use automancy_defs::id::{Id, IdRaw};
 use automancy_defs::log;
 
 use crate::data::stack::{ItemAmount, ItemStack};
-use crate::{load_recursively, ResourceManager, JSON_EXT};
+use crate::{load_recursively, ResourceManager, RON_EXT};
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct ScriptJson {
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ScriptRaw {
     pub id: IdRaw,
     pub adjacent: Option<IdRaw>,
-    pub instructions: InstructionsJson,
+    pub instructions: InstructionsRaw,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct InstructionsJson {
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct InstructionsRaw {
     pub inputs: Option<Vec<(IdRaw, ItemAmount)>>,
     pub output: Vec<(IdRaw, ItemAmount)>,
 }
@@ -41,7 +41,7 @@ impl ResourceManager {
     fn load_script(&mut self, file: &Path) -> anyhow::Result<()> {
         log::info!("Loading script at: {file:?}");
 
-        let script: ScriptJson = serde_json::from_str(&read_to_string(file)?)?;
+        let script: ScriptRaw = ron::from_str(&read_to_string(file)?)?;
 
         let id = script.id.to_id(&mut self.interner);
 
@@ -85,7 +85,7 @@ impl ResourceManager {
     pub fn load_scripts(&mut self, dir: &Path) -> anyhow::Result<()> {
         let scripts = dir.join("scripts");
 
-        for file in load_recursively(&scripts, OsStr::new(JSON_EXT)) {
+        for file in load_recursively(&scripts, OsStr::new(RON_EXT)) {
             self.load_script(&file)?;
         }
 

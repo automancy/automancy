@@ -2,17 +2,17 @@ use std::ffi::OsStr;
 use std::fs::read_to_string;
 use std::path::Path;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use automancy_defs::hashbrown::HashSet;
 use automancy_defs::id::{Id, IdRaw};
 use automancy_defs::log;
 
 use crate::registry::Registry;
-use crate::{load_recursively, ResourceManager, JSON_EXT};
+use crate::{load_recursively, ResourceManager, RON_EXT};
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct TagJson {
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TagRaw {
     pub id: IdRaw,
     pub entries: Vec<IdRaw>,
 }
@@ -37,7 +37,7 @@ impl ResourceManager {
     fn load_tag(&mut self, file: &Path) -> anyhow::Result<()> {
         log::info!("Loading tag at: {file:?}");
 
-        let tag: TagJson = serde_json::from_str(&read_to_string(file)?)?;
+        let tag: TagRaw = ron::from_str(&read_to_string(file)?)?;
 
         let id = tag.id.to_id(&mut self.interner);
 
@@ -58,7 +58,7 @@ impl ResourceManager {
     pub fn load_tags(&mut self, dir: &Path) -> anyhow::Result<()> {
         let tags = dir.join("tags");
 
-        for file in load_recursively(&tags, OsStr::new(JSON_EXT)) {
+        for file in load_recursively(&tags, OsStr::new(RON_EXT)) {
             self.load_tag(&file)?;
         }
 

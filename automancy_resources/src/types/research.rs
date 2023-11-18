@@ -2,16 +2,16 @@ use std::ffi::OsStr;
 use std::fs::read_to_string;
 use std::path::Path;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use automancy_defs::graph::visit::IntoNodeReferences;
 use automancy_defs::id::{Id, IdRaw};
 use automancy_defs::log;
 
-use crate::{load_recursively, ResourceManager, JSON_EXT};
+use crate::{load_recursively, ResourceManager, RON_EXT};
 
-#[derive(Clone, Debug, Deserialize)]
-pub struct ResearchJson {
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ResearchRaw {
     id: IdRaw,
     unlock: IdRaw,
     icon: IdRaw,
@@ -34,7 +34,7 @@ impl ResourceManager {
     fn load_research(&mut self, file: &Path) -> anyhow::Result<()> {
         log::info!("Loading research entry at: {file:?}");
 
-        let research: ResearchJson = serde_json::from_str(&read_to_string(file)?)?;
+        let research: ResearchRaw = ron::from_str(&read_to_string(file)?)?;
 
         let id = research.id.to_id(&mut self.interner);
         let unlock = research.unlock.to_id(&mut self.interner);
@@ -62,7 +62,7 @@ impl ResourceManager {
     pub fn load_researches(&mut self, dir: &Path) -> anyhow::Result<()> {
         let items = dir.join("researches");
 
-        for file in load_recursively(&items, OsStr::new(JSON_EXT)) {
+        for file in load_recursively(&items, OsStr::new(RON_EXT)) {
             self.load_research(&file)?;
         }
 
@@ -83,7 +83,7 @@ impl ResourceManager {
             .and_then(|i| self.registry.researches.node_weight(*i))
     }
 
-    pub fn compile_researches(&mut self) -> anyhow::Result<()> {
+    pub fn compile_researches(&mut self) {
         for (index, research) in self.registry.researches.clone().node_references() {
             if let Some(next) = &research.next {
                 for id in next {
@@ -93,7 +93,5 @@ impl ResourceManager {
                 }
             }
         }
-
-        Ok(())
     }
 }

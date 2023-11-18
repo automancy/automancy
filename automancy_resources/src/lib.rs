@@ -82,7 +82,7 @@ pub fn load_recursively(path: &Path, extension: &OsStr) -> Vec<PathBuf> {
 
 pub const RESOURCES_PATH: &str = "resources";
 
-pub const JSON_EXT: &str = "json";
+pub const RON_EXT: &str = "ron";
 pub const AUDIO_EXT: &str = "ogg";
 pub const FUNCTION_EXT: &str = "rhai";
 pub const SHADER_EXT: &str = "wgsl";

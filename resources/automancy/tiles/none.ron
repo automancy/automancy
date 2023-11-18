@@ -1,0 +1,10 @@
+(
+    id: "automancy:none",
+    function: None,
+    models: [
+        "automancy:none",
+    ],
+    data: ({
+        "default_tile": Bool(true),
+    }),
+)

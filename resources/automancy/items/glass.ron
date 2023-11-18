@@ -1,0 +1,4 @@
+(
+    id: "automancy:glass",
+    model: "automancy:item/glass",
+)

@@ -1,0 +1,10 @@
+(
+    id: "automancy:coal",
+    adjacent: None,
+    instructions: (
+        inputs: None,
+        output: [
+            ("automancy:coal", 8),
+        ],
+    ),
+)

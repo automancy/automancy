@@ -1,0 +1,10 @@
+(
+    id: "automancy:merger",
+    function: Some("automancy:merger"),
+    models: [
+        "automancy:merger",
+    ],
+    data: ({
+        "inactive_model": Id("automancy:transfer_tile_inactive"),
+    }),
+)

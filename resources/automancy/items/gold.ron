@@ -1,0 +1,4 @@
+(
+    id: "automancy:gold",
+    model: "automancy:item/gold",
+)

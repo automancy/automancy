@@ -1,0 +1,4 @@
+(
+    id: "automancy:water",
+    model: "automancy:item/water",
+)

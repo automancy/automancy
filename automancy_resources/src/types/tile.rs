@@ -2,17 +2,16 @@ use std::ffi::OsStr;
 use std::fs::read_to_string;
 use std::path::Path;
 
-use serde::Deserialize;
-use serde_json;
+use serde::{Deserialize, Serialize};
 
 use automancy_defs::id::{Id, IdRaw};
 use automancy_defs::log;
 
 use crate::data::{DataMap, DataMapRaw};
-use crate::{load_recursively, ResourceManager, JSON_EXT};
+use crate::{load_recursively, ResourceManager, RON_EXT};
 
-#[derive(Debug, Deserialize)]
-pub struct TileJson {
+#[derive(Debug, Deserialize, Serialize)]
+pub struct TileRaw {
     pub id: IdRaw,
     pub function: Option<IdRaw>,
     pub models: Vec<IdRaw>,
@@ -31,7 +30,7 @@ impl ResourceManager {
     fn load_tile(&mut self, file: &Path) -> anyhow::Result<()> {
         log::info!("Loading tile at {file:?}");
 
-        let tile: TileJson = serde_json::from_str(&read_to_string(file)?)?;
+        let tile: TileRaw = ron::from_str(&read_to_string(file)?)?;
 
         let id = tile.id.to_id(&mut self.interner);
 
@@ -59,7 +58,7 @@ impl ResourceManager {
     pub fn load_tiles(&mut self, dir: &Path) -> anyhow::Result<()> {
         let tiles = dir.join("tiles");
 
-        for file in load_recursively(&tiles, OsStr::new(JSON_EXT)) {
+        for file in load_recursively(&tiles, OsStr::new(RON_EXT)) {
             self.load_tile(&file)?;
         }
 

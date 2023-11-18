@@ -1,0 +1,12 @@
+(
+    id: "automancy:coal_to_fire",
+    adjacent: None,
+    instructions: (
+        inputs: Some([
+            ("automancy:coal", 1),
+        ]),
+        output: [
+            ("automancy:fire", 16),
+        ],
+    ),
+)

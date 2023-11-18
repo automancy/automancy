@@ -1,0 +1,4 @@
+(
+    id: "automancy:chaos",
+    model: "automancy:item/chaos",
+)

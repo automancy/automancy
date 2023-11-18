@@ -1,0 +1,4 @@
+(
+    id: "automancy:mud",
+    model: "automancy:item/mud",
+)

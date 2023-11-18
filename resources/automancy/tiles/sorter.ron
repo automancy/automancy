@@ -1,0 +1,11 @@
+(
+    id: "automancy:sorter",
+    function: Some("automancy:sorter"),
+    models: [
+        "automancy:sorter",
+    ],
+    data: ({
+        "item_type": Id("automancy:#any"),
+        "inactive_model": Id("automancy:transfer_tile_inactive"),
+    }),
+)

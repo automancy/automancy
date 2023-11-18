@@ -1,0 +1,12 @@
+(
+    id: "automancy:coal_to_order",
+    adjacent: None,
+    instructions: (
+        inputs: Some([
+            ("automancy:coal", 1),
+        ]),
+        output: [
+            ("automancy:order", 8),
+        ],
+    ),
+)

@@ -1,0 +1,13 @@
+(
+    id: "automancy:small_storage",
+    function: Some("automancy:storage"),
+    models: [
+        "automancy:small_storage",
+    ],
+    data: ({
+        "item_type": Id("automancy:#any"),
+        "storage_takeable": Bool(true),
+        "max_amount": Amount(65536),
+        "not_targeted": Bool(true),
+    }),
+)

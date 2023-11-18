@@ -1,0 +1,4 @@
+(
+    id: "automancy:coal",
+    model: "automancy:item/coal",
+)

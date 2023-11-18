@@ -1,0 +1,4 @@
+(
+    id: "automancy:fire",
+    model: "automancy:item/fire",
+)

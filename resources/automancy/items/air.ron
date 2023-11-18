@@ -1,0 +1,4 @@
+(
+    id: "automancy:air",
+    model: "automancy:item/air",
+)

@@ -1,0 +1,8 @@
+(
+    id: "automancy:basic_still",
+    unlock: "automancy:basic_still",
+    icon: "automancy:basic_still",
+    next: None,
+    name: "automancy:research/basic_still_name",
+    description: "automancy:research/basic_still_description",
+)

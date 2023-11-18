@@ -1,0 +1,19 @@
+(
+    id: "automancy:basic_refinery",
+    function: Some("automancy:machine"),
+    models: [
+        "automancy:basic_refinery",
+    ],
+    data: ({
+        "scripts": VecId([
+            "automancy:sand",
+            "automancy:dirt",
+            "automancy:mud",
+            "automancy:glass",
+            "automancy:orb",
+            "automancy:silver",
+            "automancy:gold",
+            "automancy:philosophers_stone",
+        ]),
+    }),
+)

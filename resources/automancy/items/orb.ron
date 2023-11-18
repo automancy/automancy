@@ -1,0 +1,4 @@
+(
+    id: "automancy:orb",
+    model: "automancy:item/orb",
+)

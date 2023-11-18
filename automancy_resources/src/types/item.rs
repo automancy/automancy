@@ -3,17 +3,17 @@ use std::fs::read_to_string;
 use std::path::Path;
 use std::sync::Arc;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use automancy_defs::hashbrown::HashMap;
 use automancy_defs::id::{Id, IdRaw};
 use automancy_defs::log;
 
 use crate::data::item::{item_match, Item};
-use crate::{load_recursively, ResourceManager, JSON_EXT};
+use crate::{load_recursively, ResourceManager, RON_EXT};
 
-#[derive(Clone, Debug, Deserialize)]
-struct ItemJson {
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct ItemRaw {
     id: IdRaw,
     model: IdRaw,
 }
@@ -22,7 +22,7 @@ impl ResourceManager {
     fn load_item(&mut self, file: &Path) -> anyhow::Result<()> {
         log::info!("Loading item at: {file:?}");
 
-        let item: ItemJson = serde_json::from_str(&read_to_string(file)?)?;
+        let item: ItemRaw = ron::from_str(&read_to_string(file)?)?;
 
         let id = item.id.to_id(&mut self.interner);
         let model = item.model.to_id(&mut self.interner);
@@ -35,7 +35,7 @@ impl ResourceManager {
     pub fn load_items(&mut self, dir: &Path) -> anyhow::Result<()> {
         let items = dir.join("items");
 
-        for file in load_recursively(&items, OsStr::new(JSON_EXT)) {
+        for file in load_recursively(&items, OsStr::new(RON_EXT)) {
             self.load_item(&file)?;
         }
 

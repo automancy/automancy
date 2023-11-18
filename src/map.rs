@@ -12,6 +12,7 @@ use std::{
 
 use lazy_static::lazy_static;
 use ractor::ActorRef;
+use ron::error::SpannedResult;
 use serde::{Deserialize, Serialize};
 use zstd::{Decoder, Encoder};
 
@@ -28,7 +29,7 @@ use crate::tile_entity::{TileEntityMsg, TileModifier};
 
 pub const MAP_PATH: &str = "map";
 pub const MAP_EXT: &str = ".zst";
-pub const HEADER_EXT: &str = ".json";
+pub const HEADER_EXT: &str = ".ron";
 
 pub const MAIN_MENU: &str = ".main_menu";
 
@@ -113,7 +114,7 @@ impl Map {
 
         let reader = BufReader::with_capacity(MAP_BUFFER_SIZE, file);
 
-        let decoded: serde_json::Result<MapHeader> = serde_json::from_reader(reader);
+        let decoded: SpannedResult<MapHeader> = ron::de::from_reader(reader);
 
         match decoded {
             Ok(v) => Some((v, time)),
@@ -148,8 +149,7 @@ impl Map {
         let file = File::open(path).ok()?;
         let decoder = Decoder::new(file).unwrap();
 
-        let decoded: serde_json::Result<Vec<(TileCoord, SerdeTile)>> =
-            serde_json::from_reader(decoder);
+        let decoded: SpannedResult<Vec<(TileCoord, SerdeTile)>> = ron::de::from_reader(decoder);
 
         match decoded {
             Ok(v) => Some(v),
@@ -268,7 +268,7 @@ impl Map {
         let data = self.data.to_raw(interner);
         let tile_count = serde_tiles.len() as u64;
 
-        serde_json::to_writer(
+        ron::ser::to_writer(
             &mut header_writer,
             &MapHeader {
                 tile_map,
@@ -278,7 +278,7 @@ impl Map {
         )
         .unwrap();
 
-        serde_json::to_writer(&mut tiles_encoder, &serde_tiles).unwrap();
+        ron::ser::to_writer(&mut tiles_encoder, &serde_tiles).unwrap();
 
         header_writer.flush().unwrap();
         tiles_encoder.do_finish().unwrap();

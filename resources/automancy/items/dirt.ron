@@ -1,0 +1,4 @@
+(
+    id: "automancy:dirt",
+    model: "automancy:item/dirt",
+)

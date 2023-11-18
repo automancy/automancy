@@ -2,7 +2,7 @@ use std::ffi::OsStr;
 use std::fs::read_to_string;
 use std::path::Path;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use automancy_defs::gltf::animation::util::ReadOutputs;
 use automancy_defs::gltf::json;
@@ -13,7 +13,7 @@ use automancy_defs::rendering::{Animation, AnimationUnit, Model, Vertex};
 use automancy_defs::{gltf, id, log};
 
 use crate::data::item::Item;
-use crate::{load_recursively, ResourceManager, JSON_EXT};
+use crate::{load_recursively, ResourceManager, RON_EXT};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct IndexRange {
@@ -21,8 +21,8 @@ pub struct IndexRange {
     pub size: u32,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct ModelJson {
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ModelRaw {
     pub id: IdRaw,
     pub file: String,
 }
@@ -47,7 +47,7 @@ impl ResourceManager {
     fn load_model(&mut self, file: &Path) -> anyhow::Result<()> {
         log::info!("Loading model at: {file:?}");
 
-        let model: ModelJson = serde_json::from_str(&read_to_string(file)?)?;
+        let model: ModelRaw = ron::from_str(&read_to_string(file)?)?;
 
         let file = file
             .parent()
@@ -174,7 +174,7 @@ impl ResourceManager {
     pub fn load_models(&mut self, dir: &Path) -> anyhow::Result<()> {
         let models = dir.join("models");
 
-        for file in load_recursively(&models, OsStr::new(JSON_EXT)) {
+        for file in load_recursively(&models, OsStr::new(RON_EXT)) {
             self.load_model(&file)?;
         }
 

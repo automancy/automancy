@@ -1,0 +1,17 @@
+(
+    id: "automancy:basic_still",
+    function: Some("automancy:machine"),
+    models: [
+        "automancy:basic_still",
+    ],
+    data: ({
+        "scripts": VecId([
+            "automancy:coal_to_fire",
+            "automancy:coal_to_chaos",
+            "automancy:coal_to_order",
+            "automancy:dirt_to_earth",
+            "automancy:sand_to_air",
+            "automancy:mud_to_water",
+        ]),
+    }),
+)

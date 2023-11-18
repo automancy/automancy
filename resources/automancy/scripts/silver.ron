@@ -1,0 +1,14 @@
+(
+    id: "automancy:silver",
+    adjacent: None,
+    instructions: (
+        inputs: Some([
+            ("automancy:water", 16),
+            ("automancy:order", 8),
+            ("automancy:gravel", 128),
+        ]),
+        output: [
+            ("automancy:silver", 1),
+        ],
+    ),
+)

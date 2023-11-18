@@ -1,0 +1,10 @@
+(
+    id: "automancy:void",
+    function: Some("automancy:void"),
+    models: [
+        "automancy:void",
+    ],
+    data: ({
+        "not_targeted": Bool(true),
+    }),
+)

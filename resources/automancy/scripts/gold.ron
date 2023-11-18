@@ -1,0 +1,13 @@
+(
+    id: "automancy:gold",
+    adjacent: None,
+    instructions: (
+        inputs: Some([
+            ("automancy:water", 16),
+            ("automancy:gravel", 256),
+        ]),
+        output: [
+            ("automancy:gold", 1),
+        ],
+    ),
+)

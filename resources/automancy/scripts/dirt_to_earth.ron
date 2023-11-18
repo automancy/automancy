@@ -1,0 +1,12 @@
+(
+    id: "automancy:dirt_to_earth",
+    adjacent: None,
+    instructions: (
+        inputs: Some([
+            ("automancy:dirt", 1),
+        ]),
+        output: [
+            ("automancy:earth", 8),
+        ],
+    ),
+)

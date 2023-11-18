@@ -1,0 +1,12 @@
+(
+    id: "automancy:sand_to_air",
+    adjacent: None,
+    instructions: (
+        inputs: Some([
+            ("automancy:sand", 1),
+        ]),
+        output: [
+            ("automancy:air", 8),
+        ],
+    ),
+)

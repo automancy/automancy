@@ -1,0 +1,10 @@
+(
+    id: "automancy:node",
+    function: Some("automancy:node"),
+    models: [
+        "automancy:node",
+    ],
+    data: ({
+        "linked": Bool(true),
+    }),
+)

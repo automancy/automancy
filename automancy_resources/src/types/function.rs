@@ -12,6 +12,7 @@ use crate::{ResourceManager, FUNCTION_EXT};
 impl ResourceManager {
     pub fn load_functions(&mut self, dir: &Path) -> anyhow::Result<()> {
         let functions = dir.join("functions");
+
         if let Ok(functions) = read_dir(functions) {
             for file in functions
                 .into_iter()

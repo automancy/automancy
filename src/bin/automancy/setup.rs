@@ -31,6 +31,7 @@ fn load_resources(track: TrackHandle) -> (Arc<ResourceManager>, Vec<Vertex>, Vec
         .for_each(|dir| {
             let namespace = dir.file_name().unwrap().to_str().unwrap();
             log::info!("Loading namespace {namespace}...");
+
             resource_man
                 .load_models(&dir)
                 .expect("Error loading models");
@@ -50,9 +51,14 @@ fn load_resources(track: TrackHandle) -> (Arc<ResourceManager>, Vec<Vertex>, Vec
             resource_man
                 .load_functions(&dir)
                 .expect("Error loading functions");
+            resource_man
+                .load_researches(&dir)
+                .expect("Error loading researches");
+
             log::info!("Loaded namespace {namespace}.");
         });
 
+    resource_man.compile_researches();
     resource_man.ordered_items();
     let (vertices, indices) = resource_man.compile_models();
 

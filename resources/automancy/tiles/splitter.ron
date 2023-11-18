@@ -1,0 +1,11 @@
+(
+    id: "automancy:splitter",
+    function: Some("automancy:splitter"),
+    models: [
+        "automancy:splitter_right",
+        "automancy:splitter_left",
+    ],
+    data: ({
+        "not_targeted": Bool(true),
+    }),
+)

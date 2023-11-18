@@ -1,0 +1,4 @@
+(
+    id: "automancy:earth",
+    model: "automancy:item/earth",
+)

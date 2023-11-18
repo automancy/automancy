@@ -1,0 +1,13 @@
+(
+    id: "automancy:sand",
+    adjacent: None,
+    instructions: (
+        inputs: Some([
+            ("automancy:gravel", 2),
+            ("automancy:chaos", 2),
+        ]),
+        output: [
+            ("automancy:sand", 1),
+        ],
+    ),
+)

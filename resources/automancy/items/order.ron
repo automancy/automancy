@@ -1,0 +1,4 @@
+(
+    id: "automancy:order",
+    model: "automancy:item/order",
+)
