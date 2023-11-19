@@ -47,16 +47,16 @@ fn vs_main(
     return out;
 }
 
-const SOBEL_X = mat3x3<f32>(
-    vec3<f32>( 1.0,  2.0,  1.0),
-    vec3<f32>( 0.0,  0.0,  0.0),
-    vec3<f32>(-1.0, -2.0, -1.0),
+const KERNEL_X = mat3x3<f32>(
+    vec3<f32>( 1.0,  0.0, -1.0),
+    vec3<f32>( 1.0,  0.0, -1.0),
+    vec3<f32>( 1.0,  0.0, -1.0),
 );
 
-const SOBEL_Y = mat3x3<f32>(
-    vec3<f32>( 1.0,  0.0, -1.0),
-    vec3<f32>( 2.0,  0.0, -2.0),
-    vec3<f32>( 1.0,  0.0, -1.0),
+const KERNEL_Y = mat3x3<f32>(
+    vec3<f32>( 1.0,  1.0,  1.0),
+    vec3<f32>( 0.0,  0.0,  0.0),
+    vec3<f32>(-1.0, -1.0, -1.0),
 );
 
 fn color_edge(uv: vec2<f32>) -> f32 {
@@ -78,8 +78,8 @@ fn color_edge(uv: vec2<f32>) -> f32 {
         vec3(nw,  n, ne),
     );
 
-    let gx = dot(SOBEL_X[0], m[0]) + dot(SOBEL_X[1], m[1]) + dot(SOBEL_X[2], m[2]);
-    let gy = dot(SOBEL_Y[0], m[0]) + dot(SOBEL_Y[1], m[1]) + dot(SOBEL_Y[2], m[2]);
+    let gx = dot(KERNEL_X[0], m[0]) + dot(KERNEL_X[1], m[1]) + dot(KERNEL_X[2], m[2]);
+    let gy = dot(KERNEL_Y[0], m[0]) + dot(KERNEL_Y[1], m[1]) + dot(KERNEL_Y[2], m[2]);
 
     let g = length(vec2(gx, gy));
 
@@ -105,8 +105,8 @@ fn normal_edge(uv: vec2<f32>) -> f32 {
         vec3(nw,   n, ne),
     );
 
-    let gx = dot(SOBEL_X[0], m[0]) + dot(SOBEL_X[1], m[1]) + dot(SOBEL_X[2], m[2]);
-    let gy = dot(SOBEL_Y[0], m[0]) + dot(SOBEL_Y[1], m[1]) + dot(SOBEL_Y[2], m[2]);
+    let gx = dot(KERNEL_X[0], m[0]) + dot(KERNEL_X[1], m[1]) + dot(KERNEL_X[2], m[2]);
+    let gy = dot(KERNEL_Y[0], m[0]) + dot(KERNEL_Y[1], m[1]) + dot(KERNEL_Y[2], m[2]);
 
     let g = length(vec2(gx, gy));
 
@@ -132,8 +132,8 @@ fn depth_edge(uv: vec2<f32>) -> f32 {
         vec3(nw,  n, ne),
     );
 
-    let gx = dot(SOBEL_X[0], m[0]) + dot(SOBEL_X[1], m[1]) + dot(SOBEL_X[2], m[2]);
-    let gy = dot(SOBEL_Y[0], m[0]) + dot(SOBEL_Y[1], m[1]) + dot(SOBEL_Y[2], m[2]);
+    let gx = dot(KERNEL_X[0], m[0]) + dot(KERNEL_X[1], m[1]) + dot(KERNEL_X[2], m[2]);
+    let gy = dot(KERNEL_Y[0], m[0]) + dot(KERNEL_Y[1], m[1]) + dot(KERNEL_Y[2], m[2]);
 
     let g = length(vec2(gx, gy));
 

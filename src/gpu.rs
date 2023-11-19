@@ -49,7 +49,7 @@ pub const NORMAL_CLEAR: Color = Color {
     a: 0.0,
 };
 
-pub const UPSCALE_LEVEL: u32 = 2;
+pub const UPSCALE_LEVEL: u32 = 1;
 
 pub const DEPTH_FORMAT: TextureFormat = TextureFormat::Depth32Float;
 pub const SCREENSHOT_FORMAT: TextureFormat = TextureFormat::Rgba8UnormSrgb;
@@ -60,14 +60,19 @@ pub fn compile_instances<T: Clone>(
 ) -> HashMap<Id, Vec<(usize, RawInstanceData, T)>> {
     let mut raw_instances = HashMap::new();
 
+    #[cfg(debug_assertions)]
     let mut seen = HashSet::new();
 
     instances.binary_group_by_key(|v| v.1).for_each(|v| {
         let id = v[0].1;
-        if seen.contains(&id) {
-            panic!("Duplicate id when collecting instances - are the instances sorted?");
+
+        #[cfg(debug_assertions)]
+        {
+            if seen.contains(&id) {
+                panic!("Duplicate id when collecting instances - are the instances sorted?");
+            }
+            seen.insert(id);
         }
-        seen.insert(id);
 
         let models = &resource_man.all_models[&id].0;
 

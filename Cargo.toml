@@ -55,6 +55,7 @@ egui-winit = "0.23.0"
 lazy_static = "1.4.0"
 anyhow = "1.0.72"
 thiserror = "1.0.43"
+enum-ordinalize = "3.1.13"
 
 rhai = { version = "1.16.2", features = [
     "sync",
@@ -84,6 +85,7 @@ winit = { workspace = true }
 lazy_static = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
+enum-ordinalize = { workspace = true }
 
 rhai = { workspace = true }
 
@@ -96,7 +98,6 @@ human-panic = "1.1.5"
 color-eyre = "0.6"
 strip-ansi-escapes = "0.2.0"
 
-enum-ordinalize = "3.1.13"
 enum-map = "2.6.3"
 arraydeque = "0.5.1"
 fuse-rust = "0.3.1"

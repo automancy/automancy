@@ -1,9 +1,8 @@
 use std::ops::Mul;
 
 use egui::NumExt;
-use num::Zero;
 
-use automancy_defs::cgmath::{point2, point3, vec2};
+use automancy_defs::cgmath::{point2, point3, vec2, InnerSpace};
 use automancy_defs::coord::{TileCoord, TileRange};
 use automancy_defs::hexagon_tiles::traits::HexRound;
 use automancy_defs::math;
@@ -89,14 +88,14 @@ impl Camera {
     pub fn update_pos(&mut self, (width, height): (Double, Double), elapsed: Double) {
         let m = elapsed * 100.0;
 
-        if !self.move_vel.is_zero() {
+        if self.move_vel.magnitude2() > 0.000001 {
             self.pos.x += self.move_vel.x * m;
             self.pos.y += self.move_vel.y * m;
 
             self.move_vel -= self.move_vel * elapsed.mul(4.0).at_most(0.9);
         }
 
-        if !self.scroll_vel.is_zero() {
+        if self.scroll_vel.abs() > 0.00005 {
             self.pos.z += self.scroll_vel * m;
             self.pos.z = self.pos.z.clamp(1.0, 4.5);
 

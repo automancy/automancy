@@ -1,7 +1,7 @@
 use std::mem::size_of;
 
 use bytemuck::{Pod, Zeroable};
-use cgmath::{point3, vec3, EuclideanSpace, Matrix, MetricSpace, SquareMatrix};
+use cgmath::{point3, vec3, EuclideanSpace, MetricSpace, SquareMatrix};
 use egui::NumExt;
 use gltf::animation::Interpolation;
 use hexagon_tiles::fractional::FractionalHex;
@@ -11,7 +11,7 @@ use wgpu::{vertex_attr_array, BufferAddress, VertexAttribute, VertexBufferLayout
 use crate::coord::TileCoord;
 use crate::math;
 use crate::math::{
-    direction_to_angle, DPoint2, Double, Float, Matrix3, Matrix4, Point3, Quaternion, Vector3,
+    direction_to_angle, DPoint2, Double, Float, Matrix4, Point3, Quaternion, Vector3,
 };
 
 pub fn lerp_coords_to_pixel(a: TileCoord, b: TileCoord, t: Double) -> DPoint2 {
@@ -143,21 +143,6 @@ impl InstanceData {
     }
 }
 
-fn invert_transpose(matrix: Matrix4) -> Matrix4 {
-    matrix
-        .invert()
-        .map(|m| m.transpose())
-        .unwrap_or(Matrix4::identity())
-}
-
-fn mat4_to_3(matrix: Matrix4) -> Matrix3 {
-    Matrix3::from_cols(
-        matrix.x.truncate(),
-        matrix.y.truncate(),
-        matrix.z.truncate(),
-    )
-}
-
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
 pub struct RawInstanceData {
@@ -165,7 +150,6 @@ pub struct RawInstanceData {
     alpha: Float,
     light_pos: VertexPos,
     model_matrix: RawMat4,
-    normal_matrix: RawMat3,
 }
 
 impl From<InstanceData> for RawInstanceData {
@@ -175,7 +159,6 @@ impl From<InstanceData> for RawInstanceData {
             alpha: value.alpha,
             light_pos: [value.light_pos.x, value.light_pos.y, value.light_pos.z],
             model_matrix: value.model_matrix.into(),
-            normal_matrix: mat4_to_3(invert_transpose(value.model_matrix)).into(),
         }
     }
 }
@@ -190,9 +173,6 @@ impl RawInstanceData {
             7 => Float32x4,
             8 => Float32x4,
             9 => Float32x4,
-            10 => Float32x3,
-            11 => Float32x3,
-            12 => Float32x3,
         ];
 
         VertexBufferLayout {

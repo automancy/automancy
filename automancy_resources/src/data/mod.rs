@@ -360,7 +360,7 @@ impl DataMapRaw {
                     (
                         IdRaw::parse(key).to_id(interner),
                         match value {
-                            DataRaw::Inventory(v) => Data::Inventory(v.to_inventory(&interner)),
+                            DataRaw::Inventory(v) => Data::Inventory(v.to_inventory(interner)),
                             DataRaw::Coord(v) => Data::Coord(*v),
                             DataRaw::VecCoord(v) => Data::VecCoord(v.clone()),
                             DataRaw::Id(v) => Data::Id(interner.get_or_intern(v.to_string())),
