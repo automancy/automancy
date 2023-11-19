@@ -7,5 +7,6 @@
     data: ({
         "item_type": Id("automancy:#any"),
         "inactive_model": Id("automancy:transfer_tile_inactive"),
+        "default_tile": Bool(true),
     }),
 )

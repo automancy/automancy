@@ -7,5 +7,6 @@
     ],
     data: ({
         "not_targeted": Bool(true),
+        "default_tile": Bool(true),
     }),
 )
