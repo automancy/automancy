@@ -87,6 +87,7 @@ pub enum GameMsg {
         coord: TileCoord,
         id: Id,
         tile_modifier: TileModifier,
+        data: Option<DataMap>,
         record: bool,
         reply: Option<RpcReplyPort<PlaceTileResponse>>,
     },
@@ -290,6 +291,7 @@ impl Actor for Game {
                         coord,
                         id,
                         tile_modifier,
+                        data,
                         record,
                         reply,
                     } => {
@@ -316,7 +318,7 @@ impl Actor for Game {
                                 reply.send(PlaceTileResponse::Removed).unwrap();
                             }
 
-                            remove_tile(state, coord)
+                            remove_tile(state, coord).await
                         } else {
                             if let Some(reply) = reply {
                                 reply.send(PlaceTileResponse::Placed).unwrap();
@@ -329,13 +331,14 @@ impl Actor for Game {
                                 coord,
                                 id,
                                 tile_modifier,
+                                data,
                             )
                             .await
                         };
 
                         if record {
-                            let (id, tile_modifier) =
-                                old_tile.unwrap_or((self.resource_man.registry.none, 0));
+                            let (id, tile_modifier, data) =
+                                old_tile.unwrap_or((self.resource_man.registry.none, 0, None));
 
                             state.undo_steps.push_back(vec![PlaceTile {
                                 coord,
@@ -343,6 +346,7 @@ impl Actor for Game {
                                 tile_modifier,
                                 record: false,
                                 reply: None,
+                                data,
                             }]);
                         }
                     }
@@ -459,27 +463,30 @@ impl Actor for Game {
                     MoveTiles(tiles, direction, record) => {
                         let mut undo = vec![];
 
-                        tiles
-                            .into_iter()
-                            .flat_map(|coord| {
-                                Some(coord).zip(
-                                    state
-                                        .map
-                                        .tiles
-                                        .remove(&coord)
-                                        .zip(state.tile_entities.remove(&coord)),
-                                )
-                            })
-                            .collect::<Vec<_>>()
-                            .into_iter()
-                            .for_each(|(coord, ((id, modifier), tile_entity))| {
-                                let new_coord = coord + direction;
+                        let mut removed = Vec::new();
 
-                                state.map.tiles.insert(new_coord, (id, modifier));
-                                state.tile_entities.insert(new_coord, tile_entity);
+                        for coord in tiles {
+                            if let Some(old) = remove_tile(state, coord).await {
+                                removed.push((coord, old));
+                            }
+                        }
 
-                                undo.push(new_coord);
-                            });
+                        for (coord, (id, modifier, data)) in removed {
+                            let new_coord = coord + direction;
+
+                            insert_new_tile(
+                                self.resource_man.clone(),
+                                myself.clone(),
+                                state,
+                                new_coord,
+                                id,
+                                modifier,
+                                data,
+                            )
+                            .await;
+
+                            undo.push(new_coord);
+                        }
 
                         if record {
                             state
@@ -519,16 +526,6 @@ impl Actor for Game {
     }
 }
 
-/// Stops a tile and removes it from the game
-fn remove_tile(state: &mut GameState, coord: TileCoord) -> Option<(Id, TileModifier)> {
-    if let Some(tile_entity) = state.tile_entities.get(&coord) {
-        tile_entity.stop(Some("Removed from game".to_string()));
-    }
-
-    state.tile_entities.remove(&coord);
-    state.map.tiles.remove(&coord)
-}
-
 /// Creates a new tile of given type at the given position, and with an initial state.
 pub async fn new_tile(
     resource_man: Arc<ResourceManager>,
@@ -554,6 +551,32 @@ pub async fn new_tile(
     actor
 }
 
+/// Stops a tile and removes it from the game
+async fn remove_tile(
+    state: &mut GameState,
+    coord: TileCoord,
+) -> Option<(Id, TileModifier, Option<DataMap>)> {
+    let data = if let Some(tile_entity) = state.tile_entities.remove(&coord) {
+        let data = tile_entity
+            .call(TileEntityMsg::TakeData, None)
+            .await
+            .ok()
+            .map(CallResult::unwrap);
+
+        tile_entity.stop(Some("Removed from game".to_string()));
+
+        data
+    } else {
+        None
+    };
+
+    state
+        .map
+        .tiles
+        .remove(&coord)
+        .map(|(id, modifier)| (id, modifier, data))
+}
+
 /// Makes a new tile and add it into both the map and the game
 async fn insert_new_tile(
     resource_man: Arc<ResourceManager>,
@@ -562,10 +585,17 @@ async fn insert_new_tile(
     coord: TileCoord,
     id: Id,
     tile_modifier: TileModifier,
-) -> Option<(Id, TileModifier)> {
-    let old = remove_tile(state, coord);
+    data: Option<DataMap>,
+) -> Option<(Id, TileModifier, Option<DataMap>)> {
+    let old = remove_tile(state, coord).await;
 
     let tile_entity = new_tile(resource_man, game, coord, id, tile_modifier).await;
+
+    if let Some(data) = data {
+        tile_entity
+            .send_message(TileEntityMsg::SetData(data))
+            .unwrap();
+    }
 
     state.tile_entities.insert(coord, tile_entity);
     state.map.tiles.insert(coord, (id, tile_modifier));

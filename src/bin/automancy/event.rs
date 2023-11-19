@@ -469,6 +469,7 @@ pub fn on_event(
                                 *loop_store.selected_tile_modifiers.get(&id).unwrap_or(&0),
                             record: true,
                             reply: Some(reply),
+                            data: None,
                         },
                         None,
                     ))?
