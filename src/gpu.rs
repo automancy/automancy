@@ -28,20 +28,6 @@ use automancy_resources::ResourceManager;
 
 pub const GPU_BACKENDS: Backends = Backends::all();
 
-pub fn device_descriptor() -> DeviceDescriptor<'static> {
-    DeviceDescriptor {
-        features: Features::INDIRECT_FIRST_INSTANCE | Features::MULTI_DRAW_INDIRECT,
-        // WebGL doesn't support all of wgpu's features, so if
-        // we're building for the web we'll have to disable some.
-        limits: if cfg!(target_arch = "wasm32") {
-            Limits::downlevel_webgl2_defaults()
-        } else {
-            Limits::default()
-        },
-        label: None,
-    }
-}
-
 pub const NORMAL_CLEAR: Color = Color {
     r: 1.0,
     g: 0.0,
@@ -558,7 +544,20 @@ impl Gpu {
             .unwrap();
 
         let (device, queue) = adapter
-            .request_device(&device_descriptor(), None)
+            .request_device(
+                &DeviceDescriptor {
+                    features: Features::INDIRECT_FIRST_INSTANCE | Features::MULTI_DRAW_INDIRECT,
+                    // WebGL doesn't support all of wgpu's features, so if
+                    // we're building for the web we'll have to disable some.
+                    limits: if cfg!(target_arch = "wasm32") {
+                        Limits::downlevel_webgl2_defaults()
+                    } else {
+                        Limits::default()
+                    },
+                    label: None,
+                },
+                None,
+            )
             .await
             .unwrap();
 
