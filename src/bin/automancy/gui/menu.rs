@@ -1,9 +1,8 @@
-use color_eyre::owo_colors::OwoColorize;
 use std::fs;
 
 use egui::{
-    vec2, Align, Align2, Button, Checkbox, ComboBox, Context, RadioButton, RichText, ScrollArea,
-    Slider, TextEdit, TextStyle, Window,
+    vec2, Align, Align2, Button, Checkbox, ComboBox, Context, RichText, ScrollArea, Slider,
+    TextEdit, TextStyle, Window,
 };
 use futures::executor::block_on;
 use winit::event_loop::ControlFlow;
@@ -33,7 +32,7 @@ pub fn main_menu(
     Window::new("main_menu")
         .resizable(false)
         .title_bar(false)
-        .default_width(175.0)
+        .min_width(100.0)
         .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0))
         .frame(default_frame())
         .show(context, |ui| {

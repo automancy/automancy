@@ -2,7 +2,7 @@ use crate::{LoadResourceError, ResourceManager, COULD_NOT_GET_FILE_STEM, FONT_EX
 use automancy_defs::flexstr::ToSharedStr;
 use automancy_defs::log;
 use std::ffi::OsStr;
-use std::fs::{read_dir, read_to_string, File};
+use std::fs::{read_dir, File};
 use std::io::Read;
 use std::path::Path;
 use ttf_parser::{name_id, Face};
@@ -26,13 +26,18 @@ impl ResourceManager {
                 File::open(&file)?.read_to_end(&mut data)?;
                 let parsed = Face::parse(data.as_slice(), 0)?;
                 let file_stem = file.file_stem().unwrap().to_str().unwrap().to_string();
-                let name = parsed
+                let names = parsed
                     .tables()
                     .name
                     .expect("Failed to get name table from font")
-                    .names
+                    .names;
+                let name = names
                     .get(name_id::TYPOGRAPHIC_FAMILY)
-                    .expect("Failed to get font family name")
+                    .unwrap_or(
+                        names
+                            .get(name_id::FULL_NAME)
+                            .unwrap_or(names.get(name_id::FAMILY).unwrap()),
+                    )
                     .to_string()
                     .unwrap_or(file_stem);
                 self.fonts.insert(

@@ -94,7 +94,7 @@ fn init_styles(gui: &Gui) {
 
 /// Initializes the GUI.
 pub fn init_gui(renderer: egui_wgpu::Renderer, window: &Window) -> Gui {
-    let mut gui = Gui {
+    let gui = Gui {
         renderer,
         context: Default::default(),
         state: State::new(window),

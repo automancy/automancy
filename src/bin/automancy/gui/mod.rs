@@ -5,7 +5,6 @@ use fuse_rust::Fuse;
 use std::sync::Arc;
 
 use automancy_defs::colors;
-use automancy_defs::flexstr::SharedStr;
 use automancy_defs::gui::Gui;
 use automancy_defs::id::Id;
 use automancy_resources::ResourceManager;
