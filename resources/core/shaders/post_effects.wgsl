@@ -59,18 +59,20 @@ const KERNEL_Y = mat3x3<f32>(
     vec3<f32>(-1.0, -1.0, -1.0),
 );
 
+const LUMA = vec3<f32>(0.299, 0.587, 0.114);
+
 fn color_edge(uv: vec2<f32>) -> f32 {
     let texel_size = 1.0 / vec2<f32>(textureDimensions(frame_texture));
 
-    let c  = length(textureSample(frame_texture, frame_sampler, uv).rgb);
-    let n  = length(textureSample(frame_texture, frame_sampler, uv + texel_size * vec2<f32>( 0.0,  1.0)).rgb);
-    let e  = length(textureSample(frame_texture, frame_sampler, uv + texel_size * vec2<f32>( 1.0,  0.0)).rgb);
-    let s  = length(textureSample(frame_texture, frame_sampler, uv + texel_size * vec2<f32>( 0.0, -1.0)).rgb);
-    let w  = length(textureSample(frame_texture, frame_sampler, uv + texel_size * vec2<f32>(-1.0,  0.0)).rgb);
-    let ne = length(textureSample(frame_texture, frame_sampler, uv + texel_size * vec2<f32>( 1.0,  1.0)).rgb);
-    let nw = length(textureSample(frame_texture, frame_sampler, uv + texel_size * vec2<f32>(-1.0,  1.0)).rgb);
-    let se = length(textureSample(frame_texture, frame_sampler, uv + texel_size * vec2<f32>( 1.0, -1.0)).rgb);
-    let sw = length(textureSample(frame_texture, frame_sampler, uv + texel_size * vec2<f32>(-1.0, -1.0)).rgb);
+    let c  = dot(textureSample(frame_texture, frame_sampler, uv).rgb, LUMA);
+    let n  = dot(textureSample(frame_texture, frame_sampler, uv + texel_size * vec2<f32>( 0.0,  1.0)).rgb, LUMA);
+    let e  = dot(textureSample(frame_texture, frame_sampler, uv + texel_size * vec2<f32>( 1.0,  0.0)).rgb, LUMA);
+    let s  = dot(textureSample(frame_texture, frame_sampler, uv + texel_size * vec2<f32>( 0.0, -1.0)).rgb, LUMA);
+    let w  = dot(textureSample(frame_texture, frame_sampler, uv + texel_size * vec2<f32>(-1.0,  0.0)).rgb, LUMA);
+    let ne = dot(textureSample(frame_texture, frame_sampler, uv + texel_size * vec2<f32>( 1.0,  1.0)).rgb, LUMA);
+    let nw = dot(textureSample(frame_texture, frame_sampler, uv + texel_size * vec2<f32>(-1.0,  1.0)).rgb, LUMA);
+    let se = dot(textureSample(frame_texture, frame_sampler, uv + texel_size * vec2<f32>( 1.0, -1.0)).rgb, LUMA);
+    let sw = dot(textureSample(frame_texture, frame_sampler, uv + texel_size * vec2<f32>(-1.0, -1.0)).rgb, LUMA);
 
     let m = mat3x3(
         vec3(sw,  s, se),
@@ -83,7 +85,7 @@ fn color_edge(uv: vec2<f32>) -> f32 {
 
     let g = length(vec2(gx, gy));
 
-    return smoothstep(0.2, 1.0, g);
+    return smoothstep(0.15, 1.0, g);
 }
 
 fn normal_edge(uv: vec2<f32>) -> f32 {
@@ -110,7 +112,7 @@ fn normal_edge(uv: vec2<f32>) -> f32 {
 
     let g = length(vec2(gx, gy));
 
-    return smoothstep(0.2, 0.7, g);
+    return smoothstep(0.3, 1.0, g);
 }
 
 fn depth_edge(uv: vec2<f32>) -> f32 {
@@ -137,7 +139,7 @@ fn depth_edge(uv: vec2<f32>) -> f32 {
 
     let g = length(vec2(gx, gy));
 
-    return smoothstep(0.2, 0.8, 1.0 - g);
+    return smoothstep(0.2, 0.8, g);
 }
 
 fn rgb2hsl(c: vec3<f32>) -> vec3<f32> {
@@ -158,10 +160,10 @@ fn hsl2rgb(c: vec3<f32>) -> vec3<f32> {
   return c.z * mix(K.xxx, clamp(p - K.xxx, vec3(0.0, 0.0, 0.0), vec3(1.0, 1.0, 1.0)), c.y);
 }
 
-fn sobel_color(color: vec4<f32>, r: f32) -> vec4<f32> {
-    if (r > 0.2) {
+fn darken(color: vec4<f32>, r: f32) -> vec4<f32> {
+    if (r > 0.05) {
         var hsl = rgb2hsl(color.rgb);
-        hsl.z = 0.3;
+        hsl.z = 0.05;
 
         return vec4(hsl2rgb(hsl), color.a);
     } else {
@@ -173,9 +175,9 @@ fn sobel_color(color: vec4<f32>, r: f32) -> vec4<f32> {
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let color = textureSample(frame_texture, frame_sampler, in.uv);
 
-    let color_edge_c = sobel_color(color, color_edge(in.uv));
-    let normal_edge_c = color * vec4(vec3(normal_edge(in.uv)), 1.0);
-    let depth_edge_c = vec4(vec3(depth_edge(in.uv)), 1.0);
+    let color_edge_c = color + color * color_edge(in.uv);
+    let normal_edge_c = normal_edge(in.uv);
+    let depth_edge_c =  depth_edge(in.uv);
 
-    return (color_edge_c + normal_edge_c) * depth_edge_c;
+    return darken(color_edge_c, normal_edge_c * depth_edge_c);
 }

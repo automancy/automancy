@@ -71,7 +71,7 @@ struct FragmentOutput {
 fn fs_main(in: VertexOutput) -> FragmentOutput {
     let light_dir = normalize(in.light_pos.xyz - in.model_pos);
 
-    let diffuse = max(sqrt(dot(in.normal, light_dir)), 0.0);
+    let diffuse = max(dot(in.normal, light_dir), 0.0);
 
     var out: FragmentOutput;
 

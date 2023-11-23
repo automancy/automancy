@@ -35,8 +35,6 @@ pub const NORMAL_CLEAR: Color = Color {
     a: 0.0,
 };
 
-pub const UPSCALE_LEVEL: u32 = 1;
-
 pub const DEPTH_FORMAT: TextureFormat = TextureFormat::Depth32Float;
 pub const SCREENSHOT_FORMAT: TextureFormat = TextureFormat::Rgba8UnormSrgb;
 
@@ -171,89 +169,15 @@ pub fn create_or_write_buffer(
     }
 }
 
-pub fn create_surface_texture(
+pub fn create_texture_and_view(
     device: &Device,
-    format: TextureFormat,
-    size: Extent3d,
-    label: Option<&str>,
+    descriptor: &TextureDescriptor,
 ) -> (Texture, TextureView) {
-    let texture = device.create_texture(&TextureDescriptor {
-        label,
-        size,
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: TextureDimension::D2,
-        format,
-        usage: TextureUsages::RENDER_ATTACHMENT
-            | TextureUsages::TEXTURE_BINDING
-            | TextureUsages::COPY_SRC,
-        view_formats: &[],
-    });
+    let texture = device.create_texture(descriptor);
 
     let view = texture.create_view(&TextureViewDescriptor::default());
 
     (texture, view)
-}
-
-pub fn create_texture(
-    device: &Device,
-    format: TextureFormat,
-    dimension: TextureDimension,
-    size: Extent3d,
-    label: Option<&str>,
-    usage: TextureUsages,
-) -> (Texture, TextureView) {
-    let texture = device.create_texture(&TextureDescriptor {
-        label,
-        size,
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension,
-        format,
-        usage,
-        view_formats: &[],
-    });
-
-    let view = texture.create_view(&TextureViewDescriptor::default());
-
-    (texture, view)
-}
-
-pub fn create_texture_init(
-    device: &Device,
-    queue: &Queue,
-    format: TextureFormat,
-    dimension: TextureDimension,
-    size: Extent3d,
-    usage: TextureUsages,
-    data: &[u8],
-) -> (Texture, TextureView) {
-    let texture = device.create_texture_with_data(
-        queue,
-        &TextureDescriptor {
-            label: None,
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension,
-            format,
-            usage,
-            view_formats: &[],
-        },
-        data,
-    );
-
-    let view = texture.create_view(&TextureViewDescriptor::default());
-
-    (texture, view)
-}
-
-fn extent3d(config: &SurfaceConfiguration, scale: u32) -> Extent3d {
-    Extent3d {
-        width: config.width * scale,
-        height: config.height * scale,
-        depth_or_array_layers: 1,
-    }
 }
 
 fn make_post_effects_bind_group(
@@ -335,7 +259,7 @@ fn make_combine_bind_group(
     })
 }
 
-fn make_downscale_bind_group(
+fn make_antialiasing_bind_group(
     device: &Device,
     bind_group_layout: &BindGroupLayout,
     texture: &TextureView,
@@ -353,7 +277,7 @@ fn make_downscale_bind_group(
                 resource: BindingResource::Sampler(sampler),
             },
         ],
-        label: Some("downscale_bind_group"),
+        label: Some("antialiasing_bind_group"),
     })
 }
 
@@ -368,7 +292,7 @@ pub struct GameResources {
     #[getters(get)]
     post_effects_bind_group: Option<BindGroup>,
     #[getters(get)]
-    downscale_bind_group: Option<BindGroup>,
+    antialiasing_bind_group: Option<BindGroup>,
 }
 
 #[derive(OptionGetter)]
@@ -387,7 +311,7 @@ pub struct GuiResources {
     #[getters(get)]
     post_effects_bind_group: Option<BindGroup>,
     #[getters(get)]
-    downscale_bind_group: Option<BindGroup>,
+    antialiasing_bind_group: Option<BindGroup>,
 }
 
 #[derive(OptionGetter)]
@@ -429,7 +353,7 @@ pub struct PostEffectsResources {
 }
 
 #[derive(OptionGetter)]
-pub struct DownscaleResources {
+pub struct AntialiasingResources {
     pub bind_group_layout: BindGroupLayout,
     pub pipeline: RenderPipeline,
     #[getters(get)]
@@ -440,6 +364,9 @@ pub struct DownscaleResources {
 pub struct IntermediateResources {
     pub bind_group_layout: BindGroupLayout,
     pub screenshot_pipeline: RenderPipeline,
+    pub present_pipeline: RenderPipeline,
+    #[getters(get)]
+    present_bind_group: Option<BindGroup>,
 }
 
 pub struct Gpu {
@@ -477,7 +404,7 @@ pub struct Gpu {
     pub first_combine_resources: CombineResources,
     pub post_effects_resources: PostEffectsResources,
     pub second_combine_resources: CombineResources,
-    pub downscale_resources: DownscaleResources,
+    pub antialiasing_resources: AntialiasingResources,
     pub intermediate_resources: IntermediateResources,
 }
 
@@ -572,10 +499,7 @@ impl Gpu {
         let size = window.inner_size();
 
         let config = SurfaceConfiguration {
-            usage: TextureUsages::RENDER_ATTACHMENT
-                | TextureUsages::TEXTURE_BINDING
-                | TextureUsages::COPY_SRC
-                | TextureUsages::COPY_DST,
+            usage: TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
             width: size.width,
             height: size.height,
@@ -601,9 +525,9 @@ impl Gpu {
             source: ShaderSource::Wgsl(resource_man.shaders["combine"].as_str().into()),
         });
 
-        let downscale_shader = device.create_shader_module(ShaderModuleDescriptor {
-            label: Some("Downscale Shader"),
-            source: ShaderSource::Wgsl(resource_man.shaders["downscale"].as_str().into()),
+        let antialiasing_shader = device.create_shader_module(ShaderModuleDescriptor {
+            label: Some("Antialiasing Shader"),
+            source: ShaderSource::Wgsl(resource_man.shaders["antialiasing"].as_str().into()),
         });
 
         let intermediate_shader = device.create_shader_module(ShaderModuleDescriptor {
@@ -747,7 +671,7 @@ impl Gpu {
                     usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
                 }),
                 post_effects_bind_group: None,
-                downscale_bind_group: None,
+                antialiasing_bind_group: None,
             }
         };
 
@@ -817,7 +741,7 @@ impl Gpu {
                     usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
                 }),
                 post_effects_bind_group: None,
-                downscale_bind_group: None,
+                antialiasing_bind_group: None,
             }
         };
 
@@ -1088,7 +1012,7 @@ impl Gpu {
             texture: None,
         };
 
-        let downscale_resources = {
+        let antialiasing_resources = {
             let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
                 entries: &[
                     BindGroupLayoutEntry {
@@ -1097,36 +1021,36 @@ impl Gpu {
                         ty: BindingType::Texture {
                             multisampled: false,
                             view_dimension: TextureViewDimension::D2,
-                            sample_type: TextureSampleType::Float { filterable: false },
+                            sample_type: TextureSampleType::Float { filterable: true },
                         },
                         count: None,
                     },
                     BindGroupLayoutEntry {
                         binding: 1,
                         visibility: ShaderStages::FRAGMENT,
-                        ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
+                        ty: BindingType::Sampler(SamplerBindingType::Filtering),
                         count: None,
                     },
                 ],
-                label: Some("downscale_bind_group_layout"),
+                label: Some("antialiasing_bind_group_layout"),
             });
 
             let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
-                label: Some("Downscale Render Pipeline Layout"),
+                label: Some("Antialiasing Render Pipeline Layout"),
                 bind_group_layouts: &[&bind_group_layout],
                 push_constant_ranges: &[],
             });
 
             let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
-                label: Some("Downscale Render Pipeline"),
+                label: Some("Antialiasing Render Pipeline"),
                 layout: Some(&pipeline_layout),
                 vertex: VertexState {
-                    module: &downscale_shader,
+                    module: &antialiasing_shader,
                     entry_point: "vs_main",
                     buffers: &[],
                 },
                 fragment: Some(FragmentState {
-                    module: &downscale_shader,
+                    module: &antialiasing_shader,
                     entry_point: "fs_main",
                     targets: &[Some(ColorTargetState {
                         format: config.format,
@@ -1149,7 +1073,7 @@ impl Gpu {
                 multiview: None,
             });
 
-            DownscaleResources {
+            AntialiasingResources {
                 bind_group_layout,
                 pipeline,
                 texture: None,
@@ -1164,7 +1088,7 @@ impl Gpu {
                         binding: 0,
                         visibility: ShaderStages::FRAGMENT,
                         ty: BindingType::Texture {
-                            sample_type: TextureSampleType::Float { filterable: true },
+                            sample_type: TextureSampleType::Float { filterable: false },
                             view_dimension: TextureViewDimension::D2,
                             multisampled: false,
                         },
@@ -1173,7 +1097,7 @@ impl Gpu {
                     BindGroupLayoutEntry {
                         binding: 1,
                         visibility: ShaderStages::FRAGMENT,
-                        ty: BindingType::Sampler(SamplerBindingType::Filtering),
+                        ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
                         count: None,
                     },
                 ],
@@ -1218,9 +1142,43 @@ impl Gpu {
                 multiview: None,
             });
 
+            let present_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+                label: Some("Present Pipeline"),
+                layout: Some(&intermediate_pipeline_layout),
+                vertex: VertexState {
+                    module: &intermediate_shader,
+                    entry_point: "vs_main",
+                    buffers: &[],
+                },
+                fragment: Some(FragmentState {
+                    module: &intermediate_shader,
+                    entry_point: "fs_main",
+                    targets: &[Some(ColorTargetState {
+                        format: config.format,
+                        blend: None,
+                        write_mask: ColorWrites::ALL,
+                    })],
+                }),
+                primitive: PrimitiveState {
+                    topology: PrimitiveTopology::TriangleList,
+                    front_face: FrontFace::Ccw,
+                    cull_mode: None,
+                    ..Default::default()
+                },
+                depth_stencil: None,
+                multisample: MultisampleState {
+                    count: 1,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                multiview: None,
+            });
+
             IntermediateResources {
                 bind_group_layout,
                 screenshot_pipeline,
+                present_pipeline,
+                present_bind_group: None,
             }
         };
 
@@ -1259,7 +1217,7 @@ impl Gpu {
             first_combine_resources,
             post_effects_resources,
             second_combine_resources,
-            downscale_resources,
+            antialiasing_resources,
             intermediate_resources,
         };
 
@@ -1277,39 +1235,77 @@ impl Gpu {
 
         self.surface.configure(device, config);
 
-        let original = extent3d(config, 1);
-        let upscale = extent3d(config, UPSCALE_LEVEL);
+        let extent = Extent3d {
+            width: config.width,
+            height: config.height,
+            depth_or_array_layers: 1,
+        };
 
-        self.normal_texture = Some(create_surface_texture(
+        self.game_texture = Some(create_texture_and_view(
             device,
-            TextureFormat::Rgba32Float,
-            upscale,
-            None,
+            &TextureDescriptor {
+                label: None,
+                size: extent,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: config.format,
+                usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            },
         ));
-        self.depth_texture = Some(create_texture(
+        self.normal_texture = Some(create_texture_and_view(
             device,
-            DEPTH_FORMAT,
-            TextureDimension::D2,
-            upscale,
-            None,
-            TextureUsages::RENDER_ATTACHMENT,
+            &TextureDescriptor {
+                label: None,
+                size: extent,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: TextureFormat::Rgba32Float,
+                usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            },
         ));
-        self.model_depth_texture = Some(create_texture(
+        self.depth_texture = Some(create_texture_and_view(
             device,
-            TextureFormat::R32Float,
-            TextureDimension::D2,
-            upscale,
-            None,
-            TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
+            &TextureDescriptor {
+                label: None,
+                size: extent,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: DEPTH_FORMAT,
+                usage: TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            },
+        ));
+        self.model_depth_texture = Some(create_texture_and_view(
+            device,
+            &TextureDescriptor {
+                label: None,
+                size: extent,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: TextureFormat::R32Float,
+                usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            },
         ));
 
-        self.game_texture = Some(create_surface_texture(device, config.format, upscale, None));
-
-        self.egui_resources.texture = Some(create_surface_texture(
+        self.egui_resources.texture = Some(create_texture_and_view(
             device,
-            config.format,
-            original,
-            None,
+            &TextureDescriptor {
+                label: None,
+                size: extent,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: config.format,
+                usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            },
         ));
 
         self.game_resources.post_effects_bind_group = Some(make_post_effects_bind_group(
@@ -1336,57 +1332,107 @@ impl Gpu {
             &self.non_filtering_sampler,
         ));
 
-        self.post_effects_resources.texture =
-            Some(create_surface_texture(device, config.format, upscale, None));
-
-        self.downscale_resources.texture = Some(create_surface_texture(
+        self.post_effects_resources.texture = Some(create_texture_and_view(
             device,
-            config.format,
-            original,
-            None,
+            &TextureDescriptor {
+                label: None,
+                size: extent,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: config.format,
+                usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            },
         ));
 
-        self.game_resources.downscale_bind_group = Some(make_downscale_bind_group(
+        self.antialiasing_resources.texture = Some(create_texture_and_view(
             device,
-            &self.downscale_resources.bind_group_layout,
+            &TextureDescriptor {
+                label: None,
+                size: extent,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: config.format,
+                usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            },
+        ));
+
+        self.game_resources.antialiasing_bind_group = Some(make_antialiasing_bind_group(
+            device,
+            &self.antialiasing_resources.bind_group_layout,
             &self.post_effects_resources.texture().1,
-            &self.non_filtering_sampler,
+            &self.filtering_sampler,
         ));
-        self.gui_resources.downscale_bind_group = Some(make_downscale_bind_group(
+        self.gui_resources.antialiasing_bind_group = Some(make_antialiasing_bind_group(
             device,
-            &self.downscale_resources.bind_group_layout,
+            &self.antialiasing_resources.bind_group_layout,
             &self.post_effects_resources.texture().1,
-            &self.non_filtering_sampler,
+            &self.filtering_sampler,
         ));
 
-        self.first_combine_resources.texture = Some(create_surface_texture(
+        self.first_combine_resources.texture = Some(create_texture_and_view(
             device,
-            config.format,
-            original,
-            None,
+            &TextureDescriptor {
+                label: None,
+                size: extent,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: config.format,
+                usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            },
         ));
         self.first_combine_resources.bind_group = Some(make_combine_bind_group(
             device,
             &self.first_combine_resources.bind_group_layout,
-            &self.downscale_resources.texture().1,
+            &self.antialiasing_resources.texture().1,
             &self.non_filtering_sampler,
             &self.egui_resources.texture().1,
             &self.non_filtering_sampler,
         ));
 
-        self.second_combine_resources.texture = Some(create_surface_texture(
+        self.second_combine_resources.texture = Some(create_texture_and_view(
             device,
-            config.format,
-            original,
-            None,
+            &TextureDescriptor {
+                label: None,
+                size: extent,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: config.format,
+                usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            },
         ));
         self.second_combine_resources.bind_group = Some(make_combine_bind_group(
             device,
             &self.second_combine_resources.bind_group_layout,
             &self.first_combine_resources.texture().1,
             &self.non_filtering_sampler,
-            &self.downscale_resources.texture().1,
+            &self.antialiasing_resources.texture().1,
             &self.non_filtering_sampler,
         ));
+
+        self.intermediate_resources.present_bind_group =
+            Some(device.create_bind_group(&BindGroupDescriptor {
+                label: None,
+                layout: &self.intermediate_resources.bind_group_layout,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: BindingResource::TextureView(
+                            &self.second_combine_resources.texture().1,
+                        ),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: BindingResource::Sampler(&self.non_filtering_sampler),
+                    },
+                ],
+            }))
     }
 }

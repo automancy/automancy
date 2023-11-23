@@ -90,7 +90,7 @@ fn draw_tile_selection(
             gui_instances.push((
                 InstanceData::default()
                     .with_model_matrix(matrix)
-                    .with_light_pos(point3(0.0, 1.0, 8.0)),
+                    .with_light_pos(point3(0.0, 1.5, 10.0)),
                 model,
                 (
                     Some(rect),

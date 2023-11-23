@@ -20,7 +20,7 @@ use wgpu::{
 
 use automancy::game::{GameMsg, RenderUnit, TransactionRecord, TRANSACTION_ANIMATION_SPEED};
 use automancy::gpu;
-use automancy::gpu::{Gpu, NORMAL_CLEAR, SCREENSHOT_FORMAT, UPSCALE_LEVEL};
+use automancy::gpu::{Gpu, NORMAL_CLEAR, SCREENSHOT_FORMAT};
 use automancy::input::KeyActions;
 use automancy_defs::cgmath::{point3, vec3, EuclideanSpace};
 use automancy_defs::coord::TileCoord;
@@ -385,8 +385,8 @@ impl Renderer {
                 game_pass.set_viewport(
                     0.0,
                     0.0,
-                    (size.width * UPSCALE_LEVEL) as Float,
-                    (size.height * UPSCALE_LEVEL) as Float,
+                    size.width as Float,
+                    size.height as Float,
                     1.0,
                     0.0,
                 );
@@ -500,8 +500,8 @@ impl Renderer {
                 in_world_item_pass.set_viewport(
                     0.0,
                     0.0,
-                    (size.width * UPSCALE_LEVEL) as Float,
-                    (size.height * UPSCALE_LEVEL) as Float,
+                    (size.width) as Float,
+                    (size.height) as Float,
                     1.0,
                     0.0,
                 );
@@ -524,10 +524,10 @@ impl Renderer {
         }
 
         {
-            let mut downscale_pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("Game Downscale Render Pass"),
+            let mut antialiasing_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some("Game Antialiasing Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.downscale_resources.texture().1,
+                    view: &self.gpu.antialiasing_resources.texture().1,
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(Color::BLACK),
@@ -537,9 +537,13 @@ impl Renderer {
                 depth_stencil_attachment: None,
             });
 
-            downscale_pass.set_pipeline(&self.gpu.downscale_resources.pipeline);
-            downscale_pass.set_bind_group(0, self.gpu.game_resources.downscale_bind_group(), &[]);
-            downscale_pass.draw(0..3, 0..1);
+            antialiasing_pass.set_pipeline(&self.gpu.antialiasing_resources.pipeline);
+            antialiasing_pass.set_bind_group(
+                0,
+                self.gpu.game_resources.antialiasing_bind_group(),
+                &[],
+            );
+            antialiasing_pass.draw(0..3, 0..1);
         }
 
         let user_commands = {
@@ -668,10 +672,10 @@ impl Renderer {
                 for (draw, (viewport, scissor)) in gui_draws.values().flatten() {
                     if let Some(viewport) = viewport {
                         gui_pass.set_viewport(
-                            viewport.left() * factor * UPSCALE_LEVEL as Float,
-                            viewport.top() * factor * UPSCALE_LEVEL as Float,
-                            viewport.width() * factor * UPSCALE_LEVEL as Float,
-                            viewport.height() * factor * UPSCALE_LEVEL as Float,
+                            viewport.left() * factor as Float,
+                            viewport.top() * factor as Float,
+                            viewport.width() * factor as Float,
+                            viewport.height() * factor as Float,
                             1.0,
                             0.0,
                         );
@@ -679,8 +683,8 @@ impl Renderer {
                         gui_pass.set_viewport(
                             0.0,
                             0.0,
-                            (size.width * UPSCALE_LEVEL) as Float,
-                            (size.height * UPSCALE_LEVEL) as Float,
+                            (size.width) as Float,
+                            (size.height) as Float,
                             1.0,
                             0.0,
                         );
@@ -688,18 +692,13 @@ impl Renderer {
 
                     if let Some(scissor) = scissor {
                         gui_pass.set_scissor_rect(
-                            (scissor.left() * factor) as u32 * UPSCALE_LEVEL,
-                            (scissor.top() * factor) as u32 * UPSCALE_LEVEL,
-                            (scissor.width() * factor) as u32 * UPSCALE_LEVEL,
-                            (scissor.height() * factor) as u32 * UPSCALE_LEVEL,
+                            (scissor.left() * factor) as u32,
+                            (scissor.top() * factor) as u32,
+                            (scissor.width() * factor) as u32,
+                            (scissor.height() * factor) as u32,
                         );
                     } else {
-                        gui_pass.set_scissor_rect(
-                            0,
-                            0,
-                            size.width * UPSCALE_LEVEL,
-                            size.height * UPSCALE_LEVEL,
-                        );
+                        gui_pass.set_scissor_rect(0, 0, size.width, size.height);
                     }
 
                     gui_pass.draw_indexed(
@@ -778,8 +777,8 @@ impl Renderer {
                 overlay.set_viewport(
                     0.0,
                     0.0,
-                    (size.width * UPSCALE_LEVEL) as Float,
-                    (size.height * UPSCALE_LEVEL) as Float,
+                    (size.width) as Float,
+                    (size.height) as Float,
                     1.0,
                     0.0,
                 );
@@ -888,10 +887,10 @@ impl Renderer {
                 for (draw, (viewport, scissor)) in item_draws.values().flatten() {
                     if let Some(viewport) = viewport {
                         item_pass.set_viewport(
-                            viewport.left() * factor * UPSCALE_LEVEL as Float,
-                            viewport.top() * factor * UPSCALE_LEVEL as Float,
-                            viewport.width() * factor * UPSCALE_LEVEL as Float,
-                            viewport.height() * factor * UPSCALE_LEVEL as Float,
+                            viewport.left() * factor as Float,
+                            viewport.top() * factor as Float,
+                            viewport.width() * factor as Float,
+                            viewport.height() * factor as Float,
                             0.0,
                             1.0,
                         );
@@ -899,8 +898,8 @@ impl Renderer {
                         item_pass.set_viewport(
                             0.0,
                             0.0,
-                            (size.width * UPSCALE_LEVEL) as Float,
-                            (size.height * UPSCALE_LEVEL) as Float,
+                            (size.width) as Float,
+                            (size.height) as Float,
                             0.0,
                             1.0,
                         );
@@ -908,18 +907,13 @@ impl Renderer {
 
                     if let Some(scissor) = scissor {
                         item_pass.set_scissor_rect(
-                            (scissor.left() * factor) as u32 * UPSCALE_LEVEL,
-                            (scissor.top() * factor) as u32 * UPSCALE_LEVEL,
-                            (scissor.width() * factor) as u32 * UPSCALE_LEVEL,
-                            (scissor.height() * factor) as u32 * UPSCALE_LEVEL,
+                            (scissor.left() * factor) as u32,
+                            (scissor.top() * factor) as u32,
+                            (scissor.width() * factor) as u32,
+                            (scissor.height() * factor) as u32,
                         );
                     } else {
-                        item_pass.set_scissor_rect(
-                            0,
-                            0,
-                            size.width * UPSCALE_LEVEL,
-                            size.height * UPSCALE_LEVEL,
-                        );
+                        item_pass.set_scissor_rect(0, 0, size.width, size.height);
                     }
 
                     item_pass.draw_indexed(
@@ -932,10 +926,10 @@ impl Renderer {
         }
 
         {
-            let mut downscale_pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("Gui Downscale Render Pass"),
+            let mut antialiasing_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some("Gui Antialiasing Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.gpu.downscale_resources.texture().1,
+                    view: &self.gpu.antialiasing_resources.texture().1,
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(Color::BLACK),
@@ -945,9 +939,13 @@ impl Renderer {
                 depth_stencil_attachment: None,
             });
 
-            downscale_pass.set_pipeline(&self.gpu.downscale_resources.pipeline);
-            downscale_pass.set_bind_group(0, self.gpu.gui_resources.downscale_bind_group(), &[]);
-            downscale_pass.draw(0..3, 0..1);
+            antialiasing_pass.set_pipeline(&self.gpu.antialiasing_resources.pipeline);
+            antialiasing_pass.set_bind_group(
+                0,
+                self.gpu.gui_resources.antialiasing_bind_group(),
+                &[],
+            );
+            antialiasing_pass.draw(0..3, 0..1);
         }
 
         {
@@ -969,15 +967,32 @@ impl Renderer {
             combine_pass.draw(0..3, 0..1)
         }
 
-        encoder.copy_texture_to_texture(
-            self.gpu
-                .second_combine_resources
-                .texture()
-                .0
-                .as_image_copy(),
-            output.texture.as_image_copy(),
-            output.texture.size(),
-        );
+        {
+            let view = output
+                .texture
+                .create_view(&TextureViewDescriptor::default());
+
+            let mut present_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some("Present Pass"),
+                color_attachments: &[Some(RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: Operations {
+                        load: LoadOp::Clear(Color::BLACK),
+                        store: true,
+                    },
+                })],
+                depth_stencil_attachment: None,
+            });
+
+            present_pass.set_pipeline(&self.gpu.intermediate_resources.present_pipeline);
+            present_pass.set_bind_group(
+                0,
+                self.gpu.intermediate_resources.present_bind_group(),
+                &[],
+            );
+            present_pass.draw(0..3, 0..1)
+        }
 
         fn size_align<T: PrimInt>(size: T, alignment: T) -> T {
             ((size + alignment - T::one()) / alignment) * alignment
@@ -1010,14 +1025,12 @@ impl Renderer {
                     BindGroupEntry {
                         binding: 0,
                         resource: BindingResource::TextureView(
-                            &output
-                                .texture
-                                .create_view(&TextureViewDescriptor::default()),
+                            &self.gpu.second_combine_resources.texture().1,
                         ),
                     },
                     BindGroupEntry {
                         binding: 1,
-                        resource: BindingResource::Sampler(&self.gpu.filtering_sampler),
+                        resource: BindingResource::Sampler(&self.gpu.non_filtering_sampler),
                     },
                 ],
             });
@@ -1085,8 +1098,6 @@ impl Renderer {
                 });
                 self.gpu.device.poll(Maintain::Wait);
                 rx.blocking_recv().unwrap().unwrap();
-
-                // TODO does screenshotting work on windows
 
                 let texture_width = (texture_dim.width * block_size) as usize;
                 let data = slice.get_mapped_range();
