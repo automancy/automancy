@@ -29,12 +29,12 @@ use crate::data::stack::{ItemAmount, ItemStack};
 use crate::data::DataMap;
 use crate::error::ErrorManager;
 use crate::registry::{DataIds, ErrorIds, GuiIds, ModelIds, Registry};
+use crate::types::font::Font;
 use crate::types::model::IndexRange;
 use crate::types::script::{Instructions, Script};
 use crate::types::tag::Tag;
 use crate::types::tile::Tile;
 use crate::types::translate::Translate;
-
 pub mod data;
 pub mod error;
 
@@ -82,6 +82,7 @@ pub fn load_recursively(path: &Path, extension: &OsStr) -> Vec<PathBuf> {
 
 pub const RESOURCES_PATH: &str = "resources";
 
+pub const FONT_EXT: &str = "ttf";
 pub const RON_EXT: &str = "ron";
 pub const AUDIO_EXT: &str = "ogg";
 pub const FUNCTION_EXT: &str = "rhai";
@@ -103,6 +104,7 @@ pub struct ResourceManager {
     pub audio: HashMap<SharedStr, StaticSoundData>,
     pub shaders: HashMap<SharedStr, String>,
     pub functions: HashMap<Id, (AST, Scope<'static>)>,
+    pub fonts: HashMap<SharedStr, Font>,
 
     pub ordered_tiles: Vec<Id>,
     pub ordered_items: Vec<Id>,
@@ -298,6 +300,7 @@ impl ResourceManager {
             audio: Default::default(),
             shaders: Default::default(),
             functions: Default::default(),
+            fonts: Default::default(),
 
             ordered_tiles: vec![],
             ordered_items: vec![],

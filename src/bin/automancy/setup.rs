@@ -48,6 +48,7 @@ fn load_resources(track: TrackHandle) -> (Arc<ResourceManager>, Vec<Vertex>, Vec
             resource_man
                 .load_shaders(&dir)
                 .expect("Error loading shaders");
+            resource_man.load_fonts(&dir).expect("Error loading fonts");
             resource_man
                 .load_functions(&dir)
                 .expect("Error loading functions");

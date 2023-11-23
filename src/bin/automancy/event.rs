@@ -19,7 +19,8 @@ use automancy::tile_entity::{TileEntityMsg, TileModifier};
 use automancy_defs::cgmath::{point2, vec3};
 use automancy_defs::colors::ColorAdj;
 use automancy_defs::coord::{ChunkCoord, TileCoord};
-use automancy_defs::gui::Gui;
+use automancy_defs::flexstr::ToSharedStr;
+use automancy_defs::gui::{set_font, Gui};
 use automancy_defs::hashbrown::{HashMap, HashSet};
 use automancy_defs::id::Id;
 use automancy_defs::math::{Float, Matrix4, FAR};
@@ -130,6 +131,7 @@ fn render(
 
     let mut result = Ok(false);
 
+    let mut should_update_fonts = false;
     let mut tile_tints = HashMap::new();
 
     let mut extra_instances = vec![];
@@ -268,7 +270,7 @@ fn render(
                     menu::map_menu(setup, &gui.context, loop_store);
                 }
                 Screen::Options => {
-                    menu::options_menu(setup, &gui.context, loop_store);
+                    should_update_fonts = menu::options_menu(setup, &gui.context, loop_store);
                 }
                 Screen::Paused => {
                     menu::pause_menu(setup, &gui.context, loop_store);
@@ -277,6 +279,9 @@ fn render(
             }
         }
 
+        if should_update_fonts {
+            set_font(setup.options.gui.font.to_shared_str(), gui);
+        }
         match loop_store.gui_state.popup.clone() {
             PopupState::None => {}
             PopupState::MapCreate => popup::map_create_popup(setup, gui, loop_store),
@@ -613,6 +618,5 @@ pub fn on_event(
             setup.game.send_message(GameMsg::Undo)?;
         }
     }
-
     Ok(false)
 }

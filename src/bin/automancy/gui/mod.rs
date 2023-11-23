@@ -1,9 +1,12 @@
 use egui::epaint::Shadow;
-use egui::{Frame, Margin, Rounding, ScrollArea, Ui};
+use egui::{FontData, FontDefinitions, Frame, Margin, Rounding, ScrollArea, Ui};
 use enum_map::{enum_map, Enum, EnumMap};
 use fuse_rust::Fuse;
+use std::sync::Arc;
 
 use automancy_defs::colors;
+use automancy_defs::flexstr::SharedStr;
+use automancy_defs::gui::Gui;
 use automancy_defs::id::Id;
 use automancy_resources::ResourceManager;
 
@@ -193,5 +196,15 @@ impl TextFieldState {
                 ui.radio_value(new_id, Some(id), name(resource_man, &id));
             }
         });
+    }
+}
+
+// TODO i should really find a better place for this. oh well!
+pub fn init_fonts(resource_man: Arc<ResourceManager>, gui: &mut Gui) {
+    gui.fonts = FontDefinitions::default();
+    for (name, font) in resource_man.fonts.iter() {
+        gui.fonts
+            .font_data
+            .insert(name.to_string(), FontData::from_owned(font.data.to_owned()));
     }
 }

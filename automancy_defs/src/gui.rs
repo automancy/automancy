@@ -2,15 +2,11 @@ use egui::output::OpenUrl;
 use egui::style::{WidgetVisuals, Widgets};
 use egui::FontFamily::{Monospace, Proportional};
 use egui::{
-    Color32, Context, FontData, FontDefinitions, FontId, Response, Rounding, Stroke, Style,
-    TextStyle, Ui, Visuals, Widget,
+    Color32, Context, FontDefinitions, FontId, Response, Rounding, Stroke, Style, TextStyle, Ui,
+    Visuals, Widget,
 };
 use egui_winit::State;
-use std::error::Error;
-use std::fs;
-use std::fs::File;
-use std::io::Read;
-
+use flexstr::SharedStr;
 use winit::window::Window;
 
 pub struct Gui {
@@ -19,37 +15,17 @@ pub struct Gui {
     pub state: State,
     pub fonts: FontDefinitions,
 }
-/// Initialize the font families.
-fn init_fonts(gui: &mut Gui) -> Result<(), Box<dyn Error>> {
-    gui.fonts = FontDefinitions::default();
-    let fonts_dir = fs::read_dir("resources/core/fonts")?;
-    let font_files: Vec<(File, String)> = fonts_dir
-        .filter_map(|f| f.ok())
-        .map(|f| (File::open(f.path()), f))
-        .filter(|(f, _d)| f.is_ok())
-        .map(|(f, d)| (f.unwrap(), d.file_name().to_str().unwrap().to_string()))
-        .collect();
-    for (mut file, filename) in font_files {
-        log::info!("loading font {filename}");
-        let mut data: Vec<u8> = Vec::new();
-        file.read_to_end(&mut data)?;
-        gui.fonts
-            .font_data
-            .insert(filename.to_owned(), FontData::from_owned(data));
-    }
-    Ok(())
-}
-pub fn set_font(font: String, gui: &mut Gui) {
+pub fn set_font(font: SharedStr, gui: &mut Gui) {
     gui.fonts
         .families
         .get_mut(&Proportional)
         .unwrap()
-        .insert(0, font.to_owned());
+        .insert(0, font.to_string());
     gui.fonts
         .families
         .get_mut(&Monospace)
         .unwrap()
-        .insert(0, font);
+        .insert(0, font.to_string());
     gui.context.set_fonts(gui.fonts.clone());
 }
 
@@ -124,7 +100,6 @@ pub fn init_gui(renderer: egui_wgpu::Renderer, window: &Window) -> Gui {
         state: State::new(window),
         fonts: FontDefinitions::default(),
     };
-    init_fonts(&mut gui).expect("Failed to initialize fonts");
     init_styles(&gui);
 
     gui
