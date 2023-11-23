@@ -22,3 +22,4 @@ rhai = { workspace = true }
 walkdir = "2.3.3"
 chrono = "0.4.24"
 kira = "0.8.3"
+ttf-parser = "0.20.0"

@@ -12,6 +12,7 @@ use automancy::game::GameMsg;
 use automancy::map::{Map, MAIN_MENU};
 use automancy::options::AAType;
 use automancy::VERSION;
+use automancy_defs::flexstr::ToSharedStr;
 use automancy_defs::gui::{Gui, HyperlinkWidget};
 use automancy_defs::log;
 use automancy_resources::{format, format_time};
@@ -495,7 +496,11 @@ pub fn options_menu(
                                     ui.label(RichText::new("Font:"));
                                     let font_before = setup.options.gui.font.clone();
                                     ComboBox::from_label("")
-                                        .selected_text(setup.options.gui.font.to_string())
+                                        .selected_text(
+                                            &setup.resource_man.fonts
+                                                [&setup.options.gui.font.to_shared_str()]
+                                                .name,
+                                        )
                                         .show_ui(ui, |ui| {
                                             for (key, font) in &setup.resource_man.fonts {
                                                 ui.selectable_value(

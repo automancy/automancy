@@ -31,7 +31,7 @@ impl ResourceManager {
                     .name
                     .expect("Failed to get name table from font")
                     .names
-                    .get(name_id::FAMILY)
+                    .get(name_id::TYPOGRAPHIC_FAMILY)
                     .expect("Failed to get font family name")
                     .to_string()
                     .unwrap_or(file_stem);
