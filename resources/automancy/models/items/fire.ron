@@ -1,4 +1,4 @@
 (
     id: "automancy:item/fire",
-    file: "fire.gltf",
+    file: "fire.glb",
 )

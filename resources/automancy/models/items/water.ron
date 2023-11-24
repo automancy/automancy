@@ -1,4 +1,4 @@
 (
     id: "automancy:item/water",
-    file: "water.gltf",
+    file: "water.glb",
 )

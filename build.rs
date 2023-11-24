@@ -27,8 +27,12 @@ fn file_check(path: &Path, out_path: &Path) -> bool {
         return true;
     }
 
-    let Ok(in_meta) = metadata(path) else { return true };
-    let Ok(out_meta) = metadata(out_path) else { return true };
+    let Ok(in_meta) = metadata(path) else {
+        return true;
+    };
+    let Ok(out_meta) = metadata(out_path) else {
+        return true;
+    };
 
     !out_path.is_file()
         || in_meta
@@ -89,7 +93,7 @@ fn main() {
     // Model blender runs (parallel)
     let mut model_handles = Vec::new();
     for blend_path in load_recursively(resources, OsStr::new("blend")) {
-        let out_path = blend_path.with_extension("gltf");
+        let out_path = blend_path.with_extension("glb");
 
         if file_check(&blend_path, &out_path) {
             model_handles.push(thread::spawn(move || {
