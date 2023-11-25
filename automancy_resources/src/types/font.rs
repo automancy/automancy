@@ -15,30 +15,28 @@ impl ResourceManager {
     pub fn load_fonts(&mut self, dir: &Path) -> anyhow::Result<()> {
         let fonts = dir.join("fonts");
         if let Ok(fonts) = read_dir(fonts) {
-            for file in fonts
+            let mut fonts = fonts
                 .into_iter()
                 .flatten()
                 .map(|v| v.path())
-                .filter(|v| v.extension() == Some(OsStr::new(FONT_EXT)))
-            {
+                .filter(|v| {
+                    v.extension().is_some()
+                        && FONT_EXT.contains(&v.extension().unwrap().to_str().unwrap())
+                })
+                .collect::<Vec<_>>();
+            for file in fonts {
                 log::info!("loading font {file:?}");
                 let mut data: Vec<u8> = Vec::new();
                 File::open(&file)?.read_to_end(&mut data)?;
-                let parsed = Face::parse(data.as_slice(), 0)?;
                 let file_stem = file.file_stem().unwrap().to_str().unwrap().to_string();
-                let names = parsed
+                let name = Face::parse(data.as_slice(), 0)?
                     .tables()
                     .name
-                    .expect("Failed to get name table from font")
-                    .names;
-                let name = names
-                    .get(name_id::TYPOGRAPHIC_FAMILY)
-                    .unwrap_or(
-                        names
-                            .get(name_id::FULL_NAME)
-                            .unwrap_or(names.get(name_id::FAMILY).unwrap()),
-                    )
-                    .to_string()
+                    .expect("Failed to get name table (likely malformed font file)")
+                    .names
+                    .into_iter()
+                    .filter_map(|n| n.to_string())
+                    .find(|n| n.to_lowercase()[..2] == file_stem.to_lowercase()[..2])
                     .unwrap_or(file_stem);
                 self.fonts.insert(
                     file.file_name()

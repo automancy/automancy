@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::fmt;
 use std::fmt::{Debug, Formatter};
@@ -82,7 +83,7 @@ pub fn load_recursively(path: &Path, extension: &OsStr) -> Vec<PathBuf> {
 
 pub const RESOURCES_PATH: &str = "resources";
 
-pub const FONT_EXT: &str = "ttf";
+pub const FONT_EXT: [&str; 2] = ["ttf", "otf"];
 pub const RON_EXT: &str = "ron";
 pub const AUDIO_EXT: &str = "ogg";
 pub const FUNCTION_EXT: &str = "rhai";
@@ -104,7 +105,7 @@ pub struct ResourceManager {
     pub audio: HashMap<SharedStr, StaticSoundData>,
     pub shaders: HashMap<SharedStr, String>,
     pub functions: HashMap<Id, (AST, Scope<'static>)>,
-    pub fonts: HashMap<SharedStr, Font>,
+    pub fonts: BTreeMap<SharedStr, Font>, // yes this does need to be a BTreeMap
 
     pub ordered_tiles: Vec<Id>,
     pub ordered_items: Vec<Id>,

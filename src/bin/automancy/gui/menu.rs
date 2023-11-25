@@ -1,5 +1,7 @@
+use color_eyre::owo_colors::OwoColorize;
 use std::fs;
 
+use egui::text::TextWrapping;
 use egui::{
     vec2, Align, Align2, Button, Checkbox, ComboBox, Context, RichText, ScrollArea, Slider,
     TextEdit, TextStyle, Window,
@@ -495,6 +497,7 @@ pub fn options_menu(
                                     ui.label(RichText::new("Font:"));
                                     let font_before = setup.options.gui.font.clone();
                                     ComboBox::from_label("")
+                                        .width(175.0)
                                         .selected_text(
                                             &setup.resource_man.fonts
                                                 [&setup.options.gui.font.to_shared_str()]
@@ -506,7 +509,8 @@ pub fn options_menu(
                                                     &mut setup.options.gui.font,
                                                     key.to_string(),
                                                     font.name.clone(),
-                                                );
+                                                )
+                                                .on_hover_text(key.to_string());
                                             }
                                         });
                                     let font_after = setup.options.gui.font.clone();
