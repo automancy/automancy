@@ -1,7 +1,5 @@
-use color_eyre::owo_colors::OwoColorize;
 use std::fs;
 
-use egui::text::TextWrapping;
 use egui::{
     vec2, Align, Align2, Button, Checkbox, ComboBox, Context, RichText, ScrollArea, Slider,
     TextEdit, TextStyle, Window,
@@ -14,7 +12,7 @@ use automancy::map::{Map, MAIN_MENU};
 use automancy::options::AAType;
 use automancy::VERSION;
 use automancy_defs::flexstr::ToSharedStr;
-use automancy_defs::gui::{Gui, HyperlinkWidget};
+use automancy_defs::gui::HyperlinkWidget;
 use automancy_defs::log;
 use automancy_resources::{format, format_time};
 
