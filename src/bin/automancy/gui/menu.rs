@@ -343,11 +343,7 @@ pub fn map_menu(setup: &mut GameSetup, context: &Context, loop_store: &mut Event
 }
 
 /// Draws the options menu. Returns whether or not the font should be reset (janky but it probably works)
-pub fn options_menu(
-    setup: &mut GameSetup,
-    context: &Context,
-    loop_store: &mut EventLoopStorage,
-) -> bool {
+pub fn options_menu(setup: &mut GameSetup, context: &Context, loop_store: &mut EventLoopStorage) {
     Window::new(
         setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.options].as_str(),
     )
@@ -357,179 +353,152 @@ pub fn options_menu(
     .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0))
     .frame(default_frame())
     .show(context, |ui| {
-        let ret = ui
-            .horizontal(|ui| {
-                ui.vertical(|ui| {
-                    if ui.button(RichText::new("Graphics")).clicked() {
-                        loop_store.gui_state.substate =
-                            SubState::Options(OptionsMenuState::Graphics)
-                    }
-                    if ui.button(RichText::new("Audio")).clicked() {
-                        loop_store.gui_state.substate = SubState::Options(OptionsMenuState::Audio)
-                    }
-                    if ui.button(RichText::new("GUI")).clicked() {
-                        loop_store.gui_state.substate = SubState::Options(OptionsMenuState::Gui)
-                    }
-                    if ui.button(RichText::new("Controls")).clicked() {
-                        loop_store.gui_state.substate =
-                            SubState::Options(OptionsMenuState::Controls)
-                    }
-                });
-                if let SubState::Options(menu) = loop_store.gui_state.substate {
-                    match menu {
-                        OptionsMenuState::Graphics => {
-                            ui.vertical(|ui| {
-                                ui.label(RichText::new("Graphics").text_style(TextStyle::Heading));
-                                ui.horizontal(|ui| {
-                                    ui.label(RichText::new("FPS Limit: "));
-                                    ui.add(
-                                        Slider::new(
-                                            &mut setup.options.graphics.fps_limit,
-                                            0.0..=250.0,
-                                        )
-                                        .step_by(5.0)
-                                        .custom_formatter(
-                                            |n, _| {
-                                                if n == 0.0 {
-                                                    "Vsync".to_string()
-                                                } else if n == 250.0 {
-                                                    "Unlimited".to_string()
-                                                } else {
-                                                    format!("{}", n)
-                                                }
-                                            },
-                                        ),
-                                    )
-                                });
-                                ui.horizontal(|ui| {
-                                    ui.label(RichText::new("Fullscreen: "));
-                                    ui.add(Checkbox::new(
-                                        &mut setup.options.graphics.fullscreen,
-                                        "",
-                                    ));
-                                });
-                                ui.horizontal(|ui| {
-                                    ui.label(RichText::new("Scale: "));
-                                    ui.add(
-                                        Slider::new(&mut setup.options.graphics.scale, 0.5..=4.0)
-                                            .step_by(0.5),
-                                    )
-                                });
-                                ui.horizontal(|ui| {
-                                    ui.label(RichText::new("Antialiasing: "));
-                                    ComboBox::from_label("")
-                                        .selected_text(format!(
-                                            "{:?}",
-                                            setup.options.graphics.anti_aliasing
-                                        ))
-                                        .show_ui(ui, |ui| {
-                                            ui.selectable_value(
-                                                &mut setup.options.graphics.anti_aliasing,
-                                                AAType::None,
-                                                "None",
-                                            );
-                                            ui.selectable_value(
-                                                &mut setup.options.graphics.anti_aliasing,
-                                                AAType::FXAA,
-                                                "FXAA",
-                                            );
-                                            ui.selectable_value(
-                                                &mut setup.options.graphics.anti_aliasing,
-                                                AAType::TAA,
-                                                "TAA",
-                                            );
-                                            ui.selectable_value(
-                                                &mut setup.options.graphics.anti_aliasing,
-                                                AAType::Upscale,
-                                                "Upscale",
-                                            );
-                                        });
-                                })
-                            });
-                            false
-                        }
-                        OptionsMenuState::Audio => {
-                            ui.vertical(|ui| {
-                                ui.label(RichText::new("Audio").text_style(TextStyle::Heading));
-                                ui.horizontal(|ui| {
-                                    ui.label(RichText::new("SFX Volume: "));
-                                    ui.add(
-                                        Slider::new(&mut setup.options.audio.sfx_volume, 0.0..=1.0)
-                                            .custom_formatter(|n, _| {
-                                                if n == 0.0 {
-                                                    return "Muted".to_string();
-                                                };
-                                                format!("{}%", (n * 100.0) as usize)
-                                            }),
-                                    )
-                                });
-                                ui.horizontal(|ui| {
-                                    ui.label(RichText::new("Music Volume: "));
-                                    ui.add(
-                                        Slider::new(
-                                            &mut setup.options.audio.music_volume,
-                                            0.0..=1.0,
-                                        )
-                                        .custom_formatter(
-                                            |n, _| {
-                                                if n == 0.0 {
-                                                    return "Muted".to_string();
-                                                };
-                                                format!("{}%", (n * 100.0) as usize)
-                                            },
-                                        ),
-                                    )
-                                });
-                            });
-                            false
-                        }
-                        OptionsMenuState::Gui => {
-                            ui.vertical(|ui| {
-                                ui.label(RichText::new("GUI").text_style(TextStyle::Heading));
-                                ui.horizontal(|ui| {
-                                    ui.label(RichText::new("Font Scale: "));
-                                    ui.add(
-                                        Slider::new(&mut setup.options.gui.scale, 0.5..=4.0)
-                                            .step_by(0.5),
-                                    )
-                                });
-                                ui.horizontal(|ui| {
-                                    ui.label(RichText::new("Font:"));
-                                    let font_before = setup.options.gui.font.clone();
-                                    ComboBox::from_label("")
-                                        .width(175.0)
-                                        .selected_text(
-                                            &setup.resource_man.fonts
-                                                [&setup.options.gui.font.to_shared_str()]
-                                                .name,
-                                        )
-                                        .show_ui(ui, |ui| {
-                                            for (key, font) in &setup.resource_man.fonts {
-                                                ui.selectable_value(
-                                                    &mut setup.options.gui.font,
-                                                    key.to_string(),
-                                                    font.name.clone(),
-                                                )
-                                                .on_hover_text(key.to_string());
-                                            }
-                                        });
-                                    let font_after = setup.options.gui.font.clone();
-                                    font_before != font_after
-                                })
-                            })
-                            .inner
-                            .inner
-                        }
-                        OptionsMenuState::Controls => {
-                            ui.label(RichText::new("Controls").text_style(TextStyle::Heading));
-                            false
-                        }
-                    }
-                } else {
-                    false
+        ui.horizontal(|ui| {
+            ui.vertical(|ui| {
+                if ui.button(RichText::new("Graphics")).clicked() {
+                    loop_store.gui_state.substate = SubState::Options(OptionsMenuState::Graphics)
                 }
-            })
-            .inner;
+                if ui.button(RichText::new("Audio")).clicked() {
+                    loop_store.gui_state.substate = SubState::Options(OptionsMenuState::Audio)
+                }
+                if ui.button(RichText::new("GUI")).clicked() {
+                    loop_store.gui_state.substate = SubState::Options(OptionsMenuState::Gui)
+                }
+                if ui.button(RichText::new("Controls")).clicked() {
+                    loop_store.gui_state.substate = SubState::Options(OptionsMenuState::Controls)
+                }
+            });
+            if let SubState::Options(menu) = loop_store.gui_state.substate {
+                match menu {
+                    OptionsMenuState::Graphics => {
+                        ui.vertical(|ui| {
+                            ui.label(RichText::new("Graphics").text_style(TextStyle::Heading));
+                            ui.horizontal(|ui| {
+                                ui.label(RichText::new("FPS Limit: "));
+                                ui.add(
+                                    Slider::new(&mut setup.options.graphics.fps_limit, 0.0..=250.0)
+                                        .step_by(5.0)
+                                        .custom_formatter(|n, _| {
+                                            if n == 0.0 {
+                                                "Vsync".to_string()
+                                            } else if n == 250.0 {
+                                                "Unlimited".to_string()
+                                            } else {
+                                                format!("{}", n)
+                                            }
+                                        }),
+                                )
+                            });
+                            ui.horizontal(|ui| {
+                                ui.label(RichText::new("Fullscreen: "));
+                                ui.add(Checkbox::new(&mut setup.options.graphics.fullscreen, ""));
+                            });
+                            ui.horizontal(|ui| {
+                                ui.label(RichText::new("Scale: "));
+                                ui.add(
+                                    Slider::new(&mut setup.options.graphics.scale, 0.5..=4.0)
+                                        .step_by(0.5),
+                                )
+                            });
+                            ui.horizontal(|ui| {
+                                ui.label(RichText::new("Antialiasing: "));
+                                ComboBox::from_label("")
+                                    .selected_text(format!(
+                                        "{:?}",
+                                        setup.options.graphics.anti_aliasing
+                                    ))
+                                    .show_ui(ui, |ui| {
+                                        ui.selectable_value(
+                                            &mut setup.options.graphics.anti_aliasing,
+                                            AAType::None,
+                                            "None",
+                                        );
+                                        ui.selectable_value(
+                                            &mut setup.options.graphics.anti_aliasing,
+                                            AAType::FXAA,
+                                            "FXAA",
+                                        );
+                                        ui.selectable_value(
+                                            &mut setup.options.graphics.anti_aliasing,
+                                            AAType::TAA,
+                                            "TAA",
+                                        );
+                                        ui.selectable_value(
+                                            &mut setup.options.graphics.anti_aliasing,
+                                            AAType::Upscale,
+                                            "Upscale",
+                                        );
+                                    });
+                            })
+                        });
+                    }
+                    OptionsMenuState::Audio => {
+                        ui.vertical(|ui| {
+                            ui.label(RichText::new("Audio").text_style(TextStyle::Heading));
+                            ui.horizontal(|ui| {
+                                ui.label(RichText::new("SFX Volume: "));
+                                ui.add(
+                                    Slider::new(&mut setup.options.audio.sfx_volume, 0.0..=1.0)
+                                        .custom_formatter(|n, _| {
+                                            if n == 0.0 {
+                                                return "Muted".to_string();
+                                            };
+                                            format!("{}%", (n * 100.0) as usize)
+                                        }),
+                                )
+                            });
+                            ui.horizontal(|ui| {
+                                ui.label(RichText::new("Music Volume: "));
+                                ui.add(
+                                    Slider::new(&mut setup.options.audio.music_volume, 0.0..=1.0)
+                                        .custom_formatter(|n, _| {
+                                            if n == 0.0 {
+                                                return "Muted".to_string();
+                                            };
+                                            format!("{}%", (n * 100.0) as usize)
+                                        }),
+                                )
+                            });
+                        });
+                    }
+                    OptionsMenuState::Gui => {
+                        ui.vertical(|ui| {
+                            ui.label(RichText::new("GUI").text_style(TextStyle::Heading));
+                            ui.horizontal(|ui| {
+                                ui.label(RichText::new("Font Scale: "));
+                                ui.add(
+                                    Slider::new(&mut setup.options.gui.scale, 0.5..=4.0)
+                                        .step_by(0.5),
+                                )
+                            });
+                            ui.horizontal(|ui| {
+                                ui.label(RichText::new("Font:"));
+                                ComboBox::from_label("")
+                                    .width(175.0)
+                                    .selected_text(
+                                        &setup.resource_man.fonts
+                                            [&setup.options.gui.font.to_shared_str()]
+                                            .name,
+                                    )
+                                    .show_ui(ui, |ui| {
+                                        for (key, font) in &setup.resource_man.fonts {
+                                            ui.selectable_value(
+                                                &mut setup.options.gui.font,
+                                                key.to_string(),
+                                                font.name.clone(),
+                                            )
+                                            .on_hover_text(key.to_string());
+                                        }
+                                    });
+                            });
+                        });
+                    }
+                    OptionsMenuState::Controls => {
+                        ui.label(RichText::new("Controls").text_style(TextStyle::Heading));
+                    }
+                }
+            }
+        });
         if ui
             .button(
                 setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.btn_confirm]
@@ -548,9 +517,5 @@ pub fn options_menu(
             }
             loop_store.gui_state.return_screen();
         }
-        ret
-    })
-    .unwrap()
-    .inner
-    .unwrap()
+    });
 }

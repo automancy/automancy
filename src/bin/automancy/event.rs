@@ -28,6 +28,7 @@ use automancy_defs::rendering::{make_line, InstanceData};
 use automancy_defs::{colors, log, math, window};
 use automancy_resources::data::item::Item;
 use automancy_resources::data::Data;
+use automancy_resources::kira::tween::Tween;
 
 use crate::gui::{
     error, info, menu, player, popup, tile_config, tile_selection, GuiState, PopupState, Screen,
@@ -131,7 +132,6 @@ fn render(
 
     let mut result = Ok(false);
 
-    let mut should_update_fonts = false;
     let mut tile_tints = HashMap::new();
 
     let mut extra_instances = vec![];
@@ -270,17 +270,13 @@ fn render(
                     menu::map_menu(setup, &gui.context, loop_store);
                 }
                 Screen::Options => {
-                    should_update_fonts = menu::options_menu(setup, &gui.context, loop_store);
+                    menu::options_menu(setup, &gui.context, loop_store);
                 }
                 Screen::Paused => {
                     menu::pause_menu(setup, &gui.context, loop_store);
                 }
                 Screen::Research => {}
             }
-        }
-
-        if should_update_fonts {
-            set_font(setup.options.gui.font.to_shared_str(), gui);
         }
         match loop_store.gui_state.popup.clone() {
             PopupState::None => {}
@@ -617,6 +613,14 @@ pub fn on_event(
         if setup.input_handler.control_held && setup.input_handler.key_active(KeyActions::Undo) {
             setup.game.send_message(GameMsg::Undo)?;
         }
+    }
+    if !setup.options.synced {
+        set_font(setup.options.gui.font.to_shared_str(), gui);
+        setup
+            .audio_man
+            .main_track()
+            .set_volume(setup.options.audio.sfx_volume, Tween::default())?;
+        setup.options.synced = true;
     }
     Ok(false)
 }

@@ -18,6 +18,7 @@ pub struct Options {
     pub audio: AudioOptions,
     pub gui: GuiOptions,
     pub keymap: HashMap<VirtualKeyCode, KeyAction>,
+    pub synced: bool,
 }
 
 impl Default for Options {
@@ -27,6 +28,7 @@ impl Default for Options {
             audio: Default::default(),
             gui: Default::default(),
             keymap: DEFAULT_KEYMAP.iter().cloned().collect(),
+            synced: false,
         }
     }
 }
@@ -57,7 +59,7 @@ impl Options {
         Ok(this)
     }
 
-    pub fn save(&self) -> anyhow::Result<()> {
+    pub fn save(&mut self) -> anyhow::Result<()> {
         let mut file = File::create(OPTIONS_PATH)?;
 
         let document = toml::ser::to_string_pretty(&self)?;
@@ -65,6 +67,8 @@ impl Options {
         write!(&mut file, "{document}")?;
 
         log::info!("Saved options!");
+
+        self.synced = false;
 
         Ok(())
     }
