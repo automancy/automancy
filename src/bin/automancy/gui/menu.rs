@@ -466,7 +466,7 @@ pub fn options_menu(setup: &mut GameSetup, context: &Context, loop_store: &mut E
                                 ui.label(RichText::new("Font Scale: "));
                                 ui.add(
                                     Slider::new(&mut setup.options.gui.scale, 0.5..=4.0)
-                                        .step_by(0.5),
+                                        .step_by(0.25),
                                 )
                             });
                             ui.horizontal(|ui| {

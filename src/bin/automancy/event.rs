@@ -615,6 +615,7 @@ pub fn on_event(
         }
     }
     if !setup.options.synced {
+        gui.context.set_pixels_per_point(setup.options.gui.scale);
         set_font(setup.options.gui.font.to_shared_str(), gui);
         setup
             .audio_man
