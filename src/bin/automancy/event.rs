@@ -8,7 +8,7 @@ use egui::Rect;
 use fuse_rust::Fuse;
 use futures::channel::mpsc;
 use futures::executor::block_on;
-use wgpu::SurfaceError;
+use egui_wgpu::wgpu::SurfaceError;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::ControlFlow;
 

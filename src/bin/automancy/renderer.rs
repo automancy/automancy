@@ -15,7 +15,7 @@ use egui_wgpu::wgpu::{
     LoadOp, Maintain, MapMode, Operations, RenderPassColorAttachment,
     RenderPassDepthStencilAttachment, RenderPassDescriptor, SurfaceError, TextureDescriptor,
     TextureDimension, TextureUsages, TextureViewDescriptor, COPY_BUFFER_ALIGNMENT,
-    COPY_BYTES_PER_ROW_ALIGNMENT,
+    COPY_BYTES_PER_ROW_ALIGNMENT, StoreOp::Store, StoreOp::Discard,
 };
 
 use automancy::game::{GameMsg, RenderUnit, TransactionRecord, TRANSACTION_ANIMATION_SPEED};
@@ -345,7 +345,7 @@ impl Renderer {
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Clear(Color::BLACK),
-                            store: true,
+                            store: Store,
                         },
                     }),
                     Some(RenderPassColorAttachment {
@@ -353,7 +353,7 @@ impl Renderer {
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Clear(NORMAL_CLEAR),
-                            store: true,
+                            store: Store,
                         },
                     }),
                     Some(RenderPassColorAttachment {
@@ -361,7 +361,7 @@ impl Renderer {
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Clear(Color::BLACK),
-                            store: true,
+                            store: Store,
                         },
                     }),
                 ],
@@ -369,10 +369,12 @@ impl Renderer {
                     view: &self.gpu.depth_texture().1,
                     depth_ops: Some(Operations {
                         load: LoadOp::Clear(0.0),
-                        store: true,
+                        store: Store,
                     }),
                     stencil_ops: None,
                 }),
+                occlusion_query_set: None,
+                timestamp_writes: None,
             });
 
             if game_draw_count > 0 {
@@ -412,10 +414,12 @@ impl Renderer {
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(Color::BLACK),
-                        store: true,
+                        store: Store,
                     },
                 })],
                 depth_stencil_attachment: None,
+                occlusion_query_set: None,
+                timestamp_writes: None,
             });
 
             self.gpu.queue.write_buffer(
@@ -460,7 +464,7 @@ impl Renderer {
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Load,
-                            store: true,
+                            store: Store,
                         },
                     }),
                     Some(RenderPassColorAttachment {
@@ -468,7 +472,7 @@ impl Renderer {
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Load,
-                            store: false,
+                            store: Discard,
                         },
                     }),
                     Some(RenderPassColorAttachment {
@@ -476,7 +480,7 @@ impl Renderer {
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Load,
-                            store: false,
+                            store: Discard,
                         },
                     }),
                 ],
@@ -484,10 +488,12 @@ impl Renderer {
                     view: &self.gpu.depth_texture().1,
                     depth_ops: Some(Operations {
                         load: LoadOp::Load,
-                        store: false,
+                        store: Discard,
                     }),
                     stencil_ops: None,
                 }),
+                occlusion_query_set: None,
+                timestamp_writes: None,
             });
 
             if in_world_item_draw_count > 0 {
@@ -531,10 +537,12 @@ impl Renderer {
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(Color::BLACK),
-                        store: true,
+                        store: Store,
                     },
                 })],
                 depth_stencil_attachment: None,
+                occlusion_query_set: None,
+                timestamp_writes: None,
             });
 
             antialiasing_pass.set_pipeline(&self.gpu.antialiasing_resources.pipeline);
@@ -570,10 +578,12 @@ impl Renderer {
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Clear(Color::TRANSPARENT),
-                            store: true,
+                            store: Store,
                         },
                     })],
                     depth_stencil_attachment: None,
+                    occlusion_query_set: None,
+                    timestamp_writes: None,
                 });
 
                 gui.renderer
@@ -595,10 +605,12 @@ impl Renderer {
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(Color::BLACK),
-                        store: true,
+                        store: Store,
                     },
                 })],
                 depth_stencil_attachment: None,
+                occlusion_query_set: None,
+                timestamp_writes: None,
             });
 
             combine_pass.set_pipeline(&self.gpu.first_combine_resources.pipeline);
@@ -622,7 +634,7 @@ impl Renderer {
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Clear(Color::TRANSPARENT),
-                            store: true,
+                            store: Store,
                         },
                     }),
                     Some(RenderPassColorAttachment {
@@ -630,7 +642,7 @@ impl Renderer {
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Clear(NORMAL_CLEAR),
-                            store: true,
+                            store: Store,
                         },
                     }),
                     Some(RenderPassColorAttachment {
@@ -638,7 +650,7 @@ impl Renderer {
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Clear(Color::BLACK),
-                            store: true,
+                            store: Store,
                         },
                     }),
                 ],
@@ -646,10 +658,12 @@ impl Renderer {
                     view: &self.gpu.depth_texture().1,
                     depth_ops: Some(Operations {
                         load: LoadOp::Clear(0.0),
-                        store: true,
+                        store: Store,
                     }),
                     stencil_ops: None,
                 }),
+                occlusion_query_set: None,
+                timestamp_writes: None,
             });
 
             if gui_draw_count > 0 {
@@ -737,7 +751,7 @@ impl Renderer {
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Load,
-                            store: true,
+                            store: Store,
                         },
                     }),
                     Some(RenderPassColorAttachment {
@@ -745,7 +759,7 @@ impl Renderer {
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Load,
-                            store: true,
+                            store: Store,
                         },
                     }),
                     Some(RenderPassColorAttachment {
@@ -753,7 +767,7 @@ impl Renderer {
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Load,
-                            store: true,
+                            store: Store,
                         },
                     }),
                 ],
@@ -761,10 +775,12 @@ impl Renderer {
                     view: &self.gpu.depth_texture().1,
                     depth_ops: Some(Operations {
                         load: LoadOp::Load,
-                        store: true,
+                        store: Store,
                     }),
                     stencil_ops: None,
                 }),
+                occlusion_query_set: None,
+                timestamp_writes: None,
             });
 
             if overlay_draw_count > 0 {
@@ -804,10 +820,12 @@ impl Renderer {
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(Color::BLACK),
-                        store: true,
+                        store: Store,
                     },
                 })],
                 depth_stencil_attachment: None,
+                occlusion_query_set: None,
+                timestamp_writes: None,
             });
 
             self.gpu.queue.write_buffer(
@@ -841,7 +859,7 @@ impl Renderer {
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Load,
-                            store: true,
+                            store: Store,
                         },
                     }),
                     Some(RenderPassColorAttachment {
@@ -849,7 +867,7 @@ impl Renderer {
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Load,
-                            store: false,
+                            store: Discard,
                         },
                     }),
                     Some(RenderPassColorAttachment {
@@ -857,7 +875,7 @@ impl Renderer {
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Load,
-                            store: false,
+                            store: Discard,
                         },
                     }),
                 ],
@@ -865,10 +883,12 @@ impl Renderer {
                     view: &self.gpu.depth_texture().1,
                     depth_ops: Some(Operations {
                         load: LoadOp::Load,
-                        store: false,
+                        store: Discard,
                     }),
                     stencil_ops: None,
                 }),
+                occlusion_query_set: None,
+                timestamp_writes: None,
             });
 
             if item_draw_count > 0 {
@@ -933,10 +953,12 @@ impl Renderer {
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(Color::BLACK),
-                        store: true,
+                        store: Store,
                     },
                 })],
                 depth_stencil_attachment: None,
+                occlusion_query_set: None,
+                timestamp_writes: None,
             });
 
             antialiasing_pass.set_pipeline(&self.gpu.antialiasing_resources.pipeline);
@@ -956,10 +978,12 @@ impl Renderer {
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(Color::BLACK),
-                        store: true,
+                        store: Store,
                     },
                 })],
                 depth_stencil_attachment: None,
+                occlusion_query_set: None,
+                timestamp_writes: None,
             });
 
             combine_pass.set_pipeline(&self.gpu.second_combine_resources.pipeline);
@@ -979,10 +1003,12 @@ impl Renderer {
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(Color::BLACK),
-                        store: true,
+                        store: Store,
                     },
                 })],
                 depth_stencil_attachment: None,
+                occlusion_query_set: None,
+                timestamp_writes: None,
             });
 
             present_pass.set_pipeline(&self.gpu.intermediate_resources.present_pipeline);
@@ -1043,10 +1069,12 @@ impl Renderer {
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Load,
-                            store: true,
+                            store: Store,
                         },
                     })],
                     depth_stencil_attachment: None,
+                    occlusion_query_set: None,
+                    timestamp_writes: None,
                 });
 
                 intermediate_pass

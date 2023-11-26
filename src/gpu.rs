@@ -1,8 +1,8 @@
 use std::rc::Rc;
 use std::sync::Arc;
 
-use wgpu::util::{BufferInitDescriptor, DeviceExt, DrawIndexedIndirect};
-use wgpu::{
+use egui_wgpu::wgpu::util::{BufferInitDescriptor, DeviceExt, DrawIndexedIndirect};
+use egui_wgpu::wgpu::{
     AddressMode, Backends, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout,
     BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType, BlendState,
     Buffer, BufferAddress, BufferBindingType, BufferUsages, Color, ColorTargetState, ColorWrites,
