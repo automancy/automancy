@@ -48,9 +48,9 @@ winit = { version = "0.28.7", features = [
     "serde",
 ], default-features = false }
 
-egui = { version = "0.23.0", default-features = false, features = ["log"] }
-egui-wgpu = { version = "0.23.0" }
-egui-winit = "0.23.0"
+egui = { version = "0.24.0", default-features = false, features = ["log"] }
+egui-wgpu = { version = "0.24.0" }
+egui-winit = "0.24.0"
 
 lazy_static = "1.4.0"
 anyhow = "1.0.72"

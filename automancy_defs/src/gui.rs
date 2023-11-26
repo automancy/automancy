@@ -94,10 +94,11 @@ fn init_styles(gui: &Gui) {
 
 /// Initializes the GUI.
 pub fn init_gui(renderer: egui_wgpu::Renderer, window: &Window) -> Gui {
+    let context: Context = Default::default();
     let gui = Gui {
         renderer,
-        context: Default::default(),
-        state: State::new(window),
+        state: State::new(context.viewport_id(), window, None, None),
+        context: context,
         fonts: FontDefinitions::default(),
     };
     init_styles(&gui);

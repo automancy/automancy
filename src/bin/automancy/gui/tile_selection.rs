@@ -114,8 +114,6 @@ pub fn tile_selections(
         .resizable(false)
         .frame(default_frame().outer_margin(Margin::same(10.0)))
         .show(context, |ui| {
-            ui.spacing_mut().scroll_bar_outer_margin = 0.0;
-
             ScrollArea::horizontal()
                 .scroll_bar_visibility(ScrollBarVisibility::AlwaysHidden)
                 .show(ui, |ui| {

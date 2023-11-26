@@ -9,7 +9,7 @@ use futures::executor::block_on;
 use image::{EncodableLayout, RgbaImage};
 use num::PrimInt;
 use tokio::sync::oneshot;
-use wgpu::{
+use egui_wgpu::wgpu::{
     BindGroupDescriptor, BindGroupEntry, BindingResource, BufferAddress, BufferDescriptor,
     BufferUsages, Color, CommandEncoderDescriptor, ImageCopyBuffer, ImageDataLayout, IndexFormat,
     LoadOp, Maintain, MapMode, Operations, RenderPassColorAttachment,
@@ -286,7 +286,7 @@ impl Renderer {
             gpu::indirect_instance(&setup.resource_man, in_world_item_instances, true);
 
         let egui_out = gui.context.end_frame();
-        let egui_primitives = gui.context.tessellate(egui_out.shapes);
+        let egui_primitives = gui.context.tessellate(egui_out.shapes, gui.context.pixels_per_point());
         let egui_desc = ScreenDescriptor {
             size_in_pixels: [size.width, size.height],
             pixels_per_point: factor,
