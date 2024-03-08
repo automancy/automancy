@@ -1,0 +1,17 @@
+**/target
+**/.cargo
+
+.fleet
+.vscode
+
+__pycache__
+
+map
+options.ron
+
+*.gltf
+*.glb
+*.blend1
+*.cap
+
+**/items/**/*.blend
