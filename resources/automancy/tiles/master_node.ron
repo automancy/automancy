@@ -1,0 +1,10 @@
+(
+    id: "master_node",
+    function: Some("master_node"),
+    model: "master_node",
+    data: ({
+        "category": Id("network"),
+        "direction_color": Color("ff955e"),
+        "linking": Bool(true),
+    }),
+)

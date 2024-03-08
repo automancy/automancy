@@ -1,0 +1,10 @@
+(
+    id: "splitter_right",
+    function: Some("splitter_right"),
+    model: "splitter_right",
+    data: ({
+        "category": Id("transfer"),
+        "not_targeted": Bool(true),
+        "default_tile": Bool(true),
+    }),
+)

@@ -1,0 +1,30 @@
+[package]
+name = "automancy_resources"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+automancy_macros = { workspace = true }
+automancy_defs = { workspace = true }
+
+egui = { workspace = true }
+
+serde = { workspace = true }
+ron = { workspace = true }
+
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+ordered-float = { workspace = true }
+walkdir = { workspace = true }
+hashbrown = { workspace = true }
+
+rhai = { workspace = true }
+
+
+
+chrono = "0.4.24"
+kira = "0.8.3"
+ttf-parser = "0.20.0"
+hex = "0.4.3"

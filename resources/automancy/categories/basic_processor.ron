@@ -1,0 +1,6 @@
+(
+    id: "basic_processor",
+    ord: 100000,
+    icon: "basic_still",
+    item: Some("basic_assembly"),
+)

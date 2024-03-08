@@ -1,0 +1,12 @@
+(
+    id: "mud",
+    instructions: (
+        inputs: Some([
+            ("dirt", 2),
+            ("chaos", 4),
+        ]),
+        output: [
+            ("mud", 4),
+        ],
+    ),
+)

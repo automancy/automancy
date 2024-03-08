@@ -1,0 +1,12 @@
+(
+    id: "glass",
+    instructions: (
+        inputs: Some([
+            ("sand", 1),
+            ("fire", 1),
+        ]),
+        output: [
+            ("glass", 1),
+        ],
+    ),
+)

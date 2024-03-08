@@ -1,0 +1,6 @@
+(
+    id: "network",
+    ord: -1000000,
+    icon: "master_node",
+    item: Some("network_assembly"),
+)

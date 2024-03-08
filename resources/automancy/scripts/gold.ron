@@ -1,0 +1,12 @@
+(
+    id: "gold",
+    instructions: (
+        inputs: Some([
+            ("water", 16),
+            ("gravel", 256),
+        ]),
+        output: [
+            ("gold", 1),
+        ],
+    ),
+)

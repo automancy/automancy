@@ -1,0 +1,8 @@
+(
+    id: "basic_still",
+    unlock: "basic_still",
+    icon: "basic_still",
+    next: None,
+    name: "research/basic_still_name",
+    description: "research/basic_still_description",
+)

@@ -1,0 +1,4 @@
+(
+    id: "orb",
+    model: "item/orb",
+)

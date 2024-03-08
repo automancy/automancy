@@ -1,0 +1,11 @@
+(
+    id: "mud_to_water",
+    instructions: (
+        inputs: Some([
+            ("mud", 1),
+        ]),
+        output: [
+            ("water", 16),
+        ],
+    ),
+)

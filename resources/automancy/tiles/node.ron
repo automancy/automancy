@@ -1,0 +1,9 @@
+(
+    id: "node",
+    function: Some("node"),
+    model: "node",
+    data: ({
+        "category": Id("network"),
+        "linked": Bool(true),
+    }),
+)

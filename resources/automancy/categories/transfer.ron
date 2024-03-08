@@ -1,0 +1,5 @@
+(
+    id: "transfer",
+    ord: -1000,
+    icon: "sorter",
+)

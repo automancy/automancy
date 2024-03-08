@@ -1,0 +1,9 @@
+(
+    id: "gravel",
+    instructions: (
+        inputs: None,
+        output: [
+            ("gravel", 4),
+        ],
+    ),
+)

@@ -1,0 +1,11 @@
+(
+    id: "coal_to_chaos",
+    instructions: (
+        inputs: Some([
+            ("coal", 1),
+        ]),
+        output: [
+            ("chaos", 8),
+        ],
+    ),
+)

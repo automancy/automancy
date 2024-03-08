@@ -1,0 +1,11 @@
+(
+    id: "sand_to_air",
+    instructions: (
+        inputs: Some([
+            ("sand", 1),
+        ]),
+        output: [
+            ("air", 8),
+        ],
+    ),
+)

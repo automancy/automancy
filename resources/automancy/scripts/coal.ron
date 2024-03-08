@@ -1,0 +1,9 @@
+(
+    id: "coal",
+    instructions: (
+        inputs: None,
+        output: [
+            ("coal", 8),
+        ],
+    ),
+)

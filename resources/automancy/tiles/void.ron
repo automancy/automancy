@@ -1,0 +1,10 @@
+(
+    id: "void",
+    function: Some("void"),
+    model: "void",
+    data: ({
+        "category": Id("utility"),
+        "not_targeted": Bool(true),
+        "default_tile": Bool(true),
+    }),
+)

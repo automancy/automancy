@@ -1,0 +1,11 @@
+(
+    id: "orb",
+    instructions: (
+        inputs: Some([
+            ("glass", 256),
+        ]),
+        output: [
+            ("orb", 1),
+        ],
+    ),
+)

@@ -1,0 +1,13 @@
+(
+    id: "basic_extractor",
+    function: Some("machine"),
+    model: "basic_extractor",
+    data: ({
+        "category": Id("basic_producer"),
+        "scripts": VecId([
+            "coal",
+            "gravel",
+        ]),
+        "default_tile": Bool(true),
+    }),
+)

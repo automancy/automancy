@@ -1,0 +1,18 @@
+(
+    id: "basic_refinery",
+    function: Some("machine"),
+    model: "basic_refinery",
+    data: ({
+        "category": Id("basic_processor"),
+        "scripts": VecId([
+            "sand",
+            "dirt",
+            "mud",
+            "glass",
+            "orb",
+            "silver",
+            "gold",
+            "philosophers_stone",
+        ]),
+    }),
+)

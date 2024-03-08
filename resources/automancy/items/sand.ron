@@ -1,0 +1,4 @@
+(
+    id: "sand",
+    model: "item/sand",
+)

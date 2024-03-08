@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="160cm"
+   height="160cm"
+   viewBox="0 0 160 160"
+   version="1.1"
+   id="svg4"
+   sodipodi:docname="coal.svg"
+   inkscape:version="1.3.2 (091e20ef0f, 2023-11-25, custom)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs4" />
+  <sodipodi:namedview
+     id="namedview4"
+     pagecolor="#505050"
+     bordercolor="#eeeeee"
+     borderopacity="1"
+     inkscape:showpageshadow="0"
+     inkscape:pageopacity="0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="cm"
+     inkscape:zoom="99.059999"
+     inkscape:cx="2345.8056"
+     inkscape:cy="3313.2193"
+     inkscape:window-width="1870"
+     inkscape:window-height="1052"
+     inkscape:window-x="1920"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg4" />
+  <path
+     d="M38.983 0 0 67.646l32.128 79.288L122.406 160 160 78.259l-53.666-10.09-1.263-48.29Z"
+     fill="#696c87"
+     id="path1" />
+  <path
+     d="m89.27 82.725 47.432 8.025-26.342 52.047-38.84-43.963Z"
+     fill="#242435"
+     id="path2" />
+  <path
+     d="m20.243 69.228 26.515 62.319 63.602 11.25-48.337-55.139Z"
+     fill="#191e2f"
+     id="path3" />
+  <path
+     d="M 87.722,32.521 89.27,82.725 71.687,98.682002 62.023,87.658 20.243,69.228 47.428,20.937 Z"
+     fill="#272741"
+     id="path4" />
+</svg>

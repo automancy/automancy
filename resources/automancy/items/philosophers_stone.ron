@@ -1,0 +1,4 @@
+(
+    id: "philosophers_stone",
+    model: "item/philosophers_stone",
+)

@@ -1,0 +1,8 @@
+(
+    id: "none",
+    function: None,
+    model: "none",
+    data: ({
+        "default_tile": Bool(true),
+    }),
+)

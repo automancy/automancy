@@ -1,0 +1,13 @@
+(
+    id: "small_storage",
+    function: Some("storage"),
+    model: "small_storage",
+    data: ({
+        "category": Id("network"),
+        "item_type": Id("#any"),
+        "storage_takeable": Bool(true),
+        "max_amount": Amount(65536),
+        "not_targeted": Bool(true),
+        "default_tile": Bool(true),
+    }),
+)

@@ -1,0 +1,11 @@
+(
+    id: "coal_to_order",
+    instructions: (
+        inputs: Some([
+            ("coal", 1),
+        ]),
+        output: [
+            ("order", 8),
+        ],
+    ),
+)
