@@ -8,6 +8,5 @@
         "storage_takeable": Bool(true),
         "max_amount": Amount(65536),
         "not_targeted": Bool(true),
-        "default_tile": Bool(true),
     }),
 )
