@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::f64::consts::FRAC_PI_4;
 
 use egui::scroll_area::ScrollBarVisibility;
@@ -63,16 +64,16 @@ fn draw_tile_selection(
         true
     };
 
-    for id in setup.resource_man.ordered_tiles.iter().filter(|id| {
-        if let Some(Data::Id(category)) = setup.resource_man.registry.tiles[*id]
+    for id in &setup.resource_man.ordered_tiles {
+        if let Some(Data::Id(category)) = setup.resource_man.registry.tiles[id]
             .data
             .get(&setup.resource_man.registry.data_ids.category)
         {
-            return Some(*category) == current_category;
+            if Some(*category) != current_category {
+                continue;
+            }
         }
 
-        true
-    }) {
         let is_default_tile = match setup.resource_man.registry.tiles[id]
             .data
             .get(&setup.resource_man.registry.data_ids.default_tile)
@@ -83,12 +84,15 @@ fn draw_tile_selection(
 
         if !is_default_tile {
             if let Some(research) = setup.resource_man.get_research_by_unlock(*id) {
-                if let Some(Data::SetId(unlocked)) =
-                    game_data.get(&setup.resource_man.registry.data_ids.unlocked_researches)
+                if let Data::SetId(unlocked) = game_data
+                    .entry(setup.resource_man.registry.data_ids.unlocked_researches)
+                    .or_insert_with(|| Data::SetId(HashSet::new()))
                 {
                     if !unlocked.contains(&research.id) {
                         continue;
                     }
+                } else {
+                    game_data.remove(&setup.resource_man.registry.data_ids.unlocked_researches);
                 }
             }
         }
