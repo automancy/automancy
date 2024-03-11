@@ -111,7 +111,7 @@ rand = "0.8.5"
 uuid = "1.4.1"
 num = "0.4.0"
 
-image = "0.24.6"
+image = "0.25.0"
 zstd = "0.13.0"
 
 async-trait = "0.1.68"
