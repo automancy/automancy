@@ -254,6 +254,7 @@ impl<'a> Renderer<'a> {
         }
 
         for (coord, data) in all_data {
+            let world_coord = HEX_GRID_LAYOUT.hex_to_world_pos(*coord);
             if let Some(Data::Coord(link)) = data.get(&setup.resource_man.registry.data_ids.link) {
                 extra_instances.push((
                     InstanceData::default()
@@ -261,11 +262,24 @@ impl<'a> Renderer<'a> {
                         .with_light_pos(camera_pos_float, None)
                         .with_world_matrix(world_matrix)
                         .with_model_matrix(make_line(
-                            HEX_GRID_LAYOUT.hex_to_world_pos(*coord),
+                            world_coord,
                             HEX_GRID_LAYOUT.hex_to_world_pos(**link),
                         )),
                     setup.resource_man.registry.model_ids.cube1x1,
                 ));
+            }
+
+            if let Some(Data::Id(id)) = data.get(&setup.resource_man.registry.data_ids.item) {
+                in_world_item_instances.push((
+                    InstanceData::default()
+                        .with_light_pos(camera_pos_float, None)
+                        .with_world_matrix(world_matrix)
+                        .with_model_matrix(
+                            Matrix4::from_translation(world_coord.extend(0.1))
+                                * Matrix4::from_scale(vec3(0.25, 0.25, 1.0)),
+                        ),
+                    setup.resource_man.registry.items[id].model,
+                ))
             }
         }
 
@@ -390,15 +404,13 @@ impl<'a> Renderer<'a> {
             .map(|(instance, id)| (instance, id, ()))
             .collect::<Vec<_>>();
         game_instances.append(&mut extra_instances);
+        game_instances.append(&mut direction_previews);
+        game_instances.sort_by_key(|v| v.1);
 
         let mut in_world_item_instances = in_world_item_instances
             .into_iter()
             .map(|(instance, id)| (instance, id, ()))
             .collect::<Vec<_>>();
-
-        game_instances.append(&mut direction_previews);
-
-        game_instances.sort_by_key(|v| v.1);
         in_world_item_instances.sort_by_key(|v| v.1);
 
         self.inner_render(
