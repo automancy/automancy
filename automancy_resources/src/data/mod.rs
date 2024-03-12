@@ -32,13 +32,6 @@ pub enum Data {
 }
 
 impl Data {
-    pub fn into_inventory(self) -> Option<Inventory> {
-        if let Self::Inventory(v) = self {
-            return Some(v);
-        }
-        None
-    }
-
     pub fn into_coord(self) -> Option<TileCoord> {
         if let Self::Coord(v) = self {
             return Some(v);
@@ -53,29 +46,8 @@ impl Data {
         None
     }
 
-    pub fn into_vec_coord(self) -> Option<Vec<TileCoord>> {
-        if let Self::VecCoord(v) = self {
-            return Some(v);
-        }
-        None
-    }
-
     pub fn into_id(self) -> Option<Id> {
         if let Self::Id(v) = self {
-            return Some(v);
-        }
-        None
-    }
-
-    pub fn into_vec_id(self) -> Option<Vec<Id>> {
-        if let Self::VecId(v) = self {
-            return Some(v);
-        }
-        None
-    }
-
-    pub fn into_set_id(self) -> Option<HashSet<Id>> {
-        if let Self::SetId(v) = self {
             return Some(v);
         }
         None
