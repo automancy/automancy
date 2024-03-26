@@ -51,7 +51,6 @@ pub struct RenderUnit {
     pub model: Id,
 }
 
-pub type RenderInfo = (HashMap<TileCoord, RenderUnit>, HashMap<TileCoord, DataMap>);
 pub type TransactionRecords =
     HashMap<(TileCoord, TileCoord), VecDeque<(Instant, TransactionRecord)>>;
 
@@ -71,6 +70,8 @@ pub struct GameState {
     undo_steps: ArrayDeque<Vec<GameMsg>, 16, Wrapping>,
     /// records transactions to be drawn
     transaction_records: TransactionRecords,
+
+    render_units_cache: Option<(HexBounds, HashMap<TileCoord, RenderUnit>)>,
 }
 
 pub async fn load_map(
@@ -79,14 +80,7 @@ pub async fn load_map(
     map_name: String,
 ) -> anyhow::Result<()> {
     setup.game.send_message(LoadMap(map_name))?;
-    loop_store.map_info = Some(
-        setup
-            .game
-            .call(GetMapInfoAndName, None)
-            .await
-            .unwrap()
-            .unwrap(),
-    );
+    loop_store.map_info = Some(setup.game.call(GetMapInfoAndName, None).await?.unwrap());
 
     Ok(())
 }
@@ -121,11 +115,12 @@ pub enum GameMsg {
     GetTile(TileCoord, RpcReplyPort<Option<Id>>),
     /// get the tile entity at the given position
     GetTileEntity(TileCoord, RpcReplyPort<Option<ActorRef<TileEntityMsg>>>),
-
-    /// get rendering information
-    RenderInfoRequest {
+    /// get all the data from the tiles
+    GetAllData(RpcReplyPort<HashMap<TileCoord, DataMap>>),
+    /// get all the tiles needing to be rendered, and their info
+    GetAllRenderUnits {
         culling_range: HexBounds,
-        reply: RpcReplyPort<RenderInfo>,
+        reply: RpcReplyPort<HashMap<TileCoord, RenderUnit>>,
     },
 
     GetRecordedTransactions(RpcReplyPort<TransactionRecords>),
@@ -186,12 +181,10 @@ impl Actor for Game {
                     .save(&self.resource_man.interner, &state.tile_entities)
                     .await;
                 log::info!("Saved map {}", state.map.map_name.clone());
-                reply.send(()).unwrap();
+                reply.send(())?;
             }
             GetMapInfoAndName(reply) => {
-                reply
-                    .send((state.map.info.clone(), state.map.map_name.clone()))
-                    .unwrap();
+                reply.send((state.map.info.clone(), state.map.map_name.clone()))?;
 
                 return Ok(());
             }
@@ -204,7 +197,7 @@ impl Actor for Game {
                     Tick => {
                         tick(state);
                     }
-                    RenderInfoRequest {
+                    GetAllRenderUnits {
                         culling_range,
                         reply,
                     } => {
@@ -237,19 +230,7 @@ impl Actor for Game {
                             })
                             .collect();
 
-                        let all_data = multi_call_iter(
-                            state.tile_entities.values(),
-                            state.tile_entities.len(),
-                            TileEntityMsg::GetDataWithCoord,
-                            None,
-                        )
-                        .await
-                        .unwrap()
-                        .into_iter()
-                        .map(CallResult::unwrap)
-                        .collect();
-
-                        reply.send((instances, all_data)).unwrap();
+                        reply.send(instances).unwrap();
                     }
                     PlaceTile {
                         coord,
@@ -261,7 +242,7 @@ impl Actor for Game {
                         if let Some(old_id) = state.map.tiles.get(&coord) {
                             if *old_id == id {
                                 if let Some(reply) = reply {
-                                    reply.send(PlaceTileResponse::Ignored).unwrap();
+                                    reply.send(PlaceTileResponse::Ignored)?;
                                 }
 
                                 return Ok(());
@@ -288,7 +269,7 @@ impl Actor for Game {
 
                         if skip {
                             if let Some(reply) = reply {
-                                reply.send(PlaceTileResponse::Ignored).unwrap();
+                                reply.send(PlaceTileResponse::Ignored)?;
                             }
                             return Ok(());
                         }
@@ -296,20 +277,20 @@ impl Actor for Game {
                         let old_tile = if id == self.resource_man.registry.none {
                             if !state.map.tiles.contains_key(&coord) {
                                 if let Some(reply) = reply {
-                                    reply.send(PlaceTileResponse::Ignored).unwrap();
+                                    reply.send(PlaceTileResponse::Ignored)?;
                                 }
 
                                 return Ok(());
                             }
 
                             if let Some(reply) = reply {
-                                reply.send(PlaceTileResponse::Removed).unwrap();
+                                reply.send(PlaceTileResponse::Removed)?;
                             }
 
                             remove_tile(&self.resource_man, state, coord).await
                         } else {
                             if let Some(reply) = reply {
-                                reply.send(PlaceTileResponse::Placed).unwrap();
+                                reply.send(PlaceTileResponse::Placed)?;
                             }
 
                             insert_new_tile(
@@ -337,16 +318,14 @@ impl Actor for Game {
                         }
                     }
                     GetTile(coord, reply) => {
-                        reply.send(state.map.tiles.get(&coord).cloned()).unwrap();
+                        reply.send(state.map.tiles.get(&coord).cloned())?;
                     }
                     GetTileEntity(coord, reply) => {
-                        reply
-                            .send(state.tile_entities.get(&coord).cloned())
-                            .unwrap();
+                        reply.send(state.tile_entities.get(&coord).cloned())?;
                     }
                     ForwardMsgToTile(coord, msg) => {
                         if let Some(tile_entity) = state.tile_entities.get(&coord) {
-                            tile_entity.send_message(msg).unwrap();
+                            tile_entity.send_message(msg)?;
                         }
                     }
                     StopTicking => {
@@ -355,7 +334,7 @@ impl Actor for Game {
                     Undo => {
                         if let Some(step) = state.undo_steps.pop_back() {
                             for msg in step {
-                                myself.send_message(msg).unwrap();
+                                myself.send_message(msg)?;
                             }
                         }
                     }
@@ -385,7 +364,21 @@ impl Actor for Game {
                             }
                         }
 
-                        reply.send(state.transaction_records.clone()).unwrap();
+                        reply.send(state.transaction_records.clone())?;
+                    }
+                    GetAllData(reply) => {
+                        let all_data = multi_call_iter(
+                            state.tile_entities.values(),
+                            state.tile_entities.len(),
+                            TileEntityMsg::GetDataWithCoord,
+                            None,
+                        )
+                        .await?
+                        .into_iter()
+                        .map(CallResult::unwrap)
+                        .collect();
+
+                        reply.send(all_data)?;
                     }
                     RecordTransaction(stack, source_coord, coord) => {
                         if let Some((instant, _)) = state
@@ -609,7 +602,7 @@ async fn insert_new_tile(
     if let Some(data) = data {
         tile_entity
             .send_message(TileEntityMsg::SetData(data))
-            .unwrap();
+            .ok()?;
     }
 
     state.tile_entities.insert(coord, tile_entity);
@@ -658,6 +651,7 @@ impl Default for GameState {
 
             undo_steps: Default::default(),
             transaction_records: Default::default(),
+            render_units_cache: None,
         }
     }
 }

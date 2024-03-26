@@ -18,6 +18,7 @@ use egui_wgpu::wgpu::{
 };
 use hashbrown::HashMap;
 use image::EncodableLayout;
+use rayon::prelude::*;
 use wgpu::util::{DrawIndexedIndirectArgs, TextureDataOrder};
 use wgpu::{AdapterInfo, Surface};
 use winit::dpi::PhysicalSize;
@@ -969,19 +970,8 @@ pub fn compile_instances<T: Clone + Send>(
     let mut raw_instances = HashMap::new();
     let mut matrix_data = vec![];
 
-    #[cfg(debug_assertions)]
-    let mut seen = hashbrown::HashSet::new();
-
     instances.binary_group_by_key(|v| v.1).for_each(|group| {
         let id = group[0].1;
-
-        #[cfg(debug_assertions)]
-        {
-            if seen.contains(&id) {
-                panic!("Duplicate id when collecting instances - are the instances sorted?");
-            }
-            seen.insert(id);
-        }
 
         let models = &resource_man.all_models[&id].0;
 
@@ -1018,6 +1008,32 @@ pub fn compile_instances<T: Clone + Send>(
     (raw_instances, matrix_data)
 }
 
+fn collect_indirect<T: Clone + Send + Sync>(
+    base_instance_counter: &mut u32,
+    draw_count: &mut u32,
+    vec: &mut Vec<(DrawIndexedIndirectArgs, T)>,
+    resource_man: &ResourceManager,
+    id: &Id,
+    instances: &[(usize, RawInstanceData, T)],
+) {
+    let size = instances.len() as u32;
+
+    let index_range = resource_man.all_index_ranges[id][&instances[0].0];
+
+    let command = DrawIndexedIndirectArgs {
+        first_index: index_range.offset,
+        index_count: index_range.size,
+        first_instance: *base_instance_counter,
+        instance_count: size,
+        base_vertex: 0,
+    };
+
+    *base_instance_counter += size;
+    *draw_count += 1;
+
+    vec.push((command, instances[0].2.clone()));
+}
+
 pub fn indirect_instance<T: Clone + Send + Sync>(
     resource_man: &ResourceManager,
     instances: &[(InstanceData, Id, T)],
@@ -1032,42 +1048,51 @@ pub fn indirect_instance<T: Clone + Send + Sync>(
     let (compiled_instances, matrix_data) =
         compile_instances(resource_man, instances, animation_map);
 
-    let (_, draw_count, commands) = compiled_instances.iter().fold(
-        (0, 0, HashMap::new()),
-        |(mut base_instance_counter, mut draw_count, mut commands), (id, instances)| {
-            let mut a = instances.binary_group_by_key(|v| v.0);
-            let mut b = instances.iter().map(slice::from_ref);
+    let (_, draw_count, commands) = compiled_instances
+        .par_iter()
+        .fold(
+            || (0, 0, HashMap::new()),
+            |(mut base_instance_counter, mut draw_count, mut commands), (id, groups)| {
+                let vec = commands
+                    .entry(*id)
+                    .or_insert_with(|| Vec::with_capacity(groups.len()));
 
-            let vec = commands
-                .entry(*id)
-                .or_insert_with(|| Vec::with_capacity(instances.len()));
+                if group {
+                    for instances in groups.binary_group_by_key(|v| v.0) {
+                        collect_indirect(
+                            &mut base_instance_counter,
+                            &mut draw_count,
+                            vec,
+                            resource_man,
+                            id,
+                            instances,
+                        )
+                    }
+                } else {
+                    for instances in groups.iter().map(slice::from_ref) {
+                        collect_indirect(
+                            &mut base_instance_counter,
+                            &mut draw_count,
+                            vec,
+                            resource_man,
+                            id,
+                            instances,
+                        )
+                    }
+                }
 
-            for instances in if group {
-                &mut a as &mut dyn Iterator<Item = &[(usize, RawInstanceData, T)]>
-            } else {
-                &mut b as &mut dyn Iterator<Item = &[(usize, RawInstanceData, T)]>
-            } {
-                let size = instances.len() as u32;
-
-                let index_range = resource_man.all_index_ranges[id][&instances[0].0];
-
-                let command = DrawIndexedIndirectArgs {
-                    first_index: index_range.offset,
-                    index_count: index_range.size,
-                    first_instance: base_instance_counter,
-                    instance_count: size,
-                    base_vertex: 0,
-                };
-
-                base_instance_counter += size;
-                draw_count += 1;
-
-                vec.push((command, instances[0].2.clone()));
-            }
-
-            (base_instance_counter, draw_count, commands)
-        },
-    );
+                (base_instance_counter, draw_count, commands)
+            },
+        )
+        .reduce(
+            || (0, 0, HashMap::new()),
+            |mut a, b| {
+                for (k, v) in b.2 {
+                    a.2.insert(k, v);
+                }
+                (a.0 + b.0, a.1 + b.1, a.2)
+            },
+        );
 
     let instances = compiled_instances
         .into_iter()

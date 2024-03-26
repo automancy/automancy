@@ -30,13 +30,12 @@ use automancy_defs::math::{
 };
 use automancy_defs::rendering::{make_line, GameUBO, InstanceData, LINE_DEPTH};
 use automancy_defs::slice_group_by::GroupBy;
-use automancy_defs::{bytemuck, colors};
-use automancy_resources::data::Data;
+use automancy_defs::{bytemuck, colors, math};
+use automancy_resources::data::{Data, DataMap};
 use automancy_resources::ResourceManager;
 
 use crate::game::{
-    GameMsg, RenderInfo, RenderUnit, TransactionRecord, TransactionRecords,
-    TRANSACTION_ANIMATION_SPEED,
+    GameMsg, RenderUnit, TransactionRecord, TransactionRecords, TRANSACTION_ANIMATION_SPEED,
 };
 use crate::gpu;
 use crate::gpu::{
@@ -54,7 +53,8 @@ pub struct Renderer<'a> {
     pub global_buffers: Arc<GlobalBuffers>,
     pub fps_limit: Double,
 
-    render_info_cache: Arc<Mutex<Option<RenderInfo>>>,
+    render_info_cache:
+        Arc<Mutex<Option<(HashMap<TileCoord, RenderUnit>, HashMap<TileCoord, DataMap>)>>>,
     render_info_updating: Arc<AtomicBool>,
     transaction_records_cache: Arc<Mutex<TransactionRecords>>,
     transaction_records_updating: Arc<AtomicBool>,
@@ -80,22 +80,6 @@ impl<'a> Renderer<'a> {
             transaction_records_cache: Arc::new(Default::default()),
             transaction_records_updating: Arc::new(Default::default()),
         }
-    }
-}
-
-fn get_angle_from_direction(target: &Data) -> Option<Float> {
-    if let Data::Coord(target) = target {
-        match *target {
-            TileCoord::TOP_RIGHT => Some(0.0),
-            TileCoord::RIGHT => Some(-60.0),
-            TileCoord::BOTTOM_RIGHT => Some(-120.0),
-            TileCoord::BOTTOM_LEFT => Some(-180.0),
-            TileCoord::LEFT => Some(-240.0),
-            TileCoord::TOP_LEFT => Some(-300.0),
-            _ => None,
-        }
-    } else {
-        None
     }
 }
 
@@ -154,11 +138,12 @@ impl<'a> Renderer<'a> {
             updating.store(true, Ordering::Relaxed);
 
             runtime.spawn(async move {
-                let result = game
+                let all_data = game.call(GameMsg::GetAllData, None).await.unwrap().unwrap();
+                let instances = game
                     .call(
-                        |reply| GameMsg::RenderInfoRequest {
-                            culling_range,
+                        |reply| GameMsg::GetAllRenderUnits {
                             reply,
+                            culling_range,
                         },
                         None,
                     )
@@ -166,7 +151,7 @@ impl<'a> Renderer<'a> {
                     .unwrap()
                     .unwrap();
 
-                *cache.lock().await = Some(result);
+                *cache.lock().await = Some((instances, all_data));
 
                 updating.store(false, Ordering::Relaxed);
             });
@@ -219,7 +204,13 @@ impl<'a> Renderer<'a> {
             if let Some(theta) = all_data
                 .get(coord)
                 .and_then(|data| data.get(&setup.resource_man.registry.data_ids.target))
-                .and_then(get_angle_from_direction)
+                .and_then(|target| {
+                    if let Data::Coord(target) = target {
+                        math::tile_direction_to_angle(*target)
+                    } else {
+                        None
+                    }
+                })
             {
                 unit.instance = unit
                     .instance
@@ -329,6 +320,15 @@ impl<'a> Renderer<'a> {
                 .unwrap()
                 .model;
 
+            for RenderUnit { model, .. } in instances.values() {
+                try_add_animation(
+                    &setup.resource_man,
+                    setup.start_instant,
+                    *model,
+                    &mut animation_map,
+                );
+            }
+
             for hex in culling_range.all_coords() {
                 let coord = TileCoord::from(hex);
 
@@ -360,13 +360,6 @@ impl<'a> Renderer<'a> {
                 instance, model, ..
             } in instances.into_values()
             {
-                try_add_animation(
-                    &setup.resource_man,
-                    setup.start_instant,
-                    model,
-                    &mut animation_map,
-                );
-
                 map.entry(model)
                     .or_insert_with(|| Vec::with_capacity(32))
                     .push((
