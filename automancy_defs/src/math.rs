@@ -170,3 +170,15 @@ pub fn direction_to_angle(d: Vec2) -> Float {
 
     angle.rem_euclid(std::f32::consts::PI)
 }
+
+pub fn tile_direction_to_angle(direction: TileCoord) -> Option<Float> {
+    match direction {
+        TileCoord::TOP_RIGHT => Some(0.0),
+        TileCoord::RIGHT => Some(-60.0),
+        TileCoord::BOTTOM_RIGHT => Some(-120.0),
+        TileCoord::BOTTOM_LEFT => Some(-180.0),
+        TileCoord::LEFT => Some(-240.0),
+        TileCoord::TOP_LEFT => Some(-300.0),
+        _ => None,
+    }
+}
