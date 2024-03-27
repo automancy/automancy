@@ -28,12 +28,14 @@ use automancy::map::MAIN_MENU;
 use automancy::renderer::Renderer;
 use automancy::setup::GameSetup;
 use automancy::LOGO;
-use automancy_defs::flexstr::ToSharedStr;
 use automancy_defs::gui::init_gui;
 use automancy_defs::gui::set_font;
 use automancy_defs::math::Double;
 use automancy_defs::{log, window};
 use automancy_resources::kira::tween::Tween;
+
+static SYMBOLS_FONT: &[u8] = include_bytes!("../../assets/SymbolsNerdFontMono-Regular.ttf");
+static SYMBOLS_FONT_KEY: &str = "SYMBOLS_FONT";
 
 /// Gets the game icon.
 fn get_icon() -> Icon {
@@ -181,13 +183,19 @@ fn main() -> eyre::Result<()> {
     egui_callback_resources.insert(global_buffers.clone());
 
     let mut gui = init_gui(egui_renderer, gpu.window);
+    egui_extras::install_image_loaders(&gui.context);
+
     gui.fonts = FontDefinitions::default();
+    gui.fonts.font_data.insert(
+        SYMBOLS_FONT_KEY.to_string(),
+        FontData::from_static(SYMBOLS_FONT),
+    );
     for (name, font) in setup.resource_man.fonts.iter() {
         gui.fonts
             .font_data
             .insert(name.to_string(), FontData::from_owned(font.data.clone()));
     }
-    set_font(setup.options.gui.font.to_shared_str(), &mut gui);
+    set_font(SYMBOLS_FONT_KEY, &setup.options.gui.font, &mut gui);
     log::info!("Gui set up.");
 
     let mut renderer = Renderer::new(
@@ -232,7 +240,7 @@ fn main() -> eyre::Result<()> {
 
         if !setup.options.synced {
             gui.context.set_zoom_factor(setup.options.gui.scale);
-            set_font(setup.options.gui.font.to_shared_str(), &mut gui);
+            set_font(SYMBOLS_FONT_KEY, &setup.options.gui.font, &mut gui);
 
             setup
                 .audio_man

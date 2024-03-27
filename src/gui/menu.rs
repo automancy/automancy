@@ -3,7 +3,7 @@ use std::fs;
 
 use egui::load::Bytes;
 use egui::{
-    vec2, Align, Align2, Button, Checkbox, ComboBox, Context, Image, ImageSource, RichText,
+    vec2, Align, Align2, Button, Checkbox, ComboBox, Context, Image, ImageSource, Layout, RichText,
     ScrollArea, Slider, TextEdit, TextStyle, Window,
 };
 use tokio::runtime::Runtime;
@@ -45,7 +45,7 @@ pub fn main_menu(
                 |ui| {
                     ui.add(
                         Image::new(ImageSource::Bytes {
-                            uri: Cow::Owned(LOGO_PATH.to_string()), // TODO this is a bit expensive?
+                            uri: Cow::Borrowed(LOGO_PATH),
                             bytes: Bytes::Static(LOGO),
                         })
                         .max_size(vec2(128.0, 128.0)),
@@ -283,16 +283,16 @@ pub fn map_menu(
                         }
                     });
 
-                    ui.horizontal(|ui| {
-                        if let Some(save_time) = save_time {
-                            ui.label(format_time(
-                                *save_time,
-                                setup.resource_man.translates.gui
-                                    [&setup.resource_man.registry.gui_ids.time_fmt]
-                                    .as_str(),
-                            ));
-                        }
+                    if let Some(save_time) = save_time {
+                        ui.label(format_time(
+                            *save_time,
+                            setup.resource_man.translates.gui
+                                [&setup.resource_man.registry.gui_ids.time_fmt]
+                                .as_str(),
+                        ));
+                    }
 
+                    ui.horizontal(|ui| {
                         if ui
                             .button(
                                 setup.resource_man.translates.gui
@@ -307,7 +307,6 @@ pub fn map_menu(
 
                             loop_store.gui_state.switch_screen(Screen::Ingame);
                         }
-
                         if ui
                             .button(
                                 setup.resource_man.translates.gui
