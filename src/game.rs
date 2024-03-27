@@ -70,8 +70,6 @@ pub struct GameState {
     undo_steps: ArrayDeque<Vec<GameMsg>, 16, Wrapping>,
     /// records transactions to be drawn
     transaction_records: TransactionRecords,
-
-    render_units_cache: Option<(HexBounds, HashMap<TileCoord, RenderUnit>)>,
 }
 
 pub async fn load_map(
@@ -651,7 +649,6 @@ impl Default for GameState {
 
             undo_steps: Default::default(),
             transaction_records: Default::default(),
-            render_units_cache: None,
         }
     }
 }
