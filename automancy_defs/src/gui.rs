@@ -70,11 +70,15 @@ fn init_styles(context: &Context) {
             menu_rounding: Rounding::same(0.0),
 
             window_shadow: Shadow {
-                extrusion: 8.0,
+                offset: Default::default(),
+                blur: 8.0,
+                spread: 4.0,
                 color: Color32::from_black_alpha(64),
             },
             popup_shadow: Shadow {
-                extrusion: 4.0,
+                offset: Default::default(),
+                blur: 8.0,
+                spread: 4.0,
                 color: Color32::from_black_alpha(64),
             },
 
@@ -150,7 +154,7 @@ pub fn init_gui(renderer: egui_wgpu::Renderer, window: &Window) -> Gui {
 
     let viewport_id = context.viewport_id();
 
-    let gui = Gui {
+    Gui {
         context: context.clone(),
         state: State::new(
             context,
@@ -161,9 +165,7 @@ pub fn init_gui(renderer: egui_wgpu::Renderer, window: &Window) -> Gui {
         ),
         renderer,
         fonts: FontDefinitions::default(),
-    };
-
-    gui
+    }
 }
 
 #[must_use = "You should put this widget in an ui with `ui.add(widget);`"]
