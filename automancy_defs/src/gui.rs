@@ -1,13 +1,11 @@
 use egui::epaint::Shadow;
 use egui::output::OpenUrl;
 use egui::style::{Interaction, Spacing, WidgetVisuals, Widgets};
-use egui::FontFamily::{Monospace, Proportional};
 use egui::{
-    Color32, Context, FontDefinitions, FontId, Margin, Response, Rounding, Stroke, Style,
-    TextStyle, Ui, Visuals, Widget,
+    Color32, Context, FontDefinitions, FontFamily, FontId, Margin, Response, Rounding, Stroke,
+    Style, TextStyle, Ui, Visuals, Widget,
 };
 use egui_winit::State;
-use flexstr::SharedStr;
 use winit::window::Window;
 
 pub struct Gui {
@@ -17,17 +15,29 @@ pub struct Gui {
     pub fonts: FontDefinitions,
 }
 
-pub fn set_font(font: SharedStr, gui: &mut Gui) {
+pub fn set_font(symbols_font: &str, font: &str, gui: &mut Gui) {
     gui.fonts
         .families
-        .get_mut(&Proportional)
+        .get_mut(&FontFamily::Proportional)
         .unwrap()
         .insert(0, font.to_string());
     gui.fonts
         .families
-        .get_mut(&Monospace)
+        .get_mut(&FontFamily::Monospace)
         .unwrap()
         .insert(0, font.to_string());
+
+    gui.fonts
+        .families
+        .get_mut(&FontFamily::Proportional)
+        .unwrap()
+        .insert(0, symbols_font.to_string());
+    gui.fonts
+        .families
+        .get_mut(&FontFamily::Monospace)
+        .unwrap()
+        .insert(0, symbols_font.to_string());
+
     gui.context.set_fonts(gui.fonts.clone());
 }
 
@@ -36,11 +46,20 @@ fn init_styles(context: &Context) {
     let light = Visuals::light();
     context.set_style(Style {
         text_styles: [
-            (TextStyle::Small, FontId::new(9.0, Proportional)),
-            (TextStyle::Body, FontId::new(13.0, Proportional)),
-            (TextStyle::Button, FontId::new(13.0, Proportional)),
-            (TextStyle::Heading, FontId::new(19.0, Proportional)),
-            (TextStyle::Monospace, FontId::new(13.0, Monospace)),
+            (TextStyle::Small, FontId::new(9.0, FontFamily::Proportional)),
+            (TextStyle::Body, FontId::new(13.0, FontFamily::Proportional)),
+            (
+                TextStyle::Button,
+                FontId::new(13.0, FontFamily::Proportional),
+            ),
+            (
+                TextStyle::Heading,
+                FontId::new(19.0, FontFamily::Proportional),
+            ),
+            (
+                TextStyle::Monospace,
+                FontId::new(13.0, FontFamily::Monospace),
+            ),
         ]
         .into(),
         visuals: Visuals {
@@ -122,7 +141,6 @@ fn init_styles(context: &Context) {
 /// Initializes the GUI.
 pub fn init_gui(renderer: egui_wgpu::Renderer, window: &Window) -> Gui {
     let context = Context::default();
-    egui_extras::install_image_loaders(&context);
 
     context.tessellation_options_mut(|o| {
         o.coarse_tessellation_culling = false;

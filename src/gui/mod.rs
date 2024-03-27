@@ -216,8 +216,8 @@ impl TextFieldState {
     }
 }
 
-pub fn info_hover(ui: &mut Ui, info: impl Into<WidgetText>) {
-    ui.label("ⓘ")
+pub fn hover_tip(ui: &mut Ui, info: impl Into<WidgetText>) {
+    ui.label("\u{f449}")
         .on_hover_cursor(CursorIcon::Help)
         .on_hover_ui(|ui| {
             ui.label(info);

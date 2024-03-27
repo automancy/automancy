@@ -21,7 +21,7 @@ impl ResourceManager {
                     .and_then(OsStr::to_str)
                     .is_some_and(|v| FONT_EXT.contains(&v))
             }) {
-                log::info!("loading font {file:?}");
+                log::info!("Loading font {file:?}");
 
                 let mut data: Vec<u8> = Vec::new();
                 File::open(&file)?.read_to_end(&mut data)?;
@@ -35,6 +35,16 @@ impl ResourceManager {
                     .ok_or_else(|| LoadResourceError::OsStringError(file.clone()))?
                     .to_string();
 
+                let file_name = file
+                    .file_name()
+                    .ok_or_else(|| {
+                        LoadResourceError::InvalidFileError(file.clone(), COULD_NOT_GET_FILE_STEM)
+                    })?
+                    .to_str()
+                    .ok_or_else(|| LoadResourceError::OsStringError(file.clone()))?
+                    .to_string()
+                    .to_shared_str();
+
                 let name = Face::parse(&data, 0)?
                     .tables()
                     .name
@@ -45,22 +55,12 @@ impl ResourceManager {
                     .find(|n| n.to_lowercase()[..2] == file_stem.to_lowercase()[..2])
                     .unwrap_or(file_stem);
 
-                self.fonts.insert(
-                    file.file_name()
-                        .ok_or_else(|| {
-                            LoadResourceError::InvalidFileError(
-                                file.clone(),
-                                COULD_NOT_GET_FILE_STEM,
-                            )
-                        })?
-                        .to_str()
-                        .ok_or_else(|| LoadResourceError::OsStringError(file.clone()))?
-                        .to_string()
-                        .to_shared_str(),
-                    Font { name, data },
-                );
+                log::info!("Loaded font {name} with key {file_name}!");
+
+                self.fonts.insert(file_name, Font { name, data });
             }
         }
+
         Ok(())
     }
 }

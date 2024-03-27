@@ -17,7 +17,7 @@ use automancy_resources::ResourceManager;
 
 use crate::event::EventLoopStorage;
 use crate::gui::item::draw_item;
-use crate::gui::{info_hover, TextField, MEDIUM_ICON_SIZE, SMALL_ICON_SIZE};
+use crate::gui::{hover_tip, TextField, MEDIUM_ICON_SIZE, SMALL_ICON_SIZE};
 use crate::setup::GameSetup;
 use crate::tile_entity::TileEntityMsg;
 
@@ -37,12 +37,12 @@ pub fn add_direction(ui: &mut Ui, target_coord: &mut Option<TileCoord>, n: u8) {
         target_coord,
         coord,
         match n {
-            0 => "↗",
-            1 => "➡",
-            2 => "↘",
-            3 => "↙",
-            4 => "⬅",
-            5 => "↖",
+            0 => "\u{f46c}",
+            1 => "\u{f432}",
+            2 => "\u{f43e}",
+            3 => "\u{f424}",
+            4 => "\u{f434}",
+            5 => "\u{f45c}",
             _ => "",
         },
     );
@@ -74,7 +74,7 @@ fn config_target(
 
         ui.horizontal(|ui| {
             add_direction(ui, &mut new_target_coord, 4);
-            ui.selectable_value(&mut new_target_coord, None, "❌");
+            ui.selectable_value(&mut new_target_coord, None, "\u{f467}");
             add_direction(ui, &mut new_target_coord, 1);
         });
 
@@ -358,7 +358,7 @@ fn config_script(
                 [&setup.resource_man.registry.gui_ids.tile_config_script]
                 .as_str(),
         );
-        info_hover(
+        hover_tip(
             ui,
             setup.resource_man.translates.gui
                 [&setup.resource_man.registry.gui_ids.tile_config_script_info]
