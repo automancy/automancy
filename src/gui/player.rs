@@ -95,21 +95,21 @@ pub fn player(
         {
             ScrollArea::vertical().show(ui, |ui| {
                 for (id, amount) in inventory.iter() {
-                    let item = setup.resource_man.registry.items.get(id).unwrap();
+                    if let Some(item) = setup.resource_man.registry.items.get(id) {
+                        let (dst_rect, _) = draw_item(
+                            ui,
+                            &setup.resource_man,
+                            None,
+                            ItemStack {
+                                item: *item,
+                                amount: *amount,
+                            },
+                            MEDIUM_ICON_SIZE,
+                            true,
+                        );
 
-                    let (dst_rect, _) = draw_item(
-                        ui,
-                        &setup.resource_man,
-                        None,
-                        ItemStack {
-                            item: *item,
-                            amount: *amount,
-                        },
-                        MEDIUM_ICON_SIZE,
-                        true,
-                    );
-
-                    take_item_animation(ui, setup, loop_store, *item, dst_rect);
+                        take_item_animation(ui, setup, loop_store, *item, dst_rect);
+                    }
                 }
             });
         }
