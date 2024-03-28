@@ -37,7 +37,6 @@ use automancy_resources::ResourceManager;
 use crate::game::{
     GameMsg, RenderUnit, TransactionRecord, TransactionRecords, TRANSACTION_ANIMATION_SPEED,
 };
-use crate::gpu;
 use crate::gpu::{
     AnimationMap, GlobalBuffers, Gpu, RenderResources, SharedResources, NORMAL_CLEAR,
     SCREENSHOT_FORMAT,
@@ -45,6 +44,7 @@ use crate::gpu::{
 use crate::input::KeyActions;
 use crate::options::Options;
 use crate::setup::GameSetup;
+use crate::{gpu, gui};
 
 pub struct Renderer<'a> {
     pub gpu: Gpu<'a>,
@@ -124,6 +124,8 @@ impl<'a> Renderer<'a> {
         mut extra_instances: Vec<(InstanceData, Id)>,
         mut in_world_item_instances: Vec<(InstanceData, Id)>,
     ) -> Result<(), SurfaceError> {
+        gui::reset_callback_counter();
+
         let size = self.gpu.window.inner_size();
 
         if size.width == 0 || size.height == 0 {

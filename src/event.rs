@@ -31,7 +31,6 @@ use automancy_resources::ResourceManager;
 
 use crate::game::{GameMsg, PlaceTileResponse};
 use crate::gpu::AnimationMap;
-use crate::gui;
 use crate::gui::{
     debug, error, info, menu, player, popup, tile_config, tile_selection, GameEguiCallback,
     GuiState, PopupState, Screen, TextField,
@@ -141,8 +140,6 @@ fn render(
     gui: &mut Gui,
     target: &EventLoopWindowTarget<()>,
 ) -> anyhow::Result<bool> {
-    gui::reset_callback_counter();
-
     let mut result = Ok(false);
 
     setup.camera.update_pointing_at(
