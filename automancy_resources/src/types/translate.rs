@@ -2,16 +2,16 @@ use std::ffi::OsStr;
 use std::fs::{read_dir, read_to_string};
 use std::path::Path;
 
+use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
 
 use automancy_defs::flexstr::{SharedStr, ToSharedStr};
 use automancy_defs::id::{Id, IdRaw};
 use automancy_defs::log;
-use hashbrown::HashMap;
 
 use crate::{ResourceManager, RON_EXT};
 
-#[derive(Debug, Default, Clone, Deserialize, Serialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 pub struct TranslateRaw {
     none: String,
     unnamed: String,
@@ -21,6 +21,7 @@ pub struct TranslateRaw {
     scripts: HashMap<IdRaw, String>,
     gui: HashMap<IdRaw, String>,
     error: HashMap<IdRaw, String>,
+    research: HashMap<IdRaw, SharedStr>,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -33,6 +34,7 @@ pub struct Translate {
     pub scripts: HashMap<Id, SharedStr>,
     pub gui: HashMap<Id, SharedStr>,
     pub error: HashMap<Id, SharedStr>,
+    pub research: HashMap<Id, SharedStr>,
 }
 
 impl ResourceManager {
@@ -74,6 +76,11 @@ impl ResourceManager {
             .into_iter()
             .map(|(id, str)| (id.to_id(&mut self.interner), str.into()))
             .collect();
+        let research = translate
+            .research
+            .into_iter()
+            .map(|(id, str)| (id.to_id(&mut self.interner), str.into()))
+            .collect();
 
         self.translates = Translate {
             none,
@@ -84,6 +91,7 @@ impl ResourceManager {
             scripts,
             gui,
             error,
+            research,
         };
 
         Ok(())
