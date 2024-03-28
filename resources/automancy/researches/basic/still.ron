@@ -1,8 +1,12 @@
 (
     id: "basic_still",
-    unlock: "basic_still",
     icon: "basic_still",
-    next: None,
+    unlocks: ["basic_still"],
+    next_researches: None,
     name: "research/basic_still_name",
     description: "research/basic_still_description",
+    required_items: Some([
+        ("white_mechwork", 4),
+    ]),
+    attached_puzzle: Some("connection_puzzle"),
 )

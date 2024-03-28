@@ -15,7 +15,6 @@ pub struct TileDefRaw {
     pub id: IdRaw,
     pub function: Option<IdRaw>,
     pub model: IdRaw,
-    #[serde(default)]
     pub data: DataMapRaw,
 }
 
