@@ -421,7 +421,7 @@ pub fn init_gpu_resources(
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
 
-        const MATRIX_DATA_SIZE: usize = 256;
+        const MATRIX_DATA_SIZE: usize = 4096;
         let matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Gui Matrix Data Buffer"),
             contents: &Vec::from_iter(
@@ -973,30 +973,30 @@ pub fn compile_instances<T: Clone + Send>(
     instances.binary_group_by_key(|v| v.1).for_each(|group| {
         let id = group[0].1;
 
-        let models = &resource_man.all_models[&id].0;
+        if let Some((models, ..)) = &resource_man.all_models.get(&id) {
+            let vec = raw_instances
+                .entry(id)
+                .or_insert_with(|| Vec::with_capacity(group.len()));
 
-        let vec = raw_instances
-            .entry(id)
-            .or_insert_with(|| Vec::with_capacity(group.len()));
+            for (instance, _, extra) in group.iter() {
+                for model in models.values() {
+                    let mut instance = *instance;
 
-        for (instance, _, extra) in group.iter() {
-            for model in models.values() {
-                let mut instance = *instance;
+                    let mut matrix = model.matrix;
+                    if let Some(anim) = animation_map
+                        .get(&id)
+                        .and_then(|anim| anim.get(&model.index))
+                    {
+                        matrix *= *anim;
+                    }
+                    instance = instance.add_model_matrix(matrix);
 
-                let mut matrix = model.matrix;
-                if let Some(anim) = animation_map
-                    .get(&id)
-                    .and_then(|anim| anim.get(&model.index))
-                {
-                    matrix *= *anim;
+                    vec.push((
+                        model.index,
+                        RawInstanceData::from_instance(instance, &mut matrix_data),
+                        extra.clone(),
+                    ));
                 }
-                instance = instance.add_model_matrix(matrix);
-
-                vec.push((
-                    model.index,
-                    RawInstanceData::from_instance(instance, &mut matrix_data),
-                    extra.clone(),
-                ));
             }
         }
     });
