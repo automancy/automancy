@@ -15,9 +15,9 @@ fn handle_transaction(input) {
 
     if item != () && target != () {
         if input.stack.item == item {
-            return ["pass_on", input.coord + target];
+            return [TransResult::PASS_ON, input.coord + target];
         } else {
-            return ["pass_on", input.coord + target.rotate_right()];
+            return [TransResult::PASS_ON, input.coord + target.rotate_right()];
         }
     }
 }

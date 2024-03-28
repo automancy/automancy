@@ -32,7 +32,7 @@ fn handle_transaction(input) {
         buffer[item] = stored;
         this[BUFFER] = buffer;
 
-        return ["consume", inserting];
+        return [TransResult::CONSUME, inserting];
     }
 }
 
@@ -53,7 +53,7 @@ fn handle_extract_request(input) {
 
         if stored > 0 {
             return [
-                "make_transaction",
+                Result::MAKE_TRANSACTION,
                 input.requested_from_coord,
                 input.id,
                 input.coord,

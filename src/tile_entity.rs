@@ -3,14 +3,14 @@ use std::sync::Arc;
 
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort};
 use rand::{thread_rng, RngCore};
-use rhai::{CallFnOptions, Dynamic, ImmutableString, Scope, INT};
+use rhai::{CallFnOptions, Dynamic, Scope, INT};
 
 use automancy_defs::coord::TileCoord;
 use automancy_defs::id::Id;
 use automancy_defs::log;
 use automancy_resources::data::stack::{ItemAmount, ItemStack};
 use automancy_resources::data::{Data, DataMap};
-use automancy_resources::types::function::RhaiDataMap;
+use automancy_resources::types::function::{ResultType, RhaiDataMap, TransactionResultType};
 use automancy_resources::ResourceManager;
 
 use crate::game::{GameMsg, TickUnit};
@@ -111,10 +111,10 @@ impl TileEntity {
             return None;
         }
 
-        let ty: ImmutableString = result[0].clone().cast();
+        let ty: TransactionResultType = result[0].clone().cast();
 
-        match ty.as_str() {
-            "pass_on" => {
+        return match ty {
+            TransactionResultType::PassOn => {
                 let coord: TileCoord = result[1].clone().cast();
 
                 send_to_tile(
@@ -130,9 +130,9 @@ impl TileEntity {
                     },
                 );
 
-                return Some(GameMsg::RecordTransaction(stack, source_coord, self.coord));
+                Some(GameMsg::RecordTransaction(stack, source_coord, self.coord))
             }
-            "proxy" => {
+            TransactionResultType::Proxy => {
                 let coord: TileCoord = result[1].clone().cast();
 
                 send_to_tile(
@@ -148,9 +148,9 @@ impl TileEntity {
                     },
                 );
 
-                return Some(GameMsg::RecordTransaction(stack, self.coord, coord));
+                Some(GameMsg::RecordTransaction(stack, self.coord, coord))
             }
-            "consume" => {
+            TransactionResultType::Consume => {
                 let consumed: ItemAmount = result[1].clone().cast();
 
                 send_to_tile(
@@ -164,12 +164,9 @@ impl TileEntity {
                     },
                 );
 
-                return Some(GameMsg::RecordTransaction(stack, source_coord, self.coord));
+                Some(GameMsg::RecordTransaction(stack, source_coord, self.coord))
             }
-            _ => (),
-        }
-
-        None
+        };
     }
 
     fn handle_rhai_result(&self, state: &mut TileEntityState, result: rhai::Array) {
@@ -177,10 +174,10 @@ impl TileEntity {
             return;
         }
 
-        let ty: ImmutableString = result[0].clone().cast();
+        let ty: ResultType = result[0].clone().cast();
 
-        match ty.as_str() {
-            "make_transaction" => {
+        match ty {
+            ResultType::MakeTransaction => {
                 let coord: TileCoord = result[1].clone().cast();
                 let source_id: Id = result[2].clone().cast::<INT>().into();
                 let source_coord: TileCoord = result[3].clone().cast();
@@ -205,32 +202,7 @@ impl TileEntity {
                     );
                 }
             }
-            "make_hidden_transaction" => {
-                let coord: TileCoord = result[1].clone().cast();
-                let source_id: Id = result[2].clone().cast::<INT>().into();
-                let source_coord: TileCoord = result[3].clone().cast();
-
-                let stacks: Vec<ItemStack> = result[4]
-                    .clone()
-                    .try_cast()
-                    .unwrap_or_else(|| result[4].clone().into_typed_array().unwrap());
-
-                for stack in stacks {
-                    send_to_tile(
-                        state,
-                        coord,
-                        Transaction {
-                            stack,
-                            source_coord,
-                            source_id,
-                            root_coord: source_coord,
-                            root_id: source_id,
-                            hidden: true,
-                        },
-                    );
-                }
-            }
-            "make_extract_request" => {
+            ResultType::MakeExtractRequest => {
                 let coord: TileCoord = result[1].clone().cast();
                 let requested_from_id: Id = result[2].clone().cast::<INT>().into();
                 let requested_from_coord: TileCoord = result[3].clone().cast();
@@ -244,7 +216,6 @@ impl TileEntity {
                     },
                 );
             }
-            _ => (),
         }
     }
 

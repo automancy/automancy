@@ -11,6 +11,19 @@ use automancy_defs::log;
 use crate::data::{Data, DataMap};
 use crate::{ResourceManager, FUNCTION_EXT};
 
+#[derive(Debug, Clone, Copy)]
+pub enum ResultType {
+    MakeTransaction,
+    MakeExtractRequest,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum TransactionResultType {
+    PassOn,
+    Proxy,
+    Consume,
+}
+
 #[derive(Default, Debug, Clone)]
 pub struct RhaiDataMap(BTreeMap<Id, Dynamic>);
 

@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::fmt;
 use std::fmt::{Debug, Formatter};
-use std::ops::{Add, Neg, Sub};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::time::SystemTime;
@@ -13,27 +12,19 @@ use hashbrown::HashMap;
 pub use kira;
 use kira::sound::static_sound::StaticSoundData;
 use kira::track::TrackHandle;
-use rhai::{Dynamic, Engine, Module, Scope, AST, INT};
+use rhai::{Engine, Scope, AST};
 use thiserror::Error;
 use walkdir::WalkDir;
 
-use automancy_defs::coord::TileCoord;
 use automancy_defs::flexstr::SharedStr;
 use automancy_defs::id;
 use automancy_defs::id::{id_static, Id, Interner};
 use automancy_defs::rendering::{Animation, Model};
 
-use crate::data::inventory::Inventory;
-use crate::data::item::{rhai_item_match, rhai_item_matches, rhai_item_stack_matches, Item};
-use crate::data::stack::{ItemAmount, ItemStack};
 use crate::error::ErrorManager;
 use crate::registry::{DataIds, ErrorIds, GuiIds, ModelIds, Registry};
 use crate::types::font::Font;
-use crate::types::function::RhaiDataMap;
 use crate::types::model::IndexRange;
-use crate::types::script::{Instructions, Script};
-use crate::types::tag::Tag;
-use crate::types::tile::TileDef;
 use crate::types::translate::Translate;
 
 pub mod data;
@@ -42,6 +33,12 @@ pub mod error;
 pub mod registry;
 
 pub mod types;
+
+mod rhai_coord;
+mod rhai_data;
+mod rhai_functions;
+mod rhai_resources;
+mod rhai_tile;
 
 static COULD_NOT_GET_FILE_STEM: &str = "could not get file stem";
 
@@ -130,155 +127,11 @@ impl ResourceManager {
         engine.set_max_expr_depths(0, 0);
         engine.set_fast_operators(false);
 
-        engine.register_fn("item_match", rhai_item_match);
-        engine.register_fn("item_matches", rhai_item_matches);
-        engine.register_fn("item_matches", rhai_item_stack_matches);
-
-        {
-            let mut module = Module::new();
-
-            module
-                .set_var("ZERO", TileCoord::ZERO)
-                .set_var("TOP_RIGHT", TileCoord::TOP_RIGHT)
-                .set_var("RIGHT", TileCoord::RIGHT)
-                .set_var("BOTTOM_RIGHT", TileCoord::BOTTOM_RIGHT)
-                .set_var("BOTTOM_LEFT", TileCoord::BOTTOM_LEFT)
-                .set_var("LEFT", TileCoord::LEFT)
-                .set_var("TOP_LEFT", TileCoord::TOP_LEFT);
-
-            engine.register_static_module("TileCoord", module.into());
-
-            engine
-                .register_type_with_name::<TileCoord>("TileCoord")
-                .register_fn("to_string", |v: TileCoord| v.to_string())
-                .register_iterator::<Vec<TileCoord>>()
-                .register_fn("TileCoord", TileCoord::new)
-                .register_fn("rotate_left", |n: TileCoord| {
-                    TileCoord::from(n.counter_clockwise())
-                })
-                .register_fn("rotate_right", |n: TileCoord| {
-                    TileCoord::from(n.clockwise())
-                })
-                .register_get("q", |v: &mut TileCoord| v.x)
-                .register_get("r", |v: &mut TileCoord| v.y)
-                .register_fn("+", TileCoord::add)
-                .register_fn("-", TileCoord::sub)
-                .register_fn("-", TileCoord::neg)
-                .register_fn("==", |a: TileCoord, b: TileCoord| a == b)
-                .register_fn("!=", |a: TileCoord, b: TileCoord| a != b);
-        }
-
-        {
-            engine
-                .register_indexer_get_set(RhaiDataMap::rhai_get, RhaiDataMap::rhai_set)
-                .register_fn(
-                    "get_or_new_inventory",
-                    RhaiDataMap::rhai_get_or_new_inventory,
-                );
-
-            engine
-                .register_type_with_name::<Inventory>("Inventory")
-                .register_fn("take", Inventory::take)
-                .register_fn("take", Inventory::take_with_item)
-                .register_fn("add", Inventory::add)
-                .register_fn("add", Inventory::add_with_item)
-                .register_indexer_get_set(Inventory::get, Inventory::insert)
-                .register_indexer_get_set(Inventory::get_with_item, Inventory::insert_with_item);
-            engine
-                .register_type_with_name::<Id>("Id")
-                .register_iterator::<Vec<Id>>();
-            engine
-                .register_type_with_name::<Script>("Script")
-                .register_get("instructions", |v: &mut Script| v.instructions.clone());
-            engine
-                .register_type_with_name::<Instructions>("Instructions")
-                .register_get("inputs", |v: &mut Instructions| match &v.inputs {
-                    Some(v) => Dynamic::from_iter(v.clone()),
-                    None => Dynamic::UNIT,
-                })
-                .register_get("outputs", |v: &mut Instructions| v.outputs.clone());
-            engine.register_type_with_name::<TileDef>("Tile");
-            engine
-                .register_type_with_name::<Item>("Item")
-                .register_iterator::<Vec<Item>>()
-                .register_get("id", |v: &mut Item| v.id)
-                .register_fn("==", |a: Item, b: Item| a == b)
-                .register_fn("!=", |a: Item, b: Item| a != b);
-
-            engine
-                .register_type_with_name::<ItemStack>("ItemStack")
-                .register_iterator::<Vec<ItemStack>>()
-                .register_fn("ItemStack", |item: Item, amount: ItemAmount| ItemStack {
-                    item,
-                    amount,
-                })
-                .register_get("item", |v: &mut ItemStack| v.item)
-                .register_get("amount", |v: &mut ItemStack| v.amount);
-            engine.register_type_with_name::<Tag>("Tag");
-        }
-
-        {
-            engine.register_fn("as_script", |id: INT| {
-                match RESOURCE_MAN
-                    .read()
-                    .unwrap()
-                    .as_ref()
-                    .unwrap()
-                    .registry
-                    .scripts
-                    .get(&Id::from(id))
-                    .cloned()
-                {
-                    Some(v) => Dynamic::from(v),
-                    None => Dynamic::UNIT,
-                }
-            });
-            engine.register_fn("as_tile", |id: INT| {
-                match RESOURCE_MAN
-                    .read()
-                    .unwrap()
-                    .as_ref()
-                    .unwrap()
-                    .registry
-                    .tiles
-                    .get(&Id::from(id))
-                    .cloned()
-                {
-                    Some(v) => Dynamic::from(v),
-                    None => Dynamic::UNIT,
-                }
-            });
-            engine.register_fn("as_item", |id: INT| {
-                match RESOURCE_MAN
-                    .read()
-                    .unwrap()
-                    .as_ref()
-                    .unwrap()
-                    .registry
-                    .items
-                    .get(&Id::from(id))
-                    .cloned()
-                {
-                    Some(v) => Dynamic::from(v),
-                    None => Dynamic::UNIT,
-                }
-            });
-            engine.register_fn("as_tag", |id: INT| {
-                match RESOURCE_MAN
-                    .read()
-                    .unwrap()
-                    .clone()
-                    .unwrap()
-                    .registry
-                    .tags
-                    .get(&Id::from(id))
-                    .cloned()
-                {
-                    Some(v) => Dynamic::from(v),
-                    None => Dynamic::UNIT,
-                }
-            });
-        }
+        rhai_functions::register_functions(&mut engine);
+        rhai_coord::register_coord_stuff(&mut engine);
+        rhai_data::register_data_stuff(&mut engine);
+        rhai_resources::register_resources(&mut engine);
+        rhai_tile::register_tile_stuff(&mut engine);
 
         let data_ids = DataIds::new(&mut interner);
         let model_ids = ModelIds::new(&mut interner);

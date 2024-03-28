@@ -7,5 +7,5 @@ fn function_id() {
 }
 
 fn handle_transaction(input) {
-    return ["consume", input.stack.amount];
+    return [TransResult::CONSUME, input.stack.amount];
 }

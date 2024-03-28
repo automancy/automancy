@@ -28,7 +28,7 @@ fn handle_tick(input) {
     let inputs = script.instructions.inputs;
 
     if inputs == () {
-        return ["make_transaction", coord, input.id, input.coord, outputs];
+        return [Result::MAKE_TRANSACTION, coord, input.id, input.coord, outputs];
     }
 
     let buffer = this[BUFFER];
@@ -44,7 +44,7 @@ fn handle_tick(input) {
         }
     }
 
-    ["make_transaction", coord, input.id, input.coord, outputs]
+    [Result::MAKE_TRANSACTION, coord, input.id, input.coord, outputs]
 }
 
 fn handle_transaction(input) {
@@ -71,7 +71,7 @@ fn handle_transaction(input) {
 
     this[BUFFER] = buffer;
 
-    return ["consume", inserting]
+    return [TransResult::CONSUME, inserting]
 }
 
 fn handle_transaction_result(input) {

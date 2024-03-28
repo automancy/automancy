@@ -4,5 +4,6 @@
     model: "none",
     data: ({
         "default_tile": Bool(true),
+        "not_targeted": Bool(true),
     }),
 )
