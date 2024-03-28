@@ -336,10 +336,17 @@ fn render(
                             ));
                         }
 
-                        if let Some(dir) = loop_store.placement_direction {
+                        if let Some((dir, selected_tile_id)) = loop_store
+                            .placement_direction
+                            .zip(loop_store.selected_tile_id)
+                        {
                             if dir != TileCoord::ZERO
-                                && loop_store.selected_tile_id
-                                    != Some(setup.resource_man.registry.none)
+                                && !setup.resource_man.registry.tiles[&selected_tile_id]
+                                    .data
+                                    .get(&setup.resource_man.registry.data_ids.not_targeted)
+                                    .cloned()
+                                    .and_then(Data::into_bool)
+                                    .unwrap_or(false)
                             {
                                 extra_instances.push((
                                     InstanceData::default()
@@ -712,19 +719,28 @@ pub fn on_event(
             setup.options.synced = false
         }
 
-        if setup.input_handler.shift_held {
-            let hex = math::main_pos_to_fract_hex(
-                window::window_size_double(renderer.gpu.window),
-                setup.input_handler.main_pos,
-                setup.camera.get_pos(),
-            );
-            let rounded = Hex::round(hex.to_array()).as_vec2();
-            let fract = (hex - rounded) * 2.0;
+        if let Some(selected_tile_id) = loop_store.selected_tile_id {
+            if setup.input_handler.shift_held
+                && !setup.resource_man.registry.tiles[&selected_tile_id]
+                    .data
+                    .get(&setup.resource_man.registry.data_ids.not_targeted)
+                    .cloned()
+                    .and_then(Data::into_bool)
+                    .unwrap_or(false)
+            {
+                let hex = math::main_pos_to_fract_hex(
+                    window::window_size_double(renderer.gpu.window),
+                    setup.input_handler.main_pos,
+                    setup.camera.get_pos(),
+                );
+                let rounded = Hex::round(hex.to_array()).as_vec2();
+                let fract = (hex - rounded) * 2.0;
 
-            loop_store.placement_direction = Some(Hex::round(fract.to_array()).into())
-        } else {
-            loop_store.placement_direction = None;
-            loop_store.prev_placement_direction = None;
+                loop_store.placement_direction = Some(Hex::round(fract.to_array()).into())
+            } else {
+                loop_store.placement_direction = None;
+                loop_store.prev_placement_direction = None;
+            }
         }
     }
 
