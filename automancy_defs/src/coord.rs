@@ -27,7 +27,7 @@ impl TileCoord {
     pub const ZERO: Self = Self(Hex::new(0, 0));
 
     /// Creates a new coordinate from a q and an r component, at the position (q, r, -q - r).
-    pub fn new(q: TileUnit, r: TileUnit) -> Self {
+    pub const fn new(q: TileUnit, r: TileUnit) -> Self {
         Self(TileHex::new(q, r))
     }
 }
@@ -38,12 +38,12 @@ impl TileCoord {
         format!("{},{}", self.x, self.y)
     }
 
-    pub const TOP_RIGHT: Self = Self(TileHex::NEIGHBORS_COORDS[3]);
-    pub const RIGHT: Self = Self(TileHex::NEIGHBORS_COORDS[2]);
-    pub const BOTTOM_RIGHT: Self = Self(TileHex::NEIGHBORS_COORDS[1]);
-    pub const BOTTOM_LEFT: Self = Self(TileHex::NEIGHBORS_COORDS[0]);
-    pub const LEFT: Self = Self(TileHex::NEIGHBORS_COORDS[5]);
-    pub const TOP_LEFT: Self = Self(TileHex::NEIGHBORS_COORDS[4]);
+    pub const TOP_RIGHT: Self = Self::new(1, -1);
+    pub const RIGHT: Self = Self::new(1, 0);
+    pub const BOTTOM_RIGHT: Self = Self::new(0, 1);
+    pub const BOTTOM_LEFT: Self = Self::new(-1, 1);
+    pub const LEFT: Self = Self::new(-1, 0);
+    pub const TOP_LEFT: Self = Self::new(0, -1);
 
     /// Creates a list of the neighbors
     pub fn neighbors(self) -> [Self; 6] {

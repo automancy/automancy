@@ -11,8 +11,8 @@ pub const HEX_GRID_LAYOUT: HexLayout = HexLayout {
     orientation: HexOrientation::Pointy,
     origin: Vec2::ZERO,
     hex_size: Vec2::ONE,
-    invert_x: false,
-    invert_y: false,
+    invert_x: true,
+    invert_y: true,
 };
 
 pub const SQRT_3: Float = 1.732_050_8;
