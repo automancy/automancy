@@ -76,23 +76,19 @@
         "invalid_name": "Invalid Name!",
         "create_map": "Create Map",
         "error_popup": "Error",
-
         "tile_config": "Config",
         "tile_config_script": "Script:",
         "tile_config_script_info": "A Script is like a 'recipe' for the Tile to operate on, it specifies what the Tile consumes and what it produces.",
         "tile_config_target": "Target:",
         "tile_config_item": "Item:",
-
         "hint_search_script": "Filter with Script name...",
         "hint_search_item": "Filter with Item name...",
-
         "lbl_amount": "Amount: ",
         "lbl_maps_loaded": "{} maps loaded",
         "lbl_delete_map_confirm": "This will permanently delete this map. Are you sure?",
         "lbl_pick_another_name": "Please pick another name.",
         "lbl_link_destination": "(Click on me to start Linking, and then right click a Tile to pick Destination)",
         "lbl_cannot_place_missing_item": "You need one '{}' item\nin order to place this tile",
-
         "btn_fedi": "Fedi",
         "btn_link_network": "Link Network!",
         "btn_confirm": "Ok",
@@ -110,4 +106,8 @@
         "unwritable_options": "Could not write the options.ron file! Your changes will NOT be saved.",
         "invalid_map_data": "Map {} was corrupted and could not be repaired! This session will instead be written to {}",
     },
+    research: {
+        "basic_still_name": "Basic Still",
+        "basic_still_description": "<Basic Still>",
+    }
 )

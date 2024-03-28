@@ -3,8 +3,8 @@
     icon: "basic_still",
     unlocks: ["basic_still"],
     next_researches: None,
-    name: "research/basic_still_name",
-    description: "research/basic_still_description",
+    name: "basic_still_name",
+    description: "basic_still_description",
     required_items: Some([
         ("white_mechwork", 4),
     ]),
