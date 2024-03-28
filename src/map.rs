@@ -67,7 +67,6 @@ pub struct Map {
 /// A map stores tiles and tile entities to disk.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MapRaw {
-    pub map_name: String,
     pub tiles: Vec<(TileCoord, Id, DataMapRaw)>,
     pub tile_map: HashMap<Id, IdRaw>,
 }
@@ -87,9 +86,9 @@ impl Map {
         PathBuf::from(format!("{MAP_PATH}/{map_name}/"))
     }
 
-    /// Gets the path to a map's header from its name.
+    /// Gets the path to a map's info from its name.
     pub fn info(map_name: &str) -> PathBuf {
-        Map::path(map_name).join(format!("header{INFO_EXT}"))
+        Map::path(map_name).join(format!("info{INFO_EXT}"))
     }
 
     /// Gets the path to a map's tiles from its name.
@@ -233,7 +232,6 @@ impl Map {
         let mut tiles_encoder = Encoder::new(tiles_writer, 0).unwrap();
 
         let mut map_raw = MapRaw {
-            map_name: self.map_name.clone(),
             tiles: vec![],
             tile_map: Default::default(),
         };
