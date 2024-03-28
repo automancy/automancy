@@ -225,7 +225,7 @@ pub fn hover_tip(ui: &mut Ui, info: impl Into<WidgetText>) {
 }
 
 lazy_static! {
-    static ref INDEX_COUNTER: Mutex<u32> = Mutex::new(0);
+    static ref INDEX_COUNTER: Mutex<usize> = Mutex::new(0);
 }
 
 pub fn reset_callback_counter() {
@@ -235,7 +235,7 @@ pub fn reset_callback_counter() {
 pub struct GameEguiCallback {
     instance: InstanceData,
     model: Id,
-    index: u32,
+    index: usize,
 }
 
 impl GameEguiCallback {
@@ -283,7 +283,7 @@ impl CallbackTrait for GameEguiCallback {
         try_add_animation(&resource_man, start_instant, self.model, animation_map);
 
         callback_resources
-            .entry::<Vec<(InstanceData, Id, u32)>>()
+            .entry::<Vec<(InstanceData, Id, usize)>>()
             .or_insert_with(Vec::new)
             .push((self.instance, self.model, self.index));
 
@@ -297,7 +297,7 @@ impl CallbackTrait for GameEguiCallback {
         _egui_encoder: &mut CommandEncoder,
         callback_resources: &mut CallbackResources,
     ) -> Vec<CommandBuffer> {
-        if let Some(mut instances) = callback_resources.remove::<Vec<(InstanceData, Id, u32)>>() {
+        if let Some(mut instances) = callback_resources.remove::<Vec<(InstanceData, Id, usize)>>() {
             instances.sort_by_key(|v| v.1);
 
             let resource_man = callback_resources
@@ -340,7 +340,7 @@ impl CallbackTrait for GameEguiCallback {
         callback_resources: &'a CallbackResources,
     ) {
         if let Some(draws) =
-            callback_resources.get::<HashMap<Id, Vec<(DrawIndexedIndirectArgs, u32)>>>()
+            callback_resources.get::<HashMap<Id, Vec<(DrawIndexedIndirectArgs, usize)>>>()
         {
             let gui_resources = callback_resources.get::<GuiResources>().unwrap();
             let global_buffers = callback_resources.get::<Arc<GlobalBuffers>>().unwrap();
