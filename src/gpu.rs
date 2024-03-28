@@ -18,7 +18,6 @@ use egui_wgpu::wgpu::{
 };
 use hashbrown::HashMap;
 use image::EncodableLayout;
-use rayon::prelude::*;
 use wgpu::util::{DrawIndexedIndirectArgs, TextureDataOrder};
 use wgpu::{AdapterInfo, Surface};
 use winit::dpi::PhysicalSize;
@@ -1048,51 +1047,40 @@ pub fn indirect_instance<T: Clone + Send + Sync>(
     let (compiled_instances, matrix_data) =
         compile_instances(resource_man, instances, animation_map);
 
-    let (_, draw_count, commands) = compiled_instances
-        .par_iter()
-        .fold(
-            || (0, 0, HashMap::new()),
-            |(mut base_instance_counter, mut draw_count, mut commands), (id, groups)| {
-                let vec = commands
-                    .entry(*id)
-                    .or_insert_with(|| Vec::with_capacity(groups.len()));
+    let (_, draw_count, commands) = compiled_instances.iter().fold(
+        (0, 0, HashMap::new()),
+        |(mut base_instance_counter, mut draw_count, mut commands), (id, groups)| {
+            let vec = commands
+                .entry(*id)
+                .or_insert_with(|| Vec::with_capacity(groups.len()));
 
-                if group {
-                    for instances in groups.binary_group_by_key(|v| v.0) {
-                        collect_indirect(
-                            &mut base_instance_counter,
-                            &mut draw_count,
-                            vec,
-                            resource_man,
-                            id,
-                            instances,
-                        )
-                    }
-                } else {
-                    for instances in groups.iter().map(slice::from_ref) {
-                        collect_indirect(
-                            &mut base_instance_counter,
-                            &mut draw_count,
-                            vec,
-                            resource_man,
-                            id,
-                            instances,
-                        )
-                    }
+            if group {
+                for instances in groups.binary_group_by_key(|v| v.0) {
+                    collect_indirect(
+                        &mut base_instance_counter,
+                        &mut draw_count,
+                        vec,
+                        resource_man,
+                        id,
+                        instances,
+                    )
                 }
+            } else {
+                for instances in groups.iter().map(slice::from_ref) {
+                    collect_indirect(
+                        &mut base_instance_counter,
+                        &mut draw_count,
+                        vec,
+                        resource_man,
+                        id,
+                        instances,
+                    )
+                }
+            }
 
-                (base_instance_counter, draw_count, commands)
-            },
-        )
-        .reduce(
-            || (0, 0, HashMap::new()),
-            |mut a, b| {
-                for (k, v) in b.2 {
-                    a.2.insert(k, v);
-                }
-                (a.0 + b.0, a.1 + b.1, a.2)
-            },
-        );
+            (base_instance_counter, draw_count, commands)
+        },
+    );
 
     let instances = compiled_instances
         .into_iter()
