@@ -92,23 +92,25 @@ pub fn try_add_animation(
     if !animation_map.contains_key(&model) {
         let elapsed = Instant::now().duration_since(start_instant).as_secs_f32();
 
-        let anims = resource_man.all_models[&model]
-            .1
-            .iter()
-            .map(|anim| {
-                let last = anim.inputs.last().unwrap();
-                let wrapped = elapsed % last;
-                let index = anim.inputs.partition_point(|v| *v < wrapped);
+        if let Some((_, anims)) = resource_man.all_models.get(&model) {
+            let anims = anims
+                .iter()
+                .map(|anim| {
+                    let last = anim.inputs.last().unwrap();
+                    let wrapped = elapsed % last;
+                    let index = anim.inputs.partition_point(|v| *v < wrapped);
 
-                (anim.target, anim.outputs[index])
-            })
-            .collect::<Vec<_>>();
-        let anims = anims
-            .binary_group_by_key(|v| v.0)
-            .map(|v| (v[0].0, v.iter().fold(Matrix4::IDENTITY, |acc, v| acc * v.1)))
-            .collect::<HashMap<_, _>>();
+                    (anim.target, anim.outputs[index])
+                })
+                .collect::<Vec<_>>();
 
-        animation_map.insert(model, anims);
+            let anims = anims
+                .binary_group_by_key(|v| v.0)
+                .map(|v| (v[0].0, v.iter().fold(Matrix4::IDENTITY, |acc, v| acc * v.1)))
+                .collect::<HashMap<_, _>>();
+
+            animation_map.insert(model, anims);
+        }
     }
 }
 
