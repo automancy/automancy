@@ -3,7 +3,7 @@ use std::fs;
 
 use egui::load::Bytes;
 use egui::{
-    vec2, Align, Align2, Button, Checkbox, ComboBox, Context, Image, ImageSource, Layout, RichText,
+    vec2, Align, Align2, Button, Checkbox, ComboBox, Context, Image, ImageSource, RichText,
     ScrollArea, Slider, TextEdit, TextStyle, Window,
 };
 use tokio::runtime::Runtime;
