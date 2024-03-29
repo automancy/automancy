@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter};
 use std::ops::{Add, Deref, Div, Mul, Neg, Sub};
 
-use hexx::Hex;
+use hexx::{EdgeDirection, Hex};
 use serde::{Deserialize, Serialize};
 
 /// The type of number that will be stored in a tile's coordinates. Should probably be a signed integer.
@@ -38,12 +38,12 @@ impl TileCoord {
         format!("{},{}", self.x, self.y)
     }
 
-    pub const TOP_RIGHT: Self = Self::new(1, -1);
-    pub const RIGHT: Self = Self::new(1, 0);
-    pub const BOTTOM_RIGHT: Self = Self::new(0, 1);
-    pub const BOTTOM_LEFT: Self = Self::new(-1, 1);
-    pub const LEFT: Self = Self::new(-1, 0);
-    pub const TOP_LEFT: Self = Self::new(0, -1);
+    pub const TOP_RIGHT: Self = Self(EdgeDirection::POINTY_TOP_RIGHT.into_hex());
+    pub const RIGHT: Self = Self(EdgeDirection::POINTY_RIGHT.into_hex());
+    pub const BOTTOM_RIGHT: Self = Self(EdgeDirection::POINTY_BOTTOM_RIGHT.into_hex());
+    pub const BOTTOM_LEFT: Self = Self(EdgeDirection::POINTY_BOTTOM_LEFT.into_hex());
+    pub const LEFT: Self = Self(EdgeDirection::POINTY_LEFT.into_hex());
+    pub const TOP_LEFT: Self = Self(EdgeDirection::POINTY_TOP_LEFT.into_hex());
 
     /// Creates a list of the neighbors
     pub fn neighbors(self) -> [Self; 6] {
