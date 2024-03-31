@@ -1,6 +1,7 @@
 (
     id: "basic_still",
-    icon: "basic_still",
+    icon: "tile/basic_still",
+    icon_mode: Tile,
     unlocks: ["basic_still"],
     next_researches: None,
     name: "basic_still_name",

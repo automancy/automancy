@@ -1,7 +1,7 @@
 (
     id: "void",
     function: Some("void"),
-    model: "void",
+    model: "tile/void",
     data: ({
         "category": Id("utility"),
         "not_targeted": Bool(true),

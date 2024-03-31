@@ -1,7 +1,7 @@
 (
     id: "sorter",
     function: Some("sorter"),
-    model: "sorter",
+    model: "tile/sorter",
     data: ({
         "category": Id("transfer"),
         "direction_color": Color("98ffa0"),

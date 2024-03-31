@@ -1,7 +1,7 @@
 (
     id: "none",
     function: None,
-    model: "none",
+    model: "tile/none",
     data: ({
         "default_tile": Bool(true),
         "not_targeted": Bool(true),

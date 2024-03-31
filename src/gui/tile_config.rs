@@ -186,7 +186,7 @@ fn takeable_item(
         let item = *state.resource_man.registry.items.get(&id).unwrap();
 
         let (rect, response) = draw_item(
-            state,
+            &state.resource_man,
             ui,
             None,
             ItemStack { item, amount },
@@ -253,7 +253,7 @@ fn config_item(
         .and_then(|id| state.resource_man.registry.items.get(&id).cloned())
         .map(|item| ItemStack { item, amount: 0 })
     {
-        draw_item(state, ui, None, stack, SMALL_ICON_SIZE, true);
+        draw_item(&state.resource_man, ui, None, stack, SMALL_ICON_SIZE, true);
     }
 
     searchable_id(
@@ -262,12 +262,12 @@ fn config_item(
         items.as_slice(),
         &mut new_item,
         TextField::Filter,
-        state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.hint_search_item]
+        state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.search_item_tip]
             .to_string(),
         &|state, id| state.resource_man.item_name(id).to_string(),
         &|state, ui, id| {
             draw_item(
-                state,
+                &state.resource_man,
                 ui,
                 None,
                 ItemStack {
@@ -307,12 +307,26 @@ fn draw_script_info(state: &mut GameState, ui: &mut Ui, script: Option<Id>) {
 
         if let Some(inputs) = &script.instructions.inputs {
             for input in inputs {
-                draw_item(state, ui, Some(" + "), *input, SMALL_ICON_SIZE, true);
+                draw_item(
+                    &state.resource_man,
+                    ui,
+                    Some(" + "),
+                    *input,
+                    SMALL_ICON_SIZE,
+                    true,
+                );
             }
         }
 
         for output in &script.instructions.outputs {
-            draw_item(state, ui, Some("=> "), *output, SMALL_ICON_SIZE, true);
+            draw_item(
+                &state.resource_man,
+                ui,
+                Some("=> "),
+                *output,
+                SMALL_ICON_SIZE,
+                true,
+            );
         }
     });
 }
@@ -353,7 +367,7 @@ fn config_script(
         scripts,
         &mut new_script,
         TextField::Filter,
-        state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.hint_search_script]
+        state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.search_script_tip]
             .to_string(),
         &|state, id| state.resource_man.script_name(id).to_string(),
         &|state, ui, id| {
@@ -365,7 +379,14 @@ fn config_script(
                 .map(|script| script.instructions.outputs.as_slice())
             {
                 for stack in stacks {
-                    draw_item(state, ui, None, *stack, SMALL_ICON_SIZE, false);
+                    draw_item(
+                        &state.resource_man,
+                        ui,
+                        None,
+                        *stack,
+                        SMALL_ICON_SIZE,
+                        false,
+                    );
                 }
             }
         },
@@ -389,7 +410,7 @@ fn config_script(
 }
 
 /// Draws the tile configuration menu.
-pub fn tile_config(state: &mut GameState, game_data: &mut DataMap) {
+pub fn tile_config_ui(state: &mut GameState, game_data: &mut DataMap) {
     let Some(config_open_at) = state.gui_state.config_open_at else {
         return;
     };
@@ -449,7 +470,20 @@ pub fn tile_config(state: &mut GameState, game_data: &mut DataMap) {
                 .cloned()
             {
                 ui.add_space(MARGIN);
-                ui.vertical(|ui| {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        state.resource_man.translates.gui
+                            [&state.resource_man.registry.gui_ids.inventory]
+                            .as_str(),
+                    );
+                    hover_tip(
+                        ui,
+                        state.resource_man.translates.gui
+                            [&state.resource_man.registry.gui_ids.inventory_tip]
+                            .as_str(),
+                    );
+                });
+                ui.group(|ui| {
                     takeable_item(state, ui, game_data, buffer, entity.clone());
                 });
                 ui.add_space(MARGIN);

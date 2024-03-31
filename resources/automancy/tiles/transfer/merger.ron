@@ -1,7 +1,7 @@
 (
     id: "merger",
     function: Some("merger"),
-    model: "merger",
+    model: "tile/merger",
     data: ({
         "category": Id("transfer"),
         "direction_color": Color("ff4a40"),

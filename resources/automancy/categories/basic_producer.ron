@@ -1,5 +1,5 @@
 (
     id: "basic_producer",
     ord: 1000,
-    icon: "basic_extractor",
+    icon: "tile/basic_extractor",
 )

@@ -1,7 +1,7 @@
 (
     id: "basic_extractor",
     function: Some("machine"),
-    model: "basic_extractor",
+    model: "tile/basic_extractor",
     data: ({
         "category": Id("basic_producer"),
         "scripts": VecId([

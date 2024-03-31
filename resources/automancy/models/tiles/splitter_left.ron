@@ -1,4 +1,4 @@
 (
-    id: "splitter_left",
+    id: "tile/splitter_left",
     file: "splitter_left.glb",
 )

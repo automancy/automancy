@@ -1,7 +1,7 @@
 (
     id: "basic_still",
     function: Some("machine"),
-    model: "basic_still",
+    model: "tile/basic_still",
     data: ({
         "category": Id("basic_processor"),
         "scripts": VecId([

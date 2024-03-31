@@ -85,9 +85,11 @@ pub struct GuiIds {
     pub create_map: Id,
     pub invalid_name: Id,
     pub options: Id,
+    pub inventory: Id,
 
-    pub hint_search_script: Id,
-    pub hint_search_item: Id,
+    pub inventory_tip: Id,
+    pub search_script_tip: Id,
+    pub search_item_tip: Id,
 
     pub lbl_amount: Id,
     pub lbl_link_destination: Id,
@@ -108,6 +110,8 @@ pub struct GuiIds {
     pub btn_load: Id,
     pub btn_delete: Id,
     pub btn_new_map: Id,
+
+    pub research_menu_title: Id,
 
     pub time_fmt: Id,
 }

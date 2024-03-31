@@ -1,7 +1,7 @@
 (
     id: "node",
     function: Some("node"),
-    model: "node",
+    model: "tile/node",
     data: ({
         "category": Id("network"),
         "linked": Bool(true),

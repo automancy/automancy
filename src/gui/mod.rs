@@ -79,6 +79,8 @@ pub struct GuiState {
     /// TODO shift is only on keyboard
     pub placement_direction: Option<TileCoord>,
     pub prev_placement_direction: Option<TileCoord>,
+
+    pub selected_research: Option<Id>,
 }
 
 impl Default for GuiState {
@@ -101,6 +103,7 @@ impl Default for GuiState {
             initial_cursor_position: None,
             placement_direction: None,
             prev_placement_direction: None,
+            selected_research: None,
         }
     }
 }
@@ -491,7 +494,7 @@ pub fn render_ui(
                         info::info(state);
 
                         // tile_config
-                        tile_config::tile_config(state, game_data);
+                        tile_config::tile_config_ui(state, game_data);
 
                         let (selection_send, selection_recv) = oneshot::channel();
 

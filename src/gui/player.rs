@@ -28,7 +28,7 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                 for (id, amount) in inventory.iter() {
                     if let Some(item) = state.resource_man.registry.items.get(id) {
                         let (dst_rect, _) = draw_item(
-                            state,
+                            &state.resource_man,
                             ui,
                             None,
                             ItemStack {
