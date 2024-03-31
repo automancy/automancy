@@ -41,7 +41,7 @@ pub fn info(state: &mut GameState) {
                 let item = state.resource_man.registry.items.get(id).unwrap();
 
                 draw_item(
-                    state,
+                    &state.resource_man,
                     ui,
                     None,
                     ItemStack {
