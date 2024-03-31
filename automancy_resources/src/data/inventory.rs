@@ -96,7 +96,7 @@ impl Inventory {
     }
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct InventoryRaw(Vec<(IdRaw, ItemAmount)>);
 
 impl InventoryRaw {

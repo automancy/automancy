@@ -195,7 +195,7 @@ impl DataMap {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DataRaw {
     Inventory(InventoryRaw),
     Coord(TileCoord),
@@ -240,7 +240,7 @@ impl DataRaw {
     }
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DataMapRaw(HashMap<String, DataRaw>);
 
 impl From<DataMapRaw> for HashMap<String, DataRaw> {

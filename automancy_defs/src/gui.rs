@@ -155,6 +155,7 @@ pub fn init_gui(renderer: egui_wgpu::Renderer, window: &Window) -> Gui {
     let viewport_id = context.viewport_id();
 
     Gui {
+        renderer,
         context: context.clone(),
         state: State::new(
             context,
@@ -163,7 +164,6 @@ pub fn init_gui(renderer: egui_wgpu::Renderer, window: &Window) -> Gui {
             Some(window.scale_factor() as f32),
             None,
         ),
-        renderer,
         fonts: FontDefinitions::default(),
     }
 }
