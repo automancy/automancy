@@ -3,32 +3,26 @@ use std::fs;
 
 use egui::load::Bytes;
 use egui::{
-    vec2, Align, Align2, Button, Checkbox, ComboBox, Context, Image, ImageSource, RichText,
-    ScrollArea, Slider, TextEdit, TextStyle, Window,
+    vec2, Align, Align2, Button, Checkbox, ComboBox, Image, ImageSource, RichText, ScrollArea,
+    Slider, TextEdit, TextStyle, Window,
 };
-use tokio::runtime::Runtime;
 use winit::event_loop::EventLoopWindowTarget;
 
-use automancy_defs::flexstr::ToSharedStr;
 use automancy_defs::gui::HyperlinkWidget;
 use automancy_defs::log;
 use automancy_resources::{format, format_time};
 
-use crate::event::{shutdown_graceful, EventLoopStorage};
-use crate::game::{load_map, GameMsg};
+use crate::event::{refresh_maps, shutdown_graceful};
+use crate::game::{load_map, GameSystemMessage};
 use crate::gui::{OptionsMenuState, PopupState, Screen, SubState, TextField};
 use crate::map::{Map, MAIN_MENU};
 use crate::options::AAType;
-use crate::setup::GameSetup;
-use crate::{LOGO, LOGO_PATH, VERSION};
+use crate::{GameState, LOGO, LOGO_PATH, VERSION};
 
 /// Draws the main menu.
 pub fn main_menu(
-    runtime: &Runtime,
-    setup: &mut GameSetup,
-    context: &Context,
+    state: &mut GameState,
     target: &EventLoopWindowTarget<()>,
-    loop_store: &mut EventLoopStorage,
 ) -> anyhow::Result<bool> {
     let mut result = Ok(false);
 
@@ -37,7 +31,7 @@ pub fn main_menu(
         .title_bar(false)
         .max_width(200.0)
         .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0))
-        .show(context, |ui| {
+        .show(&state.gui.context.clone(), |ui| {
             ui.with_layout(
                 ui.layout()
                     .with_cross_align(Align::Center)
@@ -50,12 +44,13 @@ pub fn main_menu(
                         })
                         .max_size(vec2(128.0, 128.0)),
                     );
+
                     if ui
                         .add(
                             Button::new(
                                 RichText::new(
-                                    setup.resource_man.translates.gui
-                                        [&setup.resource_man.registry.gui_ids.btn_play]
+                                    state.resource_man.translates.gui
+                                        [&state.resource_man.registry.gui_ids.btn_play]
                                         .as_str(),
                                 )
                                 .heading(),
@@ -64,15 +59,16 @@ pub fn main_menu(
                         )
                         .clicked()
                     {
-                        setup.refresh_maps();
-                        loop_store.gui_state.switch_screen(Screen::MapLoad)
+                        refresh_maps(state);
+                        state.gui_state.switch_screen(Screen::MapLoad)
                     };
+
                     if ui
                         .add(
                             Button::new(
                                 RichText::new(
-                                    setup.resource_man.translates.gui
-                                        [&setup.resource_man.registry.gui_ids.btn_options]
+                                    state.resource_man.translates.gui
+                                        [&state.resource_man.registry.gui_ids.btn_options]
                                         .as_str(),
                                 )
                                 .heading(),
@@ -81,14 +77,14 @@ pub fn main_menu(
                         )
                         .clicked()
                     {
-                        loop_store.gui_state.switch_screen(Screen::Options)
+                        state.gui_state.switch_screen(Screen::Options)
                     };
 
                     ui.add(HyperlinkWidget::new(
                         Button::new(
                             RichText::new(
-                                setup.resource_man.translates.gui
-                                    [&setup.resource_man.registry.gui_ids.btn_fedi]
+                                state.resource_man.translates.gui
+                                    [&state.resource_man.registry.gui_ids.btn_fedi]
                                     .as_str(),
                             )
                             .heading(),
@@ -96,11 +92,12 @@ pub fn main_menu(
                         .min_size(vec2(100.0, 28.0)),
                         "https://gamedev.lgbt/@automancy",
                     ));
+
                     ui.add(HyperlinkWidget::new(
                         Button::new(
                             RichText::new(
-                                setup.resource_man.translates.gui
-                                    [&setup.resource_man.registry.gui_ids.btn_source]
+                                state.resource_man.translates.gui
+                                    [&state.resource_man.registry.gui_ids.btn_source]
                                     .as_str(),
                             )
                             .heading(),
@@ -108,12 +105,13 @@ pub fn main_menu(
                         .min_size(vec2(100.0, 28.0)),
                         "https://github.com/automancy/automancy",
                     ));
+
                     if ui
                         .add(
                             Button::new(
                                 RichText::new(
-                                    setup.resource_man.translates.gui
-                                        [&setup.resource_man.registry.gui_ids.btn_exit]
+                                    state.resource_man.translates.gui
+                                        [&state.resource_man.registry.gui_ids.btn_exit]
                                         .as_str(),
                                 )
                                 .heading(),
@@ -122,8 +120,13 @@ pub fn main_menu(
                         )
                         .clicked()
                     {
-                        result = runtime.block_on(shutdown_graceful(setup, target));
+                        result = state.tokio.block_on(shutdown_graceful(
+                            &state.game,
+                            &mut state.game_handle,
+                            target,
+                        ));
                     };
+
                     ui.label(VERSION)
                 },
             );
@@ -133,18 +136,13 @@ pub fn main_menu(
 }
 
 /// Draws the pause menu.
-pub fn pause_menu(
-    runtime: &Runtime,
-    setup: &GameSetup,
-    context: &Context,
-    loop_store: &mut EventLoopStorage,
-) {
+pub fn pause_menu(state: &mut GameState) {
     Window::new("Game Paused")
         .resizable(false)
         .collapsible(false)
         .default_width(175.0)
         .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0))
-        .show(context, |ui| {
+        .show(&state.gui.context.clone(), |ui| {
             ui.with_layout(
                 ui.layout()
                     .with_cross_align(Align::Center)
@@ -154,8 +152,8 @@ pub fn pause_menu(
                         .add(
                             Button::new(
                                 RichText::new(
-                                    setup.resource_man.translates.gui
-                                        [&setup.resource_man.registry.gui_ids.btn_unpause]
+                                    state.resource_man.translates.gui
+                                        [&state.resource_man.registry.gui_ids.btn_unpause]
                                         .as_str(),
                                 )
                                 .heading(),
@@ -164,14 +162,14 @@ pub fn pause_menu(
                         )
                         .clicked()
                     {
-                        loop_store.gui_state.switch_screen(Screen::Ingame)
+                        state.gui_state.switch_screen(Screen::Ingame)
                     };
                     if ui
                         .add(
                             Button::new(
                                 RichText::new(
-                                    setup.resource_man.translates.gui
-                                        [&setup.resource_man.registry.gui_ids.btn_options]
+                                    state.resource_man.translates.gui
+                                        [&state.resource_man.registry.gui_ids.btn_options]
                                         .as_str(),
                                 )
                                 .heading(),
@@ -180,14 +178,14 @@ pub fn pause_menu(
                         )
                         .clicked()
                     {
-                        loop_store.gui_state.switch_screen(Screen::Options)
+                        state.gui_state.switch_screen(Screen::Options)
                     };
                     if ui
                         .add(
                             Button::new(
                                 RichText::new(
-                                    setup.resource_man.translates.gui
-                                        [&setup.resource_man.registry.gui_ids.btn_exit]
+                                    state.resource_man.translates.gui
+                                        [&state.resource_man.registry.gui_ids.btn_exit]
                                         .as_str(),
                                 )
                                 .heading(),
@@ -196,16 +194,22 @@ pub fn pause_menu(
                         )
                         .clicked()
                     {
-                        runtime
-                            .block_on(setup.game.call(GameMsg::SaveMap, None))
+                        state
+                            .tokio
+                            .block_on(state.game.call(GameSystemMessage::SaveMap, None))
                             .unwrap()
                             .unwrap();
 
-                        runtime
-                            .block_on(load_map(setup, loop_store, MAIN_MENU.to_string()))
+                        state
+                            .tokio
+                            .block_on(load_map(
+                                &state.game,
+                                &mut state.loop_store,
+                                MAIN_MENU.to_string(),
+                            ))
                             .unwrap();
 
-                        loop_store.gui_state.switch_screen(Screen::MainMenu)
+                        state.gui_state.switch_screen(Screen::MainMenu)
                     };
                     ui.label(VERSION)
                 },
@@ -214,80 +218,60 @@ pub fn pause_menu(
 }
 
 /// Draws the map loading menu.
-pub fn map_menu(
-    runtime: &Runtime,
-    setup: &mut GameSetup,
-    context: &Context,
-    loop_store: &mut EventLoopStorage,
-) {
+pub fn map_menu(state: &mut GameState) {
     Window::new(
-        setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.load_map].as_str(),
+        state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.load_map].as_str(),
     )
     .resizable(false)
     .collapsible(false)
     .default_width(600.0)
     .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0))
-    .show(context, |ui| {
+    .show(&state.gui.context.clone(), |ui| {
         ScrollArea::vertical().max_height(400.0).show(ui, |ui| {
             let mut dirty = false;
 
-            for ((_, save_time), map_name) in &setup.maps {
+            for ((_, save_time), map_name) in state.loop_store.map_infos_cache.clone() {
                 ui.group(|ui| {
                     ui.scope(|ui| {
                         ui.style_mut().override_text_style = Some(TextStyle::Heading);
                         ui.set_width(300.0);
 
-                        if map_name == loop_store.gui_state.text_field.get(TextField::MapRenaming) {
+                        if map_name == state.gui_state.renaming_map {
                             if ui
                                 .add(
                                     TextEdit::multiline(
-                                        loop_store.gui_state.text_field.get(TextField::MapRenaming),
+                                        state.gui_state.text_field.get(TextField::MapRenaming),
                                     )
                                     .desired_rows(1),
                                 )
                                 .lost_focus()
                             {
-                                *loop_store.gui_state.text_field.get(TextField::MapRenaming) =
-                                    loop_store
-                                        .gui_state
-                                        .text_field
-                                        .get(TextField::MapRenaming)
-                                        .chars()
-                                        .filter(|v| v.is_alphanumeric())
-                                        .collect();
+                                let s = state
+                                    .gui_state
+                                    .text_field
+                                    .take(TextField::MapRenaming)
+                                    .chars()
+                                    .filter(|v| v.is_alphanumeric())
+                                    .collect::<String>();
 
-                                if fs::rename(
-                                    Map::path(map_name),
-                                    Map::path(
-                                        loop_store.gui_state.text_field.get(TextField::MapRenaming),
-                                    ),
-                                )
-                                .is_ok()
-                                {
-                                    log::info!(
-                                        "Renamed map {map_name} to {}",
-                                        loop_store.gui_state.text_field.get(TextField::MapRenaming)
-                                    );
+                                if fs::rename(Map::path(&map_name), Map::path(&s)).is_ok() {
+                                    log::info!("Renamed map {map_name} to {}", s);
 
                                     dirty = true;
                                 } else {
-                                    loop_store.gui_state.popup = PopupState::InvalidName;
+                                    state.gui_state.popup = PopupState::InvalidName;
                                 }
-
-                                *loop_store.gui_state.text_field.get(TextField::MapRenaming) =
-                                    Default::default();
                             }
                         } else if ui.selectable_label(false, map_name.as_str()).clicked() {
-                            *loop_store.gui_state.text_field.get(TextField::MapRenaming) =
-                                map_name.clone();
+                            state.gui_state.renaming_map = map_name.clone();
                         }
                     });
 
                     if let Some(save_time) = save_time {
                         ui.label(format_time(
-                            *save_time,
-                            setup.resource_man.translates.gui
-                                [&setup.resource_man.registry.gui_ids.time_fmt]
+                            save_time,
+                            state.resource_man.translates.gui
+                                [&state.resource_man.registry.gui_ids.time_fmt]
                                 .as_str(),
                         ));
                     }
@@ -295,27 +279,32 @@ pub fn map_menu(
                     ui.horizontal(|ui| {
                         if ui
                             .button(
-                                setup.resource_man.translates.gui
-                                    [&setup.resource_man.registry.gui_ids.btn_load]
+                                state.resource_man.translates.gui
+                                    [&state.resource_man.registry.gui_ids.btn_load]
                                     .as_str(),
                             )
                             .clicked()
                         {
-                            runtime
-                                .block_on(load_map(setup, loop_store, map_name.clone()))
+                            state
+                                .tokio
+                                .block_on(load_map(
+                                    &state.game,
+                                    &mut state.loop_store,
+                                    map_name.clone(),
+                                ))
                                 .unwrap();
 
-                            loop_store.gui_state.switch_screen(Screen::Ingame);
+                            state.gui_state.switch_screen(Screen::Ingame);
                         }
                         if ui
                             .button(
-                                setup.resource_man.translates.gui
-                                    [&setup.resource_man.registry.gui_ids.btn_delete]
+                                state.resource_man.translates.gui
+                                    [&state.resource_man.registry.gui_ids.btn_delete]
                                     .as_str(),
                             )
                             .clicked()
                         {
-                            loop_store.gui_state.popup =
+                            state.gui_state.popup =
                                 PopupState::MapDeleteConfirmation(map_name.clone());
 
                             dirty = true;
@@ -325,84 +314,85 @@ pub fn map_menu(
             }
 
             if dirty {
-                setup.refresh_maps();
+                refresh_maps(state);
             }
         });
         ui.label(format(
-            setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.lbl_maps_loaded]
+            state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.lbl_maps_loaded]
                 .as_str(),
-            &[setup.maps.len().to_string().as_str()],
+            &[state.loop_store.map_infos_cache.len().to_string().as_str()],
         ));
         ui.horizontal(|ui| {
             if ui
                 .button(
                     RichText::new(
-                        setup.resource_man.translates.gui
-                            [&setup.resource_man.registry.gui_ids.btn_new_map]
+                        state.resource_man.translates.gui
+                            [&state.resource_man.registry.gui_ids.btn_new_map]
                             .as_str(),
                     )
                     .heading(),
                 )
                 .clicked()
             {
-                loop_store.gui_state.popup = PopupState::MapCreate
+                state.gui_state.popup = PopupState::MapCreate
             }
             if ui
                 .button(
                     RichText::new(
-                        setup.resource_man.translates.gui
-                            [&setup.resource_man.registry.gui_ids.btn_cancel]
+                        state.resource_man.translates.gui
+                            [&state.resource_man.registry.gui_ids.btn_cancel]
                             .as_str(),
                     )
                     .heading(),
                 )
                 .clicked()
             {
-                loop_store.gui_state.switch_screen(Screen::MainMenu)
+                state.gui_state.switch_screen(Screen::MainMenu)
             }
         });
     });
 }
 
 /// Draws the options menu.
-pub fn options_menu(setup: &mut GameSetup, context: &Context, loop_store: &mut EventLoopStorage) {
+pub fn options_menu(state: &mut GameState) {
     Window::new(
-        setup.resource_man.translates.gui[&setup.resource_man.registry.gui_ids.options].as_str(),
+        state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.options].as_str(),
     )
     .resizable(false)
     .collapsible(false)
     .default_width(175.0)
     .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0))
-    .show(context, |ui| {
+    .show(&state.gui.context.clone(), |ui| {
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
                 if ui
                     .add(Button::new("Graphics").min_size(vec2(80.0, 24.0)))
                     .clicked()
                 {
-                    loop_store.gui_state.substate = SubState::Options(OptionsMenuState::Graphics)
+                    state.gui_state.substate = SubState::Options(OptionsMenuState::Graphics)
                 }
                 if ui
                     .add(Button::new("Audio").min_size(vec2(80.0, 24.0)))
                     .clicked()
                 {
-                    loop_store.gui_state.substate = SubState::Options(OptionsMenuState::Audio)
+                    state.gui_state.substate = SubState::Options(OptionsMenuState::Audio)
                 }
                 if ui
                     .add(Button::new("GUI").min_size(vec2(80.0, 24.0)))
                     .clicked()
                 {
-                    loop_store.gui_state.substate = SubState::Options(OptionsMenuState::Gui)
+                    state.gui_state.substate = SubState::Options(OptionsMenuState::Gui)
                 }
                 if ui
                     .add(Button::new("Controls").min_size(vec2(80.0, 24.0)))
                     .clicked()
                 {
-                    loop_store.gui_state.substate = SubState::Options(OptionsMenuState::Controls)
+                    state.gui_state.substate = SubState::Options(OptionsMenuState::Controls)
                 }
             });
+
             ScrollArea::vertical().show(ui, |ui| {
-                if let SubState::Options(menu) = loop_store.gui_state.substate {
+                if let SubState::Options(menu) = state.gui_state.substate {
                     match menu {
                         OptionsMenuState::Graphics => {
                             ui.vertical(|ui| {
@@ -411,7 +401,7 @@ pub fn options_menu(setup: &mut GameSetup, context: &Context, loop_store: &mut E
                                     ui.label(RichText::new("Max FPS: "));
                                     ui.add(
                                         Slider::new(
-                                            &mut setup.options.graphics.fps_limit,
+                                            &mut state.options.graphics.fps_limit,
                                             0.0..=250.0,
                                         )
                                         .step_by(5.0)
@@ -431,14 +421,14 @@ pub fn options_menu(setup: &mut GameSetup, context: &Context, loop_store: &mut E
                                 ui.horizontal(|ui| {
                                     ui.label(RichText::new("Fullscreen: "));
                                     ui.add(Checkbox::new(
-                                        &mut setup.options.graphics.fullscreen,
+                                        &mut state.options.graphics.fullscreen,
                                         "",
                                     ));
                                 });
                                 ui.horizontal(|ui| {
                                     ui.label(RichText::new("Scale: "));
                                     ui.add(
-                                        Slider::new(&mut setup.options.graphics.scale, 0.5..=4.0)
+                                        Slider::new(&mut state.options.graphics.scale, 0.5..=4.0)
                                             .step_by(0.5),
                                     )
                                 });
@@ -447,21 +437,21 @@ pub fn options_menu(setup: &mut GameSetup, context: &Context, loop_store: &mut E
                                     ComboBox::from_label("")
                                         .selected_text(format!(
                                             "{:?}",
-                                            setup.options.graphics.anti_aliasing
+                                            state.options.graphics.anti_aliasing //TODO inconsistent, use a to_string?
                                         ))
                                         .show_ui(ui, |ui| {
                                             ui.selectable_value(
-                                                &mut setup.options.graphics.anti_aliasing,
+                                                &mut state.options.graphics.anti_aliasing,
                                                 AAType::None,
                                                 "None",
                                             );
                                             ui.selectable_value(
-                                                &mut setup.options.graphics.anti_aliasing,
+                                                &mut state.options.graphics.anti_aliasing,
                                                 AAType::FXAA,
                                                 "FXAA",
                                             );
                                             ui.selectable_value(
-                                                &mut setup.options.graphics.anti_aliasing,
+                                                &mut state.options.graphics.anti_aliasing,
                                                 AAType::TAA,
                                                 "TAA",
                                             );
@@ -475,7 +465,7 @@ pub fn options_menu(setup: &mut GameSetup, context: &Context, loop_store: &mut E
                                 ui.horizontal(|ui| {
                                     ui.label(RichText::new("SFX Volume: "));
                                     ui.add(
-                                        Slider::new(&mut setup.options.audio.sfx_volume, 0.0..=1.0)
+                                        Slider::new(&mut state.options.audio.sfx_volume, 0.0..=1.0)
                                             .custom_formatter(|n, _| {
                                                 if n == 0.0 {
                                                     return "Muted".to_string();
@@ -488,7 +478,7 @@ pub fn options_menu(setup: &mut GameSetup, context: &Context, loop_store: &mut E
                                     ui.label(RichText::new("Music Volume: "));
                                     ui.add(
                                         Slider::new(
-                                            &mut setup.options.audio.music_volume,
+                                            &mut state.options.audio.music_volume,
                                             0.0..=1.0,
                                         )
                                         .custom_formatter(
@@ -509,23 +499,23 @@ pub fn options_menu(setup: &mut GameSetup, context: &Context, loop_store: &mut E
                                 ui.horizontal(|ui| {
                                     ui.label(RichText::new("Font Scale: "));
                                     ui.add(
-                                        Slider::new(&mut setup.options.gui.scale, 0.5..=4.0)
+                                        Slider::new(&mut state.options.gui.scale, 0.5..=4.0)
                                             .step_by(0.25),
                                     )
                                 });
                                 ui.horizontal(|ui| {
                                     ui.label(RichText::new("Font:"));
+                                    let current_font = state.options.gui.font.clone();
+
                                     ComboBox::from_label("")
                                         .width(175.0)
                                         .selected_text(
-                                            &setup.resource_man.fonts
-                                                [&setup.options.gui.font.to_shared_str()]
-                                                .name,
+                                            &state.resource_man.fonts[&current_font].name,
                                         )
                                         .show_ui(ui, |ui| {
-                                            for (key, font) in &setup.resource_man.fonts {
+                                            for (key, font) in &state.resource_man.fonts {
                                                 ui.selectable_value(
-                                                    &mut setup.options.gui.font,
+                                                    &mut state.options.gui.font,
                                                     key.to_string(),
                                                     font.name.clone(),
                                                 )
@@ -542,27 +532,28 @@ pub fn options_menu(setup: &mut GameSetup, context: &Context, loop_store: &mut E
                 }
             });
         });
+
         if ui
             .add(
                 Button::new(RichText::new(
-                    setup.resource_man.translates.gui
-                        [&setup.resource_man.registry.gui_ids.btn_confirm]
+                    state.resource_man.translates.gui
+                        [&state.resource_man.registry.gui_ids.btn_confirm]
                         .as_str(),
                 ))
                 .min_size(vec2(80.0, 24.0)),
             )
             .clicked()
         {
-            if setup.options.save().is_err() {
-                setup.resource_man.error_man.push(
+            if state.options.save().is_err() {
+                state.resource_man.error_man.push(
                     (
-                        setup.resource_man.registry.err_ids.unwritable_options,
+                        state.resource_man.registry.err_ids.unwritable_options,
                         vec![],
                     ),
-                    &setup.resource_man,
+                    &state.resource_man,
                 );
             }
-            loop_store.gui_state.return_screen();
+            state.gui_state.return_screen();
         }
     });
 }

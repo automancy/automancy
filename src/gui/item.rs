@@ -5,14 +5,14 @@ use automancy_defs::math;
 use automancy_defs::math::Float;
 use automancy_defs::rendering::InstanceData;
 use automancy_resources::data::stack::ItemStack;
-use automancy_resources::ResourceManager;
 
 use crate::gui::GameEguiCallback;
+use crate::GameState;
 
 /// Draws an Item's icon.
 pub fn draw_item(
+    state: &GameState,
     ui: &mut Ui,
-    resource_man: &ResourceManager,
     prefix: Option<&'static str>,
     stack: ItemStack,
     size: Float,
@@ -33,11 +33,11 @@ pub fn draw_item(
             let label_response = if stack.amount > 0 {
                 ui.label(format!(
                     "{} ({})",
-                    resource_man.item_name(&stack.item.id),
+                    state.resource_man.item_name(&stack.item.id),
                     stack.amount
                 ))
             } else {
-                ui.label(resource_man.item_name(&stack.item.id).to_string())
+                ui.label(state.resource_man.item_name(&stack.item.id).to_string())
             };
 
             icon_response.union(label_response)
@@ -50,7 +50,7 @@ pub fn draw_item(
             GameEguiCallback::new(
                 InstanceData::default()
                     .with_world_matrix(math::view(dvec3(0.0, 0.0, 1.0)).as_mat4()),
-                resource_man.get_item_model(stack.item),
+                state.resource_man.get_item_model(stack.item),
                 rect,
                 ui.ctx().screen_rect(),
             ),

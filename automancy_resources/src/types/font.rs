@@ -1,5 +1,4 @@
 use crate::{LoadResourceError, ResourceManager, COULD_NOT_GET_FILE_STEM, FONT_EXT};
-use automancy_defs::flexstr::ToSharedStr;
 use automancy_defs::log;
 use std::ffi::OsStr;
 use std::fs::{read_dir, File};
@@ -42,8 +41,7 @@ impl ResourceManager {
                     })?
                     .to_str()
                     .ok_or_else(|| LoadResourceError::OsStringError(file.clone()))?
-                    .to_string()
-                    .to_shared_str();
+                    .to_string();
 
                 let name = Face::parse(&data, 0)?
                     .tables()

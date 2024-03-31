@@ -21,7 +21,7 @@ use automancy_resources::data::{DataMap, DataMapRaw};
 use automancy_resources::ResourceManager;
 
 use crate::game;
-use crate::game::GameMsg;
+use crate::game::GameSystemMessage;
 use crate::tile_entity::TileEntityMsg;
 
 pub const MAP_PATH: &str = "map";
@@ -44,7 +44,7 @@ pub struct MapInfo {
     pub data: DataMap,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MapInfoRaw {
     /// The number of saved tiles.
     #[serde(default)]
@@ -167,7 +167,7 @@ impl Map {
 
     /// Loads a map from disk.
     pub async fn load(
-        game: ActorRef<GameMsg>,
+        game: ActorRef<GameSystemMessage>,
         resource_man: Arc<ResourceManager>,
         map_name: &str,
     ) -> (Self, TileEntities) {

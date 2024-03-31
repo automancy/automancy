@@ -1,11 +1,13 @@
 use std::borrow::Cow;
+use std::collections::VecDeque;
 use std::f32::consts::FRAC_PI_6;
+use std::mem;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
 use arboard::{Clipboard, ImageData};
-use egui::Rgba;
+use egui::{Rect, Rgba};
 use egui_wgpu::wgpu::{
     BufferAddress, BufferDescriptor, BufferUsages, Color, CommandEncoderDescriptor,
     ImageCopyBuffer, ImageDataLayout, IndexFormat, LoadOp, Maintain, MapMode, Operations,
@@ -17,6 +19,7 @@ use egui_wgpu::ScreenDescriptor;
 use hashbrown::HashMap;
 use image::{EncodableLayout, RgbaImage};
 use num::PrimInt;
+use ractor::ActorRef;
 use tokio::runtime::Runtime;
 use tokio::sync::{oneshot, Mutex};
 use wgpu::StoreOp;
@@ -31,19 +34,21 @@ use automancy_defs::math::{
 use automancy_defs::rendering::{make_line, GameUBO, InstanceData, LINE_DEPTH};
 use automancy_defs::slice_group_by::GroupBy;
 use automancy_defs::{bytemuck, colors, math};
+use automancy_resources::data::item::Item;
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::ResourceManager;
 
+use crate::camera::Camera;
 use crate::game::{
-    GameMsg, RenderUnit, TransactionRecord, TransactionRecords, TRANSACTION_ANIMATION_SPEED,
+    GameSystemMessage, RenderUnit, TransactionRecord, TransactionRecords,
+    TRANSACTION_ANIMATION_SPEED,
 };
 use crate::gpu::{
     AnimationMap, GlobalBuffers, Gpu, RenderResources, SharedResources, NORMAL_CLEAR,
     SCREENSHOT_FORMAT,
 };
-use crate::input::KeyActions;
+use crate::input::{InputHandler, KeyActions};
 use crate::options::Options;
-use crate::setup::GameSetup;
 use crate::{gpu, gui};
 
 pub struct Renderer<'a> {
@@ -58,6 +63,12 @@ pub struct Renderer<'a> {
     render_info_updating: Arc<AtomicBool>,
     transaction_records_cache: Arc<Mutex<TransactionRecords>>,
     transaction_records_updating: Arc<AtomicBool>,
+
+    pub tile_tints: HashMap<TileCoord, Rgba>,
+    pub extra_instances: Vec<(InstanceData, Id)>,
+    pub in_world_item_instances: Vec<(InstanceData, Id)>,
+
+    pub take_item_animations: HashMap<Item, VecDeque<(Instant, Rect)>>,
 }
 
 impl<'a> Renderer<'a> {
@@ -79,6 +90,12 @@ impl<'a> Renderer<'a> {
             render_info_updating: Arc::new(Default::default()),
             transaction_records_cache: Arc::new(Default::default()),
             transaction_records_updating: Arc::new(Default::default()),
+
+            tile_tints: Default::default(),
+            extra_instances: vec![],
+            in_world_item_instances: vec![],
+
+            take_item_animations: Default::default(),
         }
     }
 }
@@ -117,14 +134,19 @@ pub fn try_add_animation(
 impl<'a> Renderer<'a> {
     pub fn render(
         &mut self,
-        runtime: &Runtime,
-        setup: &GameSetup,
+        start_instant: Instant,
+        resource_man: &ResourceManager,
+        tokio: &Runtime,
+        input_handler: &InputHandler,
+        camera: &Camera,
         gui: &mut Gui,
-        tile_tints: HashMap<TileCoord, Rgba>,
-        mut extra_instances: Vec<(InstanceData, Id)>,
-        mut in_world_item_instances: Vec<(InstanceData, Id)>,
+        game: &ActorRef<GameSystemMessage>,
     ) -> Result<(), SurfaceError> {
         gui::reset_callback_counter();
+
+        let tile_tints = mem::take(&mut self.tile_tints);
+        let mut extra_instances = mem::take(&mut self.extra_instances);
+        let mut in_world_item_instances = mem::take(&mut self.in_world_item_instances);
 
         let size = self.gpu.window.inner_size();
 
@@ -132,20 +154,24 @@ impl<'a> Renderer<'a> {
             return Ok(());
         }
 
-        let culling_range = setup.camera.culling_range;
+        let culling_range = camera.culling_range;
 
         if !self.render_info_updating.load(Ordering::Relaxed) {
             let cache = self.render_info_cache.clone();
             let updating = self.render_info_updating.clone();
-            let game = setup.game.clone();
+            let game = game.clone();
 
             updating.store(true, Ordering::Relaxed);
 
-            runtime.spawn(async move {
-                let all_data = game.call(GameMsg::GetAllData, None).await.unwrap().unwrap();
+            tokio.spawn(async move {
+                let all_data = game
+                    .call(GameSystemMessage::GetAllData, None)
+                    .await
+                    .unwrap()
+                    .unwrap();
                 let instances = game
                     .call(
-                        |reply| GameMsg::GetAllRenderUnits {
+                        |reply| GameSystemMessage::GetAllRenderUnits {
                             reply,
                             culling_range,
                         },
@@ -168,13 +194,13 @@ impl<'a> Renderer<'a> {
         if !self.transaction_records_updating.load(Ordering::Relaxed) {
             let cache = self.transaction_records_cache.clone();
             let updating = self.transaction_records_updating.clone();
-            let game = setup.game.clone();
+            let game = game.clone();
 
             updating.store(true, Ordering::Relaxed);
 
-            runtime.spawn(async move {
+            tokio.spawn(async move {
                 let result = game
-                    .call(GameMsg::GetRecordedTransactions, None)
+                    .call(GameSystemMessage::GetRecordedTransactions, None)
                     .await
                     .unwrap()
                     .unwrap();
@@ -185,9 +211,8 @@ impl<'a> Renderer<'a> {
             });
         }
 
-        let camera_pos = setup.camera.get_pos();
-        let camera_pos_float = camera_pos.as_vec3();
-        let world_matrix = setup.camera.get_matrix().as_mat4();
+        let camera_pos_float = camera.get_pos().as_vec3();
+        let world_matrix = camera.get_matrix().as_mat4();
 
         let mut animation_map = gui
             .renderer
@@ -198,16 +223,11 @@ impl<'a> Renderer<'a> {
         let mut direction_previews = Vec::new();
 
         for (coord, unit) in instances.iter_mut() {
-            let tile = setup
-                .resource_man
-                .registry
-                .tiles
-                .get(&unit.tile_id)
-                .unwrap();
+            let tile = resource_man.registry.tiles.get(&unit.tile_id).unwrap();
 
             if let Some(theta) = all_data
                 .get(coord)
-                .and_then(|data| data.get(&setup.resource_man.registry.data_ids.target))
+                .and_then(|data| data.get(&resource_man.registry.data_ids.target))
                 .and_then(|target| {
                     if let Data::Coord(target) = target {
                         math::tile_direction_to_angle(*target)
@@ -222,7 +242,7 @@ impl<'a> Renderer<'a> {
 
                 if let Data::Color(color) = tile
                     .data
-                    .get(&setup.resource_man.registry.data_ids.direction_color)
+                    .get(&resource_man.registry.data_ids.direction_color)
                     .unwrap_or(&Data::Color(colors::ORANGE))
                 {
                     direction_previews.push((
@@ -236,21 +256,21 @@ impl<'a> Renderer<'a> {
                                     * Matrix4::from_scale(vec3(0.1, SQRT_3, LINE_DEPTH))
                                     * Matrix4::from_translation(vec3(0.0, 0.5, 0.0)),
                             ),
-                        setup.resource_man.registry.model_ids.cube1x1,
+                        resource_man.registry.model_ids.cube1x1,
                         (),
                     ))
                 }
             } else if let Some(Data::Id(inactive)) = tile
                 .data
-                .get(&setup.resource_man.registry.data_ids.inactive_model)
+                .get(&resource_man.registry.data_ids.inactive_model)
             {
-                unit.model = setup.resource_man.get_model(*inactive);
+                unit.model = resource_man.get_model(*inactive);
             }
         }
 
         for (coord, data) in all_data {
             let world_coord = HEX_GRID_LAYOUT.hex_to_world_pos(*coord);
-            if let Some(Data::Coord(link)) = data.get(&setup.resource_man.registry.data_ids.link) {
+            if let Some(Data::Coord(link)) = data.get(&resource_man.registry.data_ids.link) {
                 extra_instances.push((
                     InstanceData::default()
                         .with_color_offset(colors::RED.to_array())
@@ -260,11 +280,11 @@ impl<'a> Renderer<'a> {
                             world_coord,
                             HEX_GRID_LAYOUT.hex_to_world_pos(**link),
                         )),
-                    setup.resource_man.registry.model_ids.cube1x1,
+                    resource_man.registry.model_ids.cube1x1,
                 ));
             }
 
-            if let Some(Data::Id(id)) = data.get(&setup.resource_man.registry.data_ids.item) {
+            if let Some(Data::Id(id)) = data.get(&resource_man.registry.data_ids.item) {
                 in_world_item_instances.push((
                     InstanceData::default()
                         .with_light_pos(camera_pos_float, None)
@@ -273,7 +293,7 @@ impl<'a> Renderer<'a> {
                             Matrix4::from_translation(world_coord.extend(0.1))
                                 * Matrix4::from_scale(vec3(0.25, 0.25, 1.0)),
                         ),
-                    setup.resource_man.registry.items[id].model,
+                    resource_man.registry.items[id].model,
                 ))
             }
         }
@@ -307,7 +327,7 @@ impl<'a> Renderer<'a> {
                             )
                             .with_world_matrix(world_matrix)
                             .with_light_pos(camera_pos_float, None);
-                        let model = setup.resource_man.get_item_model(stack.item);
+                        let model = resource_man.get_item_model(stack.item);
 
                         in_world_item_instances.push((instance, model));
                     }
@@ -316,21 +336,15 @@ impl<'a> Renderer<'a> {
         }
 
         let mut game_instances = {
-            let none = setup
-                .resource_man
+            let none = resource_man
                 .registry
                 .tiles
-                .get(&setup.resource_man.registry.none)
+                .get(&resource_man.registry.none)
                 .unwrap()
                 .model;
 
             for RenderUnit { model, .. } in instances.values() {
-                try_add_animation(
-                    &setup.resource_man,
-                    setup.start_instant,
-                    *model,
-                    &mut animation_map,
-                );
+                try_add_animation(&resource_man, start_instant, *model, &mut animation_map);
             }
 
             for hex in culling_range.all_coords() {
@@ -379,21 +393,11 @@ impl<'a> Renderer<'a> {
         };
 
         for (_, model) in &extra_instances {
-            try_add_animation(
-                &setup.resource_man,
-                setup.start_instant,
-                *model,
-                &mut animation_map,
-            );
+            try_add_animation(&resource_man, start_instant, *model, &mut animation_map);
         }
 
         for (_, model) in &in_world_item_instances {
-            try_add_animation(
-                &setup.resource_man,
-                setup.start_instant,
-                *model,
-                &mut animation_map,
-            );
+            try_add_animation(&resource_man, start_instant, *model, &mut animation_map);
         }
 
         let mut extra_instances = extra_instances
@@ -411,8 +415,9 @@ impl<'a> Renderer<'a> {
         in_world_item_instances.sort_by_key(|v| v.1);
 
         self.inner_render(
-            setup,
+            input_handler,
             gui,
+            resource_man,
             &game_instances,
             &in_world_item_instances,
             &animation_map,
@@ -421,8 +426,9 @@ impl<'a> Renderer<'a> {
 
     fn inner_render(
         &mut self,
-        setup: &GameSetup,
+        input_handler: &InputHandler,
         gui: &mut Gui,
+        resource_man: &ResourceManager,
         game_instances: &[(InstanceData, Id, ())],
         in_world_item_instances: &[(InstanceData, Id, ())],
         animation_map: &AnimationMap,
@@ -431,19 +437,14 @@ impl<'a> Renderer<'a> {
         let factor = gui.context.pixels_per_point();
 
         let (game_instances, game_draws, game_draw_count, game_matrix_data) =
-            gpu::indirect_instance(&setup.resource_man, game_instances, true, animation_map);
+            gpu::indirect_instance(resource_man, game_instances, true, animation_map);
 
         let (
             in_world_item_instances,
             in_world_item_draws,
             in_world_item_draw_count,
             in_world_item_matrix_data,
-        ) = gpu::indirect_instance(
-            &setup.resource_man,
-            in_world_item_instances,
-            true,
-            animation_map,
-        );
+        ) = gpu::indirect_instance(&resource_man, in_world_item_instances, true, animation_map);
 
         let egui_out = gui.context.end_frame();
         let egui_primitives = gui.context.tessellate(egui_out.shapes, factor);
@@ -859,7 +860,7 @@ impl<'a> Renderer<'a> {
         let buffer_dim = texture_dim.physical_size(output.texture.format());
         let padded_width = size_align(buffer_dim.width * block_size, COPY_BYTES_PER_ROW_ALIGNMENT);
 
-        let screenshot_buffer = if setup.input_handler.key_active(KeyActions::Screenshot) {
+        let screenshot_buffer = if input_handler.key_active(KeyActions::Screenshot) {
             let intermediate_texture = self.gpu.device.create_texture(&TextureDescriptor {
                 label: Some("Screenshot Intermediate Texture"),
                 size: texture_dim,

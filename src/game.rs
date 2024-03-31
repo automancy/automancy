@@ -10,6 +10,7 @@ use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort, SupervisionEvent
 use rayon::prelude::*;
 use tokio::sync::Mutex;
 
+use crate::event::EventLoopStorage;
 use automancy_defs::coord::TileCoord;
 use automancy_defs::hexx::HexBounds;
 use automancy_defs::id::Id;
@@ -20,10 +21,8 @@ use automancy_resources::data::stack::ItemStack;
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::ResourceManager;
 
-use crate::event::EventLoopStorage;
-use crate::game::GameMsg::*;
+use crate::game::GameSystemMessage::*;
 use crate::map::{Map, MapInfo, TileEntities};
-use crate::setup::GameSetup;
 use crate::tile_entity::{TileEntity, TileEntityMsg};
 use crate::util::actor::multi_call_iter;
 
@@ -55,7 +54,7 @@ pub type TransactionRecords =
     HashMap<(TileCoord, TileCoord), VecDeque<(Instant, TransactionRecord)>>;
 
 #[derive(Debug)]
-pub struct GameState {
+pub struct GameSystemState {
     /// a count of all the ticks that have happened
     tick_count: TickUnit,
     /// is the game stopped
@@ -67,25 +66,25 @@ pub struct GameState {
     map: Map,
 
     /// what to do to undo the last UNDO_CACHE_SIZE user events
-    undo_steps: ArrayDeque<Vec<GameMsg>, 16, Wrapping>,
+    undo_steps: ArrayDeque<Vec<GameSystemMessage>, 16, Wrapping>,
     /// records transactions to be drawn
     transaction_records: TransactionRecords,
 }
 
 pub async fn load_map(
-    setup: &GameSetup,
+    game: &ActorRef<GameSystemMessage>,
     loop_store: &mut EventLoopStorage,
     map_name: String,
 ) -> anyhow::Result<()> {
-    setup.game.send_message(LoadMap(map_name))?;
-    loop_store.map_info = Some(setup.game.call(GetMapInfoAndName, None).await?.unwrap());
+    game.send_message(LoadMap(map_name))?;
+    loop_store.map_info = Some(game.call(GetMapInfoAndName, None).await?.unwrap());
 
     Ok(())
 }
 
 /// Represents a message the game receives
 #[derive(Debug)]
-pub enum GameMsg {
+pub enum GameSystemMessage {
     /// tick the tile once
     Tick,
     StopTicking,
@@ -132,14 +131,14 @@ pub enum PlaceTileResponse {
     Ignored,
 }
 
-pub struct Game {
+pub struct GameSystem {
     pub resource_man: Arc<ResourceManager>,
 }
 
 #[async_trait::async_trait]
-impl Actor for Game {
-    type Msg = GameMsg;
-    type State = GameState;
+impl Actor for GameSystem {
+    type Msg = GameSystemMessage;
+    type State = GameSystemState;
     type Arguments = ();
 
     async fn pre_start(
@@ -500,7 +499,7 @@ pub fn try_category(resource_man: &ResourceManager, id: Id, category_item: impl 
 /// Creates a new tile of given type at the given position, and with an initial state.
 pub async fn new_tile(
     resource_man: Arc<ResourceManager>,
-    game: ActorRef<GameMsg>,
+    game: ActorRef<GameSystemMessage>,
     coord: TileCoord,
     id: Id,
 ) -> ActorRef<TileEntityMsg> {
@@ -523,7 +522,7 @@ pub async fn new_tile(
 /// Stops a tile and removes it from the game
 async fn remove_tile(
     resource_man: &ResourceManager,
-    state: &mut GameState,
+    state: &mut GameSystemState,
     coord: TileCoord,
 ) -> Option<(Id, Option<DataMap>)> {
     if let Some((tile, tile_entity)) = state
@@ -563,8 +562,8 @@ async fn remove_tile(
 /// Makes a new tile and add it into both the map and the game
 async fn insert_new_tile(
     resource_man: Arc<ResourceManager>,
-    game: ActorRef<GameMsg>,
-    state: &mut GameState,
+    game: ActorRef<GameSystemMessage>,
+    state: &mut GameSystemState,
     coord: TileCoord,
     tile: Id,
     data: Option<DataMap>,
@@ -609,7 +608,7 @@ async fn insert_new_tile(
     old
 }
 
-fn inner_tick(state: &mut GameState) {
+fn inner_tick(state: &mut GameSystemState) {
     state.tile_entities.par_iter().for_each(|(_, tile_entity)| {
         if let Err(e) = tile_entity.send_message(TileEntityMsg::Tick {
             tick_count: state.tick_count,
@@ -622,7 +621,7 @@ fn inner_tick(state: &mut GameState) {
 }
 
 /// Runs the game for one tick, logging if the tick is too long.
-pub fn tick(state: &mut GameState) {
+pub fn tick(state: &mut GameSystemState) {
     let start = Instant::now();
     inner_tick(state);
     let finish = Instant::now();
@@ -638,7 +637,7 @@ pub fn tick(state: &mut GameState) {
     }
 }
 
-impl Default for GameState {
+impl Default for GameSystemState {
     fn default() -> Self {
         Self {
             tick_count: 0,

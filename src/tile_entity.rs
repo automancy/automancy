@@ -13,7 +13,7 @@ use automancy_resources::data::{Data, DataMap};
 use automancy_resources::types::function::{ResultType, RhaiDataMap, TransactionResultType};
 use automancy_resources::ResourceManager;
 
-use crate::game::{GameMsg, TickUnit};
+use crate::game::{GameSystemMessage, TickUnit};
 use crate::tile_entity::TileEntityMsg::*;
 
 fn rhai_call_options(rhai_state: &mut Dynamic) -> CallFnOptions {
@@ -46,7 +46,7 @@ pub struct TileEntity {
 #[derive(Debug, Clone)]
 pub struct TileEntityState {
     /// A handle to the game.
-    game: ActorRef<GameMsg>,
+    game: ActorRef<GameSystemMessage>,
 
     /// The data map stored by the tile.
     data: RhaiDataMap,
@@ -56,7 +56,7 @@ pub struct TileEntityState {
 }
 
 impl TileEntityState {
-    fn new(game: ActorRef<GameMsg>) -> Self {
+    fn new(game: ActorRef<GameSystemMessage>) -> Self {
         Self {
             game,
 
@@ -106,7 +106,7 @@ impl TileEntity {
         root_coord: TileCoord,
         root_id: Id,
         result: rhai::Array,
-    ) -> Option<GameMsg> {
+    ) -> Option<GameSystemMessage> {
         if result.is_empty() {
             return None;
         }
@@ -130,7 +130,11 @@ impl TileEntity {
                     },
                 );
 
-                Some(GameMsg::RecordTransaction(stack, source_coord, self.coord))
+                Some(GameSystemMessage::RecordTransaction(
+                    stack,
+                    source_coord,
+                    self.coord,
+                ))
             }
             TransactionResultType::Proxy => {
                 let coord: TileCoord = result[1].clone().cast();
@@ -148,7 +152,9 @@ impl TileEntity {
                     },
                 );
 
-                Some(GameMsg::RecordTransaction(stack, self.coord, coord))
+                Some(GameSystemMessage::RecordTransaction(
+                    stack, self.coord, coord,
+                ))
             }
             TransactionResultType::Consume => {
                 let consumed: ItemAmount = result[1].clone().cast();
@@ -164,7 +170,11 @@ impl TileEntity {
                     },
                 );
 
-                Some(GameMsg::RecordTransaction(stack, source_coord, self.coord))
+                Some(GameSystemMessage::RecordTransaction(
+                    stack,
+                    source_coord,
+                    self.coord,
+                ))
             }
         };
     }
@@ -227,7 +237,7 @@ impl TileEntity {
         source_id: Id,
         root_coord: TileCoord,
         root_id: Id,
-    ) -> Option<GameMsg> {
+    ) -> Option<GameSystemMessage> {
         let tile = self.resource_man.registry.tiles.get(&self.id).unwrap();
 
         if let Some((ast, default_scope, function_id)) = tile
@@ -287,7 +297,7 @@ impl TileEntity {
 impl Actor for TileEntity {
     type Msg = TileEntityMsg;
     type State = TileEntityState;
-    type Arguments = (ActorRef<GameMsg>,);
+    type Arguments = (ActorRef<GameSystemMessage>,);
 
     async fn pre_start(
         &self,
@@ -485,7 +495,7 @@ impl Actor for TileEntity {
 fn send_to_tile(state: &mut TileEntityState, coord: TileCoord, message: TileEntityMsg) {
     match state
         .game
-        .send_message(GameMsg::ForwardMsgToTile(coord, message))
+        .send_message(GameSystemMessage::ForwardMsgToTile(coord, message))
     {
         Ok(_) => {}
         Err(_) => {

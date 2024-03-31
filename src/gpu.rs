@@ -1,6 +1,7 @@
 use core::slice;
 use std::mem;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use egui_wgpu::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use egui_wgpu::wgpu::{
@@ -1677,7 +1678,7 @@ impl SharedResources {
 pub struct Gpu<'a> {
     vsync: bool,
 
-    pub window: &'a Window,
+    pub window: Arc<Window>,
 
     pub adapter_info: AdapterInfo,
     pub instance: Instance,
@@ -1718,7 +1719,7 @@ impl<'a> Gpu<'a> {
         shared_resources.create(&self.device, &self.config, render_resources);
     }
 
-    pub async fn new(window: &'a Window, vsync: bool) -> Self {
+    pub async fn new(window: Arc<Window>, vsync: bool) -> Self {
         let size = window.inner_size();
 
         // The instance is a handle to our GPU
@@ -1728,7 +1729,7 @@ impl<'a> Gpu<'a> {
             ..Default::default()
         });
 
-        let surface = instance.create_surface(window).unwrap();
+        let surface = instance.create_surface(window.clone()).unwrap();
 
         let adapter = instance
             .request_adapter(&RequestAdapterOptions {

@@ -6,13 +6,13 @@ use std::panic::PanicInfo;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use std::{env, panic};
+use std::{env, fs, panic};
 
 use color_eyre::config::HookBuilder;
-use color_eyre::eyre;
 use egui::{FontData, FontDefinitions};
 use env_logger::Env;
 use num::Zero;
+use ractor::Actor;
 use rfd::{MessageButtons, MessageDialog, MessageLevel};
 use tokio::runtime::Runtime;
 use uuid::Uuid;
@@ -22,17 +22,74 @@ use winit::window::{Fullscreen, Icon, WindowBuilder};
 
 use automancy::camera::Camera;
 use automancy::event::{on_event, EventLoopStorage};
-use automancy::game::load_map;
+use automancy::game::{load_map, GameSystem, GameSystemMessage, TICK_INTERVAL};
 use automancy::gpu::{init_gpu_resources, Gpu, DEPTH_FORMAT};
+use automancy::input::InputHandler;
 use automancy::map::MAIN_MENU;
+use automancy::options::Options;
 use automancy::renderer::Renderer;
-use automancy::setup::GameSetup;
-use automancy::LOGO;
+use automancy::{GameState, LOGO};
 use automancy_defs::gui::init_gui;
 use automancy_defs::gui::set_font;
 use automancy_defs::math::Double;
+use automancy_defs::rendering::Vertex;
 use automancy_defs::{log, window};
+use automancy_resources::kira::manager::{AudioManager, AudioManagerSettings};
+use automancy_resources::kira::track::{TrackBuilder, TrackHandle};
 use automancy_resources::kira::tween::Tween;
+use automancy_resources::{ResourceManager, RESOURCES_PATH, RESOURCE_MAN};
+
+/// Initialize the Resource Manager system, and loads all the resources in all namespaces.
+fn load_resources(track: TrackHandle) -> (Arc<ResourceManager>, Vec<Vertex>, Vec<u16>) {
+    let mut resource_man = ResourceManager::new(track);
+
+    fs::read_dir(RESOURCES_PATH)
+        .expect("The resources folder doesn't exist- this is very wrong")
+        .flatten()
+        .map(|v| v.path())
+        .for_each(|dir| {
+            let namespace = dir.file_name().unwrap().to_str().unwrap();
+            log::info!("Loading namespace {namespace}...");
+
+            resource_man
+                .load_models(&dir)
+                .expect("Error loading models");
+            resource_man.load_audio(&dir).expect("Error loading audio");
+            resource_man.load_tiles(&dir).expect("Error loading tiles");
+            resource_man.load_items(&dir).expect("Error loading items");
+            resource_man.load_tags(&dir).expect("Error loading tags");
+            resource_man
+                .load_categories(&dir)
+                .expect("Error loading categories");
+            resource_man
+                .load_scripts(&dir)
+                .expect("Error loading scripts");
+            resource_man
+                .load_translates(&dir)
+                .expect("Error loading translates");
+            resource_man
+                .load_shaders(&dir)
+                .expect("Error loading shaders");
+            resource_man.load_fonts(&dir).expect("Error loading fonts");
+            resource_man
+                .load_functions(&dir)
+                .expect("Error loading functions");
+            resource_man
+                .load_researches(&dir)
+                .expect("Error loading researches");
+
+            log::info!("Loaded namespace {namespace}.");
+        });
+
+    resource_man.compile_researches();
+    resource_man.ordered_tiles();
+    resource_man.ordered_items();
+    resource_man.ordered_categories();
+
+    let (vertices, indices) = resource_man.compile_models();
+
+    (Arc::new(resource_man), vertices, indices)
+}
 
 static SYMBOLS_FONT: &[u8] = include_bytes!("../../assets/SymbolsNerdFontMono-Regular.ttf");
 static SYMBOLS_FONT_KEY: &str = "SYMBOLS_FONT";
@@ -76,7 +133,8 @@ fn write_msg<P: AsRef<Path>>(buffer: &mut impl Write, file_path: P) -> std::fmt:
 
     Ok(())
 }
-fn main() -> eyre::Result<()> {
+
+fn main() -> anyhow::Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
     {
@@ -134,83 +192,143 @@ fn main() -> eyre::Result<()> {
         }));
     }
 
-    // --- window ---
     let event_loop = EventLoop::new()?;
 
-    let icon = get_icon();
+    let mut state = {
+        let tokio = Runtime::new().unwrap();
 
-    let window = WindowBuilder::new()
-        .with_title("automancy")
-        .with_window_icon(Some(icon))
-        .with_min_inner_size(PhysicalSize::new(200, 200))
-        .build(&event_loop)
-        .expect("Failed to open window");
+        log::info!("Creating window...");
+        let icon = get_icon();
 
-    let camera = Camera::new(window::window_size_double(&window));
+        let window = WindowBuilder::new()
+            .with_title("automancy")
+            .with_window_icon(Some(icon))
+            .with_min_inner_size(PhysicalSize::new(200, 200))
+            .build(&event_loop)
+            .expect("Failed to open window");
+        log::info!("Window created.");
 
-    // --- setup ---
-    let runtime = Runtime::new().unwrap();
+        let options = Options::load()?;
+        let input_handler = InputHandler::new(&options);
 
-    let (mut setup, vertices, indices) = runtime
-        .block_on(GameSetup::setup(camera))
-        .expect("Critical failure in game setup");
+        let loop_store = EventLoopStorage::new();
+        let camera = Camera::new(window::window_size_double(&window));
 
-    let gpu = runtime.block_on(Gpu::new(&window, setup.options.graphics.fps_limit == 0.0));
+        log::info!("Initializing audio backend...");
+        let mut audio_man = AudioManager::new(AudioManagerSettings::default())?;
+        log::info!("Audio backend initialized");
 
-    // --- gui ---
-    log::info!("Setting up gui...");
-    let mut egui_renderer =
-        egui_wgpu::Renderer::new(&gpu.device, gpu.config.format, Some(DEPTH_FORMAT), 4);
-    let egui_callback_resources = &mut egui_renderer.callback_resources;
-    egui_callback_resources.insert(setup.start_instant);
-    egui_callback_resources.insert(setup.resource_man.clone());
+        log::info!("Loading resources...");
+        let track = audio_man.add_sub_track({
+            let builder = TrackBuilder::new();
 
-    // - render -
-    log::info!("Setting up rendering...");
-    let (shared_resources, render_resources, global_buffers, gui_resources) = init_gpu_resources(
-        &gpu.device,
-        &gpu.queue,
-        &gpu.config,
-        &setup.resource_man,
-        vertices,
-        indices,
-    );
-    let global_buffers = Arc::new(global_buffers);
-    log::info!("Render setup.");
-    // - render -
+            builder
+        })?;
 
-    egui_callback_resources.insert(gui_resources);
-    egui_callback_resources.insert(global_buffers.clone());
+        let (resource_man, vertices, indices) = load_resources(track);
+        RESOURCE_MAN.write().unwrap().replace(resource_man.clone());
+        log::info!("Loaded resources.");
 
-    let mut gui = init_gui(egui_renderer, gpu.window);
-    egui_extras::install_image_loaders(&gui.context);
+        log::info!("Creating game...");
+        let (game, game_handle) = tokio.block_on(Actor::spawn(
+            Some("game".to_string()),
+            GameSystem {
+                resource_man: resource_man.clone(),
+            },
+            (),
+        ))?;
+        {
+            let game = game.clone();
+            tokio.spawn(async move {
+                game.send_interval(TICK_INTERVAL, || GameSystemMessage::Tick);
+            });
+        }
+        log::info!("Game created.");
 
-    gui.fonts = FontDefinitions::default();
-    gui.fonts.font_data.insert(
-        SYMBOLS_FONT_KEY.to_string(),
-        FontData::from_static(SYMBOLS_FONT),
-    );
-    for (name, font) in setup.resource_man.fonts.iter() {
-        gui.fonts
-            .font_data
-            .insert(name.to_string(), FontData::from_owned(font.data.clone()));
-    }
-    set_font(SYMBOLS_FONT_KEY, &setup.options.gui.font, &mut gui);
-    log::info!("Gui set up.");
+        let gpu = tokio.block_on(Gpu::new(
+            Arc::new(window),
+            options.graphics.fps_limit == 0.0,
+        ));
 
-    let mut renderer = Renderer::new(
-        gpu,
-        shared_resources,
-        render_resources,
-        global_buffers.clone(),
-        &setup.options,
-    );
-    let mut loop_store = EventLoopStorage::default();
+        log::info!("Setting up rendering...");
+        let (shared_resources, render_resources, global_buffers, gui_resources) =
+            init_gpu_resources(
+                &gpu.device,
+                &gpu.queue,
+                &gpu.config,
+                &resource_man,
+                vertices,
+                indices,
+            );
+        let global_buffers = Arc::new(global_buffers);
+        let renderer = Renderer::new(
+            gpu,
+            shared_resources,
+            render_resources,
+            global_buffers.clone(),
+            &options,
+        );
+        log::info!("Render setup.");
+
+        log::info!("Setting up gui...");
+        let mut gui = init_gui(
+            egui_wgpu::Renderer::new(
+                &renderer.gpu.device,
+                renderer.gpu.config.format,
+                Some(DEPTH_FORMAT),
+                4,
+            ),
+            &renderer.gpu.window,
+        );
+        egui_extras::install_image_loaders(&gui.context);
+        gui.fonts = FontDefinitions::default();
+        gui.fonts.font_data.insert(
+            SYMBOLS_FONT_KEY.to_string(),
+            FontData::from_static(SYMBOLS_FONT),
+        );
+        for (name, font) in resource_man.fonts.iter() {
+            gui.fonts
+                .font_data
+                .insert(name.to_string(), FontData::from_owned(font.data.clone()));
+        }
+        set_font(SYMBOLS_FONT_KEY, &options.gui.font, &mut gui);
+        gui.renderer.callback_resources.insert(gui_resources);
+        gui.renderer
+            .callback_resources
+            .insert(global_buffers.clone());
+        gui.renderer.callback_resources.insert(resource_man.clone());
+        log::info!("Gui setup.");
+
+        let start_instant = Instant::now();
+        gui.renderer.callback_resources.insert(start_instant);
+
+        GameState {
+            gui_state: Default::default(),
+            input_handler,
+            options,
+            resource_man,
+            camera,
+            loop_store,
+            tokio,
+            game,
+            gui,
+            renderer,
+            game_handle: Some(game_handle),
+            start_instant,
+            audio_man,
+        }
+    };
+
     let mut closed = false;
 
     // load the main menu
-    runtime
-        .block_on(load_map(&setup, &mut loop_store, MAIN_MENU.to_string()))
+    state
+        .tokio
+        .block_on(load_map(
+            &state.game,
+            &mut state.loop_store,
+            MAIN_MENU.to_string(),
+        ))
         .unwrap();
 
     event_loop.run(move |event, target| {
@@ -218,15 +336,7 @@ fn main() -> eyre::Result<()> {
             return;
         }
 
-        match on_event(
-            &runtime,
-            &mut setup,
-            &mut loop_store,
-            &mut renderer,
-            &mut gui,
-            event,
-            target,
-        ) {
+        match on_event(&mut state, target, event) {
             Ok(to_exit) => {
                 if to_exit {
                     closed = true;
@@ -238,51 +348,54 @@ fn main() -> eyre::Result<()> {
             }
         }
 
-        if !setup.options.synced {
-            gui.context.set_zoom_factor(setup.options.gui.scale);
-            set_font(SYMBOLS_FONT_KEY, &setup.options.gui.font, &mut gui);
+        if !state.options.synced {
+            state.gui.context.set_zoom_factor(state.options.gui.scale);
+            set_font(SYMBOLS_FONT_KEY, &state.options.gui.font, &mut state.gui);
 
-            setup
+            state
                 .audio_man
                 .main_track()
-                .set_volume(setup.options.audio.sfx_volume, Tween::default())
+                .set_volume(state.options.audio.sfx_volume, Tween::default())
                 .unwrap();
 
-            renderer
+            state
+                .renderer
                 .gpu
-                .set_vsync(setup.options.graphics.fps_limit == 0.0);
+                .set_vsync(state.options.graphics.fps_limit == 0.0);
 
-            if setup.options.graphics.fps_limit >= 250.0 {
-                renderer.fps_limit = Double::INFINITY;
+            if state.options.graphics.fps_limit >= 250.0 {
+                state.renderer.fps_limit = Double::INFINITY;
             } else {
-                renderer.fps_limit = setup.options.graphics.fps_limit;
+                state.renderer.fps_limit = state.options.graphics.fps_limit;
             }
 
-            if setup.options.graphics.fullscreen {
-                renderer
+            if state.options.graphics.fullscreen {
+                state
+                    .renderer
                     .gpu
                     .window
                     .set_fullscreen(Some(Fullscreen::Borderless(None)));
             } else {
-                renderer.gpu.window.set_fullscreen(None);
+                state.renderer.gpu.window.set_fullscreen(None);
             }
 
-            setup.options.synced = true;
+            state.options.synced = true;
         }
 
-        if !renderer.fps_limit.is_zero() {
-            let frame_time = Duration::from_secs_f64(1.0 / renderer.fps_limit);
+        if !state.renderer.fps_limit.is_zero() {
+            let frame_time = Duration::from_secs_f64(1.0 / state.renderer.fps_limit);
 
-            if loop_store.frame_start.elapsed() > frame_time {
-                renderer.gpu.window.request_redraw();
+            if state.loop_store.frame_start.elapsed() > frame_time {
+                state.renderer.gpu.window.request_redraw();
                 target.set_control_flow(ControlFlow::WaitUntil(Instant::now() + frame_time));
             }
         } else {
-            renderer.gpu.window.request_redraw();
+            state.renderer.gpu.window.request_redraw();
             target.set_control_flow(ControlFlow::Poll);
         }
 
-        loop_store.elapsed = Instant::now().duration_since(loop_store.frame_start);
+        let new_elapsed = Instant::now().duration_since(state.loop_store.frame_start);
+        state.loop_store.elapsed = new_elapsed;
     })?;
 
     Ok(())
