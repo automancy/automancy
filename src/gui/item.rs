@@ -50,7 +50,7 @@ pub fn draw_item(
             GameEguiCallback::new(
                 InstanceData::default()
                     .with_world_matrix(math::view(dvec3(0.0, 0.0, 1.0)).as_mat4()),
-                resource_man.get_item_model(stack.item),
+                resource_man.get_item_model(stack.item.model),
                 rect,
                 ui.ctx().screen_rect(),
             ),

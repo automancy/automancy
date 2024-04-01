@@ -10,7 +10,7 @@ use automancy_defs::log;
 
 use crate::data::stack::{ItemAmount, ItemStack};
 use crate::types::IconMode;
-use crate::{load_recursively, ResourceManager, RON_EXT};
+use crate::{load_recursively, ResourceError, ResourceManager, RON_EXT};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ResearchRaw {
@@ -18,7 +18,7 @@ pub struct ResearchRaw {
     icon: IdRaw,
     icon_mode: IconMode,
     unlocks: Vec<IdRaw>,
-    next_researches: Option<Vec<IdRaw>>,
+    depends_on: Option<IdRaw>,
     name: IdRaw,
     description: IdRaw,
     required_items: Option<Vec<(IdRaw, ItemAmount)>>,
@@ -31,7 +31,7 @@ pub struct Research {
     pub icon: Id,
     pub icon_mode: IconMode,
     pub unlocks: Vec<Id>,
-    pub next_researches: Option<Vec<Id>>,
+    pub depends_on: Option<Id>,
     pub name: Id,
     pub description: Id,
     pub required_items: Option<Vec<ItemStack>>,
@@ -51,19 +51,27 @@ impl ResourceManager {
             .map(|id| id.to_id(&mut self.interner))
             .collect();
         let icon = research.icon.to_id(&mut self.interner);
-        let next = research
-            .next_researches
-            .map(|v| v.iter().map(|id| id.to_id(&mut self.interner)).collect());
+        let depends_on = research.depends_on.map(|id| id.to_id(&mut self.interner));
         let name = research.name.to_id(&mut self.interner);
         let description = research.description.to_id(&mut self.interner);
-        let required_items = research.required_items.map(|v| {
+        let required_items = match research.required_items.map(|v| {
             v.into_iter()
-                .map(|(id, amount)| ItemStack {
-                    item: self.registry.items[&id.to_id(&mut self.interner)],
-                    amount,
+                .map(|(id, amount)| {
+                    Ok(ItemStack {
+                        item: *self
+                            .registry
+                            .items
+                            .get(&id.to_id(&mut self.interner))
+                            .ok_or(ResourceError::ItemNotFound)?,
+                        amount,
+                    })
                 })
-                .collect()
-        });
+                .collect::<Result<Vec<_>, _>>()
+        }) {
+            Some(Err(e)) => return Err(e),
+            Some(Ok(v)) => Some(v),
+            _ => None,
+        };
         let attached_puzzle = research
             .attached_puzzle
             .map(|id| id.to_id(&mut self.interner));
@@ -72,7 +80,7 @@ impl ResourceManager {
         let index = self.registry.researches.add_node(Research {
             id,
             unlocks,
-            next_researches: next,
+            depends_on,
             icon,
             name,
             description,
@@ -125,12 +133,10 @@ impl ResourceManager {
     }
 
     pub fn compile_researches(&mut self) {
-        for (index, research) in self.registry.researches.clone().node_references() {
-            if let Some(next) = &research.next_researches {
-                for id in next {
-                    if let Some(next_index) = self.registry.researches_id_map.get(id).cloned() {
-                        self.registry.researches.add_edge(index, next_index, ());
-                    }
+        for (this, research) in self.registry.researches.clone().node_references() {
+            if let Some(prev) = &research.depends_on {
+                if let Some(prev) = self.registry.researches_id_map.get(prev).cloned() {
+                    self.registry.researches.add_edge(prev, this, ());
                 }
             }
         }

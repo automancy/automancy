@@ -14,6 +14,7 @@ use automancy_resources::data::{Data, DataMap};
 use automancy_resources::format;
 
 use crate::gui::{GameEguiCallback, LARGE_ICON_SIZE, MEDIUM_ICON_SIZE};
+use crate::util::is_research_unlocked;
 use crate::GameState;
 
 fn tile_hover_z_angle(ui: &Ui, response: &Response) -> Float {
@@ -81,15 +82,8 @@ fn draw_tile_selection(
 
         if !is_default_tile {
             if let Some(research) = state.resource_man.get_research_by_unlock(*id) {
-                if let Data::SetId(unlocked) = game_data
-                    .entry(state.resource_man.registry.data_ids.unlocked_researches)
-                    .or_insert_with(|| Data::SetId(HashSet::new()))
-                {
-                    if !unlocked.contains(&research.id) {
-                        continue;
-                    }
-                } else {
-                    game_data.remove(&state.resource_man.registry.data_ids.unlocked_researches);
+                if !is_research_unlocked(research.id, &state.resource_man, game_data) {
+                    continue;
                 }
             }
         }
@@ -172,6 +166,7 @@ pub fn tile_selections(
         .frame(Frame::window(&state.gui.context.clone().style()).outer_margin(Margin::same(10.0)))
         .show(&state.gui.context.clone(), |ui| {
             ScrollArea::horizontal()
+                .drag_to_scroll(true)
                 .scroll_bar_visibility(ScrollBarVisibility::AlwaysHidden)
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
@@ -197,6 +192,7 @@ pub fn tile_selections(
         )
         .show(&state.gui.context.clone(), |ui| {
             ScrollArea::horizontal()
+                .drag_to_scroll(true)
                 .scroll_bar_visibility(ScrollBarVisibility::AlwaysHidden)
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {

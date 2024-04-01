@@ -1,0 +1,13 @@
+(
+    id: "basic_assembler",
+    icon: "tile/basic_assembler",
+    icon_mode: Tile,
+    unlocks: ["basic_assembler"],
+    depends_on: None,
+    name: "basic_assembler_name",
+    description: "basic_assembler_description",
+    required_items: Some([
+        ("white_matter", 32),
+    ]),
+    attached_puzzle: Some("connection_puzzle"),
+)

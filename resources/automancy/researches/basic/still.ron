@@ -3,7 +3,7 @@
     icon: "tile/basic_still",
     icon_mode: Tile,
     unlocks: ["basic_still"],
-    next_researches: None,
+    depends_on: Some("basic_still"),
     name: "basic_still_name",
     description: "basic_still_description",
     required_items: Some([

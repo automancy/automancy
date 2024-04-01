@@ -89,6 +89,12 @@ pub const IMAGE_EXT: &str = "png";
 
 /// TODO set of extensions
 
+#[derive(Error, Debug)]
+pub enum ResourceError {
+    #[error("item could not be found")]
+    ItemNotFound,
+}
+
 /// Represents a resource manager, which contains all resources (apart from maps) loaded from disk dynamically.
 pub struct ResourceManager {
     pub interner: Interner,
@@ -232,6 +238,21 @@ impl ResourceManager {
     pub fn try_category_name(&self, id: Option<&Id>) -> &str {
         if let Some(id) = id {
             self.category_name(id)
+        } else {
+            &self.translates.none
+        }
+    }
+
+    pub fn research_str(&self, id: &Id) -> &str {
+        match self.translates.research.get(id) {
+            Some(name) => name,
+            None => &self.translates.unnamed,
+        }
+    }
+
+    pub fn try_research_str(&self, id: Option<&Id>) -> &str {
+        if let Some(id) = id {
+            self.research_str(id)
         } else {
             &self.translates.none
         }

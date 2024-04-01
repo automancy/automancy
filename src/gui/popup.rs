@@ -15,6 +15,7 @@ pub fn invalid_name_popup(state: &mut GameState) {
         state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.invalid_name]
             .as_str(),
     )
+    .id("invalid_map_name_popup".into())
     .resizable(false)
     .collapsible(false)
     .default_width(250.0)
@@ -43,6 +44,7 @@ pub fn map_delete_popup(state: &mut GameState, map_name: &str) {
     Window::new(
         state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.delete_map].as_str(),
     )
+    .id("map_delete_popup".into())
     .resizable(false)
     .collapsible(false)
     .default_width(250.0)
@@ -86,6 +88,7 @@ pub fn map_create_popup(state: &mut GameState) {
     Window::new(
         state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.create_map].as_str(),
     )
+    .id("map_create_popup".into())
     .resizable(false)
     .collapsible(false)
     .default_width(250.0)
