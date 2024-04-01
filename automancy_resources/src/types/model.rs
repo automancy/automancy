@@ -2,6 +2,7 @@ use std::ffi::OsStr;
 use std::fs::read_to_string;
 use std::path::Path;
 
+use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
 
 use automancy_defs::glam::vec3;
@@ -10,9 +11,7 @@ use automancy_defs::id::{Id, IdRaw};
 use automancy_defs::math::{Matrix4, Quaternion};
 use automancy_defs::rendering::{Animation, Model, Vertex};
 use automancy_defs::{gltf, log};
-use hashbrown::HashMap;
 
-use crate::data::item::Item;
 use crate::{load_recursively, ResourceManager, RON_EXT};
 
 #[derive(Debug, Default, Clone, Copy)]
