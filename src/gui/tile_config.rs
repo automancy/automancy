@@ -430,6 +430,7 @@ pub fn tile_config_ui(state: &mut GameState, game_data: &mut DataMap) {
         state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.tile_config]
             .to_string(),
     )
+    .id("tile_config".into())
     .resizable(false)
     .auto_sized()
     .constrain(true)

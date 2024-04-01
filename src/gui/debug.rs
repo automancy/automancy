@@ -28,6 +28,7 @@ pub fn debugger(state: &GameState) {
     Window::new(
         resource_man.translates.gui[&resource_man.registry.gui_ids.debug_menu].as_str(),
     )
+        .id("debugger".into())
         .resizable(false)
         .default_width(600.0)
         .show(&state.gui.context.clone(), |ui| {

@@ -36,9 +36,9 @@ impl ResourceManager {
         }
     }
 
-    pub fn get_item_model(&self, item: Item) -> Id {
-        if self.all_index_ranges.contains_key(&item.model) {
-            item.model
+    pub fn get_item_model(&self, model: Id) -> Id {
+        if self.all_index_ranges.contains_key(&model) {
+            model
         } else {
             self.registry.model_ids.items_missing
         }

@@ -12,6 +12,7 @@ pub fn error_popup(state: &mut GameState) {
             state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.error_popup]
                 .to_string(),
         )
+        .id("error_popup".into())
         .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0))
         .resizable(false)
         .default_width(300.0)

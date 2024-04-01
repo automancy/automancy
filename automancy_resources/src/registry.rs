@@ -71,8 +71,7 @@ pub struct ModelIds {
 pub struct GuiIds {
     pub info: Id,
     pub player_menu: Id,
-    pub player_inventory: Id,
-    pub open_research: Id,
+    pub player_inventory_title: Id,
     pub tile_config: Id,
     pub tile_config_script: Id,
     pub tile_config_script_info: Id,

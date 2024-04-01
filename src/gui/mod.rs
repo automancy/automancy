@@ -39,7 +39,6 @@ pub mod item;
 pub mod menu;
 pub mod player;
 pub mod popup;
-pub mod research;
 pub mod tile_config;
 pub mod tile_selection;
 
@@ -54,7 +53,6 @@ pub struct GuiState {
     pub popup: PopupState,
 
     pub debugger_open: bool,
-    pub research_open: bool,
 
     pub text_field: TextFieldState,
 
@@ -91,7 +89,6 @@ impl Default for GuiState {
             substate: SubState::None,
             popup: PopupState::None,
             debugger_open: false,
-            research_open: false,
             text_field: Default::default(),
             renaming_map: "".to_string(),
             tile_selection_category: None,
@@ -258,7 +255,7 @@ fn take_item_animation(state: &mut GameState, ui: &mut Ui, item: Item, dst_rect:
                     GameEguiCallback::new(
                         InstanceData::default()
                             .with_world_matrix(math::view(dvec3(0.0, 0.0, 1.0)).as_mat4()),
-                        state.resource_man.get_item_model(item),
+                        state.resource_man.get_item_model(item.model),
                         rect,
                         ui.ctx().screen_rect(),
                     ),
@@ -491,7 +488,7 @@ pub fn render_ui(
                         }
 
                         // tile_info
-                        info::info(state);
+                        info::info_ui(state);
 
                         // tile_config
                         tile_config::tile_config_ui(state, game_data);
@@ -586,10 +583,6 @@ pub fn render_ui(
                             ));
                         }
                     }
-                }
-
-                if state.gui_state.research_open {
-                    research::research_ui(state);
                 }
             }
             Screen::MainMenu => *result = menu::main_menu(state, target),

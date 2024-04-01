@@ -11,10 +11,11 @@ use crate::tile_entity::TileEntityMsg;
 use crate::GameState;
 
 /// Draws the info GUI.
-pub fn info(state: &mut GameState) {
+pub fn info_ui(state: &mut GameState) {
     Window::new(
         state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.info].as_str(),
     )
+    .id("info".into())
     .anchor(Align2::RIGHT_TOP, vec2(-10.0, 10.0))
     .resizable(false)
     .default_width(300.0)

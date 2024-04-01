@@ -327,7 +327,7 @@ impl<'a> Renderer<'a> {
                             )
                             .with_world_matrix(world_matrix)
                             .with_light_pos(camera_pos_float, None);
-                        let model = resource_man.get_item_model(stack.item);
+                        let model = resource_man.get_item_model(stack.item.model);
 
                         in_world_item_instances.push((instance, model));
                     }
