@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::f64::consts::FRAC_PI_4;
 
 use egui::scroll_area::ScrollBarVisibility;
