@@ -3,12 +3,14 @@ use std::collections::{BTreeMap, HashSet};
 use std::ops::{Deref, DerefMut};
 
 use egui::Rgba;
+use hashbrown::HashMap;
 use rhai::Dynamic;
 use serde::{Deserialize, Serialize};
 
 use automancy_defs::coord::TileCoord;
+use automancy_defs::glam::IVec2;
+use automancy_defs::hexx::{Hex, OffsetHexMode};
 use automancy_defs::id::{Id, IdRaw, Interner};
-use hashbrown::HashMap;
 
 use crate::data::inventory::{Inventory, InventoryRaw};
 use crate::data::stack::ItemAmount;
@@ -206,6 +208,7 @@ pub enum DataRaw {
     SetId(Vec<IdRaw>),
     Amount(ItemAmount),
     Bool(bool),
+    VecOffsetCoord(Vec<IVec2>),
 }
 
 impl DataRaw {
@@ -236,6 +239,16 @@ impl DataRaw {
                     color.next().unwrap_or(255),
                 ))
             }
+            DataRaw::VecOffsetCoord(v) => Data::VecCoord(
+                v.iter()
+                    .map(|v| {
+                        TileCoord::from(Hex::from_offset_coordinates(
+                            v.to_array(),
+                            OffsetHexMode::EvenRows,
+                        ))
+                    })
+                    .collect(),
+            ),
         })
     }
 }

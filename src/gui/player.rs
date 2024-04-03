@@ -1,5 +1,5 @@
 use egui::scroll_area::ScrollBarVisibility;
-use egui::{vec2, ScrollArea, Sense, Window};
+use egui::{vec2, Button, ScrollArea, Sense, Window};
 
 use automancy_defs::glam::vec3;
 use automancy_defs::graph::visit::Topo;
@@ -10,7 +10,7 @@ use automancy_resources::data::{Data, DataMap};
 use automancy_resources::types::IconMode;
 
 use crate::gui::item::draw_item;
-use crate::gui::{take_item_animation, GameEguiCallback, MEDIUM_ICON_SIZE};
+use crate::gui::{take_item_animation, GameEguiCallback, MEDIUM_ICON_SIZE, SMALL_ICON_SIZE};
 use crate::util::is_research_unlocked;
 use crate::GameState;
 
@@ -39,20 +39,22 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                         .drag_to_scroll(true)
                         .show(ui, |ui| {
                             for (id, amount) in inventory.iter() {
-                                if let Some(item) = state.resource_man.registry.items.get(id) {
-                                    let (dst_rect, _) = draw_item(
-                                        &state.resource_man,
-                                        ui,
-                                        None,
-                                        ItemStack {
-                                            item: *item,
-                                            amount: *amount,
-                                        },
-                                        MEDIUM_ICON_SIZE,
-                                        true,
-                                    );
+                                if *amount != 0 {
+                                    if let Some(item) = state.resource_man.registry.items.get(id) {
+                                        let (dst_rect, _) = draw_item(
+                                            &state.resource_man,
+                                            ui,
+                                            None,
+                                            ItemStack {
+                                                item: *item,
+                                                amount: *amount,
+                                            },
+                                            MEDIUM_ICON_SIZE,
+                                            true,
+                                        );
 
-                                    take_item_animation(state, ui, *item, dst_rect);
+                                        take_item_animation(state, ui, *item, dst_rect);
+                                    }
                                 }
                             }
                         });
@@ -173,7 +175,161 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                         ui.vertical(|ui| {
                             ui.heading(state.resource_man.research_str(&research.name));
                             ui.label(state.resource_man.research_str(&research.description));
+
+                            ScrollArea::vertical()
+                                .id_source("research_item_list")
+                                .scroll_bar_visibility(ScrollBarVisibility::AlwaysVisible)
+                                .drag_to_scroll(true)
+                                .auto_shrink(false)
+                                .max_height(120.0)
+                                .max_width(160.0)
+                                .show(ui, |ui| {
+                                    if let Some(stacks) = &research.required_items {
+                                        for stack in stacks {
+                                            draw_item(
+                                                &state.resource_man,
+                                                ui,
+                                                None,
+                                                *stack,
+                                                SMALL_ICON_SIZE,
+                                                true,
+                                            );
+                                        }
+                                    }
+                                });
+
+                            let mut already_filled = false;
+                            if let Some(Data::SetId(items_filled)) = game_data
+                                .get(&state.resource_man.registry.data_ids.research_items_filled)
+                            {
+                                already_filled = items_filled.contains(&research.id)
+                            }
+
+                            if let Some(stacks) = &research.required_items {
+                                if ui
+                                    .add_enabled(
+                                        !already_filled,
+                                        Button::new(
+                                            state.resource_man.translates.gui[&state
+                                                .resource_man
+                                                .registry
+                                                .gui_ids
+                                                .research_submit_items]
+                                                .as_str(),
+                                        ),
+                                    )
+                                    .clicked()
+                                    && !already_filled
+                                {
+                                    let mut can_take = false;
+                                    if let Some(Data::Inventory(inventory)) = game_data.get_mut(
+                                        &state.resource_man.registry.data_ids.player_inventory,
+                                    ) {
+                                        can_take = stacks.iter().all(|v| inventory.contains(*v))
+                                    }
+
+                                    if can_take {
+                                        if let Some(Data::Inventory(inventory)) = game_data.get_mut(
+                                            &state.resource_man.registry.data_ids.player_inventory,
+                                        ) {
+                                            for stack in stacks {
+                                                inventory.take(stack.item.id, stack.amount);
+                                            }
+                                        }
+
+                                        if let Some(Data::SetId(items_filled)) = game_data.get_mut(
+                                            &state
+                                                .resource_man
+                                                .registry
+                                                .data_ids
+                                                .research_items_filled,
+                                        ) {
+                                            items_filled.insert(research.id);
+                                        }
+                                    }
+                                }
+                            }
                         });
+
+                        let mut a = false;
+                        let mut b = false;
+                        let mut ab = false;
+                        {
+                            if !game_data.contains_key(
+                                &state.resource_man.registry.data_ids.research_items_filled,
+                            ) {
+                                game_data.insert(
+                                    state.resource_man.registry.data_ids.research_items_filled,
+                                    Data::SetId(Default::default()),
+                                );
+                            }
+
+                            if !game_data.contains_key(
+                                &state
+                                    .resource_man
+                                    .registry
+                                    .data_ids
+                                    .research_puzzle_completed,
+                            ) {
+                                game_data.insert(
+                                    state
+                                        .resource_man
+                                        .registry
+                                        .data_ids
+                                        .research_puzzle_completed,
+                                    Data::SetId(Default::default()),
+                                );
+                            }
+
+                            if let Some((
+                                Data::SetId(filled_items),
+                                Data::SetId(completed_puzzles),
+                            )) = game_data
+                                .get(&state.resource_man.registry.data_ids.research_items_filled)
+                                .zip(
+                                    game_data.get(
+                                        &state
+                                            .resource_man
+                                            .registry
+                                            .data_ids
+                                            .research_puzzle_completed,
+                                    ),
+                                )
+                            {
+                                a = research.attached_puzzle.is_none()
+                                    && filled_items.contains(&research.id);
+
+                                b = research.required_items.is_none()
+                                    & &completed_puzzles.contains(&research.id);
+
+                                ab = filled_items.contains(&research.id)
+                                    & &completed_puzzles.contains(&research.id);
+                            }
+                        }
+
+                        if a || b || ab {
+                            if let Some(Data::SetId(set)) = game_data.get_mut(
+                                &state.resource_man.registry.data_ids.research_items_filled,
+                            ) {
+                                set.remove(&research.id);
+                            }
+                            if let Some(Data::SetId(set)) = game_data.get_mut(
+                                &state
+                                    .resource_man
+                                    .registry
+                                    .data_ids
+                                    .research_puzzle_completed,
+                            ) {
+                                set.remove(&research.id);
+                            }
+
+                            if let Data::SetId(set) = game_data
+                                .entry(state.resource_man.registry.data_ids.unlocked_researches)
+                                .or_insert_with(|| Data::SetId(Default::default()))
+                            {
+                                set.insert(research.id);
+                            }
+                        }
                     }
                 });
             });
