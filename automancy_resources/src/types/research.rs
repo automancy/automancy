@@ -9,6 +9,7 @@ use automancy_defs::id::{Id, IdRaw};
 use automancy_defs::log;
 
 use crate::data::stack::{ItemAmount, ItemStack};
+use crate::data::{DataMap, DataMapRaw};
 use crate::types::IconMode;
 use crate::{load_recursively, ResourceError, ResourceManager, RON_EXT};
 
@@ -22,7 +23,7 @@ pub struct ResearchRaw {
     name: IdRaw,
     description: IdRaw,
     required_items: Option<Vec<(IdRaw, ItemAmount)>>,
-    attached_puzzle: Option<IdRaw>,
+    attached_puzzle: Option<(IdRaw, DataMapRaw)>,
 }
 
 #[derive(Debug, Clone)]
@@ -35,7 +36,7 @@ pub struct Research {
     pub name: Id,
     pub description: Id,
     pub required_items: Option<Vec<ItemStack>>,
-    pub attached_puzzle: Option<Id>,
+    pub attached_puzzle: Option<(Id, DataMap)>,
 }
 
 impl ResourceManager {
@@ -72,9 +73,12 @@ impl ResourceManager {
             Some(Ok(v)) => Some(v),
             _ => None,
         };
-        let attached_puzzle = research
-            .attached_puzzle
-            .map(|id| id.to_id(&mut self.interner));
+        let attached_puzzle = research.attached_puzzle.map(|(id, data)| {
+            (
+                id.to_id(&mut self.interner),
+                data.intern_to_data(&mut self.interner),
+            )
+        });
         let icon_mode = research.icon_mode;
 
         let index = self.registry.researches.add_node(Research {

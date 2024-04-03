@@ -5,9 +5,9 @@
     unlocks: ["basic_assembler"],
     depends_on: None,
     name: "basic_assembler_name",
-    description: "basic_assembler_description",
+    description: "basic_assembler_desc",
     required_items: Some([
         ("white_matter", 32),
     ]),
-    attached_puzzle: Some("connection_puzzle"),
+    attached_puzzle: Some(("connection_puzzle", ({}))),
 )

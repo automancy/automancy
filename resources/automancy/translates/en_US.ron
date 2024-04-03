@@ -103,6 +103,7 @@
         "btn_unpause": "Unpause",
         "research_menu_title": "Researches",
         "player_inventory_title": "Player Inventory",
+        "research_submit_items": "Submit items from inventory",
     },
     error: {
         "unwritable_options": "Could not write the options.ron file! Your changes will NOT be saved.",
@@ -110,6 +111,8 @@
     },
     research: {
         "basic_still_name": "Basic Still",
-        "basic_still_description": "<Basic Still>",
+        "basic_still_desc": "<Basic Still>",
+        "basic_assembler_name": "Basic Assembler",
+        "basic_assembler_desc": "<Basic Assembler",
     }
 )

@@ -5,9 +5,9 @@
     unlocks: ["basic_still"],
     depends_on: Some("basic_still"),
     name: "basic_still_name",
-    description: "basic_still_description",
+    description: "basic_still_desc",
     required_items: Some([
         ("white_mechwork", 4),
     ]),
-    attached_puzzle: Some("connection_puzzle"),
+    attached_puzzle: Some(("connection_puzzle", ({}))),
 )

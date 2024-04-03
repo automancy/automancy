@@ -43,6 +43,8 @@ pub struct DataIds {
     pub target: Id,
     pub link: Id,
     pub player_inventory: Id,
+    pub research_items_filled: Id,
+    pub research_puzzle_completed: Id,
 
     pub direction_color: Id,
     pub storage_takeable: Id,
@@ -71,7 +73,6 @@ pub struct ModelIds {
 pub struct GuiIds {
     pub info: Id,
     pub player_menu: Id,
-    pub player_inventory_title: Id,
     pub tile_config: Id,
     pub tile_config_script: Id,
     pub tile_config_script_info: Id,
@@ -111,6 +112,8 @@ pub struct GuiIds {
     pub btn_new_map: Id,
 
     pub research_menu_title: Id,
+    pub player_inventory_title: Id,
+    pub research_submit_items: Id,
 
     pub time_fmt: Id,
 }

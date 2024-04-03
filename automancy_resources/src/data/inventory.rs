@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use automancy_defs::id::{Id, IdRaw, Interner};
 
 use crate::data::item::Item;
-use crate::data::stack::ItemAmount;
+use crate::data::stack::{ItemAmount, ItemStack};
 
 #[derive(Debug, Default, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct Inventory(BTreeMap<Id, ItemAmount>);
@@ -59,6 +59,10 @@ impl Inventory {
         self.insert(id, stored - taking);
 
         Some(taking)
+    }
+
+    pub fn contains(&mut self, stack: ItemStack) -> bool {
+        self.get(stack.item.id) >= stack.amount
     }
 
     pub fn get_with_item(&mut self, item: Item) -> ItemAmount {
