@@ -1,7 +1,8 @@
+use hashbrown::HashSet;
+
 use automancy_defs::id::Id;
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::ResourceManager;
-use std::collections::HashSet;
 
 pub mod actor;
 pub mod discord;

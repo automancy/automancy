@@ -45,6 +45,7 @@ pub struct DataIds {
     pub player_inventory: Id,
     pub research_items_filled: Id,
     pub research_puzzle_completed: Id,
+    pub tiles: Id,
 
     pub direction_color: Id,
     pub storage_takeable: Id,
@@ -66,6 +67,8 @@ pub struct ModelIds {
     pub items_missing: Id,
     #[namespace(core)]
     pub cube1x1: Id,
+    #[namespace(core)]
+    pub puzzle_space: Id,
 }
 
 /// The list of GUI translation keys.

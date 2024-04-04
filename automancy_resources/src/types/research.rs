@@ -9,7 +9,8 @@ use automancy_defs::id::{Id, IdRaw};
 use automancy_defs::log;
 
 use crate::data::stack::{ItemAmount, ItemStack};
-use crate::data::{DataMap, DataMapRaw};
+use crate::data::DataMapRaw;
+use crate::types::function::RhaiDataMap;
 use crate::types::IconMode;
 use crate::{load_recursively, ResourceError, ResourceManager, RON_EXT};
 
@@ -22,6 +23,7 @@ pub struct ResearchRaw {
     depends_on: Option<IdRaw>,
     name: IdRaw,
     description: IdRaw,
+    completed_description: IdRaw,
     required_items: Option<Vec<(IdRaw, ItemAmount)>>,
     attached_puzzle: Option<(IdRaw, DataMapRaw)>,
 }
@@ -35,8 +37,9 @@ pub struct Research {
     pub depends_on: Option<Id>,
     pub name: Id,
     pub description: Id,
+    pub completed_description: Id,
     pub required_items: Option<Vec<ItemStack>>,
-    pub attached_puzzle: Option<(Id, DataMap)>,
+    pub attached_puzzle: Option<(Id, RhaiDataMap)>,
 }
 
 impl ResourceManager {
@@ -55,6 +58,7 @@ impl ResourceManager {
         let depends_on = research.depends_on.map(|id| id.to_id(&mut self.interner));
         let name = research.name.to_id(&mut self.interner);
         let description = research.description.to_id(&mut self.interner);
+        let completed_description = research.completed_description.to_id(&mut self.interner);
         let required_items = match research.required_items.map(|v| {
             v.into_iter()
                 .map(|(id, amount)| {
@@ -76,7 +80,7 @@ impl ResourceManager {
         let attached_puzzle = research.attached_puzzle.map(|(id, data)| {
             (
                 id.to_id(&mut self.interner),
-                data.intern_to_data(&mut self.interner),
+                RhaiDataMap::from_data_map(data.intern_to_data(&mut self.interner)),
             )
         });
         let icon_mode = research.icon_mode;
@@ -88,6 +92,7 @@ impl ResourceManager {
             icon,
             name,
             description,
+            completed_description,
             required_items,
             attached_puzzle,
             icon_mode,
@@ -143,6 +148,14 @@ impl ResourceManager {
                     self.registry.researches.add_edge(prev, this, ());
                 }
             }
+        }
+    }
+
+    pub fn get_puzzle_model(&self, maybe_item: Id) -> Id {
+        if self.registry.items.contains_key(&maybe_item) {
+            self.registry.items[&maybe_item].model
+        } else {
+            self.registry.model_ids.puzzle_space
         }
     }
 }

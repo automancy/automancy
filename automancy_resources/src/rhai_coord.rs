@@ -1,6 +1,10 @@
-use automancy_defs::coord::TileCoord;
-use rhai::{Engine, Module};
 use std::ops::{Add, Neg, Sub};
+
+use hashbrown::HashMap;
+use rhai::{Dynamic, Engine, Module};
+
+use automancy_defs::coord::{TileBounds, TileCoord};
+use automancy_defs::id::Id;
 
 pub(crate) fn register_coord_stuff(engine: &mut Engine) {
     let mut module = Module::new();
@@ -19,7 +23,9 @@ pub(crate) fn register_coord_stuff(engine: &mut Engine) {
     engine
         .register_type_with_name::<TileCoord>("TileCoord")
         .register_fn("to_string", |v: TileCoord| v.to_string())
-        .register_iterator::<Vec<TileCoord>>()
+        .register_fn("neighbors", |v: TileCoord| {
+            Dynamic::from_iter(v.neighbors())
+        })
         .register_fn("TileCoord", TileCoord::new)
         .register_fn("rotate_left", |n: TileCoord| {
             TileCoord::from(n.counter_clockwise())
@@ -34,4 +40,18 @@ pub(crate) fn register_coord_stuff(engine: &mut Engine) {
         .register_fn("-", TileCoord::neg)
         .register_fn("==", |a: TileCoord, b: TileCoord| a == b)
         .register_fn("!=", |a: TileCoord, b: TileCoord| a != b);
+
+    engine
+        .register_type_with_name::<TileBounds>("TileBounds")
+        .register_iterator::<TileBounds>()
+        .register_fn("TileBounds", TileBounds::new)
+        .register_fn("TileBounds", |v: Vec<TileCoord>| {
+            TileBounds::from_iter(v.into_iter().map(|v| v))
+        })
+        .register_fn("TileBounds", |v: Vec<(TileCoord, Id)>| {
+            TileBounds::from_iter(v.into_iter().map(|v| v.0))
+        })
+        .register_fn("TileBounds", |v: HashMap<TileCoord, Id>| {
+            TileBounds::from_iter(v.into_iter().map(|v| v.0))
+        });
 }

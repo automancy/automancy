@@ -24,6 +24,7 @@ use automancy::camera::Camera;
 use automancy::event::{on_event, EventLoopStorage};
 use automancy::game::{load_map, GameSystem, GameSystemMessage, TICK_INTERVAL};
 use automancy::gpu::{init_gpu_resources, Gpu, DEPTH_FORMAT};
+use automancy::gui::GuiState;
 use automancy::input::InputHandler;
 use automancy::map::MAIN_MENU;
 use automancy::options::Options;
@@ -303,7 +304,7 @@ fn main() -> anyhow::Result<()> {
         gui.renderer.callback_resources.insert(start_instant);
 
         GameState {
-            gui_state: Default::default(),
+            gui_state: GuiState::new(),
             input_handler,
             options,
             resource_man,
@@ -316,6 +317,7 @@ fn main() -> anyhow::Result<()> {
             game_handle: Some(game_handle),
             start_instant,
             audio_man,
+            puzzle_state: Default::default(),
         }
     };
 

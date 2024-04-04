@@ -5,8 +5,7 @@
     data: ({
         "category": Id("basic_producer"),
         "scripts": VecId([
-            "coal",
-            "gravel",
+            "white_matter",
         ]),
         "default_tile": Bool(true),
     }),

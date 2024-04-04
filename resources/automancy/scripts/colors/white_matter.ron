@@ -1,0 +1,9 @@
+(
+    id: "white_matter",
+    instructions: (
+        inputs: None,
+        output: [
+            ("white_matter", 32),
+        ],
+    ),
+)

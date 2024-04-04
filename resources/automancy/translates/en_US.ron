@@ -2,6 +2,11 @@
     none: "<none>",
     unnamed: "<unnamed, report to the devs>",
     items: {
+        "white_matter": "White Matter",
+        "white_mechwork": "White Mechwork",
+        "red_matter": "Red Matter",
+        "green_matter": "Green Matter",
+        "blue_matter": "Blue Matter",
         "basic_assembly": "Basic Assembly",
         "network_assembly": "Networking Assembly",
         "philosophers_stone": "Philosopher's Stone",
@@ -39,6 +44,7 @@
         "basic_still": "Basic Alchemical Still",
     },
     scripts: {
+        "white_matter": "White Matter",
         "sand": "Sand",
         "philosophers_stone": "Philosopher's Stone",
         "sand_to_air": "Sand to Air",
@@ -110,9 +116,9 @@
         "invalid_map_data": "Map {} was corrupted and could not be repaired! This session will instead be written to {}",
     },
     research: {
+        "basic_assembler_name": "Basic Assembler",
+        "basic_assembler_desc": "<Basic Assembler>",
         "basic_still_name": "Basic Still",
         "basic_still_desc": "<Basic Still>",
-        "basic_assembler_name": "Basic Assembler",
-        "basic_assembler_desc": "<Basic Assembler",
     }
 )

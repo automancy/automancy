@@ -10,9 +10,7 @@ use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort, SupervisionEvent
 use rayon::prelude::*;
 use tokio::sync::Mutex;
 
-use crate::event::EventLoopStorage;
-use automancy_defs::coord::TileCoord;
-use automancy_defs::hexx::HexBounds;
+use automancy_defs::coord::{TileBounds, TileCoord};
 use automancy_defs::id::Id;
 use automancy_defs::log;
 use automancy_defs::math::{Float, Matrix4, FAR, HEX_GRID_LAYOUT};
@@ -21,6 +19,7 @@ use automancy_resources::data::stack::ItemStack;
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::ResourceManager;
 
+use crate::event::EventLoopStorage;
 use crate::game::GameSystemMessage::*;
 use crate::map::{Map, MapInfo, TileEntities};
 use crate::tile_entity::{TileEntity, TileEntityMsg};
@@ -116,7 +115,7 @@ pub enum GameSystemMessage {
     GetAllData(RpcReplyPort<HashMap<TileCoord, DataMap>>),
     /// get all the tiles needing to be rendered, and their info
     GetAllRenderUnits {
-        culling_range: HexBounds,
+        culling_range: TileBounds,
         reply: RpcReplyPort<HashMap<TileCoord, RenderUnit>>,
     },
 
