@@ -264,6 +264,8 @@ pub fn map_menu(state: &mut GameState) {
                             }
                         } else if ui.selectable_label(false, map_name.as_str()).clicked() {
                             state.gui_state.renaming_map = map_name.clone();
+                            *state.gui_state.text_field.get(TextField::MapRenaming) =
+                                map_name.clone();
                         }
                     });
 

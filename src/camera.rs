@@ -2,9 +2,9 @@ use std::ops::Mul;
 
 use egui::NumExt;
 
-use automancy_defs::coord::TileCoord;
+use automancy_defs::coord::{TileBounds, TileCoord};
 use automancy_defs::glam::{dvec2, dvec3, vec2};
-use automancy_defs::hexx::{Hex, HexBounds};
+use automancy_defs::hexx::Hex;
 use automancy_defs::math;
 use automancy_defs::math::{matrix, DMatrix4, DVec2, DVec3, Double, Float, HEX_GRID_LAYOUT};
 
@@ -16,7 +16,7 @@ pub struct Camera {
     move_vel: DVec2,
     scroll_vel: Double,
 
-    pub culling_range: HexBounds,
+    pub culling_range: TileBounds,
     pub pointing_at: TileCoord,
     matrix: DMatrix4,
 }

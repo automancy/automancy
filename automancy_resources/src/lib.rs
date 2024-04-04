@@ -12,14 +12,14 @@ use hashbrown::HashMap;
 pub use kira;
 use kira::sound::static_sound::StaticSoundData;
 use kira::track::TrackHandle;
-use rhai::{Engine, Scope, AST};
+use rhai::{CallFnOptions, Dynamic, Engine, Scope, AST};
 use thiserror::Error;
 use walkdir::WalkDir;
 
 use automancy_defs::flexstr::SharedStr;
-use automancy_defs::id;
 use automancy_defs::id::{id_static, Id, Interner};
 use automancy_defs::rendering::{Animation, Model};
+use automancy_defs::{id, log};
 
 use crate::error::ErrorManager;
 use crate::registry::{DataIds, ErrorIds, GuiIds, ModelIds, Registry};
@@ -255,6 +255,22 @@ impl ResourceManager {
             self.research_str(id)
         } else {
             &self.translates.none
+        }
+    }
+}
+
+pub fn rhai_call_options(state: &mut Dynamic) -> CallFnOptions {
+    CallFnOptions::new()
+        .eval_ast(false)
+        .rewind_scope(true)
+        .bind_this_ptr(state)
+}
+
+pub fn rhai_log_err(function_id: &str, err: &rhai::EvalAltResult) {
+    match err {
+        rhai::EvalAltResult::ErrorFunctionNotFound(..) => {}
+        _ => {
+            log::error!("In {function_id}: {err}");
         }
     }
 }

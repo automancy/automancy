@@ -1,13 +1,13 @@
 use std::any::TypeId;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
 
 use egui::Rgba;
-use hashbrown::HashMap;
+use hashbrown::{HashMap, HashSet};
 use rhai::Dynamic;
 use serde::{Deserialize, Serialize};
 
-use automancy_defs::coord::TileCoord;
+use automancy_defs::coord::{TileBounds, TileCoord, TileUnit};
 use automancy_defs::glam::IVec2;
 use automancy_defs::hexx::{Hex, OffsetHexMode};
 use automancy_defs::id::{Id, IdRaw, Interner};
@@ -19,18 +19,25 @@ pub mod inventory;
 pub mod item;
 pub mod stack;
 
+fn offset_to_tile(a: [TileUnit; 2]) -> TileCoord {
+    TileCoord::from(Hex::from_offset_coordinates(a, OffsetHexMode::EvenRows))
+}
+
 /// Represents the data a tile entity holds. This data is given to functions.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Data {
     Inventory(Inventory),
     Coord(TileCoord),
     VecCoord(Vec<TileCoord>),
+    TileBounds(TileBounds),
     Id(Id),
     Color(Rgba),
     VecId(Vec<Id>),
     SetId(HashSet<Id>),
     Amount(ItemAmount),
     Bool(bool),
+    TileMap(HashMap<TileCoord, Id>),
+    MapSetId(HashMap<Id, HashSet<Id>>),
 }
 
 impl Data {
@@ -68,31 +75,42 @@ impl Data {
             Data::Coord(v) => Dynamic::from(v),
             Data::VecCoord(v) => Dynamic::from_iter(v),
             Data::Id(v) => Dynamic::from_int(v.into()),
-            Data::VecId(v) => Dynamic::from_iter(v),
+            Data::VecId(v) => Dynamic::from(v),
             Data::SetId(v) => Dynamic::from(v),
             Data::Amount(v) => Dynamic::from_int(v),
             Data::Bool(v) => Dynamic::from_bool(v),
             Data::Color(v) => Dynamic::from(v),
+            Data::TileBounds(v) => Dynamic::from(v),
+            Data::TileMap(v) => Dynamic::from(v),
+            Data::MapSetId(v) => Dynamic::from(v),
         }
     }
 
     pub fn from_rhai(v: Dynamic) -> Option<Self> {
-        Some(if v.type_id() == TypeId::of::<TileCoord>() {
+        let id = v.type_id();
+
+        Some(if id == TypeId::of::<TileCoord>() {
             Data::Coord(v.cast())
-        } else if v.type_id() == TypeId::of::<Id>() {
+        } else if id == TypeId::of::<Id>() {
             Data::Id(v.cast())
-        } else if v.type_id() == TypeId::of::<ItemAmount>() {
+        } else if id == TypeId::of::<ItemAmount>() {
             Data::Amount(v.cast())
-        } else if v.type_id() == TypeId::of::<bool>() {
+        } else if id == TypeId::of::<bool>() {
             Data::Bool(v.cast())
-        } else if v.type_id() == TypeId::of::<Inventory>() {
+        } else if id == TypeId::of::<Inventory>() {
             Data::Inventory(v.cast())
-        } else if v.type_id() == TypeId::of::<Vec<TileCoord>>() {
+        } else if id == TypeId::of::<Vec<TileCoord>>() {
             Data::VecCoord(v.cast())
-        } else if v.type_id() == TypeId::of::<Vec<Id>>() {
+        } else if id == TypeId::of::<Vec<Id>>() {
             Data::VecId(v.cast())
-        } else if v.type_id() == TypeId::of::<HashSet<Id>>() {
+        } else if id == TypeId::of::<HashSet<Id>>() {
             Data::SetId(v.cast())
+        } else if id == TypeId::of::<TileBounds>() {
+            Data::TileBounds(v.cast())
+        } else if id == TypeId::of::<HashMap<TileCoord, Id>>() {
+            Data::TileMap(v.cast())
+        } else if id == TypeId::of::<HashMap<Id, HashSet<Id>>>() {
+            Data::MapSetId(v.cast())
         } else {
             return None;
         })
@@ -103,25 +121,7 @@ impl TryFrom<Dynamic> for Data {
     type Error = ();
 
     fn try_from(value: Dynamic) -> Result<Self, Self::Error> {
-        let ty = value.type_id();
-
-        if ty == TypeId::of::<Inventory>() {
-            Ok(Data::Inventory(value.cast()))
-        } else if ty == TypeId::of::<TileCoord>() {
-            Ok(Data::Coord(value.cast()))
-        } else if ty == TypeId::of::<Vec<TileCoord>>() {
-            Ok(Data::VecCoord(value.cast()))
-        } else if ty == TypeId::of::<Id>() {
-            Ok(Data::Id(value.cast()))
-        } else if ty == TypeId::of::<Vec<Id>>() {
-            Ok(Data::VecId(value.cast()))
-        } else if ty == TypeId::of::<ItemAmount>() {
-            Ok(Data::Amount(value.cast()))
-        } else if ty == TypeId::of::<bool>() {
-            Ok(Data::Bool(value.cast()))
-        } else {
-            Err(())
-        }
+        Data::from_rhai(value).ok_or(())
     }
 }
 
@@ -145,6 +145,25 @@ impl Data {
             Data::Amount(v) => DataRaw::Amount(*v),
             Data::Bool(v) => DataRaw::Bool(*v),
             Data::Color(v) => DataRaw::Color(hex::encode(v.to_srgba_unmultiplied())),
+            Data::TileBounds(v) => DataRaw::TileBounds(*v),
+            Data::TileMap(v) => DataRaw::TileMap(
+                v.iter()
+                    .flat_map(|(coord, id)| {
+                        Some(*coord).zip(interner.resolve(*id).map(IdRaw::parse))
+                    })
+                    .collect(),
+            ),
+            Data::MapSetId(v) => DataRaw::MapSetId(
+                v.iter()
+                    .flat_map(|(id, set)| {
+                        interner.resolve(*id).map(IdRaw::parse).zip(Some(
+                            set.iter()
+                                .flat_map(|id| interner.resolve(*id).map(IdRaw::parse))
+                                .collect(),
+                        ))
+                    })
+                    .collect(),
+            ),
         })
     }
 }
@@ -208,7 +227,11 @@ pub enum DataRaw {
     SetId(Vec<IdRaw>),
     Amount(ItemAmount),
     Bool(bool),
+    TileBounds(TileBounds),
     VecOffsetCoord(Vec<IVec2>),
+    TileMap(Vec<(TileCoord, IdRaw)>),
+    TileMapOffsetCoord(Vec<(IVec2, IdRaw)>),
+    MapSetId(Vec<(IdRaw, Vec<IdRaw>)>),
 }
 
 impl DataRaw {
@@ -223,7 +246,7 @@ impl DataRaw {
                     .flat_map(|id| interner.get(id.to_string()))
                     .collect(),
             ),
-            DataRaw::SetId(v) => Data::VecId(
+            DataRaw::SetId(v) => Data::SetId(
                 v.iter()
                     .flat_map(|id| interner.get(id.to_string()))
                     .collect(),
@@ -239,12 +262,27 @@ impl DataRaw {
                     color.next().unwrap_or(255),
                 ))
             }
-            DataRaw::VecOffsetCoord(v) => Data::VecCoord(
+            DataRaw::VecOffsetCoord(v) => {
+                Data::VecCoord(v.iter().map(|v| offset_to_tile(v.to_array())).collect())
+            }
+            DataRaw::TileBounds(v) => Data::TileBounds(*v),
+            DataRaw::TileMap(v) => {
+                Data::TileMap(HashMap::from_iter(v.iter().flat_map(|(coord, id)| {
+                    Some(*coord).zip(interner.get(id.to_string()))
+                })))
+            }
+            DataRaw::TileMapOffsetCoord(v) => {
+                Data::TileMap(HashMap::from_iter(v.iter().flat_map(|(coord, id)| {
+                    Some(offset_to_tile(coord.to_array())).zip(interner.get(id.to_string()))
+                })))
+            }
+            DataRaw::MapSetId(v) => Data::MapSetId(
                 v.iter()
-                    .map(|v| {
-                        TileCoord::from(Hex::from_offset_coordinates(
-                            v.to_array(),
-                            OffsetHexMode::EvenRows,
+                    .flat_map(|(id, set)| {
+                        interner.get(id.to_string()).zip(Some(
+                            set.iter()
+                                .flat_map(|id| interner.get(id.to_string()))
+                                .collect(),
                         ))
                     })
                     .collect(),
@@ -290,7 +328,33 @@ impl DataMapRaw {
                                 .map(|id| interner.get_or_intern(id.to_string()))
                                 .collect(),
                         )),
-
+                        DataRaw::TileMap(v) => Some(Data::TileMap(
+                            v.iter()
+                                .map(|(coord, id)| (*coord, interner.get_or_intern(id.to_string())))
+                                .collect(),
+                        )),
+                        DataRaw::TileMapOffsetCoord(v) => Some(Data::TileMap(
+                            v.iter()
+                                .map(|(coord, id)| {
+                                    (
+                                        offset_to_tile(coord.to_array()),
+                                        interner.get_or_intern(id.to_string()),
+                                    )
+                                })
+                                .collect(),
+                        )),
+                        DataRaw::MapSetId(v) => Some(Data::MapSetId(
+                            v.iter()
+                                .map(|(id, set)| {
+                                    (
+                                        interner.get_or_intern(id.to_string()),
+                                        set.iter()
+                                            .map(|id| interner.get_or_intern(id.to_string()))
+                                            .collect(),
+                                    )
+                                })
+                                .collect(),
+                        )),
                         rest => rest.try_to_data(interner),
                     }
                     .map(|v| (IdRaw::parse(key).to_id(interner), v))

@@ -43,6 +43,7 @@ pub mod tile_config;
 pub mod tile_selection;
 
 pub const SMALL_ICON_SIZE: Float = 24.0;
+pub const SMALLISH_ICON_SIZE: Float = 36.0;
 pub const MEDIUM_ICON_SIZE: Float = 48.0;
 pub const LARGE_ICON_SIZE: Float = 96.0;
 
@@ -79,11 +80,13 @@ pub struct GuiState {
     pub prev_placement_direction: Option<TileCoord>,
 
     pub selected_research: Option<Id>,
+    pub selected_research_puzzle_tile: Option<TileCoord>,
+    pub research_puzzle_selections: Option<(TileCoord, Vec<Id>)>,
 }
 
-impl Default for GuiState {
-    fn default() -> Self {
-        GuiState {
+impl GuiState {
+    pub fn new() -> Self {
+        Self {
             screen: Screen::MainMenu,
             previous: None,
             substate: SubState::None,
@@ -101,6 +104,8 @@ impl Default for GuiState {
             placement_direction: None,
             prev_placement_direction: None,
             selected_research: None,
+            selected_research_puzzle_tile: None,
+            research_puzzle_selections: None,
         }
     }
 }
@@ -158,7 +163,7 @@ impl GuiState {
 
     pub fn switch_screen_when(
         &mut self,
-        when: &'static dyn Fn(&GuiState) -> bool,
+        when: &'static impl Fn(&GuiState) -> bool,
         new: Screen,
     ) -> bool {
         if when(self) {

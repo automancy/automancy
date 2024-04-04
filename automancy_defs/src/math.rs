@@ -3,9 +3,9 @@
 use std::f64::consts::PI;
 
 use glam::{dvec2, dvec3, dvec4, vec2};
-use hexx::{HexBounds, HexLayout, HexOrientation};
+use hexx::{HexLayout, HexOrientation};
 
-use crate::coord::TileCoord;
+use crate::coord::{TileBounds, TileCoord};
 
 pub const HEX_GRID_LAYOUT: HexLayout = HexLayout {
     orientation: HexOrientation::Pointy,
@@ -156,14 +156,17 @@ pub fn normalized_to_world(
 }
 
 /// Gets the culling range from the camera's position
-pub fn get_culling_range(size: (Double, Double), camera_pos: DVec3) -> HexBounds {
+pub fn get_culling_range(size: (Double, Double), camera_pos: DVec3) -> TileBounds {
     let v = normalized_to_world(size, dvec2(1.0, 1.0), dvec3(0.0, 0.0, camera_pos.z)).abs();
 
-    HexBounds::new(
-        HEX_GRID_LAYOUT.world_pos_to_hex(vec2(camera_pos.x as Float, camera_pos.y as Float)),
+    TileBounds::new(
+        HEX_GRID_LAYOUT
+            .world_pos_to_hex(vec2(camera_pos.x as Float, camera_pos.y as Float))
+            .into(),
         v.x.max(v.y) as u32,
     )
 }
+
 #[inline]
 pub fn direction_to_angle(d: Vec2) -> Float {
     let angle = d.y.atan2(d.x);

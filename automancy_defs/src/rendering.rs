@@ -71,7 +71,7 @@ impl Default for InstanceData {
         Self {
             color_offset: Default::default(),
             alpha: 1.0,
-            light_pos: vec4(0.0, 0.0, 0.0, 0.0),
+            light_pos: vec4(0.0, 0.0, 1.0, 1.0),
             model_matrix: Matrix4::IDENTITY,
             world_matrix: None,
         }

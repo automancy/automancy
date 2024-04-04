@@ -3,34 +3,17 @@ use std::sync::Arc;
 
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort};
 use rand::{thread_rng, RngCore};
-use rhai::{CallFnOptions, Dynamic, Scope, INT};
+use rhai::{Dynamic, Scope, INT};
 
 use automancy_defs::coord::TileCoord;
 use automancy_defs::id::Id;
-use automancy_defs::log;
 use automancy_resources::data::stack::{ItemAmount, ItemStack};
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::types::function::{ResultType, RhaiDataMap, TransactionResultType};
-use automancy_resources::ResourceManager;
+use automancy_resources::{rhai_call_options, rhai_log_err, ResourceManager};
 
 use crate::game::{GameSystemMessage, TickUnit};
 use crate::tile_entity::TileEntityMsg::*;
-
-fn rhai_call_options(rhai_state: &mut Dynamic) -> CallFnOptions {
-    CallFnOptions::new()
-        .eval_ast(false)
-        .rewind_scope(true)
-        .bind_this_ptr(rhai_state)
-}
-
-fn log_function_err(function_id: &str, err: &rhai::EvalAltResult) {
-    match err {
-        rhai::EvalAltResult::ErrorFunctionNotFound(..) => {}
-        _ => {
-            log::error!("In {function_id}: {err}");
-        }
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct TileEntity {
@@ -285,7 +268,7 @@ impl TileEntity {
                         );
                     }
                 }
-                Err(err) => log_function_err(function_id, &err),
+                Err(err) => rhai_log_err(function_id, &err),
             }
         }
 
@@ -352,7 +335,7 @@ impl Actor for TileEntity {
                             }
                         }
                         Err(err) => {
-                            log_function_err(function_id, &err);
+                            rhai_log_err(function_id, &err);
                         }
                     }
                 }
@@ -406,7 +389,7 @@ impl Actor for TileEntity {
                     match result {
                         Ok(_) => {}
                         Err(err) => {
-                            log_function_err(function_id, &err);
+                            rhai_log_err(function_id, &err);
                         }
                     }
                 }
@@ -426,7 +409,7 @@ impl Actor for TileEntity {
                 reply.send(state.data.clone().to_data_map()).unwrap();
             }
             GetDataValue(key, reply) => {
-                reply.send(state.data.get(key)).unwrap();
+                reply.send(state.data.get(key).cloned()).unwrap();
             }
             GetDataWithCoord(reply) => {
                 reply
@@ -482,7 +465,7 @@ impl Actor for TileEntity {
                                 self.handle_rhai_result(state, result);
                             }
                         }
-                        Err(err) => log_function_err(function_id, &err),
+                        Err(err) => rhai_log_err(function_id, &err),
                     }
                 }
             }

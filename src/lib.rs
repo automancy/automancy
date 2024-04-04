@@ -7,6 +7,7 @@ use tokio::task::JoinHandle;
 
 use automancy_defs::gui::Gui;
 use automancy_resources::kira::manager::AudioManager;
+use automancy_resources::types::function::RhaiDataMap;
 use automancy_resources::ResourceManager;
 
 use crate::camera::Camera;
@@ -48,4 +49,5 @@ pub struct GameState {
     pub start_instant: Instant,
     pub renderer: Renderer<'static>,
     pub game_handle: Option<JoinHandle<()>>,
+    pub puzzle_state: Option<(RhaiDataMap, bool)>,
 }
