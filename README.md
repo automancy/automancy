@@ -34,7 +34,7 @@ Links:
 
 **_Alternatively, run `cargo run -p build_script` before running the game._**
 
-**_There should be IntelliJ configurations for running the game. Simply run config `Run`._**
+**_There should be a VSCode configuration in the project, run "Run automancy" to run the project._**
 
 ### Designers
 
