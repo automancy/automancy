@@ -1,9 +1,6 @@
 **/target
 **/.cargo
 
-.fleet
-.vscode
-
 __pycache__
 
 map
