@@ -9,11 +9,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 
-
 [[bin]]
 name = "automancy"
 required-features = ["build-binary"]
-
 
 
 [profile.dev]
@@ -34,10 +32,13 @@ codegen-units = 1    # trade compile time with maximum optimization
 opt-level = "z"      # optimize for size
 
 
-
 [workspace]
-members = ["build_script", "automancy_defs", "automancy_macros", "automancy_resources"]
-
+members = [
+    "build_script",
+    "automancy_defs",
+    "automancy_macros",
+    "automancy_resources",
+]
 
 
 [workspace.dependencies]
@@ -68,6 +69,7 @@ rhai = { version = "1.16.2", features = [
     "no_time",
     "no_custom_syntax",
     "no_closure",
+    "no_custom_syntax",
     "no_float",
     "only_i32",
 ] }
@@ -119,7 +121,6 @@ tokio = { version = "1", features = ["full"] }
 rayon = "1.7.0"
 
 
-
 env_logger = { version = "0.11.0", optional = true }
 rfd = { version = "0.14.0", optional = true }
 human-panic = { version = "1.1.5", optional = true }
@@ -127,4 +128,10 @@ color-eyre = { version = "0.6", optional = true }
 strip-ansi-escapes = { version = "0.2.0", optional = true }
 
 [features]
-build-binary = ["env_logger", "rfd", "human-panic", "color-eyre", "strip-ansi-escapes"]
+build-binary = [
+    "env_logger",
+    "rfd",
+    "human-panic",
+    "color-eyre",
+    "strip-ansi-escapes",
+]

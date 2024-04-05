@@ -22,7 +22,6 @@ hashbrown = { workspace = true }
 rhai = { workspace = true }
 
 
-
 log = "0.4"
 
 string-interner = { git = "https://github.com/automancy/string-interner" }
