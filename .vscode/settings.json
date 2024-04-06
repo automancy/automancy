@@ -1,4 +1,11 @@
 {
   "rust-analyzer.linkedProjects": ["./Cargo.toml"],
-  "rust-analyzer.showUnlinkedFileNotification": false
+  "rust-analyzer.showUnlinkedFileNotification": false,
+
+  "rust-analyzer.imports.granularity.group": "crate",
+  "rust-analyzer.imports.granularity.enforce": true,
+
+  "rust-analyzer.assist.expressionFillDefault": "default",
+  "rust-analyzer.check.command": "clippy",
+  "rust-analyzer.assist.emitMustUse": true
 }
