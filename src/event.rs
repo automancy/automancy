@@ -3,12 +3,12 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 use std::{fs, mem};
 
-use egui_wgpu::wgpu::SurfaceError;
 use hashbrown::{HashMap, HashSet};
 use ractor::rpc::CallResult;
 use ractor::ActorRef;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
+use wgpu::SurfaceError;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::EventLoopWindowTarget;
 
@@ -22,7 +22,6 @@ use automancy_resources::kira::manager::AudioManager;
 use automancy_resources::ResourceManager;
 
 use crate::game::{GameSystemMessage, PlaceTileResponse};
-use crate::gpu::AnimationMap;
 use crate::gui::{Screen, TextField};
 use crate::input::KeyActions;
 use crate::map::{Map, MapInfo, MapInfoRaw, MAP_PATH};
@@ -119,12 +118,6 @@ fn render(state: &mut GameState, target: &EventLoopWindowTarget<()>) -> anyhow::
         state.loop_store.elapsed.as_secs_f64(),
     );
 
-    state
-        .gui
-        .renderer
-        .callback_resources
-        .insert(AnimationMap::new());
-
     state.loop_store.frame_start = Instant::now();
 
     {
@@ -199,18 +192,17 @@ fn render(state: &mut GameState, target: &EventLoopWindowTarget<()>) -> anyhow::
 
     {
         {
-            state
-                .gui
-                .context
-                .begin_frame(state.gui.state.take_egui_input(&state.renderer.gpu.window));
+            state.gui.yak.start();
 
             gui::render_ui(state, &mut result, target);
+
+            state.gui.yak.finish();
         }
 
         if !matches!(result, Ok(true)) {
             match state.renderer.render(
                 state.start_instant,
-                &*state.resource_man,
+                state.resource_man.clone(),
                 &state.tokio,
                 &state.input_handler,
                 &state.camera,
@@ -300,53 +292,50 @@ pub fn on_event(
     let mut window_event = None;
     let mut device_event = None;
 
-    match &event {
-        Event::WindowEvent {
-            event: WindowEvent::CloseRequested,
-            ..
-        } => {
-            // game shutdown
-            return state.tokio.block_on(shutdown_graceful(
-                &state.game,
-                &mut state.game_handle,
-                target,
-            ));
-        }
+    if !state.gui.window.handle_event(&mut state.gui.yak, &event) {
+        match &event {
+            Event::WindowEvent {
+                event: WindowEvent::CloseRequested,
+                ..
+            } => {
+                // game shutdown
+                return state.tokio.block_on(shutdown_graceful(
+                    &state.game,
+                    &mut state.game_handle,
+                    target,
+                ));
+            }
 
-        Event::WindowEvent { event, window_id } if window_id == &state.renderer.gpu.window.id() => {
-            if !state
-                .gui
-                .state
-                .on_window_event(&state.renderer.gpu.window, event)
-                .consumed
+            Event::WindowEvent { event, window_id }
+                if window_id == &state.renderer.gpu.window.id() =>
             {
                 window_event = Some(event);
+
+                match event {
+                    WindowEvent::RedrawRequested => {
+                        state.renderer.gpu.window.pre_present_notify();
+
+                        return render(state, target);
+                    }
+                    WindowEvent::Resized(size) => {
+                        state.renderer.gpu.resize(
+                            &mut state.renderer.shared_resources,
+                            &mut state.renderer.render_resources,
+                            *size,
+                        );
+
+                        return Ok(false);
+                    }
+                    _ => {}
+                }
             }
 
-            match event {
-                WindowEvent::RedrawRequested => {
-                    state.renderer.gpu.window.pre_present_notify();
-
-                    return render(state, target);
-                }
-                WindowEvent::Resized(size) => {
-                    state.renderer.gpu.resize(
-                        &mut state.renderer.shared_resources,
-                        &mut state.renderer.render_resources,
-                        *size,
-                    );
-
-                    return Ok(false);
-                }
-                _ => {}
+            Event::DeviceEvent { event, .. } => {
+                device_event = Some(event);
             }
-        }
 
-        Event::DeviceEvent { event, .. } => {
-            device_event = Some(event);
-        }
-
-        _ => {}
+            _ => {}
+        };
     };
 
     if window_event.is_some() || device_event.is_some() {

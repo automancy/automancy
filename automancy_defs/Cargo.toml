@@ -10,9 +10,9 @@ serde = { workspace = true }
 
 wgpu = { workspace = true }
 
-egui = { workspace = true }
-egui-wgpu = { workspace = true }
-egui-winit = { workspace = true }
+yakui = { workspace = true }
+yakui-wgpu = { workspace = true }
+yakui-winit = { workspace = true }
 
 winit = { workspace = true }
 

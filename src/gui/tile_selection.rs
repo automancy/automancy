@@ -1,29 +1,47 @@
 use std::f64::consts::FRAC_PI_4;
 
-use egui::scroll_area::ScrollBarVisibility;
-use egui::{vec2, CursorIcon, Frame, Margin, Response, ScrollArea, Sense, TopBottomPanel, Ui};
 use tokio::sync::oneshot;
 
-use automancy_defs::glam::{dvec3, vec3};
+use automancy_defs::glam::{dvec3, vec2, vec3, FloatExt};
 use automancy_defs::id::Id;
 use automancy_defs::math::{z_far, z_near, DMatrix4, Float, Matrix4};
 use automancy_defs::rendering::InstanceData;
 use automancy_defs::{colors, math};
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::format;
+use yakui::{use_state, Alignment, Pivot, Vec2};
 
-use crate::gui::{GameEguiCallback, LARGE_ICON_SIZE, MEDIUM_ICON_SIZE};
+use crate::gui::{GameElement, LARGE_ICON_SIZE, MEDIUM_ICON_SIZE};
 use crate::util::is_research_unlocked;
 use crate::GameState;
 
-fn tile_hover_z_angle(ui: &Ui, response: &Response) -> Float {
-    if response.hovered() {
-        ui.ctx()
-            .animate_value_with_time(ui.next_auto_id(), 0.75, 0.3)
-    } else {
-        ui.ctx()
-            .animate_value_with_time(ui.next_auto_id(), 0.25, 0.3)
+use super::components::{
+    absolute::Absolute, hover::Hover, interactive::interactive, list::row, text::label,
+};
+
+fn tile_hover_z_angle(elapsed: Float, hovered: bool) -> Float {
+    fn angle(hovered: bool) -> Float {
+        if hovered {
+            0.75
+        } else {
+            0.25
+        }
     }
+
+    //TODO extract this
+    let s = use_state(move || angle(hovered));
+
+    let target = angle(hovered);
+
+    let r = s.get();
+
+    s.modify(|v| {
+        let lerped = v.lerp(target, (v / target).abs() + elapsed);
+
+        lerped.clamp(v.min(target), v.max(target))
+    });
+
+    r
 }
 
 fn has_category_item(state: &mut GameState, game_data: &mut DataMap, id: Id) -> bool {
@@ -45,12 +63,11 @@ fn has_category_item(state: &mut GameState, game_data: &mut DataMap, id: Id) -> 
 /// Draws the tile selection.
 fn draw_tile_selection(
     state: &mut GameState,
-    ui: &mut Ui,
     game_data: &mut DataMap,
     selection_send: &mut Option<oneshot::Sender<Id>>,
     current_category: Option<Id>,
+    size: Float,
 ) {
-    let size = ui.available_height();
     let projection = DMatrix4::perspective_lh(FRAC_PI_4, 1.0, z_near(), z_far())
         * math::view(dvec3(0.0, 0.0, 2.75));
     let projection = projection.as_mat4();
@@ -90,62 +107,61 @@ fn draw_tile_selection(
         let tile = state.resource_man.registry.tiles.get(id).unwrap();
         let model = state.resource_man.get_model(tile.model);
 
-        let (ui_id, rect) = ui.allocate_space(vec2(size, size));
+        let hovered = use_state(|| false);
 
-        let response = ui
-            .interact(rect, ui_id, Sense::click())
-            .on_hover_text(state.resource_man.tile_name(id))
-            .on_hover_cursor(CursorIcon::Grab);
-
-        let response = if !(is_default_tile || has_item) {
-            if let Some(item) =
-                current_category.and_then(|id| state.resource_man.registry.categories[&id].item)
-            {
-                response
-                    .on_hover_text(format(
-                        state.resource_man.translates.gui[&state
-                            .resource_man
-                            .registry
-                            .gui_ids
-                            .lbl_cannot_place_missing_item]
-                            .as_str(),
-                        &[state.resource_man.item_name(&item)],
-                    ))
-                    .on_hover_cursor(CursorIcon::NotAllowed)
-            } else {
-                response
-            }
-        } else {
-            response
-        };
-
-        if response.clicked() {
-            if let Some(send) = selection_send.take() {
-                send.send(*id).unwrap();
-            }
-        }
-
-        let rotate = Matrix4::from_rotation_x(tile_hover_z_angle(ui, &response));
+        let rotate = Matrix4::from_rotation_x(tile_hover_z_angle(
+            state.loop_store.elapsed.as_secs_f32(),
+            hovered.get(),
+        ));
 
         let color_offset = if is_default_tile || has_item {
             Default::default()
         } else {
-            colors::INACTIVE.to_array()
+            colors::INACTIVE.to_linear()
         };
 
-        ui.painter().add(egui_wgpu::Callback::new_paint_callback(
-            rect,
-            GameEguiCallback::new(
+        let response = interactive(|| {
+            GameElement::new(
                 InstanceData::default()
                     .with_model_matrix(rotate)
                     .with_world_matrix(projection)
                     .with_light_pos(vec3(0.0, 4.0, 14.0), None)
                     .with_color_offset(color_offset),
                 model,
-                rect,
-                ui.ctx().screen_rect(),
-            ),
-        ));
+                vec2(size, size),
+            )
+            .show();
+        });
+
+        hovered.set(response.hovering);
+
+        if response.hovering {
+            Hover::new().show(|| {
+                label(&state.resource_man.tile_name(id));
+
+                if !(is_default_tile || has_item) {
+                    if let Some(item) = current_category
+                        .and_then(|id| state.resource_man.registry.categories[&id].item)
+                    {
+                        label(&format(
+                            state.resource_man.translates.gui[&state
+                                .resource_man
+                                .registry
+                                .gui_ids
+                                .lbl_cannot_place_missing_item]
+                                .as_str(),
+                            &[&state.resource_man.item_name(&item)],
+                        ));
+                    };
+                }
+            });
+        }
+
+        if response.clicked && (is_default_tile || has_item) {
+            if let Some(send) = selection_send.take() {
+                send.send(*id).unwrap();
+            }
+        }
     }
 }
 
@@ -159,76 +175,43 @@ pub fn tile_selections(
         * math::view(dvec3(0.0, 0.0, 2.75));
     let projection = projection.as_mat4();
 
-    TopBottomPanel::bottom("tile_selections")
-        .show_separator_line(false)
-        .resizable(false)
-        .frame(Frame::window(&state.gui.context.clone().style()).outer_margin(Margin::same(10.0)))
-        .show(&state.gui.context.clone(), |ui| {
-            ScrollArea::horizontal()
-                .drag_to_scroll(true)
-                .scroll_bar_visibility(ScrollBarVisibility::AlwaysHidden)
-                .show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.set_height(LARGE_ICON_SIZE);
+    Absolute::new(Alignment::BOTTOM_CENTER, Pivot::BOTTOM_CENTER, Vec2::ZERO).show(|| {
+        row(|| {
+            for id in &state.resource_man.ordered_categories {
+                let category = &state.resource_man.registry.categories[id];
+                let model = state.resource_man.get_model(category.icon);
 
-                        draw_tile_selection(
-                            state,
-                            ui,
-                            game_data,
-                            &mut Some(selection_send),
-                            state.gui_state.tile_selection_category,
-                        );
-                    });
+                let response = interactive(|| {
+                    GameElement::new(
+                        InstanceData::default()
+                            .with_world_matrix(projection)
+                            .with_light_pos(vec3(0.0, 4.0, 14.0), None),
+                        model,
+                        vec2(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE),
+                    )
+                    .show();
                 });
+
+                if response.clicked {
+                    state.gui_state.tile_selection_category = Some(*id);
+                }
+
+                if response.hovering {
+                    Hover::new().show(|| {
+                        label(&state.resource_man.category_name(id));
+                    });
+                }
+            }
         });
 
-    TopBottomPanel::bottom("category_selections")
-        .show_separator_line(false)
-        .resizable(false)
-        .frame(
-            Frame::window(&state.gui.context.clone().style())
-                .outer_margin(Margin::symmetric(40.0, 0.0)),
-        )
-        .show(&state.gui.context.clone(), |ui| {
-            ScrollArea::horizontal()
-                .drag_to_scroll(true)
-                .scroll_bar_visibility(ScrollBarVisibility::AlwaysHidden)
-                .show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.set_height(MEDIUM_ICON_SIZE);
-
-                        for id in &state.resource_man.ordered_categories {
-                            let category = &state.resource_man.registry.categories[id];
-                            let model = state.resource_man.get_model(category.icon);
-                            let size = ui.available_height();
-
-                            let (ui_id, rect) = ui.allocate_space(vec2(size, size));
-
-                            let response = ui
-                                .interact(rect, ui_id, Sense::click())
-                                .on_hover_text(state.resource_man.category_name(id))
-                                .on_hover_cursor(CursorIcon::Grab);
-                            if response.clicked() {
-                                state.gui_state.tile_selection_category = Some(*id)
-                            }
-
-                            let rotate =
-                                Matrix4::from_rotation_x(tile_hover_z_angle(ui, &response));
-
-                            ui.painter().add(egui_wgpu::Callback::new_paint_callback(
-                                rect,
-                                GameEguiCallback::new(
-                                    InstanceData::default()
-                                        .with_model_matrix(rotate)
-                                        .with_world_matrix(projection)
-                                        .with_light_pos(vec3(0.0, 4.0, 14.0), None),
-                                    model,
-                                    rect,
-                                    ui.ctx().screen_rect(),
-                                ),
-                            ));
-                        }
-                    });
-                });
+        row(|| {
+            draw_tile_selection(
+                state,
+                game_data,
+                &mut Some(selection_send),
+                state.gui_state.tile_selection_category,
+                LARGE_ICON_SIZE,
+            );
         });
+    });
 }

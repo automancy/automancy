@@ -183,78 +183,78 @@ impl ResourceManager {
         }
     }
 
-    pub fn item_name(&self, id: &Id) -> &str {
+    pub fn item_name(&self, id: &Id) -> SharedStr {
         match self.translates.items.get(id) {
-            Some(name) => name,
-            None => &self.translates.unnamed,
+            Some(name) => name.clone(),
+            None => self.translates.unnamed.clone(),
         }
     }
 
-    pub fn try_item_name(&self, id: Option<&Id>) -> &str {
+    pub fn try_item_name(&self, id: Option<&Id>) -> SharedStr {
         if let Some(id) = id {
             self.item_name(id)
         } else {
-            &self.translates.none
+            self.translates.none.clone()
         }
     }
 
-    pub fn script_name(&self, id: &Id) -> &str {
+    pub fn script_name(&self, id: &Id) -> SharedStr {
         match self.translates.scripts.get(id) {
-            Some(name) => name,
-            None => &self.translates.unnamed,
+            Some(name) => name.clone(),
+            None => self.translates.unnamed.clone(),
         }
     }
 
-    pub fn try_script_name(&self, id: Option<&Id>) -> &str {
+    pub fn try_script_name(&self, id: Option<&Id>) -> SharedStr {
         if let Some(id) = id {
             self.item_name(id)
         } else {
-            &self.translates.none
+            self.translates.none.clone()
         }
     }
 
-    pub fn tile_name(&self, id: &Id) -> &str {
+    pub fn tile_name(&self, id: &Id) -> SharedStr {
         match self.translates.tiles.get(id) {
-            Some(name) => name,
-            None => &self.translates.unnamed,
+            Some(name) => name.clone(),
+            None => self.translates.unnamed.clone(),
         }
     }
 
-    pub fn try_tile_name(&self, id: Option<&Id>) -> &str {
+    pub fn try_tile_name(&self, id: Option<&Id>) -> SharedStr {
         if let Some(id) = id {
             self.tile_name(id)
         } else {
-            &self.translates.none
+            self.translates.none.clone()
         }
     }
 
-    pub fn category_name(&self, id: &Id) -> &str {
+    pub fn category_name(&self, id: &Id) -> SharedStr {
         match self.translates.categories.get(id) {
-            Some(name) => name,
-            None => &self.translates.unnamed,
+            Some(name) => name.clone(),
+            None => self.translates.unnamed.clone(),
         }
     }
 
-    pub fn try_category_name(&self, id: Option<&Id>) -> &str {
+    pub fn try_category_name(&self, id: Option<&Id>) -> SharedStr {
         if let Some(id) = id {
             self.category_name(id)
         } else {
-            &self.translates.none
+            self.translates.none.clone()
         }
     }
 
-    pub fn research_str(&self, id: &Id) -> &str {
+    pub fn research_str(&self, id: &Id) -> SharedStr {
         match self.translates.research.get(id) {
-            Some(name) => name,
-            None => &self.translates.unnamed,
+            Some(name) => name.clone(),
+            None => self.translates.unnamed.clone(),
         }
     }
 
-    pub fn try_research_str(&self, id: Option<&Id>) -> &str {
+    pub fn try_research_str(&self, id: Option<&Id>) -> SharedStr {
         if let Some(id) = id {
             self.research_str(id)
         } else {
-            &self.translates.none
+            self.translates.none.clone()
         }
     }
 }

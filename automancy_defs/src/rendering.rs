@@ -1,13 +1,11 @@
 use std::mem::size_of;
 
 use bytemuck::{Pod, Zeroable};
-use egui::NumExt;
-use egui_wgpu::wgpu::{
-    vertex_attr_array, BufferAddress, VertexAttribute, VertexBufferLayout, VertexStepMode,
-};
+
 use glam::{vec3, vec4};
 use gltf::animation::Interpolation;
 use gltf::scene::Transform;
+use wgpu::{vertex_attr_array, BufferAddress, VertexAttribute, VertexBufferLayout, VertexStepMode};
 
 use crate::math::{direction_to_angle, Float, Matrix3, Matrix4, Vec2, Vec3, Vec4};
 
@@ -21,7 +19,7 @@ pub fn make_line(a: Vec2, b: Vec2) -> Matrix4 {
 
     Matrix4::from_translation(vec3(mid.x, mid.y, 0.1))
         * Matrix4::from_rotation_z(theta)
-        * Matrix4::from_scale(vec3(d.at_least(0.001), 0.1, LINE_DEPTH))
+        * Matrix4::from_scale(vec3(d.max(0.001), 0.1, LINE_DEPTH))
 }
 
 // vertex
@@ -134,8 +132,8 @@ impl InstanceData {
     }
 
     #[inline]
-    pub fn with_color_offset(mut self, color_offset: VertexColor) -> Self {
-        self.color_offset = color_offset;
+    pub fn with_color_offset(mut self, color_offset: impl Into<VertexColor>) -> Self {
+        self.color_offset = color_offset.into();
 
         self
     }

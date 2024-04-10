@@ -7,26 +7,22 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use arboard::{Clipboard, ImageData};
-use egui::{Rect, Rgba};
-use egui_wgpu::wgpu::{
-    BufferAddress, BufferDescriptor, BufferUsages, Color, CommandEncoderDescriptor,
-    ImageCopyBuffer, ImageDataLayout, IndexFormat, LoadOp, Maintain, MapMode, Operations,
-    RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor,
-    SurfaceError, TextureDescriptor, TextureDimension, TextureUsages, TextureViewDescriptor,
-    COPY_BUFFER_ALIGNMENT, COPY_BYTES_PER_ROW_ALIGNMENT,
-};
-use egui_wgpu::ScreenDescriptor;
 use hashbrown::HashMap;
 use image::{EncodableLayout, RgbaImage};
 use num::PrimInt;
 use ractor::ActorRef;
 use tokio::runtime::Runtime;
 use tokio::sync::{oneshot, Mutex};
-use wgpu::StoreOp;
+use wgpu::{util::DrawIndexedIndirectArgs, StoreOp};
+use wgpu::{
+    BufferAddress, BufferDescriptor, BufferUsages, Color, CommandEncoderDescriptor,
+    ImageCopyBuffer, ImageDataLayout, IndexFormat, LoadOp, Maintain, MapMode, Operations,
+    RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor,
+    SurfaceError, TextureDescriptor, TextureDimension, TextureUsages, TextureViewDescriptor,
+    COPY_BUFFER_ALIGNMENT, COPY_BYTES_PER_ROW_ALIGNMENT,
+};
 
-use automancy_defs::coord::TileCoord;
 use automancy_defs::glam::vec3;
-use automancy_defs::gui::Gui;
 use automancy_defs::id::Id;
 use automancy_defs::math::{
     direction_to_angle, lerp_coords_to_pixel, Double, Float, Matrix4, FAR, HEX_GRID_LAYOUT, SQRT_3,
@@ -34,28 +30,44 @@ use automancy_defs::math::{
 use automancy_defs::rendering::{make_line, GameUBO, InstanceData, LINE_DEPTH};
 use automancy_defs::slice_group_by::GroupBy;
 use automancy_defs::{bytemuck, colors, math};
+use automancy_defs::{coord::TileCoord, math::Vec4};
 use automancy_resources::data::item::Item;
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::ResourceManager;
+use yakui::Rect;
+use yakui_wgpu::SurfaceInfo;
 
-use crate::camera::Camera;
-use crate::game::{
-    GameSystemMessage, RenderUnit, TransactionRecord, TransactionRecords,
-    TRANSACTION_ANIMATION_SPEED,
-};
-use crate::gpu::{
-    AnimationMap, GlobalBuffers, Gpu, RenderResources, SharedResources, NORMAL_CLEAR,
-    SCREENSHOT_FORMAT,
-};
-use crate::input::{InputHandler, KeyActions};
 use crate::options::Options;
+use crate::{
+    camera::Camera,
+    gui::{GameElementWidget, YakuiRenderResources},
+};
+use crate::{
+    game::{
+        GameSystemMessage, RenderUnit, TransactionRecord, TransactionRecords,
+        TRANSACTION_ANIMATION_SPEED,
+    },
+    gpu::DEPTH_FORMAT,
+};
 use crate::{gpu, gui};
+use crate::{
+    gpu::GuiResources,
+    input::{InputHandler, KeyActions},
+};
+use crate::{
+    gpu::{
+        AnimationMap, GlobalBuffers, Gpu, RenderResources, SharedResources, NORMAL_CLEAR,
+        SCREENSHOT_FORMAT,
+    },
+    gui::Gui,
+};
 
 pub struct Renderer<'a> {
     pub gpu: Gpu<'a>,
     pub shared_resources: SharedResources,
     pub render_resources: RenderResources,
     pub global_buffers: Arc<GlobalBuffers>,
+    pub gui_resources: Option<GuiResources>,
     pub fps_limit: Double,
 
     render_info_cache:
@@ -64,7 +76,7 @@ pub struct Renderer<'a> {
     transaction_records_cache: Arc<Mutex<TransactionRecords>>,
     transaction_records_updating: Arc<AtomicBool>,
 
-    pub tile_tints: HashMap<TileCoord, Rgba>,
+    pub tile_tints: HashMap<TileCoord, Vec4>,
     pub extra_instances: Vec<(InstanceData, Id)>,
     pub in_world_item_instances: Vec<(InstanceData, Id)>,
 
@@ -77,6 +89,7 @@ impl<'a> Renderer<'a> {
         shared_resources: SharedResources,
         render_resources: RenderResources,
         global_buffers: Arc<GlobalBuffers>,
+        gui_resources: GuiResources,
         options: &Options,
     ) -> Self {
         Self {
@@ -84,6 +97,7 @@ impl<'a> Renderer<'a> {
             shared_resources,
             render_resources,
             global_buffers,
+            gui_resources: Some(gui_resources),
             fps_limit: options.graphics.fps_limit,
 
             render_info_cache: Arc::new(Default::default()),
@@ -135,15 +149,13 @@ impl<'a> Renderer<'a> {
     pub fn render(
         &mut self,
         start_instant: Instant,
-        resource_man: &ResourceManager,
+        resource_man: Arc<ResourceManager>,
         tokio: &Runtime,
         input_handler: &InputHandler,
         camera: &Camera,
         gui: &mut Gui,
         game: &ActorRef<GameSystemMessage>,
     ) -> Result<(), SurfaceError> {
-        gui::reset_callback_counter();
-
         let tile_tints = mem::take(&mut self.tile_tints);
         let mut extra_instances = mem::take(&mut self.extra_instances);
         let mut in_world_item_instances = mem::take(&mut self.in_world_item_instances);
@@ -214,11 +226,7 @@ impl<'a> Renderer<'a> {
         let camera_pos_float = camera.get_pos().as_vec3();
         let world_matrix = camera.get_matrix().as_mat4();
 
-        let mut animation_map = gui
-            .renderer
-            .callback_resources
-            .insert(AnimationMap::new())
-            .unwrap();
+        let mut animation_map = AnimationMap::new();
 
         let mut direction_previews = Vec::new();
 
@@ -247,7 +255,7 @@ impl<'a> Renderer<'a> {
                 {
                     direction_previews.push((
                         InstanceData::default()
-                            .with_color_offset(color.to_array())
+                            .with_color_offset(color.to_linear())
                             .with_world_matrix(world_matrix)
                             .with_light_pos(camera_pos_float, None)
                             .with_model_matrix(
@@ -273,7 +281,7 @@ impl<'a> Renderer<'a> {
             if let Some(Data::Coord(link)) = data.get(&resource_man.registry.data_ids.link) {
                 extra_instances.push((
                     InstanceData::default()
-                        .with_color_offset(colors::RED.to_array())
+                        .with_color_offset(colors::RED.to_linear())
                         .with_light_pos(camera_pos_float, None)
                         .with_world_matrix(world_matrix)
                         .with_model_matrix(make_line(
@@ -414,44 +422,40 @@ impl<'a> Renderer<'a> {
             .collect::<Vec<_>>();
         in_world_item_instances.sort_by_key(|v| v.1);
 
-        self.inner_render(
+        let r = self.inner_render(
             input_handler,
             gui,
             resource_man,
             &game_instances,
             &in_world_item_instances,
-            &animation_map,
-        )
+            animation_map,
+        );
+
+        gui::reset_custom_paint_state();
+
+        r
     }
 
     fn inner_render(
         &mut self,
         input_handler: &InputHandler,
         gui: &mut Gui,
-        resource_man: &ResourceManager,
+        resource_man: Arc<ResourceManager>,
         game_instances: &[(InstanceData, Id, ())],
         in_world_item_instances: &[(InstanceData, Id, ())],
-        animation_map: &AnimationMap,
+        animation_map: AnimationMap,
     ) -> Result<(), SurfaceError> {
         let size = self.gpu.window.inner_size();
-        let factor = gui.context.pixels_per_point();
 
         let (game_instances, game_draws, game_draw_count, game_matrix_data) =
-            gpu::indirect_instance(resource_man, game_instances, true, animation_map);
+            gpu::indirect_instance(&resource_man, game_instances, true, &animation_map);
 
         let (
             in_world_item_instances,
             in_world_item_draws,
             in_world_item_draw_count,
             in_world_item_matrix_data,
-        ) = gpu::indirect_instance(&resource_man, in_world_item_instances, true, animation_map);
-
-        let egui_out = gui.context.end_frame();
-        let egui_primitives = gui.context.tessellate(egui_out.shapes, factor);
-        let egui_desc = ScreenDescriptor {
-            size_in_pixels: [size.width, size.height],
-            pixels_per_point: factor,
-        };
+        ) = gpu::indirect_instance(&resource_man, in_world_item_instances, true, &animation_map);
 
         let output = self.gpu.surface.get_current_texture()?;
 
@@ -740,54 +744,63 @@ impl<'a> Renderer<'a> {
             antialiasing_pass.draw(0..3, 0..1);
         }
 
-        let user_commands = {
-            let user_commands = {
-                for (id, delta) in egui_out.textures_delta.set {
-                    gui.renderer
-                        .update_texture(&self.gpu.device, &self.gpu.queue, id, &delta);
-                }
-
-                gui.renderer.update_buffers(
-                    &self.gpu.device,
-                    &self.gpu.queue,
-                    &mut encoder,
-                    &egui_primitives,
-                    &egui_desc,
-                )
+        {
+            let surface = SurfaceInfo {
+                format: self.gpu.config.format,
+                sample_count: 4,
+                color_attachment: &self.shared_resources.multisampling_texture().1,
+                resolve_target: Some(&self.render_resources.yakui_resources.texture().1),
+                depth_format: Some(DEPTH_FORMAT),
+                depth_attachment: Some(&self.shared_resources.multisampling_depth_texture().1),
+                depth_load_op: Some(LoadOp::Clear(1.0)),
             };
 
+            let resources = &mut (
+                resource_man.clone(),
+                self.global_buffers.clone(),
+                self.gui_resources.take(),
+                animation_map,
+                Some(Vec::<(InstanceData, Id, usize)>::new()),
+                HashMap::<Id, Vec<(DrawIndexedIndirectArgs, usize)>>::new(),
+            );
+
             {
-                let mut egui_pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                    label: Some("Egui Render Pass"),
-                    color_attachments: &[Some(RenderPassColorAttachment {
-                        view: &self.shared_resources.multisampling_texture().1,
-                        resolve_target: Some(&self.render_resources.egui_resources.texture().1),
-                        ops: Operations {
-                            load: LoadOp::Clear(Color::TRANSPARENT),
-                            store: StoreOp::Store,
+                let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("yakui Render Pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: surface.color_attachment,
+                        resolve_target: surface.resolve_target,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(Color::TRANSPARENT),
+                            store: wgpu::StoreOp::Store,
                         },
                     })],
-                    depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                        view: &self.shared_resources.multisampling_depth_texture().1,
-                        depth_ops: Some(Operations {
-                            load: LoadOp::Clear(1.0),
-                            store: StoreOp::Store,
+                    depth_stencil_attachment: surface
+                        .depth_attachment
+                        .zip(surface.depth_load_op)
+                        .map(|(view, load_op)| wgpu::RenderPassDepthStencilAttachment {
+                            view,
+                            depth_ops: Some(wgpu::Operations {
+                                load: load_op,
+                                store: wgpu::StoreOp::Store,
+                            }),
+                            stencil_ops: None,
                         }),
-                        stencil_ops: None,
-                    }),
-                    occlusion_query_set: None,
-                    timestamp_writes: None,
+                    ..Default::default()
                 });
 
                 gui.renderer
-                    .render(&mut egui_pass, &egui_primitives, &egui_desc);
+                    .paint_with::<YakuiRenderResources, GameElementWidget>(
+                        &mut gui.yak,
+                        &self.gpu.device,
+                        &self.gpu.queue,
+                        &mut render_pass,
+                        surface,
+                        resources,
+                    );
             }
 
-            for id in &egui_out.textures_delta.free {
-                gui.renderer.free_texture(id);
-            }
-
-            user_commands
+            self.gui_resources = resources.2.take();
         };
 
         {
@@ -935,9 +948,7 @@ impl<'a> Renderer<'a> {
             None
         };
 
-        self.gpu
-            .queue
-            .submit(user_commands.into_iter().chain([encoder.finish()]));
+        self.gpu.queue.submit([encoder.finish()]);
 
         if let Some(buffer) = screenshot_buffer {
             {

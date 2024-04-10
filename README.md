@@ -12,7 +12,7 @@ Perhaps, you'd be the magnificent "automancer"... if you so choose to call yours
 
 ---
 
-Tech used: Rust, wgpu, ractor, egui, Rhai
+Tech used: Rust, wgpu, ractor, yakui, Rhai
 
 Lead dev(s): Madeline Sparkles, Mae Rosaline
 

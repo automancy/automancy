@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use winit::keyboard::Key;
 
 use automancy_defs::log;
-use automancy_defs::math::{Double, Float};
+use automancy_defs::math::Double;
 
 use crate::input::{KeyAction, DEFAULT_KEYMAP};
 
@@ -90,7 +90,7 @@ pub enum AAType {
 pub struct GraphicsOptions {
     pub fps_limit: Double,
     pub fullscreen: bool,
-    pub scale: Float,
+    pub scale: Double,
     pub anti_aliasing: AAType,
 }
 
@@ -107,14 +107,12 @@ impl Default for GraphicsOptions {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GuiOptions {
-    pub scale: f32,
     pub font: String,
 }
 
 impl Default for GuiOptions {
     fn default() -> Self {
         Self {
-            scale: 1.0,
             font: "iosevka-extended.ttf".to_string(),
         }
     }

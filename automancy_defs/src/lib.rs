@@ -10,7 +10,6 @@ pub use string_interner;
 
 pub mod colors;
 pub mod coord;
-pub mod gui;
 pub mod id;
 pub mod math;
 pub mod rendering;

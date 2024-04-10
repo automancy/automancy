@@ -2,7 +2,6 @@ use std::any::TypeId;
 use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
 
-use egui::Rgba;
 use hashbrown::{HashMap, HashSet};
 use rhai::Dynamic;
 use serde::{Deserialize, Serialize};
@@ -11,6 +10,7 @@ use automancy_defs::coord::{TileBounds, TileCoord, TileUnit};
 use automancy_defs::glam::IVec2;
 use automancy_defs::hexx::{Hex, OffsetHexMode};
 use automancy_defs::id::{Id, IdRaw, Interner};
+use yakui::Color;
 
 use crate::data::inventory::{Inventory, InventoryRaw};
 use crate::data::stack::ItemAmount;
@@ -31,7 +31,7 @@ pub enum Data {
     VecCoord(Vec<TileCoord>),
     TileBounds(TileBounds),
     Id(Id),
-    Color(Rgba),
+    Color(Color),
     VecId(Vec<Id>),
     SetId(HashSet<Id>),
     Amount(ItemAmount),
@@ -144,7 +144,7 @@ impl Data {
             ),
             Data::Amount(v) => DataRaw::Amount(*v),
             Data::Bool(v) => DataRaw::Bool(*v),
-            Data::Color(v) => DataRaw::Color(hex::encode(v.to_srgba_unmultiplied())),
+            Data::Color(v) => DataRaw::Color(hex::encode([v.r, v.g, v.b, v.a])),
             Data::TileBounds(v) => DataRaw::TileBounds(*v),
             Data::TileMap(v) => DataRaw::TileMap(
                 v.iter()
@@ -255,12 +255,12 @@ impl DataRaw {
             DataRaw::Bool(v) => Data::Bool(*v),
             DataRaw::Color(v) => {
                 let mut color = hex::decode(v).ok()?.into_iter();
-                Data::Color(Rgba::from_srgba_premultiplied(
-                    color.next()?,
-                    color.next()?,
-                    color.next()?,
-                    color.next().unwrap_or(255),
-                ))
+                Data::Color(Color {
+                    r: color.next()?,
+                    g: color.next()?,
+                    b: color.next()?,
+                    a: color.next().unwrap_or(255),
+                })
             }
             DataRaw::VecOffsetCoord(v) => {
                 Data::VecCoord(v.iter().map(|v| offset_to_tile(v.to_array())).collect())

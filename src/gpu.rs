@@ -3,8 +3,12 @@ use std::mem;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use egui_wgpu::wgpu::util::{BufferInitDescriptor, DeviceExt};
-use egui_wgpu::wgpu::{
+use hashbrown::HashMap;
+use image::EncodableLayout;
+use wgpu::util::{BufferInitDescriptor, DeviceExt};
+use wgpu::util::{DrawIndexedIndirectArgs, TextureDataOrder};
+use wgpu::{AdapterInfo, Surface};
+use wgpu::{
     AddressMode, Backends, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout,
     BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType, BlendState,
     Buffer, BufferAddress, BufferBindingType, BufferUsages, Color, ColorTargetState, ColorWrites,
@@ -17,10 +21,6 @@ use egui_wgpu::wgpu::{
     TextureFormat, TextureSampleType, TextureUsages, TextureView, TextureViewDescriptor,
     TextureViewDimension, VertexState,
 };
-use hashbrown::HashMap;
-use image::EncodableLayout;
-use wgpu::util::{DrawIndexedIndirectArgs, TextureDataOrder};
-use wgpu::{AdapterInfo, Surface};
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
@@ -528,7 +528,7 @@ pub fn init_gpu_resources(
         }
     };
 
-    let egui_resources = EguiResources {
+    let yakui_resources = YakuiResources {
         texture: None,
         depth_texture: None,
     };
@@ -939,7 +939,7 @@ pub fn init_gpu_resources(
     let mut render = RenderResources {
         game_resources,
         in_world_item_resources,
-        egui_resources,
+        yakui_resources,
         first_combine_resources,
         antialiasing_resources,
         post_processing_resources,
@@ -1357,14 +1357,14 @@ pub struct GuiResources {
 }
 
 #[derive(OptionGetter)]
-pub struct EguiResources {
+pub struct YakuiResources {
     #[getters(get)]
     texture: Option<(Texture, TextureView)>,
     #[getters(get)]
     depth_texture: Option<(Texture, TextureView)>,
 }
 
-impl EguiResources {
+impl YakuiResources {
     pub fn create(&mut self, device: &Device, config: &SurfaceConfiguration) {
         self.texture = Some(create_texture_and_view(
             device,
@@ -1528,7 +1528,7 @@ pub struct SharedResources {
 pub struct RenderResources {
     pub game_resources: GameResources,
     pub in_world_item_resources: InWorldItemResources,
-    pub egui_resources: EguiResources,
+    pub yakui_resources: YakuiResources,
 
     pub first_combine_resources: CombineResources,
 
@@ -1658,14 +1658,14 @@ impl SharedResources {
             &shared_descriptor,
             &game_descriptor,
         );
-        render_resources.egui_resources.create(device, config);
+        render_resources.yakui_resources.create(device, config);
 
         render_resources.first_combine_resources.create(
             device,
             config,
             &shared_descriptor,
             &render_resources.game_resources.antialiasing_texture().1,
-            &render_resources.egui_resources.texture().1,
+            &render_resources.yakui_resources.texture().1,
         );
         render_resources.intermediate_resources.create(
             device,

@@ -9,7 +9,7 @@ edition = "2021"
 automancy_macros = { workspace = true }
 automancy_defs = { workspace = true }
 
-egui = { workspace = true }
+yakui = { workspace = true }
 
 serde = { workspace = true }
 ron = { workspace = true }

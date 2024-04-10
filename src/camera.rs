@@ -1,7 +1,5 @@
 use std::ops::Mul;
 
-use egui::NumExt;
-
 use automancy_defs::coord::{TileBounds, TileCoord};
 use automancy_defs::glam::{dvec2, dvec3, vec2};
 use automancy_defs::hexx::Hex;
@@ -101,7 +99,7 @@ impl Camera {
             self.pos.x += self.move_vel.x * m;
             self.pos.y += self.move_vel.y * m;
 
-            self.move_vel -= self.move_vel * elapsed.mul(4.0).at_most(0.9);
+            self.move_vel -= self.move_vel * elapsed.mul(4.0).min(0.9);
         }
 
         if self.scroll_vel.abs() > 0.00005 {
@@ -109,7 +107,7 @@ impl Camera {
             //self.pos.z = self.pos.z.clamp(0.05, 4.0);
             self.pos.z = self.pos.z.clamp(1.0, 4.0);
 
-            self.scroll_vel -= self.scroll_vel * elapsed.mul(15.0).at_most(0.9);
+            self.scroll_vel -= self.scroll_vel * elapsed.mul(15.0).min(0.9);
         }
 
         self.matrix = matrix(self.get_pos(), width / height);

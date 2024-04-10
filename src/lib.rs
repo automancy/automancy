@@ -1,25 +1,24 @@
 use std::sync::Arc;
 use std::time::Instant;
 
+use gui::{Gui, GuiState};
 use ractor::ActorRef;
 use tokio::runtime::Runtime;
 use tokio::task::JoinHandle;
 
-use automancy_defs::gui::Gui;
 use automancy_resources::kira::manager::AudioManager;
 use automancy_resources::types::function::RhaiDataMap;
 use automancy_resources::ResourceManager;
+use yakui::ManagedTextureId;
 
 use crate::camera::Camera;
 use crate::event::EventLoopStorage;
 use crate::game::GameSystemMessage;
-use crate::gui::GuiState;
 use crate::input::InputHandler;
 use crate::options::Options;
 use crate::renderer::Renderer;
 
 pub static VERSION: &str = env!("CARGO_PKG_VERSION");
-pub static LOGO_PATH: &str = "assets/logo.png";
 pub static LOGO: &[u8] = include_bytes!("assets/logo.png");
 pub static SSAO_NOISE_MAP: &[u8] = include_bytes!("assets/noise_map.png");
 
@@ -50,4 +49,5 @@ pub struct GameState {
     pub renderer: Renderer<'static>,
     pub game_handle: Option<JoinHandle<()>>,
     pub puzzle_state: Option<(RhaiDataMap, bool)>,
+    pub logo: ManagedTextureId,
 }

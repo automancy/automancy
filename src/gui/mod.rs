@@ -1,36 +1,47 @@
-use std::mem;
-use std::sync::{Arc, Mutex};
-use std::time::Instant;
-
-use egui::{
-    CursorIcon, LayerId, PaintCallbackInfo, Rect, ScrollArea, TextEdit, Ui, Widget, WidgetText,
-};
-use egui_wgpu::{CallbackResources, CallbackTrait, ScreenDescriptor};
 use enum_map::{enum_map, Enum, EnumMap};
 use fuse_rust::Fuse;
 use hashbrown::{HashMap, HashSet};
-use lazy_static::lazy_static;
+use std::mem;
+use std::{borrow::Cow, sync::Arc};
+use std::{cell::Cell, time::Instant};
 use tokio::sync::oneshot;
-use wgpu::util::DrawIndexedIndirectArgs;
-use wgpu::{CommandBuffer, CommandEncoder, Device, IndexFormat, Queue, RenderPass};
-use winit::event_loop::EventLoopWindowTarget;
+use wgpu::IndexFormat;
+use wgpu::{util::DrawIndexedIndirectArgs, Device, Queue};
+use winit::{event_loop::EventLoopWindowTarget, window::Window};
+use yakui_wgpu::{CallbackTrait, YakuiWgpu};
+use yakui_winit::YakuiWinit;
 
-use automancy_defs::colors::ColorAdj;
 use automancy_defs::coord::TileCoord;
 use automancy_defs::glam::{dvec2, dvec3, vec3};
 use automancy_defs::id::Id;
+use automancy_defs::math::Vec2;
 use automancy_defs::math::{Float, Matrix4, FAR, HEX_GRID_LAYOUT};
 use automancy_defs::rendering::{make_line, InstanceData};
 use automancy_defs::{bytemuck, colors, math, window};
 use automancy_resources::data::item::Item;
 use automancy_resources::data::Data;
 use automancy_resources::ResourceManager;
+use yakui::{
+    event::{EventInterest, EventResponse, WidgetEvent},
+    font::{Font, Fonts},
+    offset, opaque,
+    paint::PaintCall,
+    row,
+    util::widget,
+    widget::{EventContext, Widget},
+    widgets::{Layer, Scrollable, TextBox},
+    Alignment, Pivot, Rect, Response, Yakui,
+};
 
 use crate::game::TAKE_ITEM_ANIMATION_SPEED;
 use crate::gpu::{AnimationMap, GlobalBuffers, GuiResources};
 use crate::input::KeyActions;
 use crate::renderer::try_add_animation;
 use crate::{gpu, GameState};
+
+use self::components::{absolute::Absolute, text::label};
+
+pub mod components;
 
 pub mod debug;
 pub mod error;
@@ -46,6 +57,37 @@ pub const SMALL_ICON_SIZE: Float = 24.0;
 pub const SMALLISH_ICON_SIZE: Float = 36.0;
 pub const MEDIUM_ICON_SIZE: Float = 48.0;
 pub const LARGE_ICON_SIZE: Float = 96.0;
+
+pub struct Gui {
+    pub renderer: YakuiWgpu,
+    pub yak: Yakui,
+    pub window: YakuiWinit,
+    pub fonts: HashMap<String, Font>,
+}
+
+pub fn set_font(gui: &mut Gui, symbols_font: &str, font: &str) {
+    let fonts = gui.yak.dom().get_global_or_init(Fonts::default);
+
+    fonts.add(
+        gui.fonts.get(symbols_font).unwrap().clone(),
+        Some("symbols"),
+    );
+    fonts.add(gui.fonts.get(font).unwrap().clone(), Some("default"));
+}
+
+/// Initializes the GUI.
+pub fn init_gui(device: &Device, queue: &Queue, window: &Window) -> Gui {
+    let renderer = yakui_wgpu::YakuiWgpu::new(device, queue);
+    let window = yakui_winit::YakuiWinit::new(window);
+    let yak = Yakui::new();
+
+    Gui {
+        renderer,
+        yak,
+        window,
+        fonts: Default::default(),
+    }
+}
 
 pub struct GuiState {
     pub screen: Screen,
@@ -211,15 +253,89 @@ impl TextFieldState {
     }
 }
 
-pub fn hover_tip(ui: &mut Ui, info: impl Into<WidgetText>) {
-    ui.label("\u{f449}")
-        .on_hover_cursor(CursorIcon::Help)
-        .on_hover_ui(|ui| {
-            ui.label(info);
-        });
+#[derive(Debug)]
+pub struct HoverTip {
+    pub text: Cow<'static, str>,
+    pub tip: Cow<'static, str>,
 }
 
-fn take_item_animation(state: &mut GameState, ui: &mut Ui, item: Item, dst_rect: Rect) {
+impl HoverTip {
+    pub fn new(text: impl Into<Cow<'static, str>>, tip: impl Into<Cow<'static, str>>) -> Self {
+        Self {
+            text: text.into(),
+            tip: tip.into(),
+        }
+    }
+
+    pub fn show(self) -> Response<HoverTipResponse> {
+        widget::<HoverTipWidget>(self)
+    }
+}
+
+#[derive(Debug)]
+pub struct HoverTipWidget {
+    props: HoverTip,
+    hovering: bool,
+}
+
+#[derive(Debug)]
+pub struct HoverTipResponse {
+    pub hovering: bool,
+}
+
+impl Widget for HoverTipWidget {
+    type Props<'a> = HoverTip;
+    type Response = HoverTipResponse;
+
+    fn new() -> Self {
+        Self {
+            props: HoverTip::new("", ""),
+            hovering: false,
+        }
+    }
+
+    fn update(&mut self, props: Self::Props<'_>) -> Self::Response {
+        self.props = props;
+
+        label(&self.props.text);
+
+        if self.hovering {
+            let tip = self.props.tip.clone();
+
+            opaque(move || {
+                label(&tip);
+            });
+        }
+
+        Self::Response {
+            hovering: self.hovering,
+        }
+    }
+
+    fn event_interest(&self) -> EventInterest {
+        EventInterest::MOUSE_INSIDE | EventInterest::MOUSE_OUTSIDE
+    }
+
+    fn event(&mut self, _ctx: EventContext<'_>, event: &WidgetEvent) -> EventResponse {
+        match event {
+            WidgetEvent::MouseEnter => {
+                self.hovering = true;
+                EventResponse::Sink
+            }
+            WidgetEvent::MouseLeave => {
+                self.hovering = false;
+                EventResponse::Sink
+            }
+            _ => EventResponse::Bubble,
+        }
+    }
+}
+
+pub fn info_tip(info: &str) -> Response<HoverTipResponse> {
+    HoverTip::new("\u{f449}", info.to_string()).show()
+}
+
+fn take_item_animation(state: &mut GameState, item: Item, dst_rect: Rect) {
     let now = Instant::now();
 
     let mut to_remove = HashMap::new();
@@ -251,42 +367,43 @@ fn take_item_animation(state: &mut GameState, ui: &mut Ui, item: Item, dst_rect:
         for (instant, src_rect) in animations {
             let d = now.duration_since(*instant).as_secs_f32()
                 / TAKE_ITEM_ANIMATION_SPEED.as_secs_f32();
-            let rect = src_rect.lerp_towards(&dst_rect, d);
 
-            ui.ctx()
-                .layer_painter(ui.layer_id())
-                .add(egui_wgpu::Callback::new_paint_callback(
-                    rect,
-                    GameEguiCallback::new(
+            let pos = src_rect.pos().lerp(dst_rect.pos(), d);
+            let size = src_rect.size().lerp(dst_rect.size(), d);
+
+            Layer::new().show(|| {
+                offset(pos, || {
+                    GameElement::new(
                         InstanceData::default()
                             .with_world_matrix(math::view(dvec3(0.0, 0.0, 1.0)).as_mat4()),
                         state.resource_man.get_item_model(item.model),
-                        rect,
-                        ui.ctx().screen_rect(),
-                    ),
-                ));
+                        size,
+                    )
+                    .show();
+                });
+            });
         }
     }
 }
 
 /// Draws a search bar.
 pub fn searchable_id(
-    state: &mut GameState,
-    ui: &mut Ui,
     ids: &[Id],
     new_id: &mut Option<Id>,
     field: TextField,
-    hint_text: impl Into<WidgetText>,
+    hint_text: String,
     to_string: &'static impl Fn(&GameState, &Id) -> String,
-    draw_item: &'static impl Fn(&mut GameState, &mut Ui, &Id),
+    draw_item: &'static impl Fn(&mut GameState, &Id),
+    state: &mut GameState,
 ) {
-    TextEdit::singleline(state.gui_state.text_field.get(field))
-        .hint_text(hint_text)
-        .ui(ui);
+    let mut text = TextBox::new(state.gui_state.text_field.get(field).to_string());
+    text.placeholder = hint_text.to_string();
 
-    ScrollArea::vertical().max_height(160.0).show(ui, |ui| {
-        ui.set_width(ui.available_width());
+    if let Some(new) = text.show().text.take() {
+        *state.gui_state.text_field.get(field) = new;
+    }
 
+    Scrollable::vertical().show(|| {
         let ids = if !state.gui_state.text_field.get(field).is_empty() {
             let text = state.gui_state.text_field.get(field).clone();
             let mut filtered = ids
@@ -314,151 +431,207 @@ pub fn searchable_id(
         };
 
         for id in ids {
-            ui.horizontal(|ui| {
-                ui.style_mut().spacing.interact_size.y = SMALL_ICON_SIZE;
+            row(|| {
+                // TODO radio(new_id, Some(id), format!("{}:", to_string(state, &id)));
 
-                ui.radio_value(new_id, Some(id), format!("{}:", to_string(state, &id)));
-
-                draw_item(state, ui, &id)
+                draw_item(state, &id)
             });
         }
     });
 }
 
-lazy_static! {
-    static ref INDEX_COUNTER: Mutex<usize> = Mutex::new(0);
+pub type YakuiRenderResources = (
+    Arc<ResourceManager>,
+    Arc<GlobalBuffers>,
+    Option<GuiResources>,
+    AnimationMap,
+    Option<Vec<(InstanceData, Id, usize)>>,
+    HashMap<Id, Vec<(DrawIndexedIndirectArgs, usize)>>,
+);
+
+thread_local! {
+    static START_INSTANT: Cell<Option<Instant>> = Cell::new(None);
+    static INDEX_COUNTER: Cell<usize> = const { Cell::new(0) };
 }
 
-pub fn reset_callback_counter() {
-    *INDEX_COUNTER.lock().unwrap() = 0;
+pub fn init_custom_paint_state(start_instant: Instant) {
+    START_INSTANT.set(Some(start_instant));
 }
 
-pub struct GameEguiCallback {
+pub fn reset_custom_paint_state() {
+    INDEX_COUNTER.replace(0);
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct GameElement {
     instance: InstanceData,
     model: Id,
     index: usize,
+    size: Vec2,
 }
 
-impl GameEguiCallback {
-    pub fn new(instance: InstanceData, model: Id, rect: Rect, screen_rect: Rect) -> Self {
-        let mut counter = INDEX_COUNTER.lock().unwrap();
-
-        let inside = screen_rect.intersect(rect);
-        let sign = rect.center() - inside.center();
-
-        let sx = rect.width() / inside.width();
-        let sy = rect.height() / inside.height();
-
-        let dx = (sx - 1.0) * sign.x.signum();
-        let dy = (sy - 1.0) * sign.y.signum();
+impl GameElement {
+    pub fn new(instance: InstanceData, model: Id, size: Vec2) -> Self {
+        let index = INDEX_COUNTER.get();
 
         let result = Self {
-            instance: instance
-                .add_world_matrix_left(Matrix4::from_translation(vec3(dx, dy, 0.0)))
-                .add_world_matrix_right(Matrix4::from_scale(vec3(sx, sy, 1.0))),
+            instance,
             model,
-            index: *counter,
+            index,
+            size,
         };
-        *counter += 1;
+        INDEX_COUNTER.set(index + 1);
 
         result
     }
+
+    pub fn show(self) -> Response<()> {
+        widget::<GameElementWidget>(Some(self))
+    }
 }
 
-impl CallbackTrait for GameEguiCallback {
+#[derive(Debug, Clone, Copy)]
+pub struct GameElementWidget {
+    paint: Option<GameElement>,
+    resized_matrix: Option<Matrix4>,
+}
+
+impl CallbackTrait<YakuiRenderResources> for GameElementWidget {
     fn prepare(
         &self,
-        _device: &Device,
-        _queue: &Queue,
-        _screen_descriptor: &ScreenDescriptor,
-        _egui_encoder: &mut CommandEncoder,
-        callback_resources: &mut CallbackResources,
-    ) -> Vec<CommandBuffer> {
-        let resource_man = callback_resources
-            .get::<Arc<ResourceManager>>()
-            .unwrap()
-            .clone();
-        let start_instant = *callback_resources.get::<Instant>().unwrap();
-        let animation_map = callback_resources.get_mut::<AnimationMap>().unwrap();
+        (
+        resource_man,
+        _global_buffers,
+        _gui_resources,
+        animation_map,
+        instances,
+        _draws,
+    ): &mut YakuiRenderResources,
+    ) {
+        if let Some(paint) = self.paint {
+            let start_instant = START_INSTANT.get().unwrap();
+            try_add_animation(&resource_man, start_instant, paint.model, animation_map);
 
-        try_add_animation(&resource_man, start_instant, self.model, animation_map);
-
-        callback_resources
-            .entry::<Vec<(InstanceData, Id, usize)>>()
-            .or_insert_with(Vec::new)
-            .push((self.instance, self.model, self.index));
-
-        Vec::new()
+            instances
+                .as_mut()
+                .unwrap()
+                .push((paint.instance, paint.model, paint.index));
+        }
     }
 
     fn finish_prepare(
         &self,
-        device: &Device,
-        queue: &Queue,
-        _egui_encoder: &mut CommandEncoder,
-        callback_resources: &mut CallbackResources,
-    ) -> Vec<CommandBuffer> {
-        if let Some(mut instances) = callback_resources.remove::<Vec<(InstanceData, Id, usize)>>() {
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        (
+            resource_man,
+            global_buffers,
+            gui_resources,
+            animation_map,
+            instances,
+            draws,
+        ): &mut YakuiRenderResources,
+    ) {
+        if let Some(mut instances) = instances.take() {
+            let gui_resources = gui_resources.as_mut().unwrap();
+
             instances.sort_by_key(|v| v.1);
 
-            let resource_man = callback_resources
-                .get::<Arc<ResourceManager>>()
-                .unwrap()
-                .clone();
+            let (instances, draws_result, _count, matrix_data) =
+                gpu::indirect_instance(resource_man, &instances, false, animation_map);
 
-            let animation_map = callback_resources.get::<AnimationMap>().unwrap();
+            gpu::create_or_write_buffer(
+                device,
+                queue,
+                &mut gui_resources.instance_buffer,
+                bytemuck::cast_slice(instances.as_slice()),
+            );
 
-            let (instances, draws, _count, matrix_data) =
-                gpu::indirect_instance(&resource_man, &instances, false, animation_map);
+            queue.write_buffer(
+                &gui_resources.matrix_data_buffer,
+                0,
+                bytemuck::cast_slice(matrix_data.as_slice()),
+            );
 
-            {
-                let gui_resources = callback_resources.get_mut::<GuiResources>().unwrap();
-
-                gpu::create_or_write_buffer(
-                    device,
-                    queue,
-                    &mut gui_resources.instance_buffer,
-                    bytemuck::cast_slice(instances.as_slice()),
-                );
-
-                queue.write_buffer(
-                    &gui_resources.matrix_data_buffer,
-                    0,
-                    bytemuck::cast_slice(matrix_data.as_slice()),
-                );
-            }
-
-            callback_resources.insert(draws);
+            *draws = draws_result;
         }
-
-        Vec::new()
     }
 
     fn paint<'a>(
-        &'a self,
-        _info: PaintCallbackInfo,
-        render_pass: &mut RenderPass<'a>,
-        callback_resources: &'a CallbackResources,
+        &self,
+        render_pass: &mut wgpu::RenderPass<'a>,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        (
+            _resource_man,
+            global_buffers,
+            gui_resources,
+            _animation_map,
+            _instances,
+            draws,
+        ): &'a YakuiRenderResources,
     ) {
-        if let Some(draws) =
-            callback_resources.get::<HashMap<Id, Vec<(DrawIndexedIndirectArgs, usize)>>>()
+        let gui_resources = gui_resources.as_ref().unwrap();
+
+        render_pass.set_pipeline(&gui_resources.pipeline);
+        render_pass.set_bind_group(0, &gui_resources.bind_group, &[]);
+        render_pass.set_vertex_buffer(0, global_buffers.vertex_buffer.slice(..));
+        render_pass.set_vertex_buffer(1, gui_resources.instance_buffer.slice(..));
+        render_pass.set_index_buffer(global_buffers.index_buffer.slice(..), IndexFormat::Uint16);
+
+        for (draw, ..) in draws[&self.paint.unwrap().model]
+            .iter()
+            .filter(|v| v.1 == self.paint.unwrap().index)
         {
-            let gui_resources = callback_resources.get::<GuiResources>().unwrap();
-            let global_buffers = callback_resources.get::<Arc<GlobalBuffers>>().unwrap();
+            render_pass.draw_indexed(
+                draw.first_index..(draw.first_index + draw.index_count),
+                draw.base_vertex,
+                draw.first_instance..(draw.first_instance + draw.instance_count),
+            );
+        }
+    }
+}
 
-            render_pass.set_pipeline(&gui_resources.pipeline);
-            render_pass.set_bind_group(0, &gui_resources.bind_group, &[]);
-            render_pass.set_vertex_buffer(0, global_buffers.vertex_buffer.slice(..));
-            render_pass.set_vertex_buffer(1, gui_resources.instance_buffer.slice(..));
-            render_pass
-                .set_index_buffer(global_buffers.index_buffer.slice(..), IndexFormat::Uint16);
+impl Widget for GameElementWidget {
+    type Props<'a> = Option<GameElement>;
+    type Response = ();
 
-            for (draw, ..) in draws[&self.model].iter().filter(|v| v.1 == self.index) {
-                render_pass.draw_indexed(
-                    draw.first_index..(draw.first_index + draw.index_count),
-                    draw.base_vertex,
-                    draw.first_instance..(draw.first_instance + draw.instance_count),
-                );
+    fn new() -> Self {
+        Self {
+            paint: None,
+            resized_matrix: None,
+        }
+    }
+
+    fn update(&mut self, props: Self::Props<'_>) -> Self::Response {
+        self.paint = props;
+    }
+
+    fn layout(
+        &self,
+        _ctx: yakui::widget::LayoutContext<'_>,
+        _constraints: yakui::Constraints,
+    ) -> yakui::Vec2 {
+        /*
+        let inside = ctx.layout.viewport().constrain(constraints);
+        let sign = rect.size() / 2.0 - inside.size() / 2.0;
+
+        let sx = rect.size().x / inside.size().x;
+        let sy = rect.size().y / inside.size().y;
+
+        let dx = (sx - 1.0) * sign.x.signum();
+        let dy = (sy - 1.0) * sign.y.signum();
+         */
+
+        self.paint.as_ref().map(|v| v.size).unwrap_or(Vec2::ZERO)
+    }
+
+    fn paint(&self, ctx: yakui::widget::PaintContext<'_>) {
+        if let Some(paint) = self.paint {
+            if let Some(layer) = ctx.paint.layers_mut().current_mut() {
+                layer
+                    .calls
+                    .push(PaintCall::Custom(yakui_wgpu::cast(self.clone())));
             }
         }
     }
@@ -469,16 +642,6 @@ pub fn render_ui(
     result: &mut anyhow::Result<bool>,
     target: &EventLoopWindowTarget<()>,
 ) {
-    if state.input_handler.key_active(KeyActions::Debug) {
-        #[cfg(debug_assertions)]
-        state.gui.context.set_debug_on_hover(true);
-
-        debug::debugger(state);
-    } else {
-        #[cfg(debug_assertions)]
-        state.gui.context.set_debug_on_hover(false);
-    }
-
     if state.gui_state.popup == PopupState::None {
         match state.gui_state.screen {
             Screen::Ingame => {
@@ -526,31 +689,32 @@ pub fn render_ui(
                         .selected_tile_id
                         .and_then(|id| state.resource_man.registry.tiles.get(&id))
                     {
-                        state.gui.context.layer_painter(LayerId::background()).add(
-                            egui_wgpu::Callback::new_paint_callback(
-                                state.gui.context.screen_rect(),
-                                GameEguiCallback::new(
-                                    InstanceData::default()
-                                        .with_alpha(0.6)
-                                        .with_light_pos(state.camera.get_pos().as_vec3(), None)
-                                        .with_world_matrix(state.camera.get_matrix().as_mat4())
-                                        .with_model_matrix(Matrix4::from_translation(vec3(
-                                            cursor_pos.x as Float,
-                                            cursor_pos.y as Float,
-                                            FAR as Float,
-                                        ))),
-                                    tile_def.model,
-                                    state.gui.context.screen_rect(),
-                                    state.gui.context.screen_rect(),
-                                ),
-                            ),
-                        );
+                        Layer::new().show(|| {
+                            Absolute::new(Alignment::TOP_LEFT, Pivot::TOP_LEFT, Vec2::ZERO).show(
+                                || {
+                                    GameElement::new(
+                                        InstanceData::default()
+                                            .with_alpha(0.6)
+                                            .with_light_pos(state.camera.get_pos().as_vec3(), None)
+                                            .with_world_matrix(state.camera.get_matrix().as_mat4())
+                                            .with_model_matrix(Matrix4::from_translation(vec3(
+                                                cursor_pos.x as Float,
+                                                cursor_pos.y as Float,
+                                                FAR as Float,
+                                            ))),
+                                        tile_def.model,
+                                        state.gui.yak.layout_dom().viewport().size(),
+                                    )
+                                    .show();
+                                },
+                            );
+                        });
                     }
 
                     if let Some(coord) = state.gui_state.linking_tile {
                         state.renderer.extra_instances.push((
                             InstanceData::default()
-                                .with_color_offset(colors::RED.to_array())
+                                .with_color_offset(colors::RED.to_linear())
                                 .with_light_pos(state.camera.get_pos().as_vec3(), None)
                                 .with_world_matrix(state.camera.get_matrix().as_mat4())
                                 .with_model_matrix(make_line(
@@ -576,7 +740,7 @@ pub fn render_ui(
                         {
                             state.renderer.extra_instances.push((
                                 InstanceData::default()
-                                    .with_color_offset(colors::RED.to_array())
+                                    .with_color_offset(colors::RED.to_linear())
                                     .with_light_pos(state.camera.get_pos().as_vec3(), None)
                                     .with_world_matrix(state.camera.get_matrix().as_mat4())
                                     .with_model_matrix(make_line(
@@ -614,16 +778,16 @@ pub fn render_ui(
         }
     }
 
-    state
-        .renderer
-        .tile_tints
-        .insert(state.camera.pointing_at, colors::RED.with_alpha(0.2));
+    state.renderer.tile_tints.insert(
+        state.camera.pointing_at,
+        colors::RED.with_alpha(0.2).to_linear(),
+    );
 
     for coord in &state.gui_state.grouped_tiles {
         state
             .renderer
             .tile_tints
-            .insert(*coord, colors::ORANGE.with_alpha(0.4));
+            .insert(*coord, colors::ORANGE.with_alpha(0.4).to_linear());
     }
 
     if state.input_handler.control_held {
@@ -633,7 +797,7 @@ pub fn render_ui(
             if start != state.camera.pointing_at {
                 state.renderer.extra_instances.push((
                     InstanceData::default()
-                        .with_color_offset(colors::LIGHT_BLUE.to_array())
+                        .with_color_offset(colors::LIGHT_BLUE.to_linear())
                         .with_light_pos(state.camera.get_pos().as_vec3(), None)
                         .with_world_matrix(state.camera.get_matrix().as_mat4())
                         .with_model_matrix(make_line(
@@ -649,7 +813,7 @@ pub fn render_ui(
                 state
                     .renderer
                     .tile_tints
-                    .insert(dest, colors::LIGHT_BLUE.with_alpha(0.3));
+                    .insert(dest, colors::LIGHT_BLUE.with_alpha(0.3).to_linear());
             }
         }
     }

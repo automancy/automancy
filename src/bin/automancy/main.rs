@@ -9,7 +9,6 @@ use std::time::{Duration, Instant};
 use std::{env, fs, panic};
 
 use color_eyre::config::HookBuilder;
-use egui::{FontData, FontDefinitions};
 use env_logger::Env;
 use num::Zero;
 use ractor::Actor;
@@ -20,25 +19,33 @@ use winit::dpi::PhysicalSize;
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::{Fullscreen, Icon, WindowBuilder};
 
-use automancy::camera::Camera;
-use automancy::event::{on_event, EventLoopStorage};
-use automancy::game::{load_map, GameSystem, GameSystemMessage, TICK_INTERVAL};
-use automancy::gpu::{init_gpu_resources, Gpu, DEPTH_FORMAT};
+use automancy::gpu::{init_gpu_resources, Gpu};
 use automancy::gui::GuiState;
 use automancy::input::InputHandler;
 use automancy::map::MAIN_MENU;
 use automancy::options::Options;
 use automancy::renderer::Renderer;
+use automancy::{camera::Camera, gui::init_gui};
+use automancy::{
+    event::{on_event, EventLoopStorage},
+    gui::set_font,
+};
+use automancy::{
+    game::{load_map, GameSystem, GameSystemMessage, TICK_INTERVAL},
+    gui::init_custom_paint_state,
+};
 use automancy::{GameState, LOGO};
-use automancy_defs::gui::init_gui;
-use automancy_defs::gui::set_font;
-use automancy_defs::math::Double;
 use automancy_defs::rendering::Vertex;
+use automancy_defs::{glam::uvec2, math::Double};
 use automancy_defs::{log, window};
 use automancy_resources::kira::manager::{AudioManager, AudioManagerSettings};
 use automancy_resources::kira::track::{TrackBuilder, TrackHandle};
 use automancy_resources::kira::tween::Tween;
 use automancy_resources::{ResourceManager, RESOURCES_PATH, RESOURCE_MAN};
+use yakui::{
+    font::{Font, FontSettings},
+    paint::Texture,
+};
 
 /// Initialize the Resource Manager system, and loads all the resources in all namespaces.
 fn load_resources(track: TrackHandle) -> (Arc<ResourceManager>, Vec<Vertex>, Vec<u16>) {
@@ -267,41 +274,40 @@ fn main() -> anyhow::Result<()> {
             shared_resources,
             render_resources,
             global_buffers.clone(),
+            gui_resources,
             &options,
         );
         log::info!("Render setup.");
 
         log::info!("Setting up gui...");
         let mut gui = init_gui(
-            egui_wgpu::Renderer::new(
-                &renderer.gpu.device,
-                renderer.gpu.config.format,
-                Some(DEPTH_FORMAT),
-                4,
-            ),
+            &renderer.gpu.device,
+            &renderer.gpu.queue,
             &renderer.gpu.window,
         );
-        egui_extras::install_image_loaders(&gui.context);
-        gui.fonts = FontDefinitions::default();
-        gui.fonts.font_data.insert(
+
+        gui.fonts.insert(
             SYMBOLS_FONT_KEY.to_string(),
-            FontData::from_static(SYMBOLS_FONT),
+            Font::from_bytes(SYMBOLS_FONT, FontSettings::default()).unwrap(),
         );
         for (name, font) in resource_man.fonts.iter() {
-            gui.fonts
-                .font_data
-                .insert(name.to_string(), FontData::from_owned(font.data.clone()));
+            gui.fonts.insert(
+                name.to_string(),
+                Font::from_bytes(font.data.clone(), FontSettings::default()).unwrap(),
+            );
         }
-        set_font(SYMBOLS_FONT_KEY, &options.gui.font, &mut gui);
-        gui.renderer.callback_resources.insert(gui_resources);
-        gui.renderer
-            .callback_resources
-            .insert(global_buffers.clone());
-        gui.renderer.callback_resources.insert(resource_man.clone());
+        set_font(&mut gui, SYMBOLS_FONT_KEY, &options.gui.font);
         log::info!("Gui setup.");
 
         let start_instant = Instant::now();
-        gui.renderer.callback_resources.insert(start_instant);
+        init_custom_paint_state(start_instant);
+
+        let logo = image::load_from_memory(LOGO).unwrap();
+        let logo = gui.yak.add_texture(Texture::new(
+            yakui::paint::TextureFormat::Rgba8Srgb,
+            uvec2(logo.width(), logo.height()),
+            logo.into_bytes(),
+        ));
 
         GameState {
             gui_state: GuiState::new(),
@@ -318,6 +324,7 @@ fn main() -> anyhow::Result<()> {
             start_instant,
             audio_man,
             puzzle_state: Default::default(),
+            logo,
         }
     };
 
@@ -351,8 +358,7 @@ fn main() -> anyhow::Result<()> {
         }
 
         if !state.options.synced {
-            state.gui.context.set_zoom_factor(state.options.gui.scale);
-            set_font(SYMBOLS_FONT_KEY, &state.options.gui.font, &mut state.gui);
+            set_font(&mut state.gui, SYMBOLS_FONT_KEY, &state.options.gui.font);
 
             state
                 .audio_man

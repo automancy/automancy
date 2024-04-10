@@ -1,9 +1,12 @@
 use std::time::SystemTime;
 
-use egui::Window;
+use automancy_defs::colors::INACTIVE;
 use ron::ser::PrettyConfig;
+use yakui::divider;
 
 use crate::GameState;
+
+use super::components::{text::label, window::window, DIVIER_SIZE};
 
 /// Draws the debug menu (F3).
 pub fn debugger(state: &GameState) {
@@ -25,19 +28,33 @@ pub fn debugger(state: &GameState) {
 
     let map_info = state.tokio.block_on(info.lock()).clone();
 
-    Window::new(
-        resource_man.translates.gui[&resource_man.registry.gui_ids.debug_menu].as_str(),
-    )
-        .id("debugger".into())
-        .resizable(false)
-        .default_width(600.0)
-        .show(&state.gui.context.clone(), |ui| {
-            ui.label(format!("FPS: {fps:.1}"));
-            ui.label(format!("WGPU: {}", ron::ser::to_string_pretty(&state.renderer.gpu.adapter_info, PrettyConfig::default()).unwrap_or("could not format wgpu info".to_string())));
-            ui.separator();
-            ui.label(format!(
+    window(
+        resource_man.translates.gui[&resource_man.registry.gui_ids.debug_menu].to_string(),
+        || {
+            label(&format!("FPS: {fps:.1}"));
+            label(&format!(
+                "WGPU: {}",
+                ron::ser::to_string_pretty(
+                    &state.renderer.gpu.adapter_info,
+                    PrettyConfig::default()
+                )
+                .unwrap_or("could not format wgpu info".to_string())
+            ));
+
+            divider(INACTIVE, DIVIER_SIZE, DIVIER_SIZE);
+
+            label(&format!(
                 "ResourceMan: Tiles={reg_tiles} Items={reg_items} Tags={tags} Functions={functions} Scripts={scripts} Audio={audio} Meshes={meshes}"
             ));
-            ui.label(format!("Map \"{map_name}\" ({:?}): {}", map_info.save_time.unwrap_or(SystemTime::UNIX_EPOCH), ron::ser::to_string_pretty(&map_info.data.to_raw(&state.resource_man.interner), PrettyConfig::default()).unwrap_or("could not format map info".to_string())));
-        });
+            label(&format!(
+                "Map \"{map_name}\" ({:?}): {}",
+                map_info.save_time.unwrap_or(SystemTime::UNIX_EPOCH),
+                ron::ser::to_string_pretty(
+                    &map_info.data.to_raw(&state.resource_man.interner),
+                    PrettyConfig::default()
+                )
+                .unwrap_or("could not format map info".to_string())
+            ));
+        },
+    );
 }
