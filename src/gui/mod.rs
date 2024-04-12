@@ -1,9 +1,9 @@
 use enum_map::{enum_map, Enum, EnumMap};
 use fuse_rust::Fuse;
 use hashbrown::{HashMap, HashSet};
-use std::mem;
-use std::{borrow::Cow, sync::Arc};
+use std::sync::Arc;
 use std::{cell::Cell, time::Instant};
+use std::{collections::BTreeMap, mem};
 use tokio::sync::oneshot;
 use wgpu::IndexFormat;
 use wgpu::{util::DrawIndexedIndirectArgs, Device, Queue};
@@ -29,7 +29,7 @@ use yakui::{
     row,
     util::widget,
     widget::{EventContext, Widget},
-    widgets::{Layer, Scrollable, TextBox},
+    widgets::TextBox,
     Alignment, Pivot, Rect, Response, Yakui,
 };
 
@@ -39,7 +39,12 @@ use crate::input::KeyActions;
 use crate::renderer::try_add_animation;
 use crate::{gpu, GameState};
 
-use self::components::{absolute::Absolute, text::label};
+use self::components::{
+    absolute::Absolute,
+    layer::Layer,
+    scrollable::{scroll_vertical, Scrollable},
+    text::{label_text, symbol_text, Text},
+};
 
 pub mod components;
 
@@ -63,6 +68,7 @@ pub struct Gui {
     pub yak: Yakui,
     pub window: YakuiWinit,
     pub fonts: HashMap<String, Font>,
+    pub font_names: BTreeMap<String, String>,
 }
 
 pub fn set_font(gui: &mut Gui, symbols_font: &str, font: &str) {
@@ -86,6 +92,7 @@ pub fn init_gui(device: &Device, queue: &Queue, window: &Window) -> Gui {
         yak,
         window,
         fonts: Default::default(),
+        font_names: BTreeMap::new(),
     }
 }
 
@@ -255,14 +262,14 @@ impl TextFieldState {
 
 #[derive(Debug)]
 pub struct HoverTip {
-    pub text: Cow<'static, str>,
-    pub tip: Cow<'static, str>,
+    pub text: Text,
+    pub tip: Text,
 }
 
 impl HoverTip {
-    pub fn new(text: impl Into<Cow<'static, str>>, tip: impl Into<Cow<'static, str>>) -> Self {
+    pub fn new(text: Text, tip: Text) -> Self {
         Self {
-            text: text.into(),
+            text,
             tip: tip.into(),
         }
     }
@@ -289,7 +296,7 @@ impl Widget for HoverTipWidget {
 
     fn new() -> Self {
         Self {
-            props: HoverTip::new("", ""),
+            props: HoverTip::new(label_text(""), label_text("")),
             hovering: false,
         }
     }
@@ -297,13 +304,13 @@ impl Widget for HoverTipWidget {
     fn update(&mut self, props: Self::Props<'_>) -> Self::Response {
         self.props = props;
 
-        label(&self.props.text);
+        self.props.text.clone().show();
 
         if self.hovering {
             let tip = self.props.tip.clone();
 
             opaque(move || {
-                label(&tip);
+                tip.show();
             });
         }
 
@@ -332,7 +339,7 @@ impl Widget for HoverTipWidget {
 }
 
 pub fn info_tip(info: &str) -> Response<HoverTipResponse> {
-    HoverTip::new("\u{f449}", info.to_string()).show()
+    HoverTip::new(symbol_text("\u{f449}", colors::BLACK), label_text(info)).show()
 }
 
 fn take_item_animation(state: &mut GameState, item: Item, dst_rect: Rect) {
@@ -403,7 +410,7 @@ pub fn searchable_id(
         *state.gui_state.text_field.get(field) = new;
     }
 
-    Scrollable::vertical().show(|| {
+    scroll_vertical(400.0, || {
         let ids = if !state.gui_state.text_field.get(field).is_empty() {
             let text = state.gui_state.text_field.get(field).clone();
             let mut filtered = ids

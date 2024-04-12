@@ -1,7 +1,7 @@
 use std::fs;
 
 use automancy_defs::log;
-use yakui::{center, textbox};
+use yakui::{row, textbox};
 
 use crate::event::refresh_maps;
 use crate::game::load_map;
@@ -9,14 +9,14 @@ use crate::gui::{PopupState, Screen, TextField};
 use crate::map::Map;
 use crate::GameState;
 
-use super::components::{button::button, list::row, text::label, window::window};
+use super::components::{button::button, layout::centered_column, text::label, window::window};
 
 pub fn invalid_name_popup(state: &mut GameState) {
     window(
         state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.invalid_name]
             .to_string(),
         || {
-            center(|| {
+            centered_column(|| {
                 label(
                     state.resource_man.translates.gui
                         [&state.resource_man.registry.gui_ids.lbl_pick_another_name]
@@ -44,7 +44,7 @@ pub fn map_delete_popup(state: &mut GameState, map_name: &str) {
         state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.delete_map]
             .to_string(),
         || {
-            center(|| {
+            centered_column(|| {
                 label(
                     state.resource_man.translates.gui
                         [&state.resource_man.registry.gui_ids.lbl_delete_map_confirm]
@@ -88,7 +88,7 @@ pub fn map_create_popup(state: &mut GameState) {
         state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.create_map]
             .to_string(),
         || {
-            center(|| {
+            centered_column(|| {
                 let name = state.gui_state.text_field.get(TextField::MapName);
 
                 row(|| {

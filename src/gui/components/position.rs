@@ -1,18 +1,13 @@
-use yakui::{
-    use_state, util::widget_children, widget::Widget, widgets::StateResponse, Response, Vec2,
-};
+use yakui::{util::widget_children, widget::Widget, Response, Vec2};
 
 use core::fmt;
+use std::cell::Cell;
 
-pub struct PositionRecord {
-    pos: Response<StateResponse<Option<Vec2>>>,
-}
+pub struct PositionRecord {}
 
 impl PositionRecord {
     pub fn new() -> Self {
-        Self {
-            pos: use_state(|| None),
-        }
+        Self {}
     }
 
     pub fn show<F: FnOnce()>(self, children: F) -> Response<PositionRecordResponse> {
@@ -23,9 +18,10 @@ impl PositionRecord {
 #[derive(Debug)]
 pub struct PositionRecordWidget {
     props: PositionRecord,
+    pos: Cell<Vec2>,
 }
 
-pub type PositionRecordResponse = Option<Vec2>;
+pub type PositionRecordResponse = Vec2;
 
 impl Widget for PositionRecordWidget {
     type Props<'a> = PositionRecord;
@@ -34,13 +30,14 @@ impl Widget for PositionRecordWidget {
     fn new() -> Self {
         Self {
             props: PositionRecord::new(),
+            pos: Cell::default(),
         }
     }
 
     fn update(&mut self, props: Self::Props<'_>) -> Self::Response {
         self.props = props;
 
-        self.props.pos.get()
+        self.pos.get()
     }
 
     fn layout(
@@ -48,11 +45,11 @@ impl Widget for PositionRecordWidget {
         ctx: yakui::widget::LayoutContext<'_>,
         constraints: yakui::Constraints,
     ) -> Vec2 {
-        let layout_node = ctx.layout.get(ctx.dom.current()).unwrap();
-
-        let rect = layout_node.rect;
-        if rect.pos().abs_diff_eq(Vec2::ZERO, 0.001) {
-            self.props.pos.set(Some(rect.pos()))
+        if let Some(layout_node) = ctx.layout.get(ctx.dom.current()) {
+            let rect = layout_node.rect;
+            if rect.pos().abs_diff_eq(Vec2::ZERO, 0.001) {
+                self.pos.set(rect.pos())
+            }
         }
 
         self.default_layout(ctx, constraints)

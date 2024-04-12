@@ -9,15 +9,13 @@ use automancy_defs::rendering::InstanceData;
 use automancy_defs::{colors, math};
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::format;
-use yakui::{use_state, Alignment, Pivot, Vec2};
+use yakui::{row, use_state, Alignment, Pivot, Vec2};
 
 use crate::gui::{GameElement, LARGE_ICON_SIZE, MEDIUM_ICON_SIZE};
 use crate::util::is_research_unlocked;
 use crate::GameState;
 
-use super::components::{
-    absolute::Absolute, hover::Hover, interactive::interactive, list::row, text::label,
-};
+use super::components::{absolute::Absolute, hover::Hover, interactive::interactive, text::label};
 
 fn tile_hover_z_angle(elapsed: Float, hovered: bool) -> Float {
     fn angle(hovered: bool) -> Float {

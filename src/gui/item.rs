@@ -4,10 +4,11 @@ use automancy_defs::math::Float;
 use automancy_defs::rendering::InstanceData;
 use automancy_resources::data::stack::ItemStack;
 use automancy_resources::ResourceManager;
+use yakui::row;
 
 use crate::gui::GameElement;
 
-use super::components::{list::row, text::label};
+use super::components::text::label;
 
 /// Draws an Item's icon.
 pub fn draw_item(

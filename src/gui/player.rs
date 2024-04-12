@@ -14,11 +14,7 @@ use automancy_resources::data::{Data, DataMap};
 use automancy_resources::types::function::RhaiDataMap;
 use automancy_resources::types::IconMode;
 use automancy_resources::{rhai_call_options, rhai_log_err};
-use yakui::{
-    reflow, use_state,
-    widgets::{Layer, Scrollable},
-    Alignment, Dim2, Pivot, Rect,
-};
+use yakui::{column, row, use_state, Alignment, Dim2, Pivot, Rect};
 
 use crate::gui::item::draw_item;
 use crate::gui::{
@@ -32,8 +28,10 @@ use super::components::{
     button::button,
     container::group,
     interactive::interactive,
-    list::{column, row},
+    layer::Layer,
     position::PositionRecord,
+    relative::Relative,
+    scrollable::{scroll_vertical, Scrollable},
     text::{heading, label},
     window::window,
 };
@@ -62,7 +60,7 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                     if let Some(Data::Inventory(inventory)) =
                         game_data.get(&state.resource_man.registry.data_ids.player_inventory)
                     {
-                        Scrollable::vertical().show(|| {
+                        scroll_vertical(200.0, || {
                             for (id, amount) in inventory.iter() {
                                 let amount = *amount;
 
@@ -89,19 +87,17 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                                                             );
                                                         });
 
-                                                    if let Some(pos) = pos.take() {
-                                                        take_item_animation(
-                                                            state,
-                                                            item,
-                                                            Rect::from_pos_size(
-                                                                pos,
-                                                                vec2(
-                                                                    MEDIUM_ICON_SIZE,
-                                                                    MEDIUM_ICON_SIZE,
-                                                                ),
+                                                    take_item_animation(
+                                                        state,
+                                                        item,
+                                                        Rect::from_pos_size(
+                                                            pos.into_inner(),
+                                                            vec2(
+                                                                MEDIUM_ICON_SIZE,
+                                                                MEDIUM_ICON_SIZE,
                                                             ),
-                                                        );
-                                                    }
+                                                        ),
+                                                    );
                                                 },
                                             );
                                         });
@@ -121,7 +117,7 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
 
                     row(|| {
                         group(|| {
-                            Scrollable::vertical().show(|| {
+                            scroll_vertical(200.0, || {
                                 let mut visitor =
                                     Topo::new(&state.resource_man.registry.researches);
 
@@ -201,7 +197,7 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                                     }
 
                                     if !already_unlocked {
-                                        Scrollable::vertical().show(|| {
+                                        scroll_vertical(200.0, || {
                                             if let Some(stacks) = &research.required_items {
                                                 for stack in stacks {
                                                     draw_item(
@@ -454,8 +450,8 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
 
                                                 let pos = use_state(|| Vec2::ZERO);
                                                 let response = interactive(|| {
-                                                    if let Some(new_pos) = PositionRecord::new()
-                                                        .show(|| {
+                                                    let new_pos =
+                                                        PositionRecord::new().show(|| {
                                                             group(|| {
                                                                 // let offset = vec2(PUZZLE_HEX_GRID_LAYOUT.hex_size.x / 2.0, 0.0);
                                                                 let offset = Vec2::ZERO;
@@ -476,12 +472,13 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                                                                     );
                                                                     min = min.min(pos);
 
-                                                                    reflow(
+                                                                    Relative::new(
                                                                         Alignment::TOP_LEFT,
                                                                         Pivot::TOP_LEFT,
                                                                         Dim2::pixels(min.x, min.y),
-                                                                        || {
-                                                                            GameElement::new(
+                                                                    )
+                                                                    .show(|| {
+                                                                        GameElement::new(
                                                                     InstanceData::default()
                                                                         .with_world_matrix(
                                                                             math::view(dvec3(
@@ -508,15 +505,12 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                                                                     ),
                                                                 )
                                                                 .show();
-                                                                        },
-                                                                    );
+                                                                    });
                                                                 }
                                                             });
-                                                        })
-                                                        .take()
-                                                    {
-                                                        pos.set(new_pos);
-                                                    }
+                                                        });
+
+                                                    pos.set(new_pos.into_inner());
                                                 });
 
                                                 let mut select_result = None;
@@ -532,7 +526,7 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                                                                 .hex_to_world_pos(**selected),
                                                     )
                                                     .show(|| {
-                                                        Scrollable::vertical().show(|| {
+                                                        scroll_vertical(200.0, || {
                                                             row(|| {
                                                                 if interactive(|| {
                                                                     GameElement::new(

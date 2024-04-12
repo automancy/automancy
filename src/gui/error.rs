@@ -1,9 +1,9 @@
 use automancy_resources::error::{error_to_key, error_to_string};
-use yakui::spacer;
+use yakui::{row, spacer};
 
 use crate::GameState;
 
-use super::components::{button::button, list::row, text::label, window::window};
+use super::components::{button::button, text::label, window::window};
 
 /// Draws an error popup. Can only be called when there are errors in the queue!
 pub fn error_popup(state: &mut GameState) {

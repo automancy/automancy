@@ -1,5 +1,6 @@
 use automancy_defs::{colors::BLACK, math::Float};
 use yakui::{
+    font::FontName,
     pad,
     style::TextStyle,
     util::widget,
@@ -12,7 +13,7 @@ use super::{HEADING_SIZE, TEXT_SIZE};
 
 use yakui::Response;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct Text {
     pub text: String,
@@ -32,7 +33,7 @@ impl Text {
         }
     }
 
-    pub fn label(text: &str) -> Self {
+    fn label(text: &str) -> Self {
         Self {
             text: text.to_string(),
             style: TextStyle::label(),
@@ -74,21 +75,29 @@ impl Widget for TextWidget {
     }
 }
 
-pub fn sized_colored_label(text: &str, font_size: Float, color: Color) -> Response<TextResponse> {
+pub fn sized_colored_text(text: &str, font_size: Float, font: FontName, color: Color) -> Text {
     let mut text = Text::label(text);
     text.style.color = color;
     text.style.font_size = font_size;
-    text.show()
+    text
 }
 
 pub fn colored_label(text: &str, color: Color) -> Response<TextResponse> {
-    sized_colored_label(text, TEXT_SIZE, color)
+    sized_colored_text(text, TEXT_SIZE, "default".into(), color).show()
+}
+
+pub fn label_text(text: &str) -> Text {
+    sized_colored_text(text, TEXT_SIZE, "default".into(), BLACK)
 }
 
 pub fn label(text: &str) -> Response<TextResponse> {
-    sized_colored_label(text, TEXT_SIZE, BLACK)
+    label_text(text).show()
 }
 
 pub fn heading(text: &str) -> Response<TextResponse> {
-    sized_colored_label(text, HEADING_SIZE, BLACK)
+    sized_colored_text(text, HEADING_SIZE, "default".into(), BLACK).show()
+}
+
+pub fn symbol_text(symbol: &str, color: Color) -> Text {
+    sized_colored_text(symbol, TEXT_SIZE, "symbols".into(), color)
 }

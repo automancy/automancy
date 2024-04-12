@@ -10,6 +10,7 @@ pub struct Font {
     pub name: String,
     pub data: Vec<u8>,
 }
+
 impl ResourceManager {
     pub fn load_fonts(&mut self, dir: &Path) -> anyhow::Result<()> {
         let fonts = dir.join("fonts");

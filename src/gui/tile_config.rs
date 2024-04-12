@@ -3,14 +3,14 @@ use std::time::Instant;
 use ractor::rpc::CallResult;
 use ractor::ActorRef;
 
-use automancy_defs::{coord::TileCoord, math::Double};
+use automancy_defs::{colors::BLACK, coord::TileCoord, math::Double};
 use automancy_defs::{glam::vec2, id::Id};
 use automancy_resources::data::stack::ItemStack;
 use automancy_resources::data::{inventory::Inventory, stack::ItemAmount};
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::types::tile::TileDef;
 use yakui::{
-    pad, use_state,
+    column, pad, row, use_state,
     widgets::{Pad, Slider},
     Alignment, Pivot, Rect, Vec2,
 };
@@ -22,12 +22,11 @@ use crate::GameState;
 
 use super::components::{
     absolute::Absolute,
-    button::button,
+    button::{button, button_text},
     container::group,
     interactive::interactive,
-    list::{column, row},
     position::PositionRecord,
-    text::label,
+    text::{label, symbol_text},
     window::window,
 };
 
@@ -43,15 +42,18 @@ pub fn add_direction(target_coord: &mut Option<TileCoord>, n: u8) {
         _ => None,
     };
 
-    if button(match n {
-        0 => "\u{f46c}",
-        1 => "\u{f432}",
-        2 => "\u{f43e}",
-        3 => "\u{f424}",
-        4 => "\u{f434}",
-        5 => "\u{f45c}",
-        _ => "",
-    }) // TODO actual selectable value display
+    if button_text(symbol_text(
+        match n {
+            0 => "\u{f46c}",
+            1 => "\u{f432}",
+            2 => "\u{f43e}",
+            3 => "\u{f424}",
+            4 => "\u{f434}",
+            5 => "\u{f45c}",
+            _ => "",
+        },
+        BLACK,
+    )) // TODO actual selectable value display
     .clicked
     {
         *target_coord = coord;
@@ -194,7 +196,7 @@ fn takeable_item(
     for (id, amount) in buffer.clone().into_inner() {
         let item = *state.resource_man.registry.items.get(&id).unwrap();
 
-        let pos = use_state(|| None);
+        let pos = use_state(|| Vec2::ZERO);
 
         if interactive(|| {
             pos.set(
@@ -208,26 +210,24 @@ fn takeable_item(
                             true,
                         );
                     })
-                    .take(),
+                    .into_inner(),
             )
         })
         .clicked
         {
-            if let Some(pos) = pos.get() {
-                if let Some(amount) = buffer.take(id, amount) {
-                    dirty = true;
-                    inventory.add(id, amount);
+            if let Some(amount) = buffer.take(id, amount) {
+                dirty = true;
+                inventory.add(id, amount);
 
-                    state
-                        .renderer
-                        .take_item_animations
-                        .entry(item)
-                        .or_default()
-                        .push_back((
-                            Instant::now(),
-                            Rect::from_pos_size(pos, vec2(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE)),
-                        ));
-                }
+                state
+                    .renderer
+                    .take_item_animations
+                    .entry(item)
+                    .or_default()
+                    .push_back((
+                        Instant::now(),
+                        Rect::from_pos_size(pos.get(), vec2(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE)),
+                    ));
             }
         }
     }

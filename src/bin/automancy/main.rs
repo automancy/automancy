@@ -1,12 +1,12 @@
 #![windows_subsystem = "windows"]
 
-use std::fmt::Write;
-use std::fs::File;
 use std::panic::PanicInfo;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use std::{collections::BTreeMap, fmt::Write};
 use std::{env, fs, panic};
+use std::{fs::File, mem};
 
 use color_eyre::config::HookBuilder;
 use env_logger::Env;
@@ -38,17 +38,24 @@ use automancy::{GameState, LOGO};
 use automancy_defs::rendering::Vertex;
 use automancy_defs::{glam::uvec2, math::Double};
 use automancy_defs::{log, window};
-use automancy_resources::kira::manager::{AudioManager, AudioManagerSettings};
 use automancy_resources::kira::track::{TrackBuilder, TrackHandle};
 use automancy_resources::kira::tween::Tween;
-use automancy_resources::{ResourceManager, RESOURCES_PATH, RESOURCE_MAN};
-use yakui::{
-    font::{Font, FontSettings},
-    paint::Texture,
+use automancy_resources::{
+    kira::manager::{AudioManager, AudioManagerSettings},
+    types::font::Font,
 };
+use automancy_resources::{ResourceManager, RESOURCES_PATH, RESOURCE_MAN};
+use yakui::paint::Texture;
 
 /// Initialize the Resource Manager system, and loads all the resources in all namespaces.
-fn load_resources(track: TrackHandle) -> (Arc<ResourceManager>, Vec<Vertex>, Vec<u16>) {
+fn load_resources(
+    track: TrackHandle,
+) -> (
+    Arc<ResourceManager>,
+    Vec<Vertex>,
+    Vec<u16>,
+    BTreeMap<String, Font>,
+) {
     let mut resource_man = ResourceManager::new(track);
 
     fs::read_dir(RESOURCES_PATH)
@@ -95,8 +102,9 @@ fn load_resources(track: TrackHandle) -> (Arc<ResourceManager>, Vec<Vertex>, Vec
     resource_man.ordered_categories();
 
     let (vertices, indices) = resource_man.compile_models();
+    let fonts = mem::take(&mut resource_man.fonts);
 
-    (Arc::new(resource_man), vertices, indices)
+    (Arc::new(resource_man), vertices, indices, fonts)
 }
 
 static SYMBOLS_FONT: &[u8] = include_bytes!("../../assets/SymbolsNerdFontMono-Regular.ttf");
@@ -233,7 +241,7 @@ fn main() -> anyhow::Result<()> {
             builder
         })?;
 
-        let (resource_man, vertices, indices) = load_resources(track);
+        let (resource_man, vertices, indices, fonts) = load_resources(track);
         RESOURCE_MAN.write().unwrap().replace(resource_man.clone());
         log::info!("Loaded resources.");
 
@@ -286,14 +294,21 @@ fn main() -> anyhow::Result<()> {
             &renderer.gpu.window,
         );
 
+        gui.font_names = fonts
+            .iter()
+            .map(|(k, v)| (k.clone(), v.name.clone()))
+            .collect();
+
         gui.fonts.insert(
             SYMBOLS_FONT_KEY.to_string(),
-            Font::from_bytes(SYMBOLS_FONT, FontSettings::default()).unwrap(),
+            yakui::font::Font::from_bytes(SYMBOLS_FONT, yakui::font::FontSettings::default())
+                .unwrap(),
         );
-        for (name, font) in resource_man.fonts.iter() {
+        for (name, font) in fonts.into_iter() {
             gui.fonts.insert(
-                name.to_string(),
-                Font::from_bytes(font.data.clone(), FontSettings::default()).unwrap(),
+                name,
+                yakui::font::Font::from_bytes(font.data, yakui::font::FontSettings::default())
+                    .unwrap(),
             );
         }
         set_font(&mut gui, SYMBOLS_FONT_KEY, &options.gui.font);

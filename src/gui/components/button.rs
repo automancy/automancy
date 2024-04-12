@@ -1,12 +1,9 @@
-use std::borrow::Cow;
-
 use automancy_defs::colors;
 use yakui::{
     align,
     geometry::Color,
     style::{TextAlignment, TextStyle},
     util::widget,
-    widgets::RenderText,
 };
 use yakui::{
     event::{EventInterest, EventResponse, WidgetEvent},
@@ -18,6 +15,11 @@ use yakui::{
     widgets::Pad,
 };
 use yakui::{Alignment, Response};
+
+use super::{
+    text::{label_text, sized_colored_text, Text},
+    TEXT_SIZE,
+};
 
 /**
 A button containing some text.
@@ -35,7 +37,7 @@ if yakui::button("Hello").clicked {
 #[derive(Debug)]
 #[non_exhaustive]
 pub struct Button {
-    pub text: String,
+    pub text: Text,
     pub padding: Pad,
     pub border_radius: f32,
     pub style: DynamicButtonStyle,
@@ -66,7 +68,7 @@ impl Default for DynamicButtonStyle {
 impl Button {
     pub fn unstyled(text: &str) -> Self {
         Self {
-            text: text.to_string(),
+            text: label_text(text),
             padding: Pad::ZERO,
             border_radius: 0.0,
             style: DynamicButtonStyle::default(),
@@ -75,10 +77,10 @@ impl Button {
         }
     }
 
-    pub fn styled(text: &str) -> Self {
-        let mut text_style = TextStyle::label();
+    pub fn styled(text: Text) -> Self {
+        let mut text_style = text.style.clone();
         text_style.align = TextAlignment::Center;
-        text_style.color = colors::BLACK;
+
         let style = DynamicButtonStyle {
             text: text_style.clone(),
             fill: colors::LIGHT_GRAY,
@@ -98,8 +100,8 @@ impl Button {
         };
 
         Self {
-            text: text.to_string(),
-            padding: Pad::balanced(20.0, 10.0),
+            text,
+            padding: Pad::balanced(2.0, 2.0),
             border_radius: 6.0,
             style,
             hover_style,
@@ -166,7 +168,7 @@ impl Widget for ButtonWidget {
         container.show_children(|| {
             pad(self.props.padding, || {
                 align(alignment, || {
-                    let mut text = RenderText::label(Cow::Owned(self.props.text.clone()));
+                    let mut text = self.props.text.clone();
                     text.style = text_style;
                     text.show();
                 });
@@ -226,6 +228,21 @@ impl Widget for ButtonWidget {
     }
 }
 
+pub fn button_text(text: Text) -> Response<ButtonResponse> {
+    let mut r = None;
+
+    Pad::all(4.0).show(|| {
+        r = Some(Button::styled(text).show());
+    });
+
+    r.unwrap()
+}
+
 pub fn button(text: &str) -> Response<ButtonResponse> {
-    Button::styled(text).show()
+    button_text(sized_colored_text(
+        text,
+        TEXT_SIZE,
+        "default".into(),
+        colors::BLACK,
+    ))
 }

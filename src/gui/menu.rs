@@ -5,8 +5,8 @@ use winit::event_loop::EventLoopWindowTarget;
 use automancy_defs::{glam::vec2, log};
 use automancy_resources::{format, format_time};
 use yakui::{
-    center, checkbox, image, slider, textbox,
-    widgets::{List, Scrollable, Slider},
+    checkbox, column, image, row, slider, textbox,
+    widgets::{List, Slider},
 };
 
 use crate::event::{refresh_maps, shutdown_graceful};
@@ -19,7 +19,8 @@ use crate::{GameState, VERSION};
 use super::components::{
     button::button,
     container::group,
-    list::{column, row},
+    layout::centered_column,
+    scrollable::{scroll_vertical, Scrollable},
     select::selection_box,
     text::{heading, label},
     window::window,
@@ -33,67 +34,60 @@ pub fn main_menu(
     let mut result = Ok(false);
 
     window("Main Menu".to_string(), || {
-        center(|| {
-            column(|| {
-                image(state.logo, vec2(128.0, 128.0));
+        centered_column(|| {
+            image(state.logo, vec2(128.0, 128.0));
 
-                if button(
-                    state.resource_man.translates.gui
-                        [&state.resource_man.registry.gui_ids.btn_play]
-                        .as_str(),
-                )
-                .clicked
-                {
-                    refresh_maps(state);
-                    state.gui_state.switch_screen(Screen::MapLoad)
-                };
+            if button(
+                state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.btn_play]
+                    .as_str(),
+            )
+            .clicked
+            {
+                refresh_maps(state);
+                state.gui_state.switch_screen(Screen::MapLoad)
+            };
 
-                if button(
-                    state.resource_man.translates.gui
-                        [&state.resource_man.registry.gui_ids.btn_options]
-                        .as_str(),
-                )
-                .clicked
-                {
-                    state.gui_state.switch_screen(Screen::Options)
-                };
+            if button(
+                state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.btn_options]
+                    .as_str(),
+            )
+            .clicked
+            {
+                state.gui_state.switch_screen(Screen::Options)
+            };
 
-                if button(
-                    state.resource_man.translates.gui
-                        [&state.resource_man.registry.gui_ids.btn_fedi]
-                        .as_str(),
-                )
-                .clicked
-                {
-                    open::that("https://gamedev.lgbt/@automancy").unwrap();
-                }
+            if button(
+                state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.btn_fedi]
+                    .as_str(),
+            )
+            .clicked
+            {
+                open::that("https://gamedev.lgbt/@automancy").unwrap();
+            }
 
-                if button(
-                    state.resource_man.translates.gui
-                        [&state.resource_man.registry.gui_ids.btn_source]
-                        .as_str(),
-                )
-                .clicked
-                {
-                    open::that("https://github.com/automancy/automancy").unwrap();
-                }
+            if button(
+                state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.btn_source]
+                    .as_str(),
+            )
+            .clicked
+            {
+                open::that("https://github.com/automancy/automancy").unwrap();
+            }
 
-                if button(
-                    state.resource_man.translates.gui
-                        [&state.resource_man.registry.gui_ids.btn_exit]
-                        .as_str(),
-                )
-                .clicked
-                {
-                    result = state.tokio.block_on(shutdown_graceful(
-                        &state.game,
-                        &mut state.game_handle,
-                        target,
-                    ));
-                };
+            if button(
+                state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.btn_exit]
+                    .as_str(),
+            )
+            .clicked
+            {
+                result = state.tokio.block_on(shutdown_graceful(
+                    &state.game,
+                    &mut state.game_handle,
+                    target,
+                ));
+            };
 
-                label(VERSION);
-            });
+            label(VERSION);
         });
     });
 
@@ -103,55 +97,50 @@ pub fn main_menu(
 /// Draws the pause menu.
 pub fn pause_menu(state: &mut GameState) {
     window("Game Paused".to_string(), || {
-        center(|| {
-            column(|| {
-                if button(
-                    state.resource_man.translates.gui
-                        [&state.resource_man.registry.gui_ids.btn_unpause]
-                        .as_str(),
-                )
-                .clicked
-                {
-                    state.gui_state.switch_screen(Screen::Ingame)
-                };
+        centered_column(|| {
+            if button(
+                state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.btn_unpause]
+                    .as_str(),
+            )
+            .clicked
+            {
+                state.gui_state.switch_screen(Screen::Ingame)
+            };
 
-                if button(
-                    state.resource_man.translates.gui
-                        [&state.resource_man.registry.gui_ids.btn_options]
-                        .as_str(),
-                )
-                .clicked
-                {
-                    state.gui_state.switch_screen(Screen::Options)
-                };
+            if button(
+                state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.btn_options]
+                    .as_str(),
+            )
+            .clicked
+            {
+                state.gui_state.switch_screen(Screen::Options)
+            };
 
-                if button(
-                    state.resource_man.translates.gui
-                        [&state.resource_man.registry.gui_ids.btn_exit]
-                        .as_str(),
-                )
-                .clicked
-                {
-                    state
-                        .tokio
-                        .block_on(state.game.call(GameSystemMessage::SaveMap, None))
-                        .unwrap()
-                        .unwrap();
+            if button(
+                state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.btn_exit]
+                    .as_str(),
+            )
+            .clicked
+            {
+                state
+                    .tokio
+                    .block_on(state.game.call(GameSystemMessage::SaveMap, None))
+                    .unwrap()
+                    .unwrap();
 
-                    state
-                        .tokio
-                        .block_on(load_map(
-                            &state.game,
-                            &mut state.loop_store,
-                            MAIN_MENU.to_string(),
-                        ))
-                        .unwrap();
+                state
+                    .tokio
+                    .block_on(load_map(
+                        &state.game,
+                        &mut state.loop_store,
+                        MAIN_MENU.to_string(),
+                    ))
+                    .unwrap();
 
-                    state.gui_state.switch_screen(Screen::MainMenu)
-                };
+                state.gui_state.switch_screen(Screen::MainMenu)
+            };
 
-                label(VERSION);
-            });
+            label(VERSION);
         });
     });
 }
@@ -162,118 +151,116 @@ pub fn map_menu(state: &mut GameState) {
         state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.load_map]
             .to_string(),
         || {
-            center(|| {
-                column(|| {
-                    Scrollable::vertical().show(|| {
-                        let mut dirty = false;
+            centered_column(|| {
+                scroll_vertical(400.0, || {
+                    let mut dirty = false;
 
-                        for ((_, save_time), map_name) in state.loop_store.map_infos_cache.clone() {
-                            group(|| {
-                                if map_name == state.gui_state.renaming_map {
-                                    let renaming =
-                                        state.gui_state.text_field.get(TextField::MapRenaming);
-                                    let mut text = textbox(renaming.clone());
-                                    if let Some(new_name) = text.text.take() {
-                                        *renaming = new_name
-                                    }
-
-                                    if text.lost_focus {
-                                        let s = mem::take(renaming)
-                                            .chars()
-                                            .filter(|v| v.is_alphanumeric())
-                                            .collect::<String>();
-
-                                        if fs::rename(Map::path(&map_name), Map::path(&s)).is_ok() {
-                                            log::info!("Renamed map {map_name} to {}", s);
-
-                                            dirty = true;
-                                        } else {
-                                            state.gui_state.popup = PopupState::InvalidName;
-                                        }
-                                    }
-                                } else if button(map_name.as_str()).clicked {
-                                    state.gui_state.renaming_map = map_name.clone();
-                                    *state.gui_state.text_field.get(TextField::MapRenaming) =
-                                        map_name.clone();
+                    for ((_, save_time), map_name) in state.loop_store.map_infos_cache.clone() {
+                        group(|| {
+                            if map_name == state.gui_state.renaming_map {
+                                let renaming =
+                                    state.gui_state.text_field.get(TextField::MapRenaming);
+                                let mut text = textbox(renaming.clone());
+                                if let Some(new_name) = text.text.take() {
+                                    *renaming = new_name
                                 }
 
-                                List::row().show(|| {
-                                    if let Some(save_time) = save_time {
-                                        label(&format_time(
-                                            save_time,
-                                            &state.resource_man.translates.gui
-                                                [&state.resource_man.registry.gui_ids.time_fmt],
-                                        ));
+                                if text.lost_focus {
+                                    let s = mem::take(renaming)
+                                        .chars()
+                                        .filter(|v| v.is_alphanumeric())
+                                        .collect::<String>();
+
+                                    if fs::rename(Map::path(&map_name), Map::path(&s)).is_ok() {
+                                        log::info!("Renamed map {map_name} to {}", s);
+
+                                        dirty = true;
+                                    } else {
+                                        state.gui_state.popup = PopupState::InvalidName;
                                     }
+                                }
+                            } else if button(map_name.as_str()).clicked {
+                                state.gui_state.renaming_map = map_name.clone();
+                                *state.gui_state.text_field.get(TextField::MapRenaming) =
+                                    map_name.clone();
+                            }
 
-                                    row(|| {
-                                        if button(
-                                            state.resource_man.translates.gui
-                                                [&state.resource_man.registry.gui_ids.btn_load]
-                                                .as_str(),
-                                        )
-                                        .clicked
-                                        {
-                                            state
-                                                .tokio
-                                                .block_on(load_map(
-                                                    &state.game,
-                                                    &mut state.loop_store,
-                                                    map_name.clone(),
-                                                ))
-                                                .unwrap();
+                            List::row().show(|| {
+                                if let Some(save_time) = save_time {
+                                    label(&format_time(
+                                        save_time,
+                                        &state.resource_man.translates.gui
+                                            [&state.resource_man.registry.gui_ids.time_fmt],
+                                    ));
+                                }
 
-                                            state.gui_state.switch_screen(Screen::Ingame);
-                                        }
-                                        if button(
-                                            state.resource_man.translates.gui
-                                                [&state.resource_man.registry.gui_ids.btn_delete]
-                                                .as_str(),
-                                        )
-                                        .clicked
-                                        {
-                                            state.gui_state.popup =
-                                                PopupState::MapDeleteConfirmation(map_name.clone());
+                                row(|| {
+                                    if button(
+                                        state.resource_man.translates.gui
+                                            [&state.resource_man.registry.gui_ids.btn_load]
+                                            .as_str(),
+                                    )
+                                    .clicked
+                                    {
+                                        state
+                                            .tokio
+                                            .block_on(load_map(
+                                                &state.game,
+                                                &mut state.loop_store,
+                                                map_name.clone(),
+                                            ))
+                                            .unwrap();
 
-                                            dirty = true;
-                                        }
-                                    });
+                                        state.gui_state.switch_screen(Screen::Ingame);
+                                    }
+                                    if button(
+                                        state.resource_man.translates.gui
+                                            [&state.resource_man.registry.gui_ids.btn_delete]
+                                            .as_str(),
+                                    )
+                                    .clicked
+                                    {
+                                        state.gui_state.popup =
+                                            PopupState::MapDeleteConfirmation(map_name.clone());
+
+                                        dirty = true;
+                                    }
                                 });
                             });
-                        }
+                        });
+                    }
 
-                        if dirty {
-                            refresh_maps(state);
-                        }
-                    });
+                    if dirty {
+                        refresh_maps(state);
+                    }
+                });
 
-                    label(&format(
-                        &state.resource_man.translates.gui
-                            [&state.resource_man.registry.gui_ids.lbl_maps_loaded],
-                        &[&state.loop_store.map_infos_cache.len().to_string()],
-                    ));
+                label(&format(
+                    &state.resource_man.translates.gui
+                        [&state.resource_man.registry.gui_ids.lbl_maps_loaded],
+                    &[&state.loop_store.map_infos_cache.len().to_string()],
+                ));
 
-                    row(|| {
-                        if button(
-                            state.resource_man.translates.gui
-                                [&state.resource_man.registry.gui_ids.btn_new_map]
-                                .as_str(),
-                        )
-                        .clicked
-                        {
-                            state.gui_state.popup = PopupState::MapCreate
-                        }
+                row(|| {
+                    if button(
+                        state.resource_man.translates.gui
+                            [&state.resource_man.registry.gui_ids.btn_new_map]
+                            .as_str(),
+                    )
+                    .clicked
+                    {
+                        state.gui_state.popup = PopupState::MapCreate
+                    }
 
-                        if button(
-                            state.resource_man.translates.gui
-                                [&state.resource_man.registry.gui_ids.btn_cancel]
-                                .as_str(),
-                        )
-                        .clicked
-                        {
-                            state.gui_state.switch_screen(Screen::MainMenu)
-                        }
-                    });
+                    if button(
+                        state.resource_man.translates.gui
+                            [&state.resource_man.registry.gui_ids.btn_cancel]
+                            .as_str(),
+                    )
+                    .clicked
+                    {
+                        state.gui_state.switch_screen(Screen::MainMenu)
+                    }
                 });
             });
         },
@@ -285,7 +272,7 @@ pub fn options_menu(state: &mut GameState) {
     window(
         state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.options].to_string(),
         || {
-            center(|| {
+            centered_column(|| {
                 row(|| {
                     column(|| {
                         // TODO translate these
@@ -306,7 +293,7 @@ pub fn options_menu(state: &mut GameState) {
                         }
                     });
 
-                    Scrollable::vertical().show(|| {
+                    scroll_vertical(200.0, || {
                         if let SubState::Options(menu) = state.gui_state.substate {
                             match menu {
                                 OptionsMenuState::Graphics => {
@@ -360,7 +347,6 @@ pub fn options_menu(state: &mut GameState) {
                                                         "{:?}",
                                                         v //TODO inconsistent, use a to_string?
                                                     )
-                                                    .into()
                                                 },
                                             );
                                         });
@@ -397,14 +383,11 @@ pub fn options_menu(state: &mut GameState) {
 
                                         row(|| {
                                             label("Font:");
-                                            let current_font = state.options.gui.font.clone();
 
                                             state.options.gui.font = selection_box(
-                                                state.resource_man.fonts.keys().cloned(),
-                                                current_font,
-                                                &|font| {
-                                                    state.resource_man.fonts[&font].name.to_string()
-                                                },
+                                                state.gui.font_names.keys().cloned(),
+                                                state.options.gui.font.clone(),
+                                                &|font| state.gui.font_names[font].to_string(),
                                             );
                                         });
                                     });

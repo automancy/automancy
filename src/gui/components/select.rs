@@ -1,43 +1,40 @@
-use yakui::{
-    align, reflow,
-    widgets::{Layer, Pad},
-    Alignment, Dim2, Pivot,
-};
+use yakui::{column, use_state, widgets::Pad, Alignment, Dim2, Pivot};
 
-use super::{button::button, list::column};
+use super::{
+    button::button, clipped::clipped, layer::Layer, relative::Relative, scrollable::scroll_vertical,
+};
 
 pub fn selection_box<T: Clone + Eq>(
     options: impl IntoIterator<Item = T>,
     default: T,
-    format: &dyn Fn(T) -> String,
+    format: &dyn Fn(&T) -> String,
 ) -> T {
-    let mut open = false;
+    let mut open = use_state(|| false);
     let mut selected = default;
 
-    align(Alignment::TOP_LEFT, || {
-        column(|| {
-            if button(&format(selected.clone())).clicked {
-                open = !open;
-            }
+    column(|| {
+        if button(&format(&selected)).clicked {
+            open.modify(|v| !v);
+        }
 
-            if open {
-                Pad::ZERO.show(|| {
-                    Layer::new().show(|| {
-                        reflow(Alignment::BOTTOM_LEFT, Pivot::TOP_LEFT, Dim2::ZERO, || {
+        if open.get() {
+            Pad::ZERO.show(|| {
+                Layer::new().show(|| {
+                    Relative::new(Alignment::BOTTOM_LEFT, Pivot::TOP_LEFT, Dim2::ZERO).show(|| {
+                        scroll_vertical(250.0, || {
                             column(|| {
                                 for option in options.into_iter() {
-                                    if option != selected && button(&format(option.clone())).clicked
-                                    {
+                                    if button(&format(&option)).clicked {
                                         selected = option;
-                                        open = false;
+                                        open.set(false);
                                     }
                                 }
                             });
                         });
                     });
                 });
-            }
-        });
+            });
+        }
     });
 
     selected
