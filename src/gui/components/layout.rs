@@ -10,7 +10,7 @@ pub fn centered_row(children: impl FnOnce()) {
         r.cross_axis_alignment = CrossAxisAlignment::Center;
         r.main_axis_alignment = MainAxisAlignment::Center;
 
-        r.show(|| children());
+        r.show(children);
     });
 }
 
@@ -24,6 +24,6 @@ pub fn centered_column(children: impl FnOnce()) {
         c.cross_axis_alignment = CrossAxisAlignment::Center;
         c.main_axis_alignment = MainAxisAlignment::Center;
 
-        c.show(|| children());
+        c.show(children);
     });
 }

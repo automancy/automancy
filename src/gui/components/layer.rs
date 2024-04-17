@@ -12,13 +12,13 @@ containing layer.
 In the future, this widget may be extended to support arbitrary transforms
 applied to layers.
 */
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 #[non_exhaustive]
 pub struct Layer {}
 
 impl Layer {
     pub fn new() -> Self {
-        Self {}
+        Self::default()
     }
 
     pub fn show<F: FnOnce()>(self, children: F) -> Response<LayerResponse> {

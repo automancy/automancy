@@ -292,115 +292,107 @@ pub fn options_menu(state: &mut GameState) {
                         }
                     });
 
-                    scroll_vertical(200.0, || {
-                        column(|| {
-                            if let SubState::Options(menu) = state.gui_state.substate {
-                                match menu {
-                                    OptionsMenuState::Graphics => {
-                                        heading("Graphics");
+                    let child: Option<Box<dyn FnMut()>> = if let SubState::Options(menu) =
+                        state.gui_state.substate
+                    {
+                        match menu {
+                            OptionsMenuState::Graphics => Some(Box::new(|| {
+                                heading("Graphics");
 
-                                        column(|| {
-                                            label(&format!(
-                                                "Max FPS: {}",
-                                                if state.options.graphics.fps_limit == 0 {
-                                                    "Vsync".to_string()
-                                                } else if state.options.graphics.fps_limit == 250 {
-                                                    "Unlimited".to_string()
-                                                } else {
-                                                    state.options.graphics.fps_limit.to_string()
-                                                }
-                                            ));
+                                column(|| {
+                                    label(&format!(
+                                        "Max FPS: {}",
+                                        if state.options.graphics.fps_limit == 0 {
+                                            "Vsync".to_string()
+                                        } else if state.options.graphics.fps_limit == 250 {
+                                            "Unlimited".to_string()
+                                        } else {
+                                            state.options.graphics.fps_limit.to_string()
+                                        }
+                                    ));
 
-                                            slider(
-                                                &mut state.options.graphics.fps_limit,
-                                                0..=250,
-                                                Some(5),
+                                    slider(&mut state.options.graphics.fps_limit, 0..=250, Some(5))
+                                });
+
+                                centered_row(|| {
+                                    label("Fullscreen: ");
+
+                                    checkbox(&mut state.options.graphics.fullscreen);
+                                });
+
+                                centered_row(|| {
+                                    label(&format!(
+                                        "Scale: {}%",
+                                        (state.options.graphics.scale * 100.0) as i32
+                                    ));
+
+                                    slider(&mut state.options.graphics.scale, 0.5..=4.0, Some(0.5));
+                                });
+
+                                centered_row(|| {
+                                    label("Antialiasing: ");
+
+                                    state.options.graphics.anti_aliasing = selection_box(
+                                        [AAType::None, AAType::FXAA, AAType::TAA],
+                                        state.options.graphics.anti_aliasing,
+                                        &|v| {
+                                            format!(
+                                                "{:?}",
+                                                v //TODO inconsistent, use a to_string?
                                             )
-                                        });
+                                        },
+                                    );
+                                });
+                            })),
+                            OptionsMenuState::Audio => Some(Box::new(|| {
+                                heading("Audio");
 
-                                        centered_row(|| {
-                                            label("Fullscreen: ");
+                                centered_row(|| {
+                                    label(&format!(
+                                        "SFX Volume: {}%",
+                                        (state.options.audio.sfx_volume * 100.0) as i32
+                                    ));
 
-                                            checkbox(&mut state.options.graphics.fullscreen);
-                                        });
+                                    slider(&mut state.options.audio.sfx_volume, 0.0..=1.0, None);
+                                });
 
-                                        centered_row(|| {
-                                            label(&format!(
-                                                "Scale: {}%",
-                                                (state.options.graphics.scale * 100.0) as i32
-                                            ));
+                                centered_row(|| {
+                                    label(&format!(
+                                        "Music Volume: {}%",
+                                        (state.options.audio.music_volume * 100.0) as i32
+                                    ));
 
-                                            slider(
-                                                &mut state.options.graphics.scale,
-                                                0.5..=4.0,
-                                                Some(0.5),
-                                            );
-                                        });
+                                    slider(&mut state.options.audio.music_volume, 0.0..=1.0, None);
+                                });
+                            })),
+                            OptionsMenuState::Gui => Some(Box::new(|| {
+                                heading("GUI");
 
-                                        centered_row(|| {
-                                            label("Antialiasing: ");
+                                centered_row(|| {
+                                    label("Font:");
 
-                                            state.options.graphics.anti_aliasing = selection_box(
-                                                [AAType::None, AAType::FXAA, AAType::TAA],
-                                                state.options.graphics.anti_aliasing,
-                                                &|v| {
-                                                    format!(
-                                                        "{:?}",
-                                                        v //TODO inconsistent, use a to_string?
-                                                    )
-                                                },
-                                            );
-                                        });
-                                    }
-                                    OptionsMenuState::Audio => {
-                                        heading("Audio");
+                                    state.options.gui.font = selection_box(
+                                        state.gui.font_names.keys().cloned(),
+                                        state.options.gui.font.clone(),
+                                        &|font| state.gui.font_names[font].to_string(),
+                                    );
+                                });
+                            })),
+                            OptionsMenuState::Controls => Some(Box::new(|| {
+                                heading("Controls");
+                            })),
+                        }
+                    } else {
+                        None
+                    };
 
-                                        centered_row(|| {
-                                            label(&format!(
-                                                "SFX Volume: {}%",
-                                                (state.options.audio.sfx_volume * 100.0) as i32
-                                            ));
-
-                                            slider(
-                                                &mut state.options.audio.sfx_volume,
-                                                0.0..=1.0,
-                                                None,
-                                            );
-                                        });
-
-                                        centered_row(|| {
-                                            label(&format!(
-                                                "Music Volume: {}%",
-                                                (state.options.audio.music_volume * 100.0) as i32
-                                            ));
-
-                                            slider(
-                                                &mut state.options.audio.music_volume,
-                                                0.0..=1.0,
-                                                None,
-                                            );
-                                        });
-                                    }
-                                    OptionsMenuState::Gui => {
-                                        heading("GUI");
-
-                                        centered_row(|| {
-                                            label("Font:");
-
-                                            state.options.gui.font = selection_box(
-                                                state.gui.font_names.keys().cloned(),
-                                                state.options.gui.font.clone(),
-                                                &|font| state.gui.font_names[font].to_string(),
-                                            );
-                                        });
-                                    }
-                                    OptionsMenuState::Controls => {
-                                        heading("Controls");
-                                    }
-                                }
-                            }
+                    if let Some(child) = child {
+                        group(|| {
+                            scroll_vertical(200.0, || {
+                                column(child);
+                            });
                         });
-                    });
+                    }
                 });
 
                 if button(

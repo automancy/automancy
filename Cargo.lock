@@ -4902,7 +4902,7 @@ checksum = "791978798f0597cfc70478424c2b4fdc2b7a8024aaff78497ef00f24ef674193"
 [[package]]
 name = "yakui"
 version = "0.2.0"
-source = "git+https://github.com/automancy/yakui.git#6ef5e05cf4c47e4a90dfa74434b8b12941b849b3"
+source = "git+https://github.com/automancy/yakui.git#23ea8087b573663b39e1b55a4c3da7e994f33780"
 dependencies = [
  "yakui-core",
  "yakui-widgets",
@@ -4911,7 +4911,7 @@ dependencies = [
 [[package]]
 name = "yakui-core"
 version = "0.2.0"
-source = "git+https://github.com/automancy/yakui.git#6ef5e05cf4c47e4a90dfa74434b8b12941b849b3"
+source = "git+https://github.com/automancy/yakui.git#23ea8087b573663b39e1b55a4c3da7e994f33780"
 dependencies = [
  "anymap",
  "bitflags 2.5.0",
@@ -4927,7 +4927,7 @@ dependencies = [
 [[package]]
 name = "yakui-wgpu"
 version = "0.2.0"
-source = "git+https://github.com/automancy/yakui.git#6ef5e05cf4c47e4a90dfa74434b8b12941b849b3"
+source = "git+https://github.com/automancy/yakui.git#23ea8087b573663b39e1b55a4c3da7e994f33780"
 dependencies = [
  "bytemuck",
  "glam",
@@ -4940,7 +4940,7 @@ dependencies = [
 [[package]]
 name = "yakui-widgets"
 version = "0.2.0"
-source = "git+https://github.com/automancy/yakui.git#6ef5e05cf4c47e4a90dfa74434b8b12941b849b3"
+source = "git+https://github.com/automancy/yakui.git#23ea8087b573663b39e1b55a4c3da7e994f33780"
 dependencies = [
  "fontdue",
  "smol_str 0.1.24",
@@ -4951,7 +4951,7 @@ dependencies = [
 [[package]]
 name = "yakui-winit"
 version = "0.2.0"
-source = "git+https://github.com/automancy/yakui.git#6ef5e05cf4c47e4a90dfa74434b8b12941b849b3"
+source = "git+https://github.com/automancy/yakui.git#23ea8087b573663b39e1b55a4c3da7e994f33780"
 dependencies = [
  "winit",
  "yakui-core",

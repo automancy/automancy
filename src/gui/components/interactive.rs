@@ -6,12 +6,12 @@ use yakui::{
     Response,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Interactive {}
 
 impl Interactive {
     pub fn new() -> Self {
-        Self {}
+        Self::default()
     }
 
     pub fn show<F: FnOnce()>(self, children: F) -> Response<InteractiveResponse> {

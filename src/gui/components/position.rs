@@ -1,13 +1,13 @@
 use yakui::{util::widget_children, widget::Widget, Response, Vec2};
 
-use core::fmt;
 use std::cell::Cell;
 
+#[derive(Debug, Default)]
 pub struct PositionRecord {}
 
 impl PositionRecord {
     pub fn new() -> Self {
-        Self {}
+        Self::default()
     }
 
     pub fn show<F: FnOnce()>(self, children: F) -> Response<PositionRecordResponse> {
@@ -53,11 +53,5 @@ impl Widget for PositionRecordWidget {
         }
 
         self.default_layout(ctx, constraints)
-    }
-}
-
-impl fmt::Debug for PositionRecord {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("PositionRecord").finish_non_exhaustive()
     }
 }

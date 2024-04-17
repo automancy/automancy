@@ -1,16 +1,15 @@
-use core::fmt;
-
 use yakui::{
     util::widget_children,
     widget::{LayoutContext, Widget},
     Constraints, Response, Vec2,
 };
 
+#[derive(Debug, Default)]
 pub struct Hover {}
 
 impl Hover {
     pub fn new() -> Self {
-        Self {}
+        Self::default()
     }
 
     pub fn show<F: FnOnce()>(self, children: F) -> Response<HoverResponse> {
@@ -47,11 +46,5 @@ impl Widget for HoverWidget {
         }
 
         Vec2::ZERO
-    }
-}
-
-impl fmt::Debug for Hover {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Hover").finish_non_exhaustive()
     }
 }

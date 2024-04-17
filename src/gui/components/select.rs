@@ -1,6 +1,10 @@
-use yakui::{column, use_state, Alignment, Dim2, Pivot};
+use automancy_defs::colors;
+use yakui::{column, use_state, widgets::Pad, Alignment, Dim2, Pivot};
 
-use super::{button::button, layer::Layer, relative::Relative, scrollable::scroll_vertical};
+use super::{
+    button::button, container::RoundRect, layer::Layer, relative::Relative,
+    scrollable::scroll_vertical, PADDING_MEDIUM,
+};
 
 pub fn selection_box<T: Clone + Eq>(
     options: impl IntoIterator<Item = T>,
@@ -17,15 +21,21 @@ pub fn selection_box<T: Clone + Eq>(
 
         if open.get() {
             Layer::new().show(|| {
-                Relative::new(Alignment::BOTTOM_LEFT, Pivot::TOP_LEFT, Dim2::ZERO).show(|| {
-                    scroll_vertical(250.0, || {
-                        column(|| {
-                            for option in options.into_iter() {
-                                if button(&format(&option)).clicked {
-                                    selected = option;
-                                    open.set(false);
-                                }
-                            }
+                Relative::new(Alignment::TOP_LEFT, Pivot::TOP_LEFT, Dim2::ZERO).show(|| {
+                    let mut container = RoundRect::new(8.0);
+                    container.color = colors::BACKGROUND_1;
+                    container.show_children(|| {
+                        Pad::all(PADDING_MEDIUM).show(|| {
+                            scroll_vertical(250.0, || {
+                                column(|| {
+                                    for option in options.into_iter() {
+                                        if button(&format(&option)).clicked {
+                                            selected = option;
+                                            open.set(false);
+                                        }
+                                    }
+                                });
+                            });
                         });
                     });
                 });
