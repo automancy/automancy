@@ -79,6 +79,7 @@ pub fn sized_colored_text(text: &str, font_size: Float, font: FontName, color: C
     let mut text = Text::label(text);
     text.style.color = color;
     text.style.font_size = font_size;
+    text.style.font = font;
     text
 }
 

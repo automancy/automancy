@@ -31,7 +31,7 @@ use super::components::{
     layer::Layer,
     position::PositionRecord,
     relative::Relative,
-    scrollable::{scroll_vertical, Scrollable},
+    scrollable::scroll_vertical,
     text::{heading, label},
     window::window,
 };

@@ -1,6 +1,7 @@
 use enum_map::{enum_map, Enum, EnumMap};
 use fuse_rust::Fuse;
 use hashbrown::{HashMap, HashSet};
+use once_cell::sync::Lazy;
 use std::sync::Arc;
 use std::{cell::Cell, time::Instant};
 use std::{collections::BTreeMap, mem};
@@ -42,7 +43,7 @@ use crate::{gpu, GameState};
 use self::components::{
     absolute::Absolute,
     layer::Layer,
-    scrollable::{scroll_vertical, Scrollable},
+    scrollable::scroll_vertical,
     text::{label_text, symbol_text, Text},
 };
 
@@ -67,32 +68,33 @@ pub struct Gui {
     pub renderer: YakuiWgpu,
     pub yak: Yakui,
     pub window: YakuiWinit,
-    pub fonts: HashMap<String, Font>,
+    pub fonts: HashMap<String, Lazy<Font, Box<dyn FnOnce() -> Font>>>,
     pub font_names: BTreeMap<String, String>,
 }
 
-pub fn set_font(gui: &mut Gui, symbols_font: &str, font: &str) {
-    let fonts = gui.yak.dom().get_global_or_init(Fonts::default);
+impl Gui {
+    pub fn set_font(&mut self, symbols_font: &str, font: &str) {
+        let fonts = self.yak.dom().get_global_or_init(Fonts::default);
 
-    fonts.add(
-        gui.fonts.get(symbols_font).unwrap().clone(),
-        Some("symbols"),
-    );
-    fonts.add(gui.fonts.get(font).unwrap().clone(), Some("default"));
-}
+        fonts.add(
+            (*self.fonts.get(symbols_font).unwrap()).clone(),
+            Some("symbols"),
+        );
+        fonts.add((*self.fonts.get(font).unwrap()).clone(), Some("default"));
+    }
 
-/// Initializes the GUI.
-pub fn init_gui(device: &Device, queue: &Queue, window: &Window) -> Gui {
-    let renderer = yakui_wgpu::YakuiWgpu::new(device, queue);
-    let window = yakui_winit::YakuiWinit::new(window);
-    let yak = Yakui::new();
+    pub fn new(device: &Device, queue: &Queue, window: &Window) -> Self {
+        let renderer = yakui_wgpu::YakuiWgpu::new(device, queue);
+        let window = yakui_winit::YakuiWinit::new(window);
+        let yak = Yakui::new();
 
-    Gui {
-        renderer,
-        yak,
-        window,
-        fonts: Default::default(),
-        font_names: BTreeMap::new(),
+        Self {
+            renderer,
+            yak,
+            window,
+            fonts: Default::default(),
+            font_names: BTreeMap::new(),
+        }
     }
 }
 
@@ -268,10 +270,7 @@ pub struct HoverTip {
 
 impl HoverTip {
     pub fn new(text: Text, tip: Text) -> Self {
-        Self {
-            text,
-            tip: tip.into(),
-        }
+        Self { text, tip }
     }
 
     pub fn show(self) -> Response<HoverTipResponse> {
@@ -457,7 +456,7 @@ pub type YakuiRenderResources = (
 );
 
 thread_local! {
-    static START_INSTANT: Cell<Option<Instant>> = Cell::new(None);
+    static START_INSTANT: Cell<Option<Instant>> = const { Cell::new(None) };
     static INDEX_COUNTER: Cell<usize> = const { Cell::new(0) };
 }
 
@@ -517,7 +516,7 @@ impl CallbackTrait<YakuiRenderResources> for GameElementWidget {
     ) {
         if let Some(paint) = self.paint {
             let start_instant = START_INSTANT.get().unwrap();
-            try_add_animation(&resource_man, start_instant, paint.model, animation_map);
+            try_add_animation(resource_man, start_instant, paint.model, animation_map);
 
             instances
                 .as_mut()
@@ -532,7 +531,7 @@ impl CallbackTrait<YakuiRenderResources> for GameElementWidget {
         queue: &wgpu::Queue,
         (
             resource_man,
-            global_buffers,
+            _global_buffers,
             gui_resources,
             animation_map,
             instances,
@@ -567,8 +566,8 @@ impl CallbackTrait<YakuiRenderResources> for GameElementWidget {
     fn paint<'a>(
         &self,
         render_pass: &mut wgpu::RenderPass<'a>,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        _device: &wgpu::Device,
+        _queue: &wgpu::Queue,
         (
             _resource_man,
             global_buffers,
@@ -634,12 +633,8 @@ impl Widget for GameElementWidget {
     }
 
     fn paint(&self, ctx: yakui::widget::PaintContext<'_>) {
-        if let Some(paint) = self.paint {
-            if let Some(layer) = ctx.paint.layers_mut().current_mut() {
-                layer
-                    .calls
-                    .push(PaintCall::Custom(yakui_wgpu::cast(self.clone())));
-            }
+        if let Some(layer) = ctx.paint.layers_mut().current_mut() {
+            layer.calls.push(PaintCall::Custom(yakui_wgpu::cast(*self)));
         }
     }
 }

@@ -4,10 +4,7 @@ use winit::event_loop::EventLoopWindowTarget;
 
 use automancy_defs::{glam::vec2, log};
 use automancy_resources::{format, format_time};
-use yakui::{
-    checkbox, column, image, row, slider, textbox,
-    widgets::{List, Slider},
-};
+use yakui::{column, image, row, textbox, widgets::List};
 
 use crate::event::{refresh_maps, shutdown_graceful};
 use crate::game::{load_map, GameSystemMessage};
@@ -18,10 +15,12 @@ use crate::{GameState, VERSION};
 
 use super::components::{
     button::button,
+    checkbox::checkbox,
     container::group,
-    layout::centered_column,
-    scrollable::{scroll_vertical, Scrollable},
+    layout::{centered_column, centered_row},
+    scrollable::scroll_vertical,
     select::selection_box,
+    slider::slider,
     text::{heading, label},
     window::window,
 };
@@ -294,49 +293,51 @@ pub fn options_menu(state: &mut GameState) {
                     });
 
                     scroll_vertical(200.0, || {
-                        if let SubState::Options(menu) = state.gui_state.substate {
-                            match menu {
-                                OptionsMenuState::Graphics => {
-                                    column(|| {
+                        column(|| {
+                            if let SubState::Options(menu) = state.gui_state.substate {
+                                match menu {
+                                    OptionsMenuState::Graphics => {
                                         heading("Graphics");
 
                                         column(|| {
-                                            label("Max FPS: ");
-                                            if let Some(v) =
-                                                slider(state.options.graphics.fps_limit, 0.0, 250.0)
-                                                    .value
-                                            {
-                                                state.options.graphics.fps_limit = v;
-                                            } /* TODO custom fps widget
-                                              if n == 0.0 {
-                                                  "Vsync".to_string()
-                                              } else if n == 250.0 {
-                                                  "Unlimited".to_string()
-                                              } else {
-                                                  format!("{}", n)
-                                              } */
+                                            label(&format!(
+                                                "Max FPS: {}",
+                                                if state.options.graphics.fps_limit == 0 {
+                                                    "Vsync".to_string()
+                                                } else if state.options.graphics.fps_limit == 250 {
+                                                    "Unlimited".to_string()
+                                                } else {
+                                                    state.options.graphics.fps_limit.to_string()
+                                                }
+                                            ));
+
+                                            slider(
+                                                &mut state.options.graphics.fps_limit,
+                                                0..=250,
+                                                Some(5),
+                                            )
                                         });
 
-                                        row(|| {
+                                        centered_row(|| {
                                             label("Fullscreen: ");
 
-                                            state.options.graphics.fullscreen =
-                                                checkbox(state.options.graphics.fullscreen).checked;
+                                            checkbox(&mut state.options.graphics.fullscreen);
                                         });
 
-                                        row(|| {
-                                            label("Scale: ");
+                                        centered_row(|| {
+                                            label(&format!(
+                                                "Scale: {}%",
+                                                (state.options.graphics.scale * 100.0) as i32
+                                            ));
 
-                                            let mut slider =
-                                                Slider::new(state.options.graphics.scale, 0.5, 4.0);
-                                            slider.step = Some(0.5);
-
-                                            if let Some(v) = slider.show().value {
-                                                state.options.graphics.scale = v;
-                                            }
+                                            slider(
+                                                &mut state.options.graphics.scale,
+                                                0.5..=4.0,
+                                                Some(0.5),
+                                            );
                                         });
 
-                                        row(|| {
+                                        centered_row(|| {
                                             label("Antialiasing: ");
 
                                             state.options.graphics.anti_aliasing = selection_box(
@@ -350,38 +351,40 @@ pub fn options_menu(state: &mut GameState) {
                                                 },
                                             );
                                         });
-                                    });
-                                }
-                                OptionsMenuState::Audio => {
-                                    column(|| {
+                                    }
+                                    OptionsMenuState::Audio => {
                                         heading("Audio");
 
-                                        row(|| {
-                                            label("SFX Volume: ");
-                                            if let Some(v) =
-                                                slider(state.options.audio.sfx_volume, 0.0, 1.0)
-                                                    .value
-                                            {
-                                                state.options.audio.sfx_volume = v;
-                                            }
+                                        centered_row(|| {
+                                            label(&format!(
+                                                "SFX Volume: {}%",
+                                                (state.options.audio.sfx_volume * 100.0) as i32
+                                            ));
+
+                                            slider(
+                                                &mut state.options.audio.sfx_volume,
+                                                0.0..=1.0,
+                                                None,
+                                            );
                                         });
 
-                                        row(|| {
-                                            label("Music Volume: ");
-                                            if let Some(v) =
-                                                slider(state.options.audio.music_volume, 0.0, 1.0)
-                                                    .value
-                                            {
-                                                state.options.audio.music_volume = v;
-                                            }
+                                        centered_row(|| {
+                                            label(&format!(
+                                                "Music Volume: {}%",
+                                                (state.options.audio.music_volume * 100.0) as i32
+                                            ));
+
+                                            slider(
+                                                &mut state.options.audio.music_volume,
+                                                0.0..=1.0,
+                                                None,
+                                            );
                                         });
-                                    });
-                                }
-                                OptionsMenuState::Gui => {
-                                    column(|| {
+                                    }
+                                    OptionsMenuState::Gui => {
                                         heading("GUI");
 
-                                        row(|| {
+                                        centered_row(|| {
                                             label("Font:");
 
                                             state.options.gui.font = selection_box(
@@ -390,13 +393,13 @@ pub fn options_menu(state: &mut GameState) {
                                                 &|font| state.gui.font_names[font].to_string(),
                                             );
                                         });
-                                    });
-                                }
-                                OptionsMenuState::Controls => {
-                                    heading("Controls");
+                                    }
+                                    OptionsMenuState::Controls => {
+                                        heading("Controls");
+                                    }
                                 }
                             }
-                        }
+                        });
                     });
                 });
 

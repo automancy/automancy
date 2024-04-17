@@ -88,7 +88,7 @@ pub enum AAType {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct GraphicsOptions {
-    pub fps_limit: Double,
+    pub fps_limit: i32,
     pub fullscreen: bool,
     pub scale: Double,
     pub anti_aliasing: AAType,
@@ -97,7 +97,7 @@ pub struct GraphicsOptions {
 impl Default for GraphicsOptions {
     fn default() -> Self {
         Self {
-            fps_limit: 0.0,
+            fps_limit: 0,
             fullscreen: false,
             scale: 1.0,
             anti_aliasing: AAType::FXAA,
@@ -117,6 +117,7 @@ impl Default for GuiOptions {
         }
     }
 }
+
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct AudioOptions {
     pub sfx_volume: f64,

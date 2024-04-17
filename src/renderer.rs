@@ -25,7 +25,7 @@ use wgpu::{
 use automancy_defs::glam::vec3;
 use automancy_defs::id::Id;
 use automancy_defs::math::{
-    direction_to_angle, lerp_coords_to_pixel, Double, Float, Matrix4, FAR, HEX_GRID_LAYOUT, SQRT_3,
+    direction_to_angle, lerp_coords_to_pixel, Float, Matrix4, FAR, HEX_GRID_LAYOUT, SQRT_3,
 };
 use automancy_defs::rendering::{make_line, GameUBO, InstanceData, LINE_DEPTH};
 use automancy_defs::slice_group_by::GroupBy;
@@ -68,7 +68,7 @@ pub struct Renderer<'a> {
     pub render_resources: RenderResources,
     pub global_buffers: Arc<GlobalBuffers>,
     pub gui_resources: Option<GuiResources>,
-    pub fps_limit: Double,
+    pub fps_limit: i32,
 
     render_info_cache:
         Arc<Mutex<Option<(HashMap<TileCoord, RenderUnit>, HashMap<TileCoord, DataMap>)>>>,

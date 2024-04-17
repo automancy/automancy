@@ -3,17 +3,13 @@ use std::time::Instant;
 use ractor::rpc::CallResult;
 use ractor::ActorRef;
 
-use automancy_defs::{colors::BLACK, coord::TileCoord, math::Double};
+use automancy_defs::{colors::BLACK, coord::TileCoord};
 use automancy_defs::{glam::vec2, id::Id};
+use automancy_resources::data::inventory::Inventory;
 use automancy_resources::data::stack::ItemStack;
-use automancy_resources::data::{inventory::Inventory, stack::ItemAmount};
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::types::tile::TileDef;
-use yakui::{
-    column, pad, row, use_state,
-    widgets::{Pad, Slider},
-    Alignment, Pivot, Rect, Vec2,
-};
+use yakui::{column, pad, row, use_state, widgets::Pad, Alignment, Pivot, Rect, Vec2};
 
 use crate::gui::item::draw_item;
 use crate::gui::{info_tip, searchable_id, TextField, MEDIUM_ICON_SIZE, SMALL_ICON_SIZE};
@@ -26,6 +22,7 @@ use super::components::{
     container::group,
     interactive::interactive,
     position::PositionRecord,
+    slider::slider,
     text::{label, symbol_text},
     window::window,
 };
@@ -159,12 +156,7 @@ fn config_amount(
 
     label(&state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.lbl_amount]);
 
-    let mut slider = Slider::new(new_amount as Double, 0.0, max_amount as Double); // TODO this is not supposed to be float
-    slider.step = Some(32.0);
-
-    if let Some(new_value) = slider.show().value {
-        new_amount = new_value as ItemAmount;
-    }
+    slider(&mut new_amount, 0..=max_amount, Some(128));
 
     label(&new_amount.to_string());
 

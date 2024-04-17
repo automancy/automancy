@@ -13,7 +13,7 @@ pub const PADDING_LARGE: Float = 12.0;
 
 pub mod absolute;
 pub mod button;
-pub mod clipped;
+pub mod checkbox;
 pub mod container;
 pub mod hover;
 pub mod interactive;
@@ -23,5 +23,6 @@ pub mod position;
 pub mod relative;
 pub mod scrollable;
 pub mod select;
+pub mod slider;
 pub mod text;
 pub mod window;

@@ -59,6 +59,7 @@ impl Widget for RelativeWidget {
 
     fn layout(&self, mut ctx: LayoutContext<'_>, _constraints: Constraints) -> Vec2 {
         let node = ctx.dom.get_current();
+
         let mut size = Vec2::ZERO;
         for &child in &node.children {
             size = size.max(ctx.calculate_layout(child, Constraints::none()));

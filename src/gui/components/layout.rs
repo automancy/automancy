@@ -13,6 +13,7 @@ pub fn centered_row(children: impl FnOnce()) {
         r.show(|| children());
     });
 }
+
 pub fn centered_column(children: impl FnOnce()) {
     let mut r = List::row();
     r.cross_axis_alignment = CrossAxisAlignment::Center;

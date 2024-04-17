@@ -101,8 +101,8 @@ impl Button {
 
         Self {
             text,
-            padding: Pad::balanced(2.0, 2.0),
-            border_radius: 6.0,
+            padding: Pad::balanced(3.0, 1.0),
+            border_radius: 8.0,
             style,
             hover_style,
             down_style,
@@ -231,7 +231,7 @@ impl Widget for ButtonWidget {
 pub fn button_text(text: Text) -> Response<ButtonResponse> {
     let mut r = None;
 
-    Pad::all(4.0).show(|| {
+    Pad::all(2.0).show(|| {
         r = Some(Button::styled(text).show());
     });
 

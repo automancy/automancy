@@ -11,6 +11,7 @@ use std::{fs::File, mem};
 use color_eyre::config::HookBuilder;
 use env_logger::Env;
 use num::Zero;
+use once_cell::sync::Lazy;
 use ractor::Actor;
 use rfd::{MessageButtons, MessageDialog, MessageLevel};
 use tokio::runtime::Runtime;
@@ -19,24 +20,21 @@ use winit::dpi::PhysicalSize;
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::{Fullscreen, Icon, WindowBuilder};
 
+use automancy::event::{on_event, EventLoopStorage};
 use automancy::gpu::{init_gpu_resources, Gpu};
 use automancy::gui::GuiState;
 use automancy::input::InputHandler;
 use automancy::map::MAIN_MENU;
 use automancy::options::Options;
 use automancy::renderer::Renderer;
-use automancy::{camera::Camera, gui::init_gui};
-use automancy::{
-    event::{on_event, EventLoopStorage},
-    gui::set_font,
-};
+use automancy::{camera::Camera, gui::Gui};
 use automancy::{
     game::{load_map, GameSystem, GameSystemMessage, TICK_INTERVAL},
     gui::init_custom_paint_state,
 };
 use automancy::{GameState, LOGO};
+use automancy_defs::glam::uvec2;
 use automancy_defs::rendering::Vertex;
-use automancy_defs::{glam::uvec2, math::Double};
 use automancy_defs::{log, window};
 use automancy_resources::kira::track::{TrackBuilder, TrackHandle};
 use automancy_resources::kira::tween::Tween;
@@ -261,10 +259,7 @@ fn main() -> anyhow::Result<()> {
         }
         log::info!("Game created.");
 
-        let gpu = tokio.block_on(Gpu::new(
-            Arc::new(window),
-            options.graphics.fps_limit == 0.0,
-        ));
+        let gpu = tokio.block_on(Gpu::new(Arc::new(window), options.graphics.fps_limit == 0));
 
         log::info!("Setting up rendering...");
         let (shared_resources, render_resources, global_buffers, gui_resources) =
@@ -288,7 +283,7 @@ fn main() -> anyhow::Result<()> {
         log::info!("Render setup.");
 
         log::info!("Setting up gui...");
-        let mut gui = init_gui(
+        let mut gui = Gui::new(
             &renderer.gpu.device,
             &renderer.gpu.queue,
             &renderer.gpu.window,
@@ -301,17 +296,21 @@ fn main() -> anyhow::Result<()> {
 
         gui.fonts.insert(
             SYMBOLS_FONT_KEY.to_string(),
-            yakui::font::Font::from_bytes(SYMBOLS_FONT, yakui::font::FontSettings::default())
-                .unwrap(),
+            Lazy::new(Box::new(|| {
+                yakui::font::Font::from_bytes(SYMBOLS_FONT, yakui::font::FontSettings::default())
+                    .unwrap()
+            })),
         );
         for (name, font) in fonts.into_iter() {
             gui.fonts.insert(
                 name,
-                yakui::font::Font::from_bytes(font.data, yakui::font::FontSettings::default())
-                    .unwrap(),
+                Lazy::new(Box::new(move || {
+                    yakui::font::Font::from_bytes(font.data, yakui::font::FontSettings::default())
+                        .unwrap()
+                })),
             );
         }
-        set_font(&mut gui, SYMBOLS_FONT_KEY, &options.gui.font);
+        gui.set_font(SYMBOLS_FONT_KEY, &options.gui.font);
         log::info!("Gui setup.");
 
         let start_instant = Instant::now();
@@ -373,7 +372,9 @@ fn main() -> anyhow::Result<()> {
         }
 
         if !state.options.synced {
-            set_font(&mut state.gui, SYMBOLS_FONT_KEY, &state.options.gui.font);
+            state
+                .gui
+                .set_font(SYMBOLS_FONT_KEY, &state.options.gui.font);
 
             state
                 .audio_man
@@ -384,13 +385,7 @@ fn main() -> anyhow::Result<()> {
             state
                 .renderer
                 .gpu
-                .set_vsync(state.options.graphics.fps_limit == 0.0);
-
-            if state.options.graphics.fps_limit >= 250.0 {
-                state.renderer.fps_limit = Double::INFINITY;
-            } else {
-                state.renderer.fps_limit = state.options.graphics.fps_limit;
-            }
+                .set_vsync(state.options.graphics.fps_limit == 0);
 
             if state.options.graphics.fullscreen {
                 state
@@ -406,7 +401,13 @@ fn main() -> anyhow::Result<()> {
         }
 
         if !state.renderer.fps_limit.is_zero() {
-            let frame_time = Duration::from_secs_f64(1.0 / state.renderer.fps_limit);
+            let frame_time;
+
+            if state.options.graphics.fps_limit >= 250 {
+                frame_time = Duration::ZERO;
+            } else {
+                frame_time = Duration::from_secs_f64(1.0 / state.renderer.fps_limit as f64);
+            }
 
             if state.loop_store.frame_start.elapsed() > frame_time {
                 state.renderer.gpu.window.request_redraw();

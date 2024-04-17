@@ -46,5 +46,6 @@ pub const GRAY: Color = hex_color!("#747474");
 pub const DARK_GRAY: Color = hex_color!("#474747");
 pub const BLACK: Color = hex_color!("#000000");
 
-pub const BACKGROUND: Color = hex_color!("#ffffffaa");
+pub const BACKGROUND_1: Color = hex_color!("#ffffffaa");
+pub const BACKGROUND_2: Color = hex_color!("#cccccc");
 pub const INACTIVE: Color = hex_color!("#9a9a9a70");

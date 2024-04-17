@@ -128,6 +128,6 @@ impl Widget for ScrollableWidget {
     }
 }
 
-pub fn scroll_vertical(max_height: Float, children: impl FnOnce()) -> Response<ScrollableResponse> {
-    Scrollable::vertical(max_height).show(children)
+pub fn scroll_vertical(max_height: Float, children: impl FnOnce()) {
+    Scrollable::vertical(max_height).show(children);
 }
