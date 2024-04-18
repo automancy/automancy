@@ -65,8 +65,6 @@ impl Widget for RoundRectWidget {
     }
 
     fn layout(&self, mut ctx: LayoutContext<'_>, input: Constraints) -> Vec2 {
-        ctx.layout.enable_clipping(ctx.dom);
-
         let node = ctx.dom.get_current();
         let mut size = self.props.min_size;
 
@@ -93,7 +91,7 @@ impl Widget for RoundRectWidget {
 }
 
 pub fn group(children: impl FnOnce()) {
-    colored_box_container(colors::GRAY, || {
+    colored_box_container(colors::BACKGROUND_3, || {
         pad(Pad::all(2.0), || {
             colored_box_container(colors::BACKGROUND_1, || {
                 Pad::all(PADDING_MEDIUM).show(children);

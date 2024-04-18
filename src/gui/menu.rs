@@ -18,7 +18,7 @@ use super::components::{
     checkbox::checkbox,
     container::group,
     layout::{centered_column, centered_row},
-    scrollable::scroll_vertical,
+    scrollable::{scroll_horizontal, scroll_vertical},
     select::selection_box,
     slider::slider,
     text::{heading, label},
@@ -314,19 +314,19 @@ pub fn options_menu(state: &mut GameState) {
                                     slider(&mut state.options.graphics.fps_limit, 0..=250, Some(5))
                                 });
 
-                                centered_row(|| {
-                                    label("Fullscreen: ");
-
-                                    checkbox(&mut state.options.graphics.fullscreen);
-                                });
-
-                                centered_row(|| {
+                                column(|| {
                                     label(&format!(
                                         "Scale: {}%",
                                         (state.options.graphics.scale * 100.0) as i32
                                     ));
 
                                     slider(&mut state.options.graphics.scale, 0.5..=4.0, Some(0.5));
+                                });
+
+                                centered_row(|| {
+                                    label("Fullscreen: ");
+
+                                    checkbox(&mut state.options.graphics.fullscreen);
                                 });
 
                                 centered_row(|| {
@@ -347,7 +347,7 @@ pub fn options_menu(state: &mut GameState) {
                             OptionsMenuState::Audio => Some(Box::new(|| {
                                 heading("Audio");
 
-                                centered_row(|| {
+                                column(|| {
                                     label(&format!(
                                         "SFX Volume: {}%",
                                         (state.options.audio.sfx_volume * 100.0) as i32
@@ -356,7 +356,7 @@ pub fn options_menu(state: &mut GameState) {
                                     slider(&mut state.options.audio.sfx_volume, 0.0..=1.0, None);
                                 });
 
-                                centered_row(|| {
+                                column(|| {
                                     label(&format!(
                                         "Music Volume: {}%",
                                         (state.options.audio.music_volume * 100.0) as i32

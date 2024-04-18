@@ -30,7 +30,7 @@ use yakui::{
     row,
     util::widget,
     widget::{EventContext, Widget},
-    widgets::TextBox,
+    widgets::{Layer, TextBox},
     Alignment, Pivot, Rect, Response, Yakui,
 };
 
@@ -42,7 +42,6 @@ use crate::{gpu, GameState};
 
 use self::components::{
     absolute::Absolute,
-    layer::Layer,
     scrollable::scroll_vertical,
     text::{label_text, symbol_text, Text},
 };

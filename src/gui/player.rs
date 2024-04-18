@@ -14,7 +14,7 @@ use automancy_resources::data::{Data, DataMap};
 use automancy_resources::types::function::RhaiDataMap;
 use automancy_resources::types::IconMode;
 use automancy_resources::{rhai_call_options, rhai_log_err};
-use yakui::{column, row, use_state, Alignment, Dim2, Pivot, Rect};
+use yakui::{column, row, use_state, widgets::Layer, Alignment, Dim2, Pivot, Rect};
 
 use crate::gui::item::draw_item;
 use crate::gui::{
@@ -28,7 +28,6 @@ use super::components::{
     button::button,
     container::group,
     interactive::interactive,
-    layer::Layer,
     position::PositionRecord,
     relative::Relative,
     scrollable::scroll_vertical,

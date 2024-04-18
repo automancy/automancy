@@ -1,12 +1,20 @@
 use automancy_defs::colors;
-use yakui::{colored_box_container, row, widgets::Pad};
+use yakui::{
+    row,
+    widgets::{Layer, Pad},
+};
 
-use super::{layer::Layer, layout::centered_column, text::heading, PADDING_LARGE, PADDING_MEDIUM};
+use super::{
+    container::RoundRect, layout::centered_column, text::heading, PADDING_LARGE, PADDING_MEDIUM,
+};
 
 pub fn window(title: String, children: impl FnOnce()) {
     Layer::new().show(|| {
         centered_column(|| {
-            colored_box_container(colors::BACKGROUND_1, || {
+            let mut container = RoundRect::new(4.0);
+            container.color = colors::BACKGROUND_1;
+
+            container.show_children(|| {
                 Pad::all(PADDING_LARGE).show(|| {
                     centered_column(|| {
                         // Window Title Bar

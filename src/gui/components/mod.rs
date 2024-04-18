@@ -17,7 +17,6 @@ pub mod checkbox;
 pub mod container;
 pub mod hover;
 pub mod interactive;
-pub mod layer;
 pub mod layout;
 pub mod position;
 pub mod relative;

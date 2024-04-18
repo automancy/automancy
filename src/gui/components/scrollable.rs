@@ -6,10 +6,10 @@ use automancy_defs::{
     math::Float,
 };
 use yakui::{
-    colored_box, column,
-    input::{KeyCode, MouseButton},
+    column,
+    input::MouseButton,
     widget::{EventContext, LayoutContext, Widget},
-    widgets::Pad,
+    widgets::{Layer, Pad},
     Alignment, Dim2,
 };
 use yakui::{
@@ -22,9 +22,10 @@ use yakui::{
 };
 use yakui::{Pivot, Response};
 
-use super::relative::Relative;
+use super::{container::RoundRect, relative::Relative};
 
 const SCROLL_SIZE: f32 = 8.0;
+const SCROLL_RADIUS: f32 = 4.0;
 
 #[derive(Debug)]
 #[non_exhaustive]
@@ -70,7 +71,6 @@ pub enum ScrollDirection {
 #[non_exhaustive]
 pub struct ScrollableWidget {
     props: Scrollable,
-    shift_held: bool,
     dragging: bool,
     last_drag_pos: Option<Vec2>,
     scroll_position: Cell<Vec2>,
@@ -93,7 +93,6 @@ impl Widget for ScrollableWidget {
     fn new() -> Self {
         Self {
             props: Scrollable::none(),
-            shift_held: false,
             dragging: false,
             last_drag_pos: None,
             scroll_position: Cell::new(Vec2::ZERO),
@@ -190,22 +189,18 @@ impl Widget for ScrollableWidget {
 
     fn event(&mut self, _ctx: EventContext<'_>, event: &WidgetEvent) -> EventResponse {
         match *event {
-            WidgetEvent::KeyChanged { key, down, .. }
-                if key == KeyCode::ShiftLeft || key == KeyCode::ShiftRight =>
-            {
-                self.shift_held = down;
-
-                EventResponse::Bubble
-            }
             WidgetEvent::MouseButtonChanged {
                 button: MouseButton::One,
                 down,
                 inside,
                 ..
             } => {
+                self.last_drag_pos = None;
+
                 if inside {
-                    self.last_drag_pos = None;
                     self.dragging = down;
+                } else {
+                    self.dragging = false;
                 }
 
                 EventResponse::Bubble
@@ -231,13 +226,30 @@ impl Widget for ScrollableWidget {
                     EventResponse::Bubble
                 }
             }
-            WidgetEvent::MouseScroll { mut delta } => {
-                if self.shift_held {
+            WidgetEvent::MouseScroll {
+                mut delta,
+                modifiers,
+            } => {
+                if modifiers.shift() {
                     delta = delta.yx();
                 }
 
                 let pos = self.scroll_position.get();
                 let pos = pos + delta;
+
+                match self.props.direction {
+                    Some(ScrollDirection::Y) => {
+                        if delta.y.abs() < 0.01 {
+                            return EventResponse::Bubble;
+                        }
+                    }
+                    Some(ScrollDirection::X) => {
+                        if delta.x.abs() < 0.01 {
+                            return EventResponse::Bubble;
+                        }
+                    }
+                    None => {}
+                }
 
                 let max_scroll_position =
                     (self.canvas_size.get() - self.size.get()).max(Vec2::ZERO);
@@ -247,6 +259,11 @@ impl Widget for ScrollableWidget {
                 self.scroll_position.set(pos);
 
                 EventResponse::Sink
+            }
+            WidgetEvent::MouseLeave => {
+                self.dragging = false;
+                self.last_drag_pos = None;
+                EventResponse::Bubble
             }
             _ => EventResponse::Bubble,
         }
@@ -262,19 +279,19 @@ pub fn scroll_vertical(max_height: Float, children: impl FnOnce()) {
             pad.show(children);
         });
 
-        Relative::new(Alignment::TOP_RIGHT, Pivot::TOP_RIGHT, Dim2::ZERO).show(|| {
-            colored_box(colors::BACKGROUND_2, vec2(SCROLL_SIZE, res.size));
-        });
+        Relative::new(Alignment::CENTER_RIGHT, Pivot::CENTER_RIGHT, Dim2::ZERO).show(|| {
+            RoundRect::new(SCROLL_RADIUS).show_children(|| {
+                let mut pad = Pad::ZERO;
+                pad.top = (res.canvas_size - res.size) * res.pos_percentage;
+                pad.bottom = (res.canvas_size - res.size) * (1.0 - res.pos_percentage);
 
-        Relative::new(Alignment::TOP_RIGHT, Pivot::TOP_RIGHT, Dim2::ZERO).show(|| {
-            let mut pad = Pad::ZERO;
-            pad.top = ((res.canvas_size - res.size) * res.pos_percentage).floor();
-
-            pad.show(|| {
-                colored_box(
-                    colors::ORANGE,
-                    vec2(SCROLL_SIZE, res.size * res.size / res.canvas_size),
-                );
+                pad.show(|| {
+                    let mut rect = RoundRect::new(SCROLL_RADIUS);
+                    rect.color = colors::ORANGE;
+                    rect.min_size =
+                        vec2(SCROLL_SIZE, (res.size * res.size / res.canvas_size).floor());
+                    rect.show();
+                });
             });
         });
     });
@@ -289,18 +306,19 @@ pub fn scroll_horizontal(max_width: Float, children: impl FnOnce()) {
             pad.show(children);
         });
 
-        Relative::new(Alignment::BOTTOM_LEFT, Pivot::BOTTOM_LEFT, Dim2::ZERO).show(|| {
-            colored_box(colors::BACKGROUND_2, vec2(res.size, SCROLL_SIZE));
-        });
+        Relative::new(Alignment::BOTTOM_CENTER, Pivot::BOTTOM_CENTER, Dim2::ZERO).show(|| {
+            RoundRect::new(SCROLL_RADIUS).show_children(|| {
+                let mut pad = Pad::ZERO;
+                pad.left = (res.canvas_size - res.size) * res.pos_percentage;
+                pad.right = (res.canvas_size - res.size) * (1.0 - res.pos_percentage);
 
-        Relative::new(Alignment::BOTTOM_LEFT, Pivot::BOTTOM_LEFT, Dim2::ZERO).show(|| {
-            let mut pad = Pad::ZERO;
-            pad.left = ((res.canvas_size - res.size) * res.pos_percentage).floor();
-            pad.show(|| {
-                colored_box(
-                    colors::ORANGE,
-                    vec2(res.size * res.size / res.canvas_size, SCROLL_SIZE),
-                );
+                pad.show(|| {
+                    let mut rect = RoundRect::new(SCROLL_RADIUS);
+                    rect.color = colors::ORANGE;
+                    rect.min_size =
+                        vec2((res.size * res.size / res.canvas_size).floor(), SCROLL_SIZE);
+                    rect.show();
+                });
             });
         });
     });
