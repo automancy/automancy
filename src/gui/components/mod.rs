@@ -8,6 +8,7 @@ pub const TEXT_SIZE: Float = 16.0;
 pub const DIVIER_SIZE: Float = 1.0;
 pub const ICON_SIZE: Vec2 = vec2(12.0, 12.0);
 
+pub const PADDING_SMALL: Float = 4.0;
 pub const PADDING_MEDIUM: Float = 8.0;
 pub const PADDING_LARGE: Float = 12.0;
 
@@ -24,4 +25,5 @@ pub mod scrollable;
 pub mod select;
 pub mod slider;
 pub mod text;
+pub mod textbox;
 pub mod window;

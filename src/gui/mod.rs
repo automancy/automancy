@@ -30,7 +30,7 @@ use yakui::{
     row,
     util::widget,
     widget::{EventContext, Widget},
-    widgets::{Layer, TextBox},
+    widgets::Layer,
     Alignment, Pivot, Rect, Response, Yakui,
 };
 
@@ -44,6 +44,7 @@ use self::components::{
     absolute::Absolute,
     scrollable::scroll_vertical,
     text::{label_text, symbol_text, Text},
+    textbox::textbox,
 };
 
 pub mod components;
@@ -107,7 +108,7 @@ pub struct GuiState {
 
     pub text_field: TextFieldState,
 
-    pub renaming_map: String,
+    pub renaming_map: Option<String>,
 
     pub tile_selection_category: Option<Id>,
 
@@ -143,7 +144,7 @@ impl GuiState {
             popup: PopupState::None,
             debugger_open: false,
             text_field: Default::default(),
-            renaming_map: "".to_string(),
+            renaming_map: None,
             tile_selection_category: None,
             selected_tile_id: None,
             already_placed_at: None,
@@ -396,17 +397,12 @@ pub fn searchable_id(
     ids: &[Id],
     new_id: &mut Option<Id>,
     field: TextField,
-    hint_text: String,
+    hint_text: &str,
     to_string: &'static impl Fn(&GameState, &Id) -> String,
     draw_item: &'static impl Fn(&mut GameState, &Id),
     state: &mut GameState,
 ) {
-    let mut text = TextBox::new(state.gui_state.text_field.get(field).to_string());
-    text.placeholder = hint_text.to_string();
-
-    if let Some(new) = text.show().text.take() {
-        *state.gui_state.text_field.get(field) = new;
-    }
+    textbox(state.gui_state.text_field.get(field), hint_text);
 
     scroll_vertical(400.0, || {
         let ids = if !state.gui_state.text_field.get(field).is_empty() {

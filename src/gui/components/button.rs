@@ -101,7 +101,7 @@ impl Button {
 
         Self {
             text,
-            padding: Pad::balanced(3.0, 1.0),
+            padding: Pad::all(0.0),
             border_radius: 8.0,
             style,
             hover_style,

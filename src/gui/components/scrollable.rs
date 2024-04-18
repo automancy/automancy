@@ -9,7 +9,7 @@ use yakui::{
     column,
     input::MouseButton,
     widget::{EventContext, LayoutContext, Widget},
-    widgets::{Layer, Pad},
+    widgets::Pad,
     Alignment, Dim2,
 };
 use yakui::{

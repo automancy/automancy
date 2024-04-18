@@ -275,7 +275,7 @@ fn config_item(
         items.as_slice(),
         &mut new_item,
         TextField::Filter,
-        state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.search_item_tip]
+        &state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.search_item_tip]
             .to_string(),
         &|state, id| state.resource_man.item_name(id).to_string(),
         &|state, id| {
@@ -373,7 +373,7 @@ fn config_script(
         scripts,
         &mut new_script,
         TextField::Filter,
-        state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.search_script_tip]
+        &state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.search_script_tip]
             .to_string(),
         &|state, id| state.resource_man.script_name(id).to_string(),
         &|state, id| {
