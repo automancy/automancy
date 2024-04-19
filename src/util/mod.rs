@@ -22,5 +22,5 @@ pub fn is_research_unlocked(
         }
     }
 
-    return false;
+    false
 }

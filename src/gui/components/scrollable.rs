@@ -200,11 +200,13 @@ impl Widget for ScrollableWidget {
 
                 if inside {
                     self.dragging = down;
+
+                    EventResponse::Sink
                 } else {
                     self.dragging = false;
-                }
 
-                EventResponse::Bubble
+                    EventResponse::Bubble
+                }
             }
             WidgetEvent::MouseMoved(Some(mouse)) => {
                 if self.dragging {

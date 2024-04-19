@@ -24,13 +24,12 @@ use crate::GameState;
 use super::{
     components::{
         button::button,
-        container::group,
+        container::{group, window},
         interactive::interactive,
         position::PositionRecord,
         relative::Relative,
         scrollable::scroll_vertical,
         text::{heading, label},
-        window::window,
     },
     ui_game_object,
 };

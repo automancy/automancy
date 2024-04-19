@@ -6,7 +6,7 @@ use yakui::divider;
 
 use crate::GameState;
 
-use super::components::{text::label, window::window, DIVIER_SIZE};
+use super::components::{container::window, text::label, DIVIER_SIZE};
 
 /// Draws the debug menu (F3).
 pub fn debugger(state: &GameState) {

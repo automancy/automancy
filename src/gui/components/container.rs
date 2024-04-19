@@ -1,16 +1,16 @@
 use automancy_defs::colors;
 use yakui::{
-    colored_box_container, pad,
+    colored_box_container, pad, row,
     shapes::RoundedRectangle,
     util::{widget, widget_children},
-    widgets::Pad,
+    widgets::{Layer, Pad},
 };
 
 use yakui::geometry::{Color, Constraints, Vec2};
 use yakui::widget::{LayoutContext, PaintContext, Widget};
 use yakui::Response;
 
-use super::PADDING_MEDIUM;
+use super::{layout::centered_column, text::heading, PADDING_LARGE, PADDING_MEDIUM, PADDING_SMALL};
 
 /**
 A colored box with rounded corners that can contain children.
@@ -96,6 +96,30 @@ pub fn group(children: impl FnOnce()) {
             colored_box_container(colors::BACKGROUND_1, || {
                 Pad::all(PADDING_MEDIUM).show(children);
             });
+        });
+    });
+}
+
+pub fn window_box(title: String, children: impl FnOnce()) {
+    RoundRect::new(4.0, colors::BACKGROUND_1).show_children(|| {
+        Pad::all(PADDING_LARGE).show(|| {
+            centered_column(|| {
+                Pad::vertical(PADDING_SMALL).show(|| {
+                    row(|| {
+                        heading(&title);
+                    });
+                });
+
+                children()
+            });
+        });
+    });
+}
+
+pub fn window(title: String, children: impl FnOnce()) {
+    Layer::new().show(|| {
+        centered_column(|| {
+            window_box(title, children);
         });
     });
 }

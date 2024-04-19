@@ -23,14 +23,13 @@ use automancy_resources::data::item::Item;
 use automancy_resources::data::Data;
 use automancy_resources::ResourceManager;
 use yakui::{
-    constrained,
-    event::{EventInterest, EventResponse, WidgetEvent},
+    column, constrained,
     font::{Font, Fonts},
     offset,
     paint::PaintCall,
     row,
     util::widget,
-    widget::{EventContext, Widget},
+    widget::Widget,
     widgets::{Absolute, Layer},
     Alignment, Constraints, Pivot, Rect, Response, Yakui,
 };
@@ -43,8 +42,9 @@ use crate::{gpu, GameState};
 
 use self::components::{
     hover::hover_tip,
+    interactive::interactive,
     scrollable::scroll_vertical,
-    text::{label_text, symbol_text, Text},
+    text::{label_text, symbol_text},
     textbox::textbox,
 };
 
@@ -264,83 +264,16 @@ impl TextFieldState {
     }
 }
 
-#[derive(Debug)]
-pub struct HoverTip {
-    pub text: Text,
-    pub tip: Text,
-}
+pub fn info_tip(info: &str) {
+    let label = interactive(|| {
+        symbol_text("\u{f449}", colors::BLACK).show();
+    });
 
-impl HoverTip {
-    pub fn new(text: Text, tip: Text) -> Self {
-        Self { text, tip }
+    if label.hovering {
+        hover_tip(|| {
+            label_text(info).show();
+        });
     }
-
-    pub fn show(self) -> Response<HoverTipResponse> {
-        widget::<HoverTipWidget>(self)
-    }
-}
-
-#[derive(Debug)]
-pub struct HoverTipWidget {
-    props: HoverTip,
-    hovering: bool,
-}
-
-#[derive(Debug)]
-pub struct HoverTipResponse {
-    pub hovering: bool,
-}
-
-impl Widget for HoverTipWidget {
-    type Props<'a> = HoverTip;
-    type Response = HoverTipResponse;
-
-    fn new() -> Self {
-        Self {
-            props: HoverTip::new(label_text(""), label_text("")),
-            hovering: false,
-        }
-    }
-
-    fn update(&mut self, props: Self::Props<'_>) -> Self::Response {
-        self.props = props;
-
-        self.props.text.clone().show();
-
-        if self.hovering {
-            let tip = self.props.tip.clone();
-
-            hover_tip(move || {
-                tip.show();
-            });
-        }
-
-        Self::Response {
-            hovering: self.hovering,
-        }
-    }
-
-    fn event_interest(&self) -> EventInterest {
-        EventInterest::MOUSE_INSIDE | EventInterest::MOUSE_OUTSIDE
-    }
-
-    fn event(&mut self, _ctx: EventContext<'_>, event: &WidgetEvent) -> EventResponse {
-        match event {
-            WidgetEvent::MouseEnter => {
-                self.hovering = true;
-                EventResponse::Sink
-            }
-            WidgetEvent::MouseLeave => {
-                self.hovering = false;
-                EventResponse::Sink
-            }
-            _ => EventResponse::Bubble,
-        }
-    }
-}
-
-pub fn info_tip(info: &str) -> Response<HoverTipResponse> {
-    HoverTip::new(symbol_text("\u{f449}", colors::BLACK), label_text(info)).show()
 }
 
 fn take_item_animation(state: &mut GameState, item: Item, dst_rect: Rect) {
@@ -398,47 +331,51 @@ pub fn searchable_id(
     ids: &[Id],
     new_id: &mut Option<Id>,
     field: TextField,
-    hint_text: &str,
+    hint_text: String,
     to_string: &'static impl Fn(&GameState, &Id) -> String,
     draw_item: &'static impl Fn(&mut GameState, &Id),
     state: &mut GameState,
 ) {
-    textbox(state.gui_state.text_field.get(field), hint_text);
+    textbox(state.gui_state.text_field.get(field), &hint_text);
 
-    scroll_vertical(400.0, || {
-        let ids = if !state.gui_state.text_field.get(field).is_empty() {
-            let text = state.gui_state.text_field.get(field).clone();
-            let mut filtered = ids
-                .iter()
-                .flat_map(|id| {
-                    let result = state
-                        .gui_state
-                        .text_field
-                        .fuse
-                        .search_text_in_string(&text, &to_string(state, id));
-                    let score = result.map(|v| v.score);
+    Layer::new().show(|| {
+        scroll_vertical(200.0, || {
+            column(|| {
+                let ids = if !state.gui_state.text_field.get(field).is_empty() {
+                    let text = state.gui_state.text_field.get(field).clone();
+                    let mut filtered = ids
+                        .iter()
+                        .flat_map(|id| {
+                            let result = state
+                                .gui_state
+                                .text_field
+                                .fuse
+                                .search_text_in_string(&text, &to_string(state, id));
+                            let score = result.map(|v| v.score);
 
-                    if score.unwrap_or(0.0) > 0.4 {
-                        None
-                    } else {
-                        Some(*id).zip(score)
-                    }
-                })
-                .collect::<Vec<_>>();
-            filtered.sort_unstable_by(|a, b| a.1.total_cmp(&b.1));
+                            if score.unwrap_or(0.0) > 0.4 {
+                                None
+                            } else {
+                                Some(*id).zip(score)
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                    filtered.sort_unstable_by(|a, b| a.1.total_cmp(&b.1));
 
-            filtered.into_iter().map(|v| v.0).collect::<Vec<_>>()
-        } else {
-            ids.to_vec()
-        };
+                    filtered.into_iter().map(|v| v.0).collect::<Vec<_>>()
+                } else {
+                    ids.to_vec()
+                };
 
-        for id in ids {
-            row(|| {
-                // TODO radio(new_id, Some(id), format!("{}:", to_string(state, &id)));
+                for id in ids {
+                    row(|| {
+                        // TODO radio(new_id, Some(id), format!("{}:", to_string(state, &id)));
 
-                draw_item(state, &id)
+                        draw_item(state, &id)
+                    });
+                }
             });
-        }
+        });
     });
 }
 
@@ -504,9 +441,8 @@ impl GameElement {
 
 #[derive(Debug, Clone)]
 pub struct GameElementWidget {
-    paint: Option<GameElement>,
+    paint: Cell<Option<GameElement>>,
     pos: Cell<Vec2>,
-    resized_matrix: Option<Matrix4>,
     clip: Cell<Option<Rect>>,
 }
 
@@ -522,7 +458,7 @@ impl CallbackTrait<YakuiRenderResources> for GameElementWidget {
         _draws,
     ): &mut YakuiRenderResources,
     ) {
-        if let Some(paint) = self.paint {
+        if let Some(paint) = self.paint.get() {
             let start_instant = START_INSTANT.get().unwrap();
             try_add_animation(resource_man, start_instant, paint.model, animation_map);
 
@@ -604,9 +540,9 @@ impl CallbackTrait<YakuiRenderResources> for GameElementWidget {
             );
         }
 
-        for (draw, ..) in draws[&self.paint.unwrap().model]
+        for (draw, ..) in draws[&self.paint.get().unwrap().model]
             .iter()
-            .filter(|v| v.1 == self.paint.unwrap().index)
+            .filter(|v| v.1 == self.paint.get().unwrap().index)
         {
             render_pass.draw_indexed(
                 draw.first_index..(draw.first_index + draw.index_count),
@@ -623,15 +559,14 @@ impl Widget for GameElementWidget {
 
     fn new() -> Self {
         Self {
-            paint: None,
+            paint: Cell::default(),
             pos: Cell::new(Vec2::ZERO),
-            resized_matrix: None,
             clip: Cell::default(),
         }
     }
 
     fn update(&mut self, props: Self::Props<'_>) -> Self::Response {
-        self.paint = props;
+        self.paint.set(props);
 
         self.pos.get()
     }
@@ -648,33 +583,33 @@ impl Widget for GameElementWidget {
             }
         }
 
-        let size = constraints.constrain(Vec2::ZERO);
+        constraints.constrain(Vec2::ZERO)
+    }
 
-        if let Some(paint) = self.paint {
-            /*
-            let inside = screen_rect.intersect(rect);
-            let sign = rect.center() - inside.center();
+    fn paint(&self, ctx: yakui::widget::PaintContext<'_>) {
+        let mut clip = ctx.paint.get_current_clip();
 
-            let sx = rect.width() / inside.width();
-            let sy = rect.height() / inside.height();
+        if let Some((clip, mut paint)) = clip.as_mut().zip(self.paint.get()) {
+            let rect = *clip;
+
+            *clip = ctx.layout.viewport().constrain(*clip);
+
+            let sign = rect.pos() - clip.pos();
+
+            let sx = rect.size().x / clip.size().x;
+            let sy = rect.size().y / clip.size().y;
 
             let dx = (sx - 1.0) * sign.x.signum();
             let dy = (sy - 1.0) * sign.y.signum();
 
-            let result = Self {
-                instance: instance
-                    .add_world_matrix_left(Matrix4::from_translation(vec3(dx, dy, 0.0)))
-                    .add_world_matrix_right(Matrix4::from_scale(vec3(sx, sy, 1.0))),
-                model,
-                index: *counter,
-            }; */
+            paint.instance = paint
+                .instance
+                .add_world_matrix_left(Matrix4::from_translation(vec3(dx, dy, 0.0)))
+                .add_world_matrix_right(Matrix4::from_scale(vec3(sx, sy, 1.0)));
+
+            self.paint.set(Some(paint));
         }
 
-        size
-    }
-
-    fn paint(&self, ctx: yakui::widget::PaintContext<'_>) {
-        let clip = ctx.paint.get_current_clip();
         self.clip.set(clip);
 
         if let Some(layer) = ctx.paint.layers_mut().current_mut() {

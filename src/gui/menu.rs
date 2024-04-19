@@ -17,13 +17,13 @@ use super::components::{
     button::button,
     checkbox::checkbox,
     container::group,
+    container::window,
     layout::{centered_column, centered_row},
     scrollable::scroll_vertical,
     select::selection_box,
     slider::slider,
     text::{heading, label},
     textbox::textbox,
-    window::window,
     PADDING_LARGE, PADDING_MEDIUM, PADDING_SMALL,
 };
 

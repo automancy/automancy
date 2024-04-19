@@ -10,10 +10,10 @@ use crate::GameState;
 
 use super::components::{
     button::button,
+    container::window,
     layout::{centered_column, centered_row},
     text::label,
     textbox::textbox,
-    window::window,
 };
 
 pub fn invalid_name_popup(state: &mut GameState) {

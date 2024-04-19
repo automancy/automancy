@@ -1,11 +1,12 @@
 use automancy_defs::colors;
 use yakui::{
-    opaque,
     util::widget_children,
     widget::{LayoutContext, Widget},
     widgets::{Absolute, Layer},
     Alignment, Constraints, Pivot, Rect, Response, Vec2,
 };
+
+use crate::gui::util::constrain_to_viewport;
 
 use super::container::RoundRect;
 
@@ -43,7 +44,7 @@ impl Widget for HoverWidget {
         self.props = props;
     }
 
-    fn layout(&self, mut ctx: LayoutContext<'_>, constraints: Constraints) -> Vec2 {
+    fn layout(&self, mut ctx: LayoutContext<'_>, _constraints: Constraints) -> Vec2 {
         let node = ctx.dom.get_current();
 
         let mut size = Vec2::ZERO;
@@ -53,7 +54,7 @@ impl Widget for HoverWidget {
 
         if let Some(pos) = ctx.input.get_mouse_position(ctx.layout) {
             let mut rect = Rect::from_pos_size(pos, size);
-            rect.set_pos(rect.pos() - (rect.max() - ctx.layout.viewport().max()).max(Vec2::ZERO));
+            constrain_to_viewport(&mut rect, ctx.layout);
 
             for &child in &node.children {
                 ctx.layout.set_pos(child, rect.pos());

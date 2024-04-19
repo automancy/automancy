@@ -14,8 +14,8 @@ use crate::tile_entity::TileEntityMsg;
 use crate::GameState;
 
 use super::components::{
+    container::window,
     text::{colored_label, label},
-    window::window,
     PADDING_LARGE,
 };
 
