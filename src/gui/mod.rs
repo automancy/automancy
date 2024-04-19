@@ -411,10 +411,8 @@ pub struct GameElement {
 pub fn ui_game_object(instance: InstanceData, model: Id, size: Vec2) -> Response<Vec2> {
     let mut res = None;
 
-    Layer::new().show(|| {
-        constrained(Constraints::tight(size), || {
-            res = Some(GameElement::new(instance, model).show());
-        });
+    constrained(Constraints::tight(size), || {
+        res = Some(GameElement::new(instance, model).show());
     });
 
     res.unwrap()
@@ -530,14 +528,16 @@ impl CallbackTrait<YakuiRenderResources> for GameElementWidget {
         render_pass.set_index_buffer(global_buffers.index_buffer.slice(..), IndexFormat::Uint16);
 
         if let Some(clip) = self.clip.get() {
-            render_pass.set_viewport(
-                clip.pos().x,
-                clip.pos().y,
-                clip.size().x,
-                clip.size().y,
-                0.0,
-                1.0,
-            );
+            if clip.size() != Vec2::ZERO {
+                render_pass.set_viewport(
+                    clip.pos().x,
+                    clip.pos().y,
+                    clip.size().x,
+                    clip.size().y,
+                    0.0,
+                    1.0,
+                );
+            }
         }
 
         for (draw, ..) in draws[&self.paint.get().unwrap().model]
@@ -576,6 +576,8 @@ impl Widget for GameElementWidget {
         ctx: yakui::widget::LayoutContext<'_>,
         constraints: yakui::Constraints,
     ) -> yakui::Vec2 {
+        ctx.layout.enable_clipping(ctx.dom);
+
         if let Some(layout_node) = ctx.layout.get(ctx.dom.current()) {
             let rect = layout_node.rect;
             if !rect.pos().abs_diff_eq(Vec2::ZERO, 0.001) {
@@ -583,7 +585,7 @@ impl Widget for GameElementWidget {
             }
         }
 
-        constraints.constrain(Vec2::ZERO)
+        constraints.constrain_min(Vec2::ZERO)
     }
 
     fn paint(&self, ctx: yakui::widget::PaintContext<'_>) {

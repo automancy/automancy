@@ -131,7 +131,7 @@ impl Widget for ScrollableWidget {
     }
 
     fn layout(&self, mut ctx: LayoutContext<'_>, constraints: Constraints) -> Vec2 {
-        ctx.layout.enable_clipping(ctx.dom);
+        ctx.layout.new_clip_stack(ctx.dom);
 
         let node = ctx.dom.get_current();
         let mut canvas_size = Vec2::ZERO;
@@ -281,14 +281,16 @@ pub fn scroll_vertical(max_height: Float, children: impl FnOnce()) {
 
         Relative::new(Alignment::CENTER_RIGHT, Pivot::CENTER_RIGHT, Dim2::ZERO).show(|| {
             RoundRect::new(SCROLL_RADIUS, colors::WHITE).show_children(|| {
+                let ratio = res.size / res.canvas_size;
+                let diff = res.canvas_size - res.size;
+
                 pad_y(
-                    (res.canvas_size - res.size) * res.pos_percentage,
-                    (res.canvas_size - res.size) * (1.0 - res.pos_percentage),
+                    diff * ratio * res.pos_percentage,
+                    diff * ratio * (1.0 - res.pos_percentage),
                 )
                 .show(|| {
                     let mut rect = RoundRect::new(SCROLL_RADIUS, colors::ORANGE);
-                    rect.min_size =
-                        vec2(SCROLL_SIZE, (res.size * res.size / res.canvas_size).floor());
+                    rect.min_size = vec2(SCROLL_SIZE, (res.size * ratio).floor());
                     rect.show();
                 });
             });
@@ -304,14 +306,16 @@ pub fn scroll_horizontal(max_width: Float, children: impl FnOnce()) {
 
         Relative::new(Alignment::BOTTOM_CENTER, Pivot::BOTTOM_CENTER, Dim2::ZERO).show(|| {
             RoundRect::new(SCROLL_RADIUS, colors::WHITE).show_children(|| {
+                let ratio = res.size / res.canvas_size;
+                let diff = res.canvas_size - res.size;
+
                 pad_x(
-                    (res.canvas_size - res.size) * res.pos_percentage,
-                    (res.canvas_size - res.size) * (1.0 - res.pos_percentage),
+                    diff * ratio * res.pos_percentage,
+                    diff * ratio * (1.0 - res.pos_percentage),
                 )
                 .show(|| {
                     let mut rect = RoundRect::new(SCROLL_RADIUS, colors::ORANGE);
-                    rect.min_size =
-                        vec2((res.size * res.size / res.canvas_size).floor(), SCROLL_SIZE);
+                    rect.min_size = vec2((res.size * ratio).floor(), SCROLL_SIZE);
                     rect.show();
                 });
             });
