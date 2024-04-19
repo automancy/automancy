@@ -9,13 +9,20 @@ use automancy_defs::rendering::InstanceData;
 use automancy_defs::{colors, math};
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::format;
-use yakui::{row, use_state, Alignment, Pivot, Vec2};
+use yakui::{column, use_state, Alignment, Pivot, Vec2};
 
 use crate::gui::{GameElement, LARGE_ICON_SIZE, MEDIUM_ICON_SIZE};
 use crate::util::is_research_unlocked;
 use crate::GameState;
 
-use super::components::{absolute::Absolute, hover::Hover, interactive::interactive, text::label};
+use super::components::{
+    absolute::Absolute,
+    container::RoundRect,
+    hover::follow_cursor,
+    interactive::interactive,
+    layout::{centered_column, centered_row},
+    text::label,
+};
 
 fn tile_hover_z_angle(elapsed: Float, hovered: bool) -> Float {
     fn angle(hovered: bool) -> Float {
@@ -134,24 +141,26 @@ fn draw_tile_selection(
         hovered.set(response.hovering);
 
         if response.hovering {
-            Hover::new().show(|| {
-                label(&state.resource_man.tile_name(id));
+            follow_cursor(|| {
+                column(|| {
+                    label(&state.resource_man.tile_name(id));
 
-                if !(is_default_tile || has_item) {
-                    if let Some(item) = current_category
-                        .and_then(|id| state.resource_man.registry.categories[&id].item)
-                    {
-                        label(&format(
-                            state.resource_man.translates.gui[&state
-                                .resource_man
-                                .registry
-                                .gui_ids
-                                .lbl_cannot_place_missing_item]
-                                .as_str(),
-                            &[&state.resource_man.item_name(&item)],
-                        ));
-                    };
-                }
+                    if !(is_default_tile || has_item) {
+                        if let Some(item) = current_category
+                            .and_then(|id| state.resource_man.registry.categories[&id].item)
+                        {
+                            label(&format(
+                                state.resource_man.translates.gui[&state
+                                    .resource_man
+                                    .registry
+                                    .gui_ids
+                                    .lbl_cannot_place_missing_item]
+                                    .as_str(),
+                                &[&state.resource_man.item_name(&item)],
+                            ));
+                        };
+                    }
+                });
             });
         }
 
@@ -174,42 +183,48 @@ pub fn tile_selections(
     let projection = projection.as_mat4();
 
     Absolute::new(Alignment::BOTTOM_CENTER, Pivot::BOTTOM_CENTER, Vec2::ZERO).show(|| {
-        row(|| {
-            for id in &state.resource_man.ordered_categories {
-                let category = &state.resource_man.registry.categories[id];
-                let model = state.resource_man.get_model(category.icon);
+        centered_column(|| {
+            RoundRect::new(8.0, colors::BACKGROUND_1).show_children(|| {
+                centered_row(|| {
+                    for id in &state.resource_man.ordered_categories {
+                        let category = &state.resource_man.registry.categories[id];
+                        let model = state.resource_man.get_model(category.icon);
 
-                let response = interactive(|| {
-                    GameElement::new(
-                        InstanceData::default()
-                            .with_world_matrix(projection)
-                            .with_light_pos(vec3(0.0, 4.0, 14.0), None),
-                        model,
-                        vec2(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE),
-                    )
-                    .show();
+                        let response = interactive(|| {
+                            dbg!(GameElement::new(
+                                InstanceData::default()
+                                    .with_world_matrix(projection)
+                                    .with_light_pos(vec3(0.0, 4.0, 14.0), None),
+                                model,
+                                vec2(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE),
+                            )
+                            .show());
+                        });
+
+                        if response.clicked {
+                            state.gui_state.tile_selection_category = Some(*id);
+                        }
+
+                        if response.hovering {
+                            follow_cursor(|| {
+                                label(&state.resource_man.category_name(id));
+                            });
+                        }
+                    }
                 });
+            });
 
-                if response.clicked {
-                    state.gui_state.tile_selection_category = Some(*id);
-                }
-
-                if response.hovering {
-                    Hover::new().show(|| {
-                        label(&state.resource_man.category_name(id));
-                    });
-                }
-            }
-        });
-
-        row(|| {
-            draw_tile_selection(
-                state,
-                game_data,
-                &mut Some(selection_send),
-                state.gui_state.tile_selection_category,
-                LARGE_ICON_SIZE,
-            );
+            RoundRect::new(8.0, colors::BACKGROUND_1).show_children(|| {
+                centered_row(|| {
+                    draw_tile_selection(
+                        state,
+                        game_data,
+                        &mut Some(selection_send),
+                        state.gui_state.tile_selection_category,
+                        LARGE_ICON_SIZE,
+                    );
+                });
+            });
         });
     });
 }

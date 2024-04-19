@@ -1,7 +1,6 @@
 use std::fs;
 
 use automancy_defs::log;
-use yakui::row;
 
 use crate::event::refresh_maps;
 use crate::game::load_map;
@@ -10,7 +9,11 @@ use crate::map::Map;
 use crate::GameState;
 
 use super::components::{
-    button::button, layout::centered_column, text::label, textbox::textbox, window::window,
+    button::button,
+    layout::{centered_column, centered_row},
+    text::label,
+    textbox::textbox,
+    window::window,
 };
 
 pub fn invalid_name_popup(state: &mut GameState) {
@@ -93,9 +96,10 @@ pub fn map_create_popup(state: &mut GameState) {
             centered_column(|| {
                 let name = state.gui_state.text_field.get(TextField::MapName);
 
-                row(|| {
+                centered_row(|| {
                     label("Name:"); //TODO add this to translation
-                    if let Some(new_name) = textbox(name, "").text.take() {
+
+                    if let Some(new_name) = textbox(name, "Name your world here").text.take() {
                         *name = new_name;
                     }
                 });

@@ -8,7 +8,7 @@ use automancy_defs::colors;
 use fontdue::layout::{Layout, LinePosition};
 use yakui::{
     event::{EventInterest, EventResponse, WidgetEvent},
-    shapes::{self, outline, RoundedRectangle},
+    shapes::{outline, RoundedRectangle},
 };
 use yakui::{
     geometry::{Color, Constraints, Vec2},
@@ -45,12 +45,12 @@ pub struct TextBox {
 }
 
 impl TextBox {
-    pub fn new(text: Text) -> Self {
+    pub fn new(text: Text, placeholder: String) -> Self {
         Self {
             text,
             padding: Pad::all(PADDING_MEDIUM),
             fill: Some(colors::BACKGROUND_1),
-            placeholder: String::new(),
+            placeholder,
         }
     }
 
@@ -96,7 +96,7 @@ impl Widget for TextBoxWidget {
 
     fn new() -> Self {
         Self {
-            props: TextBox::new(label_text("")),
+            props: TextBox::new(label_text(""), "".to_string()),
             updated_text: None,
             selected: false,
             cursor: 0,
@@ -123,12 +123,7 @@ impl Widget for TextBoxWidget {
         }
         if use_placeholder {
             // Dim towards background
-            render.style.color = self
-                .props
-                .text
-                .style
-                .color
-                .lerp(&self.props.fill.unwrap_or(Color::CLEAR), 0.75);
+            render.style.color = colors::TEXT_INACTIVE;
         }
 
         pad(self.props.padding, || {
@@ -418,7 +413,7 @@ fn pick_character_on_line(
 }
 
 pub fn textbox(text: &mut String, placeholder: &str) -> Response<TextBoxResponse> {
-    let mut res = TextBox::new(label_text(text.as_str())).show();
+    let mut res = TextBox::new(label_text(text.as_str()), placeholder.to_string()).show();
 
     if let Some(new) = res.text.take() {
         *text = new.clone()

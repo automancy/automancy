@@ -9,7 +9,6 @@ use yakui::{
     column,
     input::MouseButton,
     widget::{EventContext, LayoutContext, Widget},
-    widgets::Pad,
     Alignment, Dim2,
 };
 use yakui::{
@@ -21,6 +20,8 @@ use yakui::{
     row,
 };
 use yakui::{Pivot, Response};
+
+use crate::gui::util::{pad_x, pad_y};
 
 use super::{container::RoundRect, relative::Relative};
 
@@ -273,21 +274,17 @@ impl Widget for ScrollableWidget {
 pub fn scroll_vertical(max_height: Float, children: impl FnOnce()) {
     row(|| {
         let res = Scrollable::vertical(max_height).show(|| {
-            let mut pad = Pad::ZERO;
-            pad.right = SCROLL_SIZE;
-
-            pad.show(children);
+            pad_x(0.0, SCROLL_SIZE).show(children);
         });
 
         Relative::new(Alignment::CENTER_RIGHT, Pivot::CENTER_RIGHT, Dim2::ZERO).show(|| {
-            RoundRect::new(SCROLL_RADIUS).show_children(|| {
-                let mut pad = Pad::ZERO;
-                pad.top = (res.canvas_size - res.size) * res.pos_percentage;
-                pad.bottom = (res.canvas_size - res.size) * (1.0 - res.pos_percentage);
-
-                pad.show(|| {
-                    let mut rect = RoundRect::new(SCROLL_RADIUS);
-                    rect.color = colors::ORANGE;
+            RoundRect::new(SCROLL_RADIUS, colors::WHITE).show_children(|| {
+                pad_y(
+                    (res.canvas_size - res.size) * res.pos_percentage,
+                    (res.canvas_size - res.size) * (1.0 - res.pos_percentage),
+                )
+                .show(|| {
+                    let mut rect = RoundRect::new(SCROLL_RADIUS, colors::ORANGE);
                     rect.min_size =
                         vec2(SCROLL_SIZE, (res.size * res.size / res.canvas_size).floor());
                     rect.show();
@@ -300,21 +297,17 @@ pub fn scroll_vertical(max_height: Float, children: impl FnOnce()) {
 pub fn scroll_horizontal(max_width: Float, children: impl FnOnce()) {
     column(|| {
         let res = Scrollable::horizontal(max_width).show(|| {
-            let mut pad = Pad::ZERO;
-            pad.bottom = SCROLL_SIZE;
-
-            pad.show(children);
+            pad_y(0.0, SCROLL_SIZE).show(children);
         });
 
         Relative::new(Alignment::BOTTOM_CENTER, Pivot::BOTTOM_CENTER, Dim2::ZERO).show(|| {
-            RoundRect::new(SCROLL_RADIUS).show_children(|| {
-                let mut pad = Pad::ZERO;
-                pad.left = (res.canvas_size - res.size) * res.pos_percentage;
-                pad.right = (res.canvas_size - res.size) * (1.0 - res.pos_percentage);
-
-                pad.show(|| {
-                    let mut rect = RoundRect::new(SCROLL_RADIUS);
-                    rect.color = colors::ORANGE;
+            RoundRect::new(SCROLL_RADIUS, colors::WHITE).show_children(|| {
+                pad_x(
+                    (res.canvas_size - res.size) * res.pos_percentage,
+                    (res.canvas_size - res.size) * (1.0 - res.pos_percentage),
+                )
+                .show(|| {
+                    let mut rect = RoundRect::new(SCROLL_RADIUS, colors::ORANGE);
                     rect.min_size =
                         vec2((res.size * res.size / res.canvas_size).floor(), SCROLL_SIZE);
                     rect.show();

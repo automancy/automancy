@@ -154,88 +154,97 @@ pub fn map_menu(state: &mut GameState) {
         || {
             centered_column(|| {
                 scroll_vertical(400.0, || {
-                    let mut dirty = false;
+                    column(|| {
+                        let mut dirty = false;
 
-                    for ((_, save_time), map_name) in state.loop_store.map_infos_cache.clone() {
-                        group(|| {
-                            column(|| {
-                                if Some(&map_name) == state.gui_state.renaming_map.as_ref() {
-                                    let renaming =
-                                        state.gui_state.text_field.get(TextField::MapRenaming);
+                        for ((_, save_time), map_name) in state.loop_store.map_infos_cache.clone() {
+                            group(|| {
+                                column(|| {
+                                    if Some(&map_name) == state.gui_state.renaming_map.as_ref() {
+                                        let renaming =
+                                            state.gui_state.text_field.get(TextField::MapRenaming);
 
-                                    let mut text = textbox(renaming, "");
+                                        let text = textbox(renaming, "");
 
-                                    if text.lost_focus || text.activated {
-                                        state.gui_state.renaming_map = None;
+                                        if text.lost_focus || text.activated {
+                                            state.gui_state.renaming_map = None;
 
-                                        let s = mem::take(renaming)
-                                            .chars()
-                                            .filter(|v| v.is_alphanumeric())
-                                            .collect::<String>();
+                                            let s = mem::take(renaming)
+                                                .chars()
+                                                .filter(|v| v.is_alphanumeric())
+                                                .collect::<String>();
 
-                                        if fs::rename(Map::path(&map_name), Map::path(&s)).is_ok() {
-                                            log::info!("Renamed map {map_name} to {}", s);
+                                            if fs::rename(Map::path(&map_name), Map::path(&s))
+                                                .is_ok()
+                                            {
+                                                log::info!("Renamed map {map_name} to {}", s);
 
-                                            dirty = true;
-                                        } else {
-                                            state.gui_state.popup = PopupState::InvalidName;
+                                                dirty = true;
+                                            } else {
+                                                state.gui_state.popup = PopupState::InvalidName;
+                                            }
                                         }
-                                    }
-                                } else if button(map_name.as_str()).clicked {
-                                    *state.gui_state.text_field.get(TextField::MapRenaming) =
-                                        map_name.clone();
-                                    state.gui_state.renaming_map = Some(map_name.clone());
-                                }
-
-                                centered_row(|| {
-                                    if let Some(save_time) = save_time {
-                                        label(&format_time(
-                                            save_time,
-                                            &state.resource_man.translates.gui
-                                                [&state.resource_man.registry.gui_ids.time_fmt],
-                                        ));
+                                    } else if button(map_name.as_str()).clicked {
+                                        *state.gui_state.text_field.get(TextField::MapRenaming) =
+                                            map_name.clone();
+                                        state.gui_state.renaming_map = Some(map_name.clone());
                                     }
 
-                                    row(|| {
-                                        if button(
-                                            state.resource_man.translates.gui
-                                                [&state.resource_man.registry.gui_ids.btn_load]
-                                                .as_str(),
-                                        )
-                                        .clicked
-                                        {
-                                            state
-                                                .tokio
-                                                .block_on(load_map(
-                                                    &state.game,
-                                                    &mut state.loop_store,
-                                                    map_name.clone(),
-                                                ))
-                                                .unwrap();
-
-                                            state.gui_state.switch_screen(Screen::Ingame);
+                                    centered_row(|| {
+                                        if let Some(save_time) = save_time {
+                                            label(&format_time(
+                                                save_time,
+                                                &state.resource_man.translates.gui
+                                                    [&state.resource_man.registry.gui_ids.time_fmt],
+                                            ));
                                         }
-                                        if button(
-                                            state.resource_man.translates.gui
-                                                [&state.resource_man.registry.gui_ids.btn_delete]
-                                                .as_str(),
-                                        )
-                                        .clicked
-                                        {
-                                            state.gui_state.popup =
-                                                PopupState::MapDeleteConfirmation(map_name.clone());
 
-                                            dirty = true;
-                                        }
+                                        row(|| {
+                                            if button(
+                                                state.resource_man.translates.gui
+                                                    [&state.resource_man.registry.gui_ids.btn_load]
+                                                    .as_str(),
+                                            )
+                                            .clicked
+                                            {
+                                                state
+                                                    .tokio
+                                                    .block_on(load_map(
+                                                        &state.game,
+                                                        &mut state.loop_store,
+                                                        map_name.clone(),
+                                                    ))
+                                                    .unwrap();
+
+                                                state.gui_state.switch_screen(Screen::Ingame);
+                                            }
+                                            if button(
+                                                state.resource_man.translates.gui[&state
+                                                    .resource_man
+                                                    .registry
+                                                    .gui_ids
+                                                    .btn_delete]
+                                                    .as_str(),
+                                            )
+                                            .clicked
+                                            {
+                                                state.gui_state.popup =
+                                                    PopupState::MapDeleteConfirmation(
+                                                        map_name.clone(),
+                                                    );
+
+                                                dirty = true;
+                                            }
+                                        });
                                     });
                                 });
                             });
-                        });
-                    }
+                        }
 
-                    if dirty {
-                        refresh_maps(state);
-                    }
+                        if dirty {
+                            refresh_maps(state);
+                        }
+                    });
                 });
 
                 label(&format(
@@ -403,23 +412,25 @@ pub fn options_menu(state: &mut GameState) {
                     }
                 });
 
-                if button(
-                    &state.resource_man.translates.gui
-                        [&state.resource_man.registry.gui_ids.btn_confirm],
-                )
-                .clicked
-                {
-                    if state.options.save().is_err() {
-                        state.resource_man.error_man.push(
-                            (
-                                state.resource_man.registry.err_ids.unwritable_options,
-                                vec![],
-                            ),
-                            &state.resource_man,
-                        );
+                Pad::vertical(PADDING_MEDIUM).show(|| {
+                    if button(
+                        &state.resource_man.translates.gui
+                            [&state.resource_man.registry.gui_ids.btn_confirm],
+                    )
+                    .clicked
+                    {
+                        if state.options.save().is_err() {
+                            state.resource_man.error_man.push(
+                                (
+                                    state.resource_man.registry.err_ids.unwritable_options,
+                                    vec![],
+                                ),
+                                &state.resource_man,
+                            );
+                        }
+                        state.gui_state.return_screen();
                     }
-                    state.gui_state.return_screen();
-                }
+                });
             });
         },
     );

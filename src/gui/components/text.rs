@@ -9,7 +9,7 @@ use yakui::{
     Color,
 };
 
-use super::{HEADING_SIZE, TEXT_SIZE};
+use super::{HEADING_SIZE, LABEL_SIZE};
 
 use yakui::Response;
 
@@ -84,11 +84,11 @@ pub fn sized_colored_text(text: &str, font_size: Float, font: FontName, color: C
 }
 
 pub fn colored_label(text: &str, color: Color) -> Response<TextResponse> {
-    sized_colored_text(text, TEXT_SIZE, "default".into(), color).show()
+    sized_colored_text(text, LABEL_SIZE, "default".into(), color).show()
 }
 
 pub fn label_text(text: &str) -> Text {
-    sized_colored_text(text, TEXT_SIZE, "default".into(), BLACK)
+    sized_colored_text(text, LABEL_SIZE, "default".into(), BLACK)
 }
 
 pub fn label(text: &str) -> Response<TextResponse> {
@@ -100,5 +100,5 @@ pub fn heading(text: &str) -> Response<TextResponse> {
 }
 
 pub fn symbol_text(symbol: &str, color: Color) -> Text {
-    sized_colored_text(symbol, TEXT_SIZE, "symbols".into(), color)
+    sized_colored_text(symbol, LABEL_SIZE, "symbols".into(), color)
 }

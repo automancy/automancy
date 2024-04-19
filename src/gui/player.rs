@@ -67,37 +67,29 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                                     if let Some(item) =
                                         state.resource_man.registry.items.get(id).cloned()
                                     {
-                                        Layer::new().show(|| {
-                                            Absolute::new(
-                                                Alignment::TOP_LEFT,
-                                                Pivot::TOP_LEFT,
-                                                Vec2::ZERO,
-                                            )
-                                            .show(
-                                                || {
-                                                    let mut pos =
-                                                        PositionRecord::new().show(|| {
-                                                            draw_item(
-                                                                &state.resource_man,
-                                                                None,
-                                                                ItemStack { item, amount },
-                                                                MEDIUM_ICON_SIZE,
-                                                                true,
-                                                            );
-                                                        });
+                                        Absolute::new(
+                                            Alignment::TOP_LEFT,
+                                            Pivot::TOP_LEFT,
+                                            Vec2::ZERO,
+                                        )
+                                        .show(|| {
+                                            let mut pos = PositionRecord::new().show(|| {
+                                                draw_item(
+                                                    &state.resource_man,
+                                                    None,
+                                                    ItemStack { item, amount },
+                                                    MEDIUM_ICON_SIZE,
+                                                    true,
+                                                );
+                                            });
 
-                                                    take_item_animation(
-                                                        state,
-                                                        item,
-                                                        Rect::from_pos_size(
-                                                            pos.into_inner(),
-                                                            vec2(
-                                                                MEDIUM_ICON_SIZE,
-                                                                MEDIUM_ICON_SIZE,
-                                                            ),
-                                                        ),
-                                                    );
-                                                },
+                                            take_item_animation(
+                                                state,
+                                                item,
+                                                Rect::from_pos_size(
+                                                    pos.into_inner(),
+                                                    vec2(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE),
+                                                ),
                                             );
                                         });
                                     }

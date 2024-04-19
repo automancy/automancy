@@ -26,10 +26,10 @@ pub struct RoundRect {
 }
 
 impl RoundRect {
-    pub fn new(radius: f32) -> Self {
+    pub fn new(radius: f32, color: Color) -> Self {
         Self {
             radius,
-            color: Color::WHITE,
+            color,
             min_size: Vec2::ZERO,
         }
     }
@@ -56,7 +56,7 @@ impl Widget for RoundRectWidget {
 
     fn new() -> Self {
         Self {
-            props: RoundRect::new(0.0),
+            props: RoundRect::new(0.0, colors::WHITE),
         }
     }
 

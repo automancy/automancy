@@ -47,7 +47,7 @@ impl Widget for PositionRecordWidget {
     ) -> Vec2 {
         if let Some(layout_node) = ctx.layout.get(ctx.dom.current()) {
             let rect = layout_node.rect;
-            if rect.pos().abs_diff_eq(Vec2::ZERO, 0.001) {
+            if !rect.pos().abs_diff_eq(Vec2::ZERO, 0.001) {
                 self.pos.set(rect.pos())
             }
         }

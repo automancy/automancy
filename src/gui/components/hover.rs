@@ -1,18 +1,21 @@
 use yakui::{
     util::widget_children,
     widget::{LayoutContext, Widget},
-    Constraints, Response, Vec2,
+    widgets::Layer,
+    Alignment, Constraints, Pivot, Response, Vec2,
 };
+
+use super::absolute::Absolute;
 
 #[derive(Debug, Default)]
 pub struct Hover {}
 
 impl Hover {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self::default()
     }
 
-    pub fn show<F: FnOnce()>(self, children: F) -> Response<HoverResponse> {
+    fn show<F: FnOnce()>(self, children: F) -> Response<HoverResponse> {
         widget_children::<HoverWidget, F>(children, self)
     }
 }
@@ -38,13 +41,26 @@ impl Widget for HoverWidget {
         self.props = props;
     }
 
-    fn layout(&self, ctx: LayoutContext<'_>, _constraints: Constraints) -> Vec2 {
-        let id = ctx.dom.current();
+    fn layout(&self, mut ctx: LayoutContext<'_>, _constraints: Constraints) -> Vec2 {
+        let node = ctx.dom.get_current();
 
-        if let Some(pos) = ctx.input.get_mouse_position() {
-            ctx.layout.set_pos(id, pos);
+        let mut size = Vec2::ZERO;
+        for &child in &node.children {
+            size = size.max(ctx.calculate_layout(child, Constraints::none()));
+        }
+
+        if let Some(pos) = ctx.input.get_mouse_position(ctx.layout) {
+            for &child in &node.children {
+                ctx.layout.set_pos(child, pos);
+            }
         }
 
         Vec2::ZERO
     }
+}
+
+pub fn follow_cursor(children: impl FnOnce()) {
+    Absolute::new(Alignment::TOP_LEFT, Pivot::TOP_LEFT, Vec2::ZERO).show(|| {
+        children();
+    });
 }

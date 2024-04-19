@@ -26,9 +26,7 @@ pub fn selection_box<T: Clone + Eq>(
         if open.get() {
             Relative::new(Alignment::BOTTOM_LEFT, Pivot::TOP_LEFT, Dim2::ZERO).show(|| {
                 Layer::new().show(|| {
-                    let mut container = RoundRect::new(8.0);
-                    container.color = colors::BACKGROUND_1;
-                    container.show_children(|| {
+                    RoundRect::new(8.0, colors::BACKGROUND_1).show_children(|| {
                         scroll_vertical(250.0, || {
                             Pad::all(PADDING_MEDIUM).show(|| {
                                 column(|| {

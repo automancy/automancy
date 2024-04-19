@@ -1,7 +1,7 @@
 use yakui::{
     util::widget_children,
     widget::{LayoutContext, Widget},
-    Alignment, Constraints, Pivot, Response, Vec2,
+    Alignment, Constraints, Dim2, Pivot, Response, Vec2,
 };
 
 #[derive(Debug, Clone)]
@@ -50,8 +50,17 @@ impl Widget for AbsoluteWidget {
         self.props = props;
     }
 
-    fn layout(&self, mut ctx: LayoutContext<'_>, _constraints: Constraints) -> Vec2 {
-        let id = ctx.dom.current();
+    fn flow(&self) -> yakui::Flow {
+        yakui::Flow::Relative {
+            anchor: Alignment::TOP_LEFT,
+            offset: Dim2::ZERO,
+        }
+    }
+
+    fn layout(&self, mut ctx: LayoutContext<'_>, constraints: Constraints) -> Vec2 {
+        ctx.layout.new_layer(ctx.dom);
+        ctx.layout.new_clip_stack(ctx.dom);
+
         let node = ctx.dom.get_current();
         let mut size = Vec2::ZERO;
         for &child in &node.children {
@@ -60,14 +69,14 @@ impl Widget for AbsoluteWidget {
 
         let pivot_offset = -size * self.props.pivot.as_vec2();
         for &child in &node.children {
-            ctx.layout.set_pos(child, pivot_offset);
+            ctx.layout.set_pos(
+                child,
+                self.props.anchor.as_vec2() * ctx.layout.viewport().size()
+                    + pivot_offset
+                    + self.props.offset,
+            );
         }
 
-        ctx.layout.set_pos(
-            id,
-            self.props.anchor.as_vec2() * ctx.layout.viewport().size(),
-        );
-
-        Vec2::ZERO
+        constraints.constrain_min(size)
     }
 }

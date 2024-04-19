@@ -771,6 +771,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
+name = "byteorder-lite"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f1fe948ff07f4bd06c30984e69f5b4899c516a3ef74f34df92a2df2ab535495"
+
+[[package]]
 name = "bytes"
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2023,11 +2029,11 @@ dependencies = [
 
 [[package]]
 name = "image-webp"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a84a25dcae3ac487bc24ef280f9e20c79c9b1a3e5e32cbed3041d1c514aa87c"
+checksum = "d730b085583c4d789dfd07fdcf185be59501666a90c97c40162b37e4fdad272d"
 dependencies = [
- "byteorder",
+ "byteorder-lite",
  "thiserror",
 ]
 
@@ -3874,7 +3880,7 @@ dependencies = [
  "serde",
  "serde_spanned",
  "toml_datetime",
- "toml_edit 0.22.9",
+ "toml_edit 0.22.11",
 ]
 
 [[package]]
@@ -3899,9 +3905,9 @@ dependencies = [
 
 [[package]]
 name = "toml_edit"
-version = "0.22.9"
+version = "0.22.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e40bb779c5187258fd7aad0eb68cb8706a0a81fa712fbea808ab43c4b8374c4"
+checksum = "fb686a972ccef8537b39eead3968b0e8616cb5040dbb9bba93007c8e07c9215f"
 dependencies = [
  "indexmap",
  "serde",
@@ -4903,7 +4909,7 @@ checksum = "791978798f0597cfc70478424c2b4fdc2b7a8024aaff78497ef00f24ef674193"
 [[package]]
 name = "yakui"
 version = "0.2.0"
-source = "git+https://github.com/automancy/yakui.git#5fc9ba0d46b73298ca3079d68195ba37c689f6e7"
+source = "git+https://github.com/automancy/yakui.git#c8d049055ad4c0d9de57bf23c36018062d4a30f5"
 dependencies = [
  "yakui-core",
  "yakui-widgets",
@@ -4912,7 +4918,7 @@ dependencies = [
 [[package]]
 name = "yakui-core"
 version = "0.2.0"
-source = "git+https://github.com/automancy/yakui.git#5fc9ba0d46b73298ca3079d68195ba37c689f6e7"
+source = "git+https://github.com/automancy/yakui.git#c8d049055ad4c0d9de57bf23c36018062d4a30f5"
 dependencies = [
  "anymap",
  "bitflags 2.5.0",
@@ -4928,7 +4934,7 @@ dependencies = [
 [[package]]
 name = "yakui-wgpu"
 version = "0.2.0"
-source = "git+https://github.com/automancy/yakui.git#5fc9ba0d46b73298ca3079d68195ba37c689f6e7"
+source = "git+https://github.com/automancy/yakui.git#c8d049055ad4c0d9de57bf23c36018062d4a30f5"
 dependencies = [
  "bytemuck",
  "glam",
@@ -4941,7 +4947,7 @@ dependencies = [
 [[package]]
 name = "yakui-widgets"
 version = "0.2.0"
-source = "git+https://github.com/automancy/yakui.git#5fc9ba0d46b73298ca3079d68195ba37c689f6e7"
+source = "git+https://github.com/automancy/yakui.git#c8d049055ad4c0d9de57bf23c36018062d4a30f5"
 dependencies = [
  "fontdue",
  "smol_str 0.1.24",
@@ -4952,7 +4958,7 @@ dependencies = [
 [[package]]
 name = "yakui-winit"
 version = "0.2.0"
-source = "git+https://github.com/automancy/yakui.git#5fc9ba0d46b73298ca3079d68195ba37c689f6e7"
+source = "git+https://github.com/automancy/yakui.git#c8d049055ad4c0d9de57bf23c36018062d4a30f5"
 dependencies = [
  "winit",
  "yakui-core",

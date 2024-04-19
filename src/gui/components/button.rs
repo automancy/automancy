@@ -18,7 +18,7 @@ use yakui::{Alignment, Response};
 
 use super::{
     text::{label_text, sized_colored_text, Text},
-    TEXT_SIZE,
+    LABEL_SIZE,
 };
 
 /**
@@ -241,7 +241,7 @@ pub fn button_text(text: Text) -> Response<ButtonResponse> {
 pub fn button(text: &str) -> Response<ButtonResponse> {
     button_text(sized_colored_text(
         text,
-        TEXT_SIZE,
+        LABEL_SIZE,
         "default".into(),
         colors::BLACK,
     ))

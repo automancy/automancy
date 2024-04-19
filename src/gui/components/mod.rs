@@ -3,8 +3,8 @@ use automancy_defs::{
     math::{Float, Vec2},
 };
 
-pub const HEADING_SIZE: Float = 24.0;
-pub const TEXT_SIZE: Float = 16.0;
+pub const HEADING_SIZE: Float = 20.0;
+pub const LABEL_SIZE: Float = 14.0;
 pub const DIVIER_SIZE: Float = 1.0;
 pub const ICON_SIZE: Vec2 = vec2(12.0, 12.0);
 

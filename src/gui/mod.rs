@@ -25,9 +25,7 @@ use automancy_resources::ResourceManager;
 use yakui::{
     event::{EventInterest, EventResponse, WidgetEvent},
     font::{Font, Fonts},
-    offset, opaque,
-    paint::PaintCall,
-    row,
+    offset, opaque, row,
     util::widget,
     widget::{EventContext, Widget},
     widgets::Layer,
@@ -42,6 +40,7 @@ use crate::{gpu, GameState};
 
 use self::components::{
     absolute::Absolute,
+    hover::follow_cursor,
     scrollable::scroll_vertical,
     text::{label_text, symbol_text, Text},
     textbox::textbox,
@@ -58,6 +57,7 @@ pub mod player;
 pub mod popup;
 pub mod tile_config;
 pub mod tile_selection;
+pub mod util;
 
 pub const SMALL_ICON_SIZE: Float = 24.0;
 pub const SMALLISH_ICON_SIZE: Float = 36.0;
@@ -309,7 +309,9 @@ impl Widget for HoverTipWidget {
             let tip = self.props.tip.clone();
 
             opaque(move || {
-                tip.show();
+                follow_cursor(|| {
+                    tip.show();
+                });
             });
         }
 
@@ -486,14 +488,15 @@ impl GameElement {
         result
     }
 
-    pub fn show(self) -> Response<()> {
+    pub fn show(self) -> Response<Vec2> {
         widget::<GameElementWidget>(Some(self))
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct GameElementWidget {
     paint: Option<GameElement>,
+    pos: Cell<Vec2>,
     resized_matrix: Option<Matrix4>,
 }
 
@@ -595,42 +598,67 @@ impl CallbackTrait<YakuiRenderResources> for GameElementWidget {
 
 impl Widget for GameElementWidget {
     type Props<'a> = Option<GameElement>;
-    type Response = ();
+    type Response = Vec2;
 
     fn new() -> Self {
         Self {
             paint: None,
+            pos: Cell::new(Vec2::ZERO),
             resized_matrix: None,
         }
     }
 
     fn update(&mut self, props: Self::Props<'_>) -> Self::Response {
         self.paint = props;
+
+        self.pos.get()
     }
 
     fn layout(
         &self,
-        _ctx: yakui::widget::LayoutContext<'_>,
-        _constraints: yakui::Constraints,
+        ctx: yakui::widget::LayoutContext<'_>,
+        constraints: yakui::Constraints,
     ) -> yakui::Vec2 {
-        /*
-        let inside = ctx.layout.viewport().constrain(constraints);
-        let sign = rect.size() / 2.0 - inside.size() / 2.0;
+        if let Some(layout_node) = ctx.layout.get(ctx.dom.current()) {
+            let rect = layout_node.rect;
+            if !rect.pos().abs_diff_eq(Vec2::ZERO, 0.001) {
+                self.pos.set(rect.pos())
+            }
+        }
 
-        let sx = rect.size().x / inside.size().x;
-        let sy = rect.size().y / inside.size().y;
+        if let Some(paint) = self.paint {
+            /*
+            let inside = screen_rect.intersect(rect);
+            let sign = rect.center() - inside.center();
 
-        let dx = (sx - 1.0) * sign.x.signum();
-        let dy = (sy - 1.0) * sign.y.signum();
-         */
+            let sx = rect.width() / inside.width();
+            let sy = rect.height() / inside.height();
 
-        self.paint.as_ref().map(|v| v.size).unwrap_or(Vec2::ZERO)
+            let dx = (sx - 1.0) * sign.x.signum();
+            let dy = (sy - 1.0) * sign.y.signum();
+
+            let result = Self {
+                instance: instance
+                    .add_world_matrix_left(Matrix4::from_translation(vec3(dx, dy, 0.0)))
+                    .add_world_matrix_right(Matrix4::from_scale(vec3(sx, sy, 1.0))),
+                model,
+                index: *counter,
+            }; */
+
+            constraints.constrain(paint.size)
+        } else {
+            Vec2::ZERO
+        }
     }
 
     fn paint(&self, ctx: yakui::widget::PaintContext<'_>) {
+        /*
+        let clip = ctx.paint.get_current_clip();
         if let Some(layer) = ctx.paint.layers_mut().current_mut() {
-            layer.calls.push(PaintCall::Custom(yakui_wgpu::cast(*self)));
-        }
+            layer
+                .calls
+                .push((PaintCall::Custom(yakui_wgpu::cast(self.clone())), clip));
+        } */
     }
 }
 
@@ -686,26 +714,24 @@ pub fn render_ui(
                         .selected_tile_id
                         .and_then(|id| state.resource_man.registry.tiles.get(&id))
                     {
-                        Layer::new().show(|| {
-                            Absolute::new(Alignment::TOP_LEFT, Pivot::TOP_LEFT, Vec2::ZERO).show(
-                                || {
-                                    GameElement::new(
-                                        InstanceData::default()
-                                            .with_alpha(0.6)
-                                            .with_light_pos(state.camera.get_pos().as_vec3(), None)
-                                            .with_world_matrix(state.camera.get_matrix().as_mat4())
-                                            .with_model_matrix(Matrix4::from_translation(vec3(
-                                                cursor_pos.x as Float,
-                                                cursor_pos.y as Float,
-                                                FAR as Float,
-                                            ))),
-                                        tile_def.model,
-                                        state.gui.yak.layout_dom().viewport().size(),
-                                    )
-                                    .show();
-                                },
-                            );
-                        });
+                        Absolute::new(Alignment::TOP_LEFT, Pivot::TOP_LEFT, Vec2::ZERO).show(
+                            || {
+                                GameElement::new(
+                                    InstanceData::default()
+                                        .with_alpha(0.6)
+                                        .with_light_pos(state.camera.get_pos().as_vec3(), None)
+                                        .with_world_matrix(state.camera.get_matrix().as_mat4())
+                                        .with_model_matrix(Matrix4::from_translation(vec3(
+                                            cursor_pos.x as Float,
+                                            cursor_pos.y as Float,
+                                            FAR as Float,
+                                        ))),
+                                    tile_def.model,
+                                    state.gui.yak.layout_dom().viewport().size(),
+                                )
+                                .show();
+                            },
+                        );
                     }
 
                     if let Some(coord) = state.gui_state.linking_tile {
