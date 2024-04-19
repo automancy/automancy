@@ -3,7 +3,10 @@ use ractor::rpc::CallResult;
 use automancy_defs::colors;
 use automancy_resources::data::stack::ItemStack;
 use automancy_resources::data::Data;
-use yakui::{widgets::Pad, Alignment, Pivot, Vec2};
+use yakui::{
+    widgets::{Absolute, Pad},
+    Alignment, Pivot, Vec2,
+};
 
 use crate::gui::item::draw_item;
 use crate::gui::SMALL_ICON_SIZE;
@@ -11,7 +14,6 @@ use crate::tile_entity::TileEntityMsg;
 use crate::GameState;
 
 use super::components::{
-    absolute::Absolute,
     text::{colored_label, label},
     window::window,
     PADDING_LARGE,

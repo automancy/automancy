@@ -9,7 +9,11 @@ use automancy_resources::data::inventory::Inventory;
 use automancy_resources::data::stack::ItemStack;
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::types::tile::TileDef;
-use yakui::{column, pad, row, use_state, widgets::Pad, Alignment, Pivot, Rect, Vec2};
+use yakui::{
+    column, pad, row, use_state,
+    widgets::{Absolute, Pad},
+    Alignment, Pivot, Rect, Vec2,
+};
 
 use crate::gui::item::draw_item;
 use crate::gui::{info_tip, searchable_id, TextField, MEDIUM_ICON_SIZE, SMALL_ICON_SIZE};
@@ -17,7 +21,6 @@ use crate::tile_entity::TileEntityMsg;
 use crate::GameState;
 
 use super::components::{
-    absolute::Absolute,
     button::{button, button_text},
     container::group,
     interactive::interactive,

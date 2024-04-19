@@ -14,25 +14,25 @@ use automancy_resources::data::{Data, DataMap};
 use automancy_resources::types::function::RhaiDataMap;
 use automancy_resources::types::IconMode;
 use automancy_resources::{rhai_call_options, rhai_log_err};
-use yakui::{column, row, use_state, widgets::Layer, Alignment, Dim2, Pivot, Rect};
+use yakui::{column, row, use_state, widgets::Absolute, Alignment, Dim2, Pivot, Rect};
 
 use crate::gui::item::draw_item;
-use crate::gui::{
-    take_item_animation, GameElement, MEDIUM_ICON_SIZE, SMALLISH_ICON_SIZE, SMALL_ICON_SIZE,
-};
+use crate::gui::{take_item_animation, MEDIUM_ICON_SIZE, SMALLISH_ICON_SIZE, SMALL_ICON_SIZE};
 use crate::util::is_research_unlocked;
 use crate::GameState;
 
-use super::components::{
-    absolute::Absolute,
-    button::button,
-    container::group,
-    interactive::interactive,
-    position::PositionRecord,
-    relative::Relative,
-    scrollable::scroll_vertical,
-    text::{heading, label},
-    window::window,
+use super::{
+    components::{
+        button::button,
+        container::group,
+        interactive::interactive,
+        position::PositionRecord,
+        relative::Relative,
+        scrollable::scroll_vertical,
+        text::{heading, label},
+        window::window,
+    },
+    ui_game_object,
 };
 
 const PUZZLE_HEX_GRID_LAYOUT: HexLayout = HexLayout {
@@ -138,7 +138,7 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
 
                                         if interactive(|| {
                                             row(|| {
-                                                GameElement::new(
+                                                ui_game_object(
                                                     InstanceData::default()
                                                         .with_model_matrix(
                                                             research.icon_mode.model_matrix(),
@@ -469,7 +469,7 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                                                                         Dim2::pixels(min.x, min.y),
                                                                     )
                                                                     .show(|| {
-                                                                        GameElement::new(
+                                                                        ui_game_object(
                                                                     InstanceData::default()
                                                                         .with_world_matrix(
                                                                             math::view(dvec3(
@@ -494,8 +494,7 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                                                                             .hex_size
                                                                             .y,
                                                                     ),
-                                                                )
-                                                                .show();
+                                                                );
                                                                     });
                                                                 }
                                                             });
@@ -520,7 +519,7 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                                                         scroll_vertical(200.0, || {
                                                             row(|| {
                                                                 if interactive(|| {
-                                                                    GameElement::new(
+                                                                    ui_game_object(
                                                                         InstanceData::default()
                                                                             .with_world_matrix(
                                                                                 math::view(dvec3(
@@ -537,8 +536,7 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                                                                             SMALLISH_ICON_SIZE,
                                                                             SMALLISH_ICON_SIZE,
                                                                         ),
-                                                                    )
-                                                                    .show();
+                                                                    );
                                                                 })
                                                                 .clicked
                                                                 {
@@ -555,7 +553,7 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
 
                                                                 for id in ids {
                                                                     if interactive(|| {
-                                                                        GameElement::new(
+                                                                        ui_game_object(
                                                                             InstanceData::default()
                                                                                 .with_world_matrix(
                                                                                     math::view(
@@ -580,8 +578,7 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                                                                                 SMALLISH_ICON_SIZE,
                                                                                 SMALLISH_ICON_SIZE,
                                                                             ),
-                                                                        )
-                                                                        .show();
+                                                                        );
                                                                     })
                                                                     .clicked
                                                                     {

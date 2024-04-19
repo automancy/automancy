@@ -12,7 +12,6 @@ pub const PADDING_SMALL: Float = 4.0;
 pub const PADDING_MEDIUM: Float = 8.0;
 pub const PADDING_LARGE: Float = 12.0;
 
-pub mod absolute;
 pub mod button;
 pub mod checkbox;
 pub mod container;

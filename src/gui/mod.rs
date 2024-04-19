@@ -23,13 +23,16 @@ use automancy_resources::data::item::Item;
 use automancy_resources::data::Data;
 use automancy_resources::ResourceManager;
 use yakui::{
+    constrained,
     event::{EventInterest, EventResponse, WidgetEvent},
     font::{Font, Fonts},
-    offset, opaque, row,
+    offset,
+    paint::PaintCall,
+    row,
     util::widget,
     widget::{EventContext, Widget},
-    widgets::Layer,
-    Alignment, Pivot, Rect, Response, Yakui,
+    widgets::{Absolute, Layer},
+    Alignment, Constraints, Pivot, Rect, Response, Yakui,
 };
 
 use crate::game::TAKE_ITEM_ANIMATION_SPEED;
@@ -39,8 +42,7 @@ use crate::renderer::try_add_animation;
 use crate::{gpu, GameState};
 
 use self::components::{
-    absolute::Absolute,
-    hover::follow_cursor,
+    hover::hover_tip,
     scrollable::scroll_vertical,
     text::{label_text, symbol_text, Text},
     textbox::textbox,
@@ -308,10 +310,8 @@ impl Widget for HoverTipWidget {
         if self.hovering {
             let tip = self.props.tip.clone();
 
-            opaque(move || {
-                follow_cursor(|| {
-                    tip.show();
-                });
+            hover_tip(move || {
+                tip.show();
             });
         }
 
@@ -381,13 +381,12 @@ fn take_item_animation(state: &mut GameState, item: Item, dst_rect: Rect) {
 
             Layer::new().show(|| {
                 offset(pos, || {
-                    GameElement::new(
+                    ui_game_object(
                         InstanceData::default()
                             .with_world_matrix(math::view(dvec3(0.0, 0.0, 1.0)).as_mat4()),
                         state.resource_man.get_item_model(item.model),
                         size,
-                    )
-                    .show();
+                    );
                 });
             });
         }
@@ -470,18 +469,28 @@ pub struct GameElement {
     instance: InstanceData,
     model: Id,
     index: usize,
-    size: Vec2,
+}
+
+pub fn ui_game_object(instance: InstanceData, model: Id, size: Vec2) -> Response<Vec2> {
+    let mut res = None;
+
+    Layer::new().show(|| {
+        constrained(Constraints::tight(size), || {
+            res = Some(GameElement::new(instance, model).show());
+        });
+    });
+
+    res.unwrap()
 }
 
 impl GameElement {
-    pub fn new(instance: InstanceData, model: Id, size: Vec2) -> Self {
+    pub fn new(instance: InstanceData, model: Id) -> Self {
         let index = INDEX_COUNTER.get();
 
         let result = Self {
             instance,
             model,
             index,
-            size,
         };
         INDEX_COUNTER.set(index + 1);
 
@@ -498,6 +507,7 @@ pub struct GameElementWidget {
     paint: Option<GameElement>,
     pos: Cell<Vec2>,
     resized_matrix: Option<Matrix4>,
+    clip: Cell<Option<Rect>>,
 }
 
 impl CallbackTrait<YakuiRenderResources> for GameElementWidget {
@@ -583,6 +593,17 @@ impl CallbackTrait<YakuiRenderResources> for GameElementWidget {
         render_pass.set_vertex_buffer(1, gui_resources.instance_buffer.slice(..));
         render_pass.set_index_buffer(global_buffers.index_buffer.slice(..), IndexFormat::Uint16);
 
+        if let Some(clip) = self.clip.get() {
+            render_pass.set_viewport(
+                clip.pos().x,
+                clip.pos().y,
+                clip.size().x,
+                clip.size().y,
+                0.0,
+                1.0,
+            );
+        }
+
         for (draw, ..) in draws[&self.paint.unwrap().model]
             .iter()
             .filter(|v| v.1 == self.paint.unwrap().index)
@@ -605,6 +626,7 @@ impl Widget for GameElementWidget {
             paint: None,
             pos: Cell::new(Vec2::ZERO),
             resized_matrix: None,
+            clip: Cell::default(),
         }
     }
 
@@ -626,6 +648,8 @@ impl Widget for GameElementWidget {
             }
         }
 
+        let size = constraints.constrain(Vec2::ZERO);
+
         if let Some(paint) = self.paint {
             /*
             let inside = screen_rect.intersect(rect);
@@ -644,21 +668,20 @@ impl Widget for GameElementWidget {
                 model,
                 index: *counter,
             }; */
-
-            constraints.constrain(paint.size)
-        } else {
-            Vec2::ZERO
         }
+
+        size
     }
 
     fn paint(&self, ctx: yakui::widget::PaintContext<'_>) {
-        /*
         let clip = ctx.paint.get_current_clip();
+        self.clip.set(clip);
+
         if let Some(layer) = ctx.paint.layers_mut().current_mut() {
             layer
                 .calls
                 .push((PaintCall::Custom(yakui_wgpu::cast(self.clone())), clip));
-        } */
+        }
     }
 }
 
@@ -716,7 +739,7 @@ pub fn render_ui(
                     {
                         Absolute::new(Alignment::TOP_LEFT, Pivot::TOP_LEFT, Vec2::ZERO).show(
                             || {
-                                GameElement::new(
+                                ui_game_object(
                                     InstanceData::default()
                                         .with_alpha(0.6)
                                         .with_light_pos(state.camera.get_pos().as_vec3(), None)
@@ -728,8 +751,7 @@ pub fn render_ui(
                                         ))),
                                     tile_def.model,
                                     state.gui.yak.layout_dom().viewport().size(),
-                                )
-                                .show();
+                                );
                             },
                         );
                     }

@@ -9,19 +9,21 @@ use automancy_defs::rendering::InstanceData;
 use automancy_defs::{colors, math};
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::format;
-use yakui::{column, use_state, Alignment, Pivot, Vec2};
+use yakui::{column, use_state, widgets::Absolute, Alignment, Pivot, Vec2};
 
-use crate::gui::{GameElement, LARGE_ICON_SIZE, MEDIUM_ICON_SIZE};
+use crate::gui::{LARGE_ICON_SIZE, MEDIUM_ICON_SIZE};
 use crate::util::is_research_unlocked;
 use crate::GameState;
 
-use super::components::{
-    absolute::Absolute,
-    container::RoundRect,
-    hover::follow_cursor,
-    interactive::interactive,
-    layout::{centered_column, centered_row},
-    text::label,
+use super::{
+    components::{
+        container::RoundRect,
+        hover::hover_tip,
+        interactive::interactive,
+        layout::{centered_column, centered_row},
+        text::label,
+    },
+    ui_game_object,
 };
 
 fn tile_hover_z_angle(elapsed: Float, hovered: bool) -> Float {
@@ -41,7 +43,7 @@ fn tile_hover_z_angle(elapsed: Float, hovered: bool) -> Float {
     let r = s.get();
 
     s.modify(|v| {
-        let lerped = v.lerp(target, (v / target).abs() + elapsed);
+        let lerped = v.lerp(target, elapsed);
 
         lerped.clamp(v.min(target), v.max(target))
     });
@@ -83,6 +85,8 @@ fn draw_tile_selection(
         true
     };
 
+    let mut hovered = None;
+
     for id in &state.resource_man.ordered_tiles {
         if let Some(Data::Id(category)) = state.resource_man.registry.tiles[id]
             .data
@@ -109,24 +113,26 @@ fn draw_tile_selection(
             }
         }
 
+        let active = is_default_tile || has_item;
+
         let tile = state.resource_man.registry.tiles.get(id).unwrap();
         let model = state.resource_man.get_model(tile.model);
 
-        let hovered = use_state(|| false);
+        let hover_anim_active = use_state(|| false);
 
         let rotate = Matrix4::from_rotation_x(tile_hover_z_angle(
-            state.loop_store.elapsed.as_secs_f32(),
-            hovered.get(),
+            state.loop_store.elapsed.as_secs_f32() * 5.0,
+            hover_anim_active.get(),
         ));
 
-        let color_offset = if is_default_tile || has_item {
+        let color_offset = if active {
             Default::default()
         } else {
             colors::INACTIVE.to_linear()
         };
 
         let response = interactive(|| {
-            GameElement::new(
+            ui_game_object(
                 InstanceData::default()
                     .with_model_matrix(rotate)
                     .with_world_matrix(projection)
@@ -134,41 +140,44 @@ fn draw_tile_selection(
                     .with_color_offset(color_offset),
                 model,
                 vec2(size, size),
-            )
-            .show();
+            );
         });
 
-        hovered.set(response.hovering);
+        hover_anim_active.set(response.hovering);
 
         if response.hovering {
-            follow_cursor(|| {
-                column(|| {
-                    label(&state.resource_man.tile_name(id));
-
-                    if !(is_default_tile || has_item) {
-                        if let Some(item) = current_category
-                            .and_then(|id| state.resource_man.registry.categories[&id].item)
-                        {
-                            label(&format(
-                                state.resource_man.translates.gui[&state
-                                    .resource_man
-                                    .registry
-                                    .gui_ids
-                                    .lbl_cannot_place_missing_item]
-                                    .as_str(),
-                                &[&state.resource_man.item_name(&item)],
-                            ));
-                        };
-                    }
-                });
-            });
+            hovered = Some((*id, active));
         }
 
-        if response.clicked && (is_default_tile || has_item) {
+        if active && response.clicked {
             if let Some(send) = selection_send.take() {
                 send.send(*id).unwrap();
             }
         }
+    }
+
+    if let Some((id, active)) = hovered {
+        hover_tip(|| {
+            column(|| {
+                label(&state.resource_man.tile_name(&id));
+
+                if !active {
+                    if let Some(item) = current_category
+                        .and_then(|id| state.resource_man.registry.categories[&id].item)
+                    {
+                        label(&format(
+                            state.resource_man.translates.gui[&state
+                                .resource_man
+                                .registry
+                                .gui_ids
+                                .lbl_cannot_place_missing_item]
+                                .as_str(),
+                            &[&state.resource_man.item_name(&item)],
+                        ));
+                    };
+                }
+            });
+        });
     }
 }
 
@@ -182,6 +191,8 @@ pub fn tile_selections(
         * math::view(dvec3(0.0, 0.0, 2.75));
     let projection = projection.as_mat4();
 
+    let mut hovered = None;
+
     Absolute::new(Alignment::BOTTOM_CENTER, Pivot::BOTTOM_CENTER, Vec2::ZERO).show(|| {
         centered_column(|| {
             RoundRect::new(8.0, colors::BACKGROUND_1).show_children(|| {
@@ -191,14 +202,13 @@ pub fn tile_selections(
                         let model = state.resource_man.get_model(category.icon);
 
                         let response = interactive(|| {
-                            dbg!(GameElement::new(
+                            ui_game_object(
                                 InstanceData::default()
                                     .with_world_matrix(projection)
                                     .with_light_pos(vec3(0.0, 4.0, 14.0), None),
                                 model,
                                 vec2(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE),
-                            )
-                            .show());
+                            );
                         });
 
                         if response.clicked {
@@ -206,9 +216,7 @@ pub fn tile_selections(
                         }
 
                         if response.hovering {
-                            follow_cursor(|| {
-                                label(&state.resource_man.category_name(id));
-                            });
+                            hovered = Some(*id);
                         }
                     }
                 });
@@ -227,4 +235,10 @@ pub fn tile_selections(
             });
         });
     });
+
+    if let Some(id) = hovered {
+        hover_tip(|| {
+            label(&state.resource_man.category_name(&id));
+        });
+    }
 }
