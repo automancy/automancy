@@ -12,3 +12,6 @@ options.ron
 *.cap
 
 **/items/**/*.blend
+
+.direnv
+result
