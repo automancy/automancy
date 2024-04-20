@@ -192,11 +192,11 @@ pub fn tile_selections(
         * math::view(dvec3(0.0, 0.0, 2.75));
     let projection = projection.as_mat4();
 
-    let mut hovered = None;
-
     Absolute::new(Alignment::BOTTOM_CENTER, Pivot::BOTTOM_CENTER, Dim2::ZERO).show(|| {
         centered_column(|| {
             RoundRect::new(8.0, colors::BACKGROUND_1).show_children(|| {
+                let mut hovered = None;
+
                 scroll_horizontal(state.gui.yak.layout_dom().viewport().size().x, || {
                     centered_row(|| {
                         for id in &state.resource_man.ordered_categories {
@@ -223,6 +223,12 @@ pub fn tile_selections(
                         }
                     });
                 });
+
+                if let Some(id) = hovered {
+                    hover_tip(|| {
+                        label(&state.resource_man.category_name(&id));
+                    });
+                }
             });
 
             RoundRect::new(8.0, colors::BACKGROUND_1).show_children(|| {
@@ -240,10 +246,4 @@ pub fn tile_selections(
             });
         });
     });
-
-    if let Some(id) = hovered {
-        hover_tip(|| {
-            label(&state.resource_man.category_name(&id));
-        });
-    }
 }

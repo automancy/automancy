@@ -185,7 +185,7 @@ impl Widget for ScrollableWidget {
     }
 
     fn event_interest(&self) -> EventInterest {
-        EventInterest::MOUSE_INSIDE | EventInterest::MOUSE_MOVE
+        EventInterest::MOUSE_INSIDE | EventInterest::MOUSE_MOVE | EventInterest::MOUSE_OUTSIDE
     }
 
     fn event(&mut self, _ctx: EventContext<'_>, event: &WidgetEvent) -> EventResponse {
@@ -272,7 +272,7 @@ impl Widget for ScrollableWidget {
             WidgetEvent::MouseLeave => {
                 self.dragging = false;
                 self.last_drag_pos = None;
-                EventResponse::Bubble
+                EventResponse::Sink
             }
             _ => EventResponse::Bubble,
         }

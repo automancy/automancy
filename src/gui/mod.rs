@@ -12,13 +12,13 @@ use winit::{event_loop::EventLoopWindowTarget, window::Window};
 use yakui_wgpu::{CallbackTrait, YakuiWgpu};
 use yakui_winit::YakuiWinit;
 
-use automancy_defs::coord::TileCoord;
 use automancy_defs::glam::{dvec2, dvec3, vec3};
 use automancy_defs::id::Id;
 use automancy_defs::math::Vec2;
 use automancy_defs::math::{Float, Matrix4, FAR, HEX_GRID_LAYOUT};
 use automancy_defs::rendering::{make_line, InstanceData};
 use automancy_defs::{bytemuck, colors, math, window};
+use automancy_defs::{coord::TileCoord, glam::vec2};
 use automancy_resources::data::item::Item;
 use automancy_resources::data::Data;
 use automancy_resources::ResourceManager;
@@ -100,7 +100,7 @@ impl Gui {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct GuiState {
     pub screen: Screen,
     pub previous: Option<Screen>,
@@ -138,6 +138,37 @@ pub struct GuiState {
     pub selected_research: Option<Id>,
     pub selected_research_puzzle_tile: Option<TileCoord>,
     pub research_puzzle_selections: Option<(TileCoord, Vec<Id>)>,
+}
+
+impl Default for GuiState {
+    fn default() -> Self {
+        Self {
+            screen: Default::default(),
+            previous: Default::default(),
+            substate: Default::default(),
+            popup: Default::default(),
+            debugger_open: Default::default(),
+            text_field: Default::default(),
+            renaming_map: Default::default(),
+            tile_selection_category: Default::default(),
+
+            selected_tile_id: Default::default(),
+            already_placed_at: Default::default(),
+            config_open_at: Default::default(),
+
+            linking_tile: Default::default(),
+            grouped_tiles: Default::default(),
+            initial_cursor_position: Default::default(),
+            placement_direction: Default::default(),
+            prev_placement_direction: Default::default(),
+
+            tile_config_ui_position: vec2(0.1, 0.1),
+
+            selected_research: Default::default(),
+            selected_research_puzzle_tile: Default::default(),
+            research_puzzle_selections: Default::default(),
+        }
+    }
 }
 
 /// The state of the main game GUI.
