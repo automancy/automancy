@@ -12,3 +12,6 @@ if ! [ -f "./automancy" ] || ! [ -d "./resources" ]; then
   echo $'\e[1;31mCould not find all of the installation files! Please try redownloading.\e[0m'
   exit 1
 fi
+
+echo "<script unimplemented>"
+exit 1
