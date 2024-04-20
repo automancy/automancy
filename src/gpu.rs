@@ -86,6 +86,11 @@ pub fn init_gpu_resources(
         source: ShaderSource::Wgsl(resource_man.shaders["intermediate"].as_str().into()),
     });
 
+    let depth_clear_shader = device.create_shader_module(ShaderModuleDescriptor {
+        label: Some("Depth Clear Shader"),
+        source: ShaderSource::Wgsl(resource_man.shaders["clear"].as_str().into()),
+    });
+
     let vertex_buffer = device.create_buffer_init(&BufferInitDescriptor {
         label: Some("Vertex Buffer"),
         contents: bytemuck::cast_slice(vertices.as_slice()),
@@ -414,6 +419,52 @@ pub fn init_gpu_resources(
         }
     };
 
+    let depth_clear_pipeline = {
+        let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+            label: Some("Depth Clear Pipeline Layout"),
+            bind_group_layouts: &[],
+            push_constant_ranges: &[],
+        });
+
+        device.create_render_pipeline(&RenderPipelineDescriptor {
+            label: Some("Depth Clear Pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: VertexState {
+                module: &depth_clear_shader,
+                entry_point: "vs_main",
+                buffers: &[],
+            },
+            fragment: Some(FragmentState {
+                module: &depth_clear_shader,
+                entry_point: "fs_main",
+                targets: &[Some(ColorTargetState {
+                    format: config.format,
+                    blend: None,
+                    write_mask: ColorWrites::empty(),
+                })],
+            }),
+            primitive: PrimitiveState {
+                topology: PrimitiveTopology::TriangleList,
+                front_face: FrontFace::Ccw,
+                cull_mode: None,
+                ..Default::default()
+            },
+            depth_stencil: Some(DepthStencilState {
+                format: DEPTH_FORMAT,
+                depth_write_enabled: true,
+                depth_compare: CompareFunction::Always,
+                stencil: Default::default(),
+                bias: Default::default(),
+            }),
+            multisample: MultisampleState {
+                count: 4,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview: None,
+        })
+    };
+
     let gui_resources = {
         let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Gui Uniform Buffer"),
@@ -525,6 +576,7 @@ pub fn init_gpu_resources(
             matrix_data_buffer,
             bind_group,
             pipeline,
+            depth_clear_pipeline,
         }
     };
 
@@ -1354,6 +1406,7 @@ pub struct GuiResources {
     pub matrix_data_buffer: Buffer,
     pub bind_group: BindGroup,
     pub pipeline: RenderPipeline,
+    pub depth_clear_pipeline: RenderPipeline,
 }
 
 #[derive(OptionGetter)]
