@@ -518,7 +518,8 @@ impl CallbackTrait<YakuiRenderResources> for GameElementWidget {
 
         let clip = self.clip.get();
 
-        if clip.size().x > 0.0 && clip.size().y > 0.0 {
+        if clip.size().x > 0.0 && clip.size().y > 0.0 && clip.pos().x >= 0.0 && clip.pos().y >= 0.0
+        {
             render_pass.set_viewport(
                 clip.pos().x,
                 clip.pos().y,
@@ -587,10 +588,6 @@ impl Widget for GameElementWidget {
     fn paint(&self, ctx: yakui::widget::PaintContext<'_>) {
         let clip = ctx.paint.get_current_clip();
 
-        if let Some(clip) = clip {
-            self.clip.set(clip);
-        }
-
         if let Some((paint, layout_rect)) = self.paint.get().zip(self.layout_rect.get()) {
             let clip = self.clip.get();
 
@@ -616,6 +613,10 @@ impl Widget for GameElementWidget {
                         * Matrix4::from_scale(vec3(sx, sy, 1.0)),
                 ));
             }
+        }
+
+        if let Some(clip) = clip {
+            self.clip.set(clip);
         }
 
         if let Some(layer) = ctx.paint.layers_mut().current_mut() {
