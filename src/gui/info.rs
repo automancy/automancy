@@ -5,7 +5,7 @@ use automancy_resources::data::stack::ItemStack;
 use automancy_resources::data::Data;
 use yakui::{
     widgets::{Absolute, Pad},
-    Alignment, Pivot, Vec2,
+    Alignment, Dim2, Pivot,
 };
 
 use crate::gui::item::draw_item;
@@ -21,7 +21,7 @@ use super::components::{
 
 /// Draws the info GUI.
 pub fn info_ui(state: &mut GameState) {
-    Absolute::new(Alignment::TOP_RIGHT, Pivot::TOP_RIGHT, Vec2::ZERO).show(|| {
+    Absolute::new(Alignment::TOP_RIGHT, Pivot::TOP_RIGHT, Dim2::ZERO).show(|| {
         Pad::all(PADDING_LARGE).show(|| {
             window(
                 state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.info]

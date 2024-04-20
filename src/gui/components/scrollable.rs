@@ -199,9 +199,15 @@ impl Widget for ScrollableWidget {
                 self.last_drag_pos = None;
 
                 if inside {
+                    let different = self.dragging != down;
+
                     self.dragging = down;
 
-                    EventResponse::Sink
+                    if different {
+                        EventResponse::Sink
+                    } else {
+                        EventResponse::Bubble
+                    }
                 } else {
                     self.dragging = false;
 

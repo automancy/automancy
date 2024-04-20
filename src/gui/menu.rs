@@ -2,11 +2,9 @@ use std::{fs, mem};
 
 use winit::event_loop::EventLoopWindowTarget;
 
-use automancy_defs::{colors, glam::vec2, log};
+use automancy_defs::{glam::vec2, log};
 use automancy_resources::{format, format_time};
-use yakui::{
-    column, constrained, divider, expanded, image, row, spacer, widgets::Pad, Constraints,
-};
+use yakui::{column, constrained, image, row, spacer, widgets::Pad, Constraints};
 
 use crate::event::{refresh_maps, shutdown_graceful};
 use crate::game::{load_map, GameSystemMessage};
@@ -20,12 +18,12 @@ use super::components::{
     checkbox::checkbox,
     container::{group, window},
     layout::{centered_column, centered_row, stretch_column},
-    scrollable::{scroll_horizontal, scroll_vertical},
+    scrollable::scroll_vertical,
     select::selection_box,
     slider::slider,
     text::{heading, label},
     textbox::textbox,
-    DIVIER_SIZE, PADDING_LARGE, PADDING_MEDIUM, PADDING_SMALL,
+    PADDING_LARGE, PADDING_MEDIUM, PADDING_SMALL,
 };
 
 /// Draws the main menu.
@@ -164,40 +162,51 @@ pub fn map_menu(state: &mut GameState) {
                             {
                                 group(|| {
                                     column(|| {
-                                        if Some(&map_name) == state.gui_state.renaming_map.as_ref()
-                                        {
-                                            let renaming = state
-                                                .gui_state
-                                                .text_field
-                                                .get(TextField::MapRenaming);
+                                        Pad::vertical(PADDING_SMALL).show(|| {
+                                            if Some(&map_name)
+                                                == state.gui_state.renaming_map.as_ref()
+                                            {
+                                                let renaming = state
+                                                    .gui_state
+                                                    .text_field
+                                                    .get(TextField::MapRenaming);
 
-                                            let text = textbox(renaming, "");
+                                                let text = textbox(renaming, "");
 
-                                            if text.lost_focus || text.activated {
-                                                state.gui_state.renaming_map = None;
+                                                if text.lost_focus || text.activated {
+                                                    state.gui_state.renaming_map = None;
 
-                                                let s = mem::take(renaming)
-                                                    .chars()
-                                                    .filter(|v| v.is_alphanumeric())
-                                                    .collect::<String>();
+                                                    let s = mem::take(renaming)
+                                                        .chars()
+                                                        .filter(|v| v.is_alphanumeric())
+                                                        .collect::<String>();
 
-                                                if fs::rename(Map::path(&map_name), Map::path(&s))
+                                                    if fs::rename(
+                                                        Map::path(&map_name),
+                                                        Map::path(&s),
+                                                    )
                                                     .is_ok()
-                                                {
-                                                    log::info!("Renamed map {map_name} to {}", s);
+                                                    {
+                                                        log::info!(
+                                                            "Renamed map {map_name} to {}",
+                                                            s
+                                                        );
 
-                                                    dirty = true;
-                                                } else {
-                                                    state.gui_state.popup = PopupState::InvalidName;
+                                                        dirty = true;
+                                                    } else {
+                                                        state.gui_state.popup =
+                                                            PopupState::InvalidName;
+                                                    }
                                                 }
+                                            } else if button(map_name.as_str()).clicked {
+                                                *state
+                                                    .gui_state
+                                                    .text_field
+                                                    .get(TextField::MapRenaming) = map_name.clone();
+                                                state.gui_state.renaming_map =
+                                                    Some(map_name.clone());
                                             }
-                                        } else if button(map_name.as_str()).clicked {
-                                            *state
-                                                .gui_state
-                                                .text_field
-                                                .get(TextField::MapRenaming) = map_name.clone();
-                                            state.gui_state.renaming_map = Some(map_name.clone());
-                                        }
+                                        });
 
                                         row(|| {
                                             if let Some(save_time) = save_time {

@@ -37,7 +37,6 @@ use automancy_resources::ResourceManager;
 use yakui::Rect;
 use yakui_wgpu::SurfaceInfo;
 
-use crate::options::Options;
 use crate::{
     camera::Camera,
     gui::{GameElementWidget, YakuiRenderResources},
@@ -68,7 +67,6 @@ pub struct Renderer<'a> {
     pub render_resources: RenderResources,
     pub global_buffers: Arc<GlobalBuffers>,
     pub gui_resources: Option<GuiResources>,
-    pub fps_limit: i32,
 
     render_info_cache:
         Arc<Mutex<Option<(HashMap<TileCoord, RenderUnit>, HashMap<TileCoord, DataMap>)>>>,
@@ -90,7 +88,6 @@ impl<'a> Renderer<'a> {
         render_resources: RenderResources,
         global_buffers: Arc<GlobalBuffers>,
         gui_resources: GuiResources,
-        options: &Options,
     ) -> Self {
         Self {
             gpu,
@@ -98,7 +95,6 @@ impl<'a> Renderer<'a> {
             render_resources,
             global_buffers,
             gui_resources: Some(gui_resources),
-            fps_limit: options.graphics.fps_limit,
 
             render_info_cache: Arc::new(Default::default()),
             render_info_updating: Arc::new(Default::default()),

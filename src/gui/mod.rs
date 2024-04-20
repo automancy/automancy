@@ -1,9 +1,9 @@
 use enum_map::{enum_map, Enum, EnumMap};
-use fuse_rust::Fuse;
+use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use hashbrown::{HashMap, HashSet};
 use once_cell::sync::Lazy;
 use std::sync::Arc;
-use std::{cell::Cell, time::Instant};
+use std::{cell::Cell, fmt::Debug, time::Instant};
 use std::{collections::BTreeMap, mem};
 use tokio::sync::oneshot;
 use wgpu::IndexFormat;
@@ -23,7 +23,7 @@ use automancy_resources::data::item::Item;
 use automancy_resources::data::Data;
 use automancy_resources::ResourceManager;
 use yakui::{
-    column, constrained,
+    column,
     font::{Font, Fonts},
     offset,
     paint::PaintCall,
@@ -31,7 +31,7 @@ use yakui::{
     util::widget,
     widget::Widget,
     widgets::{Absolute, Layer},
-    Alignment, Constraints, Pivot, Rect, Response, Yakui,
+    Alignment, Dim2, Pivot, Rect, Response, Yakui,
 };
 
 use crate::game::TAKE_ITEM_ANIMATION_SPEED;
@@ -100,6 +100,7 @@ impl Gui {
     }
 }
 
+#[derive(Debug, Default)]
 pub struct GuiState {
     pub screen: Screen,
     pub previous: Option<Screen>,
@@ -132,40 +133,17 @@ pub struct GuiState {
     pub placement_direction: Option<TileCoord>,
     pub prev_placement_direction: Option<TileCoord>,
 
+    pub tile_config_ui_position: Vec2,
+
     pub selected_research: Option<Id>,
     pub selected_research_puzzle_tile: Option<TileCoord>,
     pub research_puzzle_selections: Option<(TileCoord, Vec<Id>)>,
 }
 
-impl GuiState {
-    pub fn new() -> Self {
-        Self {
-            screen: Screen::MainMenu,
-            previous: None,
-            substate: SubState::None,
-            popup: PopupState::None,
-            debugger_open: false,
-            text_field: Default::default(),
-            renaming_map: None,
-            tile_selection_category: None,
-            selected_tile_id: None,
-            already_placed_at: None,
-            config_open_at: None,
-            linking_tile: None,
-            grouped_tiles: Default::default(),
-            initial_cursor_position: None,
-            placement_direction: None,
-            prev_placement_direction: None,
-            selected_research: None,
-            selected_research_puzzle_tile: None,
-            research_puzzle_selections: None,
-        }
-    }
-}
-
 /// The state of the main game GUI.
-#[derive(Eq, PartialEq, Copy, Clone)]
+#[derive(Eq, PartialEq, Copy, Clone, Debug, Default)]
 pub enum Screen {
+    #[default]
     MainMenu,
     MapLoad,
     Options,
@@ -173,13 +151,14 @@ pub enum Screen {
     Paused,
 }
 
-#[derive(Eq, PartialEq, Copy, Clone)]
+#[derive(Eq, PartialEq, Copy, Clone, Debug, Default)]
 pub enum SubState {
+    #[default]
     None,
     Options(OptionsMenuState),
 }
 
-#[derive(Eq, PartialEq, Copy, Clone)]
+#[derive(Eq, PartialEq, Copy, Clone, Debug)]
 pub enum OptionsMenuState {
     Graphics,
     Audio,
@@ -188,8 +167,9 @@ pub enum OptionsMenuState {
 }
 
 /// The state of popups (which are on top of the main GUI), if any should be displayed.
-#[derive(Eq, PartialEq, Clone)]
+#[derive(Eq, PartialEq, Clone, Debug, Default)]
 pub enum PopupState {
+    #[default]
     None,
     MapCreate,
     MapDeleteConfirmation(String),
@@ -229,7 +209,7 @@ impl GuiState {
     }
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Enum, Clone, Copy)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Enum, Clone, Copy, Debug)]
 pub enum TextField {
     Filter,
     MapRenaming,
@@ -237,14 +217,22 @@ pub enum TextField {
 }
 
 pub struct TextFieldState {
-    pub fuse: Fuse,
+    pub fuse: SkimMatcherV2,
     fields: EnumMap<TextField, String>,
+}
+
+impl Debug for TextFieldState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TextFieldState")
+            .field("fields", &self.fields)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Default for TextFieldState {
     fn default() -> Self {
         TextFieldState {
-            fuse: Fuse::default(),
+            fuse: SkimMatcherV2::default(),
             fields: enum_map! {
                 TextField::Filter => Default::default(),
                 TextField::MapName => Default::default(),
@@ -346,21 +334,21 @@ pub fn searchable_id(
                     let mut filtered = ids
                         .iter()
                         .flat_map(|id| {
-                            let result = state
+                            let score = state
                                 .gui_state
                                 .text_field
                                 .fuse
-                                .search_text_in_string(&text, &to_string(state, id));
-                            let score = result.map(|v| v.score);
+                                .fuzzy_match(&text, &to_string(state, id));
 
-                            if score.unwrap_or(0.0) > 0.4 {
+                            if score.unwrap_or(0) > 4 {
                                 None
                             } else {
                                 Some(*id).zip(score)
                             }
                         })
                         .collect::<Vec<_>>();
-                    filtered.sort_unstable_by(|a, b| a.1.total_cmp(&b.1));
+
+                    filtered.sort_unstable_by(|a, b| a.1.cmp(&b.1));
 
                     filtered.into_iter().map(|v| v.0).collect::<Vec<_>>()
                 } else {
@@ -406,33 +394,29 @@ pub struct GameElement {
     instance: InstanceData,
     model: Id,
     index: usize,
+    size: Vec2,
 }
 
-pub fn ui_game_object(instance: InstanceData, model: Id, size: Vec2) -> Response<Vec2> {
-    let mut res = None;
-
-    constrained(Constraints::tight(size), || {
-        res = Some(GameElement::new(instance, model).show());
-    });
-
-    res.unwrap()
+pub fn ui_game_object(instance: InstanceData, model: Id, size: Vec2) -> Response<Option<Rect>> {
+    GameElement::new(instance, model, size).show()
 }
 
 impl GameElement {
-    pub fn new(instance: InstanceData, model: Id) -> Self {
+    pub fn new(instance: InstanceData, model: Id, size: Vec2) -> Self {
         let index = INDEX_COUNTER.get();
 
         let result = Self {
             instance,
             model,
             index,
+            size,
         };
         INDEX_COUNTER.set(index + 1);
 
         result
     }
 
-    pub fn show(self) -> Response<Vec2> {
+    pub fn show(self) -> Response<Option<Rect>> {
         widget::<GameElementWidget>(Some(self))
     }
 }
@@ -440,8 +424,9 @@ impl GameElement {
 #[derive(Debug, Clone)]
 pub struct GameElementWidget {
     paint: Cell<Option<GameElement>>,
-    pos: Cell<Vec2>,
-    clip: Cell<Option<Rect>>,
+    layout_rect: Cell<Option<Rect>>,
+    clip: Cell<Rect>,
+    adjusted_matrix: Cell<Option<Matrix4>>,
 }
 
 impl CallbackTrait<YakuiRenderResources> for GameElementWidget {
@@ -456,9 +441,13 @@ impl CallbackTrait<YakuiRenderResources> for GameElementWidget {
         _draws,
     ): &mut YakuiRenderResources,
     ) {
-        if let Some(paint) = self.paint.get() {
+        if let Some(mut paint) = self.paint.get() {
             let start_instant = START_INSTANT.get().unwrap();
             try_add_animation(resource_man, start_instant, paint.model, animation_map);
+
+            if let Some(m) = self.adjusted_matrix.get() {
+                paint.instance = paint.instance.with_world_matrix(m);
+            }
 
             instances
                 .as_mut()
@@ -527,17 +516,17 @@ impl CallbackTrait<YakuiRenderResources> for GameElementWidget {
         render_pass.set_vertex_buffer(1, gui_resources.instance_buffer.slice(..));
         render_pass.set_index_buffer(global_buffers.index_buffer.slice(..), IndexFormat::Uint16);
 
-        if let Some(clip) = self.clip.get() {
-            if clip.size() != Vec2::ZERO {
-                render_pass.set_viewport(
-                    clip.pos().x,
-                    clip.pos().y,
-                    clip.size().x,
-                    clip.size().y,
-                    0.0,
-                    1.0,
-                );
-            }
+        let clip = self.clip.get();
+
+        if clip.size().x > 0.0 && clip.size().y > 0.0 {
+            render_pass.set_viewport(
+                clip.pos().x,
+                clip.pos().y,
+                clip.size().x,
+                clip.size().y,
+                0.0,
+                1.0,
+            );
         }
 
         for (draw, ..) in draws[&self.paint.get().unwrap().model]
@@ -555,64 +544,74 @@ impl CallbackTrait<YakuiRenderResources> for GameElementWidget {
 
 impl Widget for GameElementWidget {
     type Props<'a> = Option<GameElement>;
-    type Response = Vec2;
+    type Response = Option<Rect>;
 
     fn new() -> Self {
         Self {
             paint: Cell::default(),
-            pos: Cell::new(Vec2::ZERO),
-            clip: Cell::default(),
+            layout_rect: Cell::default(),
+            clip: Cell::new(Rect::ZERO),
+            adjusted_matrix: Cell::default(),
         }
     }
 
     fn update(&mut self, props: Self::Props<'_>) -> Self::Response {
         self.paint.set(props);
 
-        self.pos.get()
+        self.layout_rect.get()
     }
 
     fn layout(
         &self,
         ctx: yakui::widget::LayoutContext<'_>,
-        constraints: yakui::Constraints,
+        _constraints: yakui::Constraints,
     ) -> yakui::Vec2 {
         ctx.layout.enable_clipping(ctx.dom);
 
         if let Some(layout_node) = ctx.layout.get(ctx.dom.current()) {
-            let rect = layout_node.rect;
-            if !rect.pos().abs_diff_eq(Vec2::ZERO, 0.001) {
-                self.pos.set(rect.pos())
-            }
+            self.layout_rect.set(Some(layout_node.rect));
         }
 
-        constraints.constrain_min(Vec2::ZERO)
+        if let Some(paint) = self.paint.get() {
+            paint.size
+        } else {
+            Vec2::ZERO
+        }
     }
 
     fn paint(&self, ctx: yakui::widget::PaintContext<'_>) {
-        let mut clip = ctx.paint.get_current_clip();
+        let clip = ctx.paint.get_current_clip();
 
-        if let Some((clip, mut paint)) = clip.as_mut().zip(self.paint.get()) {
-            let rect = *clip;
-
-            *clip = ctx.layout.viewport().constrain(*clip);
-
-            let sign = rect.pos() - clip.pos();
-
-            let sx = rect.size().x / clip.size().x;
-            let sy = rect.size().y / clip.size().y;
-
-            let dx = (sx - 1.0) * sign.x.signum();
-            let dy = (sy - 1.0) * sign.y.signum();
-
-            paint.instance = paint
-                .instance
-                .add_world_matrix_left(Matrix4::from_translation(vec3(dx, dy, 0.0)))
-                .add_world_matrix_right(Matrix4::from_scale(vec3(sx, sy, 1.0)));
-
-            self.paint.set(Some(paint));
+        if let Some(clip) = clip {
+            self.clip.set(clip);
         }
 
-        self.clip.set(clip);
+        if let Some((paint, layout_rect)) = self.paint.get().zip(self.layout_rect.get()) {
+            let clip = self.clip.get();
+
+            if clip.size().x > 0.0 && clip.size().y > 0.0 {
+                let rect = layout_rect;
+
+                let inside = clip.constrain(layout_rect);
+
+                let sign = (rect.max() - rect.size() / 2.0) - (inside.max() - inside.size() / 2.0);
+
+                let sx = rect.size().x / inside.size().x;
+                let sy = rect.size().y / inside.size().y;
+
+                let dx = (sx - 1.0) * sign.x.signum();
+                let dy = (sy - 1.0) * sign.y.signum();
+
+                self.adjusted_matrix.set(Some(
+                    Matrix4::from_translation(vec3(dx, dy, 0.0))
+                        * paint
+                            .instance
+                            .get_world_matrix()
+                            .unwrap_or(Matrix4::IDENTITY)
+                        * Matrix4::from_scale(vec3(sx, sy, 1.0)),
+                ));
+            }
+        }
 
         if let Some(layer) = ctx.paint.layers_mut().current_mut() {
             layer
@@ -636,15 +635,8 @@ pub fn render_ui(
                         let mut lock = map_info.blocking_lock();
                         let game_data = &mut lock.data;
 
-                        if state.input_handler.key_active(KeyActions::Player) {
-                            player::player(state, game_data);
-                        }
-
                         // tile_info
                         info::info_ui(state);
-
-                        // tile_config
-                        tile_config::tile_config_ui(state, game_data);
 
                         let (selection_send, selection_recv) = oneshot::channel();
 
@@ -660,6 +652,13 @@ pub fn render_ui(
                                 state.gui_state.selected_tile_id = Some(id);
                             }
                         }
+
+                        // tile_config
+                        tile_config::tile_config_ui(state, game_data);
+
+                        if state.input_handler.key_active(KeyActions::Player) {
+                            player::player(state, game_data);
+                        }
                     }
 
                     let cursor_pos = math::screen_to_world(
@@ -674,7 +673,7 @@ pub fn render_ui(
                         .selected_tile_id
                         .and_then(|id| state.resource_man.registry.tiles.get(&id))
                     {
-                        Absolute::new(Alignment::TOP_LEFT, Pivot::TOP_LEFT, Vec2::ZERO).show(
+                        Absolute::new(Alignment::TOP_LEFT, Pivot::TOP_LEFT, Dim2::ZERO).show(
                             || {
                                 ui_game_object(
                                     InstanceData::default()

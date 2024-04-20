@@ -69,7 +69,7 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                                         Absolute::new(
                                             Alignment::TOP_LEFT,
                                             Pivot::TOP_LEFT,
-                                            Vec2::ZERO,
+                                            Dim2::ZERO,
                                         )
                                         .show(|| {
                                             let mut pos = PositionRecord::new().show(|| {
@@ -507,12 +507,14 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                                                 if let Some((selected, ids)) =
                                                     &state.gui_state.research_puzzle_selections
                                                 {
+                                                    let p = pos.get()
+                                                        + PUZZLE_HEX_GRID_LAYOUT
+                                                            .hex_to_world_pos(**selected);
+
                                                     Absolute::new(
                                                         Alignment::TOP_LEFT,
                                                         Pivot::TOP_LEFT,
-                                                        pos.get()
-                                                            + PUZZLE_HEX_GRID_LAYOUT
-                                                                .hex_to_world_pos(**selected),
+                                                        Dim2::pixels(p.x, p.y),
                                                     )
                                                     .show(|| {
                                                         scroll_vertical(200.0, || {

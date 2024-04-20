@@ -225,7 +225,7 @@ fn main() -> anyhow::Result<()> {
         let options = Options::load()?;
         let input_handler = InputHandler::new(&options);
 
-        let loop_store = EventLoopStorage::new();
+        let loop_store = EventLoopStorage::default();
         let camera = Camera::new(window::window_size_double(&window));
 
         log::info!("Initializing audio backend...");
@@ -278,7 +278,6 @@ fn main() -> anyhow::Result<()> {
             render_resources,
             global_buffers.clone(),
             gui_resources,
-            &options,
         );
         log::info!("Render setup.");
 
@@ -324,7 +323,7 @@ fn main() -> anyhow::Result<()> {
         ));
 
         GameState {
-            gui_state: GuiState::new(),
+            gui_state: GuiState::default(),
             input_handler,
             options,
             resource_man,
@@ -353,6 +352,8 @@ fn main() -> anyhow::Result<()> {
             MAIN_MENU.to_string(),
         ))
         .unwrap();
+
+    state.loop_store.frame_start = Some(Instant::now());
 
     event_loop.run(move |event, target| {
         if closed {
@@ -400,16 +401,16 @@ fn main() -> anyhow::Result<()> {
             state.options.synced = true;
         }
 
-        if !state.renderer.fps_limit.is_zero() {
+        if !state.options.graphics.fps_limit.is_zero() {
             let frame_time;
 
             if state.options.graphics.fps_limit >= 250 {
                 frame_time = Duration::ZERO;
             } else {
-                frame_time = Duration::from_secs_f64(1.0 / state.renderer.fps_limit as f64);
+                frame_time = Duration::from_secs_f64(1.0 / state.options.graphics.fps_limit as f64);
             }
 
-            if state.loop_store.frame_start.elapsed() > frame_time {
+            if state.loop_store.frame_start.unwrap().elapsed() > frame_time {
                 state.renderer.gpu.window.request_redraw();
                 target.set_control_flow(ControlFlow::WaitUntil(Instant::now() + frame_time));
             }
@@ -418,7 +419,7 @@ fn main() -> anyhow::Result<()> {
             target.set_control_flow(ControlFlow::Poll);
         }
 
-        let new_elapsed = Instant::now().duration_since(state.loop_store.frame_start);
+        let new_elapsed = Instant::now().duration_since(state.loop_store.frame_start.unwrap());
         state.loop_store.elapsed = new_elapsed;
     })?;
 

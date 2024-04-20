@@ -9,7 +9,7 @@ use automancy_defs::rendering::InstanceData;
 use automancy_defs::{colors, math};
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::format;
-use yakui::{column, use_state, widgets::Absolute, Alignment, Pivot, Vec2};
+use yakui::{column, use_state, widgets::Absolute, Alignment, Dim2, Pivot};
 
 use crate::gui::{LARGE_ICON_SIZE, MEDIUM_ICON_SIZE};
 use crate::util::is_research_unlocked;
@@ -21,6 +21,7 @@ use super::{
         hover::hover_tip,
         interactive::interactive,
         layout::{centered_column, centered_row},
+        scrollable::scroll_horizontal,
         text::label,
     },
     ui_game_object,
@@ -193,44 +194,48 @@ pub fn tile_selections(
 
     let mut hovered = None;
 
-    Absolute::new(Alignment::BOTTOM_CENTER, Pivot::BOTTOM_CENTER, Vec2::ZERO).show(|| {
+    Absolute::new(Alignment::BOTTOM_CENTER, Pivot::BOTTOM_CENTER, Dim2::ZERO).show(|| {
         centered_column(|| {
             RoundRect::new(8.0, colors::BACKGROUND_1).show_children(|| {
-                centered_row(|| {
-                    for id in &state.resource_man.ordered_categories {
-                        let category = &state.resource_man.registry.categories[id];
-                        let model = state.resource_man.get_model(category.icon);
+                scroll_horizontal(state.gui.yak.layout_dom().viewport().size().x, || {
+                    centered_row(|| {
+                        for id in &state.resource_man.ordered_categories {
+                            let category = &state.resource_man.registry.categories[id];
+                            let model = state.resource_man.get_model(category.icon);
 
-                        let response = interactive(|| {
-                            ui_game_object(
-                                InstanceData::default()
-                                    .with_world_matrix(projection)
-                                    .with_light_pos(vec3(0.0, 4.0, 14.0), None),
-                                model,
-                                vec2(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE),
-                            );
-                        });
+                            let response = interactive(|| {
+                                ui_game_object(
+                                    InstanceData::default()
+                                        .with_world_matrix(projection)
+                                        .with_light_pos(vec3(0.0, 4.0, 14.0), None),
+                                    model,
+                                    vec2(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE),
+                                );
+                            });
 
-                        if response.clicked {
-                            state.gui_state.tile_selection_category = Some(*id);
+                            if response.clicked {
+                                state.gui_state.tile_selection_category = Some(*id);
+                            }
+
+                            if response.hovering {
+                                hovered = Some(*id);
+                            }
                         }
-
-                        if response.hovering {
-                            hovered = Some(*id);
-                        }
-                    }
+                    });
                 });
             });
 
             RoundRect::new(8.0, colors::BACKGROUND_1).show_children(|| {
-                centered_row(|| {
-                    draw_tile_selection(
-                        state,
-                        game_data,
-                        &mut Some(selection_send),
-                        state.gui_state.tile_selection_category,
-                        LARGE_ICON_SIZE,
-                    );
+                scroll_horizontal(state.gui.yak.layout_dom().viewport().size().x, || {
+                    centered_row(|| {
+                        draw_tile_selection(
+                            state,
+                            game_data,
+                            &mut Some(selection_send),
+                            state.gui_state.tile_selection_category,
+                            LARGE_ICON_SIZE,
+                        );
+                    });
                 });
             });
         });

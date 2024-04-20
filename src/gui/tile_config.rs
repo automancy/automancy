@@ -9,7 +9,7 @@ use automancy_resources::data::inventory::Inventory;
 use automancy_resources::data::stack::ItemStack;
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::types::tile::TileDef;
-use yakui::{align, column, pad, row, use_state, widgets::Pad, Alignment, Rect, Vec2};
+use yakui::{column, pad, row, use_state, widgets::Pad, Rect, Vec2};
 
 use crate::gui::item::draw_item;
 use crate::gui::{info_tip, searchable_id, TextField, MEDIUM_ICON_SIZE, SMALL_ICON_SIZE};
@@ -431,7 +431,8 @@ pub fn tile_config_ui(state: &mut GameState, game_data: &mut DataMap) {
         return;
     };
 
-    movable(|| {
+    let mut pos = state.gui_state.tile_config_ui_position;
+    movable(&mut pos, || {
         window_box(
             state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.tile_config]
                 .to_string(),
@@ -512,4 +513,5 @@ pub fn tile_config_ui(state: &mut GameState, game_data: &mut DataMap) {
             },
         );
     });
+    state.gui_state.tile_config_ui_position = pos;
 }

@@ -3,7 +3,7 @@ use yakui::{
     util::widget_children,
     widget::{LayoutContext, Widget},
     widgets::{Absolute, Layer},
-    Alignment, Constraints, Pivot, Rect, Response, Vec2,
+    Alignment, Constraints, Dim2, Pivot, Rect, Response, Vec2,
 };
 
 use crate::gui::util::constrain_to_viewport;
@@ -54,7 +54,7 @@ impl Widget for HoverWidget {
 
         if let Some(pos) = ctx.input.get_mouse_position(ctx.layout) {
             let mut rect = Rect::from_pos_size(pos, size);
-            constrain_to_viewport(&mut rect, ctx.layout);
+            constrain_to_viewport(&mut rect, ctx.layout.viewport());
 
             for &child in &node.children {
                 ctx.layout.set_pos(child, rect.pos());
@@ -66,7 +66,7 @@ impl Widget for HoverWidget {
 }
 
 pub fn follow_cursor(children: impl FnOnce()) {
-    Absolute::new(Alignment::TOP_LEFT, Pivot::TOP_LEFT, Vec2::ZERO).show(|| {
+    Absolute::new(Alignment::TOP_LEFT, Pivot::TOP_LEFT, Dim2::ZERO).show(|| {
         Hover::new().show(|| {
             Layer::new().show(children);
         });

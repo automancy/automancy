@@ -104,7 +104,7 @@ automancy_resources = { path = "automancy_resources" }
 
 enum-map = "2.6.3"
 arraydeque = "0.5.1"
-fuse-rust = "0.3.1"
+fuzzy-matcher = "0.3.7"
 arboard = "3.2.0"
 
 rand = "0.8.5"

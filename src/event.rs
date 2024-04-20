@@ -53,11 +53,12 @@ pub fn refresh_maps(state: &mut GameState) {
 }
 
 /// Stores information that lives for the entire lifetime of the session, and is not dropped at the end of one event cycle or handled elsewhere.
+#[derive(Debug, Default)]
 pub struct EventLoopStorage {
     /// tag searching cache
     pub tag_cache: HashMap<Id, Arc<Vec<Item>>>,
     /// the last frame's starting time
-    pub frame_start: Instant,
+    pub frame_start: Option<Instant>,
     /// the elapsed time between each frame
     pub elapsed: Duration,
 
@@ -68,24 +69,6 @@ pub struct EventLoopStorage {
     pub config_open_updating: Arc<AtomicBool>,
     pub pointing_cache: Arc<Mutex<Option<(Id, ActorRef<TileEntityMsg>)>>>,
     pub pointing_updating: Arc<AtomicBool>,
-}
-
-impl EventLoopStorage {
-    pub fn new() -> Self {
-        Self {
-            tag_cache: Default::default(),
-            frame_start: Instant::now(),
-            elapsed: Default::default(),
-
-            map_infos_cache: vec![],
-            map_info: None,
-
-            config_open_cache: Arc::new(Default::default()),
-            config_open_updating: Arc::new(Default::default()),
-            pointing_cache: Arc::new(Default::default()),
-            pointing_updating: Arc::new(Default::default()),
-        }
-    }
 }
 
 pub async fn shutdown_graceful(
@@ -118,7 +101,7 @@ fn render(state: &mut GameState, target: &EventLoopWindowTarget<()>) -> anyhow::
         state.loop_store.elapsed.as_secs_f64(),
     );
 
-    state.loop_store.frame_start = Instant::now();
+    state.loop_store.frame_start = Some(Instant::now());
 
     {
         if let Some(config_open_at) = state.gui_state.config_open_at {
