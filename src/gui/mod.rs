@@ -12,13 +12,13 @@ use winit::{event_loop::EventLoopWindowTarget, window::Window};
 use yakui_wgpu::{CallbackTrait, YakuiWgpu};
 use yakui_winit::YakuiWinit;
 
-use automancy_defs::coord::TileCoord;
 use automancy_defs::glam::{dvec2, dvec3, vec3};
 use automancy_defs::id::Id;
 use automancy_defs::math::Vec2;
 use automancy_defs::math::{Float, Matrix4, FAR, HEX_GRID_LAYOUT};
 use automancy_defs::rendering::{make_line, InstanceData};
 use automancy_defs::{bytemuck, colors, math, window};
+use automancy_defs::{coord::TileCoord, math::Double};
 use automancy_resources::data::item::Item;
 use automancy_resources::data::Data;
 use automancy_resources::ResourceManager;
