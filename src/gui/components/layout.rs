@@ -27,3 +27,10 @@ pub fn centered_column(children: impl FnOnce()) {
         c.show(children);
     });
 }
+
+pub fn stretch_column(children: impl FnOnce()) {
+    let mut c = List::column();
+    c.cross_axis_alignment = CrossAxisAlignment::Stretch;
+
+    c.show(children);
+}
