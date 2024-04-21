@@ -3,32 +3,36 @@ use std::time::Instant;
 use ractor::rpc::CallResult;
 use ractor::ActorRef;
 
-use automancy_defs::{colors::BLACK, coord::TileCoord};
+use automancy_defs::{colors, coord::TileCoord};
 use automancy_defs::{glam::vec2, id::Id};
 use automancy_resources::data::inventory::Inventory;
 use automancy_resources::data::stack::ItemStack;
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::types::tile::TileDef;
-use yakui::{column, pad, row, use_state, widgets::Pad, Rect, Vec2};
+use yakui::{column, use_state, Rect, Vec2};
 
 use crate::gui::item::draw_item;
 use crate::gui::{info_tip, searchable_id, TextField, MEDIUM_ICON_SIZE, SMALL_ICON_SIZE};
 use crate::tile_entity::TileEntityMsg;
 use crate::GameState;
 
-use super::components::{
-    button::{button, button_text},
-    container::{group, window_box},
-    interactive::interactive,
-    layout::centered_row,
-    movable::movable,
-    position::PositionRecord,
-    slider::slider,
-    text::{label, symbol_text},
+use super::{
+    components::{
+        button::{button, button_text},
+        container::{group, window_box},
+        interactive::interactive,
+        layout::centered_row,
+        movable::movable,
+        position::PositionRecord,
+        select::selection_button,
+        slider::slider,
+        text::{label, symbol_text},
+    },
+    util::pad_x,
 };
 
 /// Draws the direction selector.
-pub fn add_direction(target_coord: &mut Option<TileCoord>, n: u8) {
+pub fn add_direction(target_coord: &mut Option<TileCoord>, n: u8, margin: f32) {
     let coord = match n {
         0 => Some(TileCoord::TOP_RIGHT),
         1 => Some(TileCoord::RIGHT),
@@ -39,22 +43,24 @@ pub fn add_direction(target_coord: &mut Option<TileCoord>, n: u8) {
         _ => None,
     };
 
-    if button_text(symbol_text(
-        match n {
-            0 => "\u{f46c}",
-            1 => "\u{f432}",
-            2 => "\u{f43e}",
-            3 => "\u{f424}",
-            4 => "\u{f434}",
-            5 => "\u{f45c}",
-            _ => "",
-        },
-        BLACK,
-    )) // TODO actual selectable value display
-    .clicked
-    {
-        *target_coord = coord;
-    }
+    pad_x(0.0, margin).show(|| {
+        selection_button(
+            target_coord,
+            coord,
+            symbol_text(
+                match n {
+                    0 => "\u{f46c}",
+                    1 => "\u{f432}",
+                    2 => "\u{f43e}",
+                    3 => "\u{f424}",
+                    4 => "\u{f434}",
+                    5 => "\u{f45c}",
+                    _ => "",
+                },
+                colors::BLACK,
+            ),
+        );
+    });
 }
 
 fn config_target(state: &GameState, data: &DataMap, tile_entity: ActorRef<TileEntityMsg>) {
@@ -70,27 +76,27 @@ fn config_target(state: &GameState, data: &DataMap, tile_entity: ActorRef<TileEn
     );
 
     column(|| {
-        row(|| {
-            pad(Pad::horizontal(15.0), || {
-                add_direction(&mut new_target_coord, 5);
-                add_direction(&mut new_target_coord, 0);
+        pad_x(16.0, 0.0).show(|| {
+            centered_row(|| {
+                add_direction(&mut new_target_coord, 5, 10.0);
+                add_direction(&mut new_target_coord, 0, 10.0);
             });
         });
 
-        row(|| {
-            add_direction(&mut new_target_coord, 4);
-            if button("\u{f467}") // TODO actual selectable value display
-                .clicked
-            {
-                new_target_coord = None;
-            }
-            add_direction(&mut new_target_coord, 1);
+        centered_row(|| {
+            add_direction(&mut new_target_coord, 4, 4.0);
+            pad_x(0.0, 4.0).show(|| {
+                if button_text(symbol_text("\u{f467}", colors::RED)).clicked {
+                    new_target_coord = None;
+                }
+            });
+            add_direction(&mut new_target_coord, 1, 4.0);
         });
 
-        row(|| {
-            pad(Pad::horizontal(15.0), || {
-                add_direction(&mut new_target_coord, 3);
-                add_direction(&mut new_target_coord, 2);
+        pad_x(16.0, 0.0).show(|| {
+            centered_row(|| {
+                add_direction(&mut new_target_coord, 3, 10.0);
+                add_direction(&mut new_target_coord, 2, 10.0);
             });
         });
     });
@@ -133,6 +139,7 @@ fn config_linking(state: &mut GameState, config_open: TileCoord) {
 fn config_amount(
     state: &mut GameState,
     data: &DataMap,
+    name: String,
     tile_entity: ActorRef<TileEntityMsg>,
     tile_info: &TileDef,
 ) {
@@ -156,9 +163,7 @@ fn config_amount(
 
     column(|| {
         centered_row(|| {
-            label(
-                &state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.lbl_amount],
-            );
+            label(&name);
             label(&new_amount.to_string());
         });
 
@@ -239,12 +244,11 @@ fn takeable_item(
     }
 }
 
-fn config_item(
+fn config_item_type(
     state: &mut GameState,
     data: &DataMap,
     item_type: Id,
     tile_entity: ActorRef<TileEntityMsg>,
-    tile_info: &TileDef,
 ) {
     let current_item = data
         .get(&state.resource_man.registry.data_ids.item)
@@ -262,7 +266,7 @@ fn config_item(
     centered_row(|| {
         label(
             state.resource_man.translates.gui
-                [&state.resource_man.registry.gui_ids.tile_config_item]
+                [&state.resource_man.registry.gui_ids.tile_config_type]
                 .as_str(),
         );
 
@@ -273,8 +277,6 @@ fn config_item(
             draw_item(&state.resource_man, None, stack, SMALL_ICON_SIZE, true);
         }
     });
-
-    config_amount(state, data, tile_entity.clone(), tile_info);
 
     searchable_id(
         items.as_slice(),
@@ -420,13 +422,14 @@ pub fn tile_config_ui(state: &mut GameState, game_data: &mut DataMap) {
         return;
     };
 
-    let Some((tile, entity)) = state.loop_store.config_open_cache.blocking_lock().clone() else {
+    let Some((tile, tile_entity)) = state.loop_store.config_open_cache.blocking_lock().clone()
+    else {
         return;
     };
 
     let Ok(CallResult::Success(data)) = state
         .tokio
-        .block_on(entity.call(TileEntityMsg::GetData, None))
+        .block_on(tile_entity.call(TileEntityMsg::GetData, None))
     else {
         return;
     };
@@ -450,7 +453,7 @@ pub fn tile_config_ui(state: &mut GameState, game_data: &mut DataMap) {
                         .data
                         .get(&state.resource_man.registry.data_ids.scripts)
                     {
-                        config_script(state, &data, scripts, entity.clone());
+                        config_script(state, &data, scripts, tile_entity.clone());
                     }
 
                     if tile_info
@@ -477,17 +480,27 @@ pub fn tile_config_ui(state: &mut GameState, game_data: &mut DataMap) {
                             });
 
                             group(|| {
-                                takeable_item(state, game_data, buffer, entity.clone());
+                                takeable_item(state, game_data, buffer, tile_entity.clone());
                             });
                         }
                     }
+
+                    config_amount(
+                        state,
+                        &data,
+                        state.resource_man.translates.gui
+                            [&state.resource_man.registry.gui_ids.tile_config_capacity]
+                            .to_string(),
+                        tile_entity.clone(),
+                        &tile_info,
+                    );
 
                     if let Some(Data::Id(item_type)) = tile_info
                         .data
                         .get(&state.resource_man.registry.data_ids.item_type)
                         .cloned()
                     {
-                        config_item(state, &data, item_type, entity.clone(), &tile_info);
+                        config_item_type(state, &data, item_type, tile_entity.clone());
                     }
 
                     if !tile_info
@@ -497,7 +510,7 @@ pub fn tile_config_ui(state: &mut GameState, game_data: &mut DataMap) {
                         .and_then(Data::into_bool)
                         .unwrap_or(false)
                     {
-                        config_target(state, &data, entity.clone());
+                        config_target(state, &data, tile_entity.clone());
                     }
 
                     if tile_info

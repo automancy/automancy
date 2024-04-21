@@ -44,6 +44,7 @@ use self::components::{
     hover::hover_tip,
     interactive::interactive,
     scrollable::scroll_vertical,
+    select::radio,
     text::{label_text, symbol_text},
     textbox::textbox,
 };
@@ -263,7 +264,7 @@ impl Debug for TextFieldState {
 impl Default for TextFieldState {
     fn default() -> Self {
         TextFieldState {
-            fuse: SkimMatcherV2::default(),
+            fuse: SkimMatcherV2::default().ignore_case(),
             fields: enum_map! {
                 TextField::Filter => Default::default(),
                 TextField::MapName => Default::default(),
@@ -369,9 +370,9 @@ pub fn searchable_id(
                                 .gui_state
                                 .text_field
                                 .fuse
-                                .fuzzy_match(&text, &to_string(state, id));
+                                .fuzzy_match(&to_string(state, id), &text);
 
-                            if score.unwrap_or(0) > 4 {
+                            if score.unwrap_or(0) <= 5 {
                                 None
                             } else {
                                 Some(*id).zip(score)
@@ -388,9 +389,9 @@ pub fn searchable_id(
 
                 for id in ids {
                     row(|| {
-                        // TODO radio(new_id, Some(id), format!("{}:", to_string(state, &id)));
-
-                        draw_item(state, &id)
+                        radio(new_id, Some(id), || {
+                            draw_item(state, &id);
+                        });
                     });
                 }
             });

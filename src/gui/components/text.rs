@@ -9,7 +9,7 @@ use yakui::{
     Color,
 };
 
-use super::{HEADING_SIZE, LABEL_SIZE};
+use super::{HEADING_SIZE, LABEL_SIZE, PADDING_MEDIUM};
 
 use yakui::Response;
 
@@ -37,7 +37,7 @@ impl Text {
         Self {
             text: text.to_string(),
             style: TextStyle::label(),
-            padding: Pad::all(8.0),
+            padding: Pad::all(PADDING_MEDIUM),
         }
     }
 

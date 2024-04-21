@@ -79,7 +79,8 @@ pub struct GuiIds {
     pub tile_config: Id,
     pub tile_config_script: Id,
     pub tile_config_script_info: Id,
-    pub tile_config_item: Id,
+    pub tile_config_type: Id,
+    pub tile_config_capacity: Id,
     pub tile_config_target: Id,
     pub error_popup: Id,
     pub debug_menu: Id,
@@ -94,7 +95,6 @@ pub struct GuiIds {
     pub search_script_tip: Id,
     pub search_item_tip: Id,
 
-    pub lbl_amount: Id,
     pub lbl_link_destination: Id,
     pub lbl_maps_loaded: Id,
     pub lbl_pick_another_name: Id,
