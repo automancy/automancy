@@ -837,5 +837,9 @@ pub fn render_ui(
         }
     }
 
+    if state.input_handler.key_active(KeyActions::Debug) {
+        debug::debugger(state);
+    }
+
     error::error_popup(state);
 }
