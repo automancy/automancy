@@ -45,13 +45,14 @@ pub(crate) fn register_coord_stuff(engine: &mut Engine) {
         .register_type_with_name::<TileBounds>("TileBounds")
         .register_iterator::<TileBounds>()
         .register_fn("TileBounds", TileBounds::new)
-        .register_fn("TileBounds", |v: Vec<TileCoord>| {
-            TileBounds::from_iter(v.into_iter().map(|v| v))
-        })
+        .register_fn("TileBounds", |v: Vec<TileCoord>| TileBounds::from_iter(v))
         .register_fn("TileBounds", |v: Vec<(TileCoord, Id)>| {
             TileBounds::from_iter(v.into_iter().map(|v| v.0))
         })
         .register_fn("TileBounds", |v: HashMap<TileCoord, Id>| {
             TileBounds::from_iter(v.into_iter().map(|v| v.0))
+        })
+        .register_fn("contains", |v: &mut TileBounds, coord: TileCoord| {
+            Dynamic::from_bool(v.is_in_bounds(*coord))
         });
 }

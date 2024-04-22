@@ -25,7 +25,6 @@ use automancy_resources::ResourceManager;
 use yakui::{
     column, constrained,
     font::{Font, Fonts},
-    offset,
     paint::PaintCall,
     row,
     util::widget,
@@ -135,6 +134,7 @@ pub struct GuiState {
     pub prev_placement_direction: Option<TileCoord>,
 
     pub tile_config_ui_position: Vec2,
+    pub player_ui_position: Vec2,
 
     pub selected_research: Option<Id>,
     pub selected_research_puzzle_tile: Option<TileCoord>,
@@ -163,7 +163,8 @@ impl Default for GuiState {
             placement_direction: Default::default(),
             prev_placement_direction: Default::default(),
 
-            tile_config_ui_position: vec2(0.1, 0.1),
+            tile_config_ui_position: vec2(0.1, 0.1), // TODO make default pos screen center?
+            player_ui_position: vec2(0.1, 0.1),
 
             selected_research: Default::default(),
             selected_research_puzzle_tile: Default::default(),
@@ -349,8 +350,13 @@ fn take_item_animation(state: &mut GameState, item: Item, dst_rect: Rect) {
             let pos = src_rect.pos().lerp(dst_rect.pos(), d);
             let size = src_rect.size().lerp(dst_rect.size(), d);
 
-            Layer::new().show(|| {
-                offset(pos, || {
+            Absolute::new(
+                Alignment::TOP_LEFT,
+                Pivot::TOP_LEFT,
+                Dim2::pixels(pos.x, pos.y),
+            )
+            .show(|| {
+                Layer::new().show(|| {
                     ui_game_object(
                         InstanceData::default()
                             .with_world_matrix(math::view(dvec3(0.0, 0.0, 1.0)).as_mat4()),

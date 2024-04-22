@@ -19,3 +19,13 @@ pub fn pad_x(left: f32, right: f32) -> Pad {
 pub fn constrain_to_viewport(rect: &mut Rect, viewport: Rect) {
     rect.set_pos(rect.pos() - (rect.max() - viewport.max()).max(Vec2::ZERO))
 }
+
+pub fn clamp_percentage_to_viewport(size: Vec2, mut pos: Vec2, viewport: Rect) -> Vec2 {
+    let mut rect = Rect::from_pos_size((pos * viewport.size()).floor(), size);
+
+    constrain_to_viewport(&mut rect, viewport);
+
+    pos = (rect.pos() / viewport.size()).clamp(Vec2::ZERO, Vec2::ONE);
+
+    pos
+}

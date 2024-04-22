@@ -79,7 +79,7 @@ impl ResourceManager {
         let research = translate
             .research
             .into_iter()
-            .map(|(id, str)| (id.to_id(&mut self.interner), str.into()))
+            .map(|(id, str)| (id.to_id(&mut self.interner), str))
             .collect();
 
         self.translates = Translate {

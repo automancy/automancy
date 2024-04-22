@@ -4,10 +4,10 @@ use automancy_defs::colors;
 use yakui::{
     util::widget_children,
     widget::{LayoutContext, Widget},
-    Alignment, Constraints, Dim2, Flow, Rect, Response, Vec2,
+    Alignment, Constraints, Dim2, Flow, Response, Vec2,
 };
 
-use crate::gui::util::constrain_to_viewport;
+use crate::gui::util::clamp_percentage_to_viewport;
 
 use super::container::RoundRect;
 
@@ -63,10 +63,11 @@ impl Widget for HoverWidget {
         }
 
         if let Some(pos) = ctx.input.get_mouse_position(ctx.layout) {
-            let mut rect = Rect::from_pos_size(pos, size);
-            constrain_to_viewport(&mut rect, ctx.layout.viewport());
-
-            self.pos.set(rect.pos() / ctx.layout.viewport().size());
+            self.pos.set(clamp_percentage_to_viewport(
+                size,
+                pos / ctx.layout.viewport().size(),
+                ctx.layout.viewport(),
+            ));
         }
 
         size

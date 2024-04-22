@@ -2,6 +2,7 @@ use automancy_defs::colors;
 use yakui::{
     align,
     geometry::Color,
+    opaque,
     style::{TextAlignment, TextStyle},
     util::widget,
 };
@@ -245,4 +246,19 @@ pub fn button(text: &str) -> Response<ButtonResponse> {
         "default".into(),
         colors::BLACK,
     ))
+}
+
+pub fn inactive_button(text: &str) -> Response<ButtonResponse> {
+    let mut r = None;
+
+    opaque(|| {
+        r = Some(button_text(sized_colored_text(
+            text,
+            LABEL_SIZE,
+            "default".into(),
+            colors::GRAY,
+        )));
+    });
+
+    r.unwrap()
 }

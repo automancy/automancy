@@ -1,19 +1,19 @@
 use std::{cell::Cell, fmt::Debug};
 
+use yakui::input::MouseButton;
 use yakui::{
     event::{EventInterest, EventResponse, WidgetEvent},
     util::widget_children,
     Alignment,
 };
 use yakui::{geometry::Vec2, Constraints};
-use yakui::{input::MouseButton, Rect};
 use yakui::{
     widget::{EventContext, Widget},
     Flow,
 };
 use yakui::{Dim2, Response};
 
-use crate::gui::util::constrain_to_viewport;
+use crate::gui::util::clamp_percentage_to_viewport;
 
 #[derive(Debug, Clone, Copy)]
 #[non_exhaustive]
@@ -49,17 +49,6 @@ impl MovableWidget {
     fn pos(&self) -> Vec2 {
         self.props.get().map(|v| v.position).unwrap_or(Vec2::ZERO)
     }
-}
-
-// TODO hover.rs also needs this?
-fn clamp_pos(size: Vec2, mut props: Movable, viewport: Rect) -> Movable {
-    let mut rect = Rect::from_pos_size((props.position * viewport.size()).floor(), size);
-
-    constrain_to_viewport(&mut rect, viewport);
-
-    props.position = (rect.pos() / viewport.size()).clamp(Vec2::ZERO, Vec2::ONE);
-
-    props
 }
 
 impl Widget for MovableWidget {
@@ -107,9 +96,11 @@ impl Widget for MovableWidget {
 
         self.size.set(size);
 
-        if let Some(props) = self.props.get() {
-            self.props
-                .set(Some(clamp_pos(size, props, ctx.layout.viewport())));
+        if let Some(mut props) = self.props.get() {
+            props.position =
+                clamp_percentage_to_viewport(size, props.position, ctx.layout.viewport());
+
+            self.props.set(Some(props));
         }
 
         size
@@ -152,9 +143,12 @@ impl Widget for MovableWidget {
 
                     let p = (self.dragging_from.get().unwrap() * viewport.size()).floor()
                         + (position - start);
-                    props.position = p / viewport.size();
 
-                    *props = clamp_pos(self.size.get(), *props, viewport);
+                    props.position = clamp_percentage_to_viewport(
+                        self.size.get(),
+                        p / viewport.size(),
+                        viewport,
+                    );
                 } else {
                     self.dragging_from.set(None);
                 }

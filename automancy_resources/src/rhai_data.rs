@@ -82,7 +82,7 @@ pub(crate) fn register_data_stuff(engine: &mut Engine) {
                 if let Ok(id) = id.as_int() {
                     v.insert(coord, Id::from(id));
                 } else if let Some(id) = id.try_cast::<Id>() {
-                    v.insert(coord, Id::from(id));
+                    v.insert(coord, id);
                 }
             },
         )
@@ -95,9 +95,9 @@ pub(crate) fn register_data_stuff(engine: &mut Engine) {
         .register_fn("keys", |v: &mut HashMap<TileCoord, Id>| {
             Dynamic::from_iter(v.keys().cloned())
         })
-        .register_fn("TileMap", || HashMap::<TileCoord, Id>::new())
+        .register_fn("TileMap", HashMap::<TileCoord, Id>::new)
         .register_fn("TileMap", |v: Vec<(TileCoord, Id)>| {
-            HashMap::<TileCoord, Id>::from_iter(v.into_iter())
+            HashMap::<TileCoord, Id>::from_iter(v)
         });
 
     engine

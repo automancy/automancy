@@ -8,7 +8,7 @@ use automancy_defs::{glam::vec2, id::Id};
 use automancy_resources::data::stack::ItemStack;
 use automancy_resources::data::{inventory::Inventory, stack::ItemAmount};
 use automancy_resources::data::{Data, DataMap};
-use yakui::{column, constrained, row, Constraints};
+use yakui::{column, constrained, row, widgets::Layer, Constraints};
 
 use crate::gui::item::draw_item;
 use crate::gui::{info_tip, searchable_id, TextField, MEDIUM_ICON_SIZE, SMALL_ICON_SIZE};
@@ -437,123 +437,133 @@ fn config_script(
 
 /// Draws the tile configuration menu.
 pub fn tile_config_ui(state: &mut GameState, game_data: &mut DataMap) {
-    let Some(config_open_at) = state.gui_state.config_open_at else {
-        return;
-    };
+    Layer::new().show(|| {
+        let Some(config_open_at) = state.gui_state.config_open_at else {
+            return;
+        };
 
-    let Some((tile, tile_entity)) = state.loop_store.config_open_cache.blocking_lock().clone()
-    else {
-        return;
-    };
+        let Some((tile, tile_entity)) = state.loop_store.config_open_cache.blocking_lock().clone()
+        else {
+            return;
+        };
 
-    let Ok(CallResult::Success(data)) = state
-        .tokio
-        .block_on(tile_entity.call(TileEntityMsg::GetData, None))
-    else {
-        return;
-    };
+        let Ok(CallResult::Success(data)) = state
+            .tokio
+            .block_on(tile_entity.call(TileEntityMsg::GetData, None))
+        else {
+            return;
+        };
 
-    let mut pos = state.gui_state.tile_config_ui_position;
-    movable(&mut pos, || {
-        window_box(
-            state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.tile_config]
-                .to_string(),
-            || {
-                stretch_column(300.0, || {
-                    let tile_info = state
-                        .resource_man
-                        .registry
-                        .tiles
-                        .get(&tile)
-                        .unwrap()
-                        .clone();
+        let mut pos = state.gui_state.tile_config_ui_position;
+        movable(&mut pos, || {
+            window_box(
+                state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.tile_config]
+                    .to_string(),
+                || {
+                    stretch_column(300.0, || {
+                        let tile_info = state
+                            .resource_man
+                            .registry
+                            .tiles
+                            .get(&tile)
+                            .unwrap()
+                            .clone();
 
-                    if let Some(Data::VecId(scripts)) = tile_info
-                        .data
-                        .get(&state.resource_man.registry.data_ids.scripts)
-                    {
-                        group(|| {
-                            config_script(state, &data, scripts, tile_entity.clone());
-                        });
-                    }
+                        if let Some(Data::VecId(scripts)) = tile_info
+                            .data
+                            .get(&state.resource_man.registry.data_ids.scripts)
+                        {
+                            group(|| {
+                                config_script(state, &data, scripts, tile_entity.clone());
+                            });
+                        }
 
-                    if tile_info
-                        .data
-                        .get(&state.resource_man.registry.data_ids.storage_takeable)
-                        .cloned()
-                        .and_then(Data::into_bool)
-                        .unwrap_or(false)
-                    {
-                        if let Some(Data::Inventory(buffer)) = data
-                            .get(&state.resource_man.registry.data_ids.buffer)
+                        if tile_info
+                            .data
+                            .get(&state.resource_man.registry.data_ids.storage_takeable)
+                            .cloned()
+                            .and_then(Data::into_bool)
+                            .unwrap_or(false)
+                        {
+                            if let Some(Data::Inventory(buffer)) = data
+                                .get(&state.resource_man.registry.data_ids.buffer)
+                                .cloned()
+                            {
+                                group(|| {
+                                    row(|| {
+                                        label(
+                                            &state.resource_man.translates.gui
+                                                [&state.resource_man.registry.gui_ids.inventory],
+                                        );
+
+                                        info_tip(
+                                            &state.resource_man.translates.gui[&state
+                                                .resource_man
+                                                .registry
+                                                .gui_ids
+                                                .inventory_tip],
+                                        );
+                                    });
+
+                                    column(|| {
+                                        takeable_item(
+                                            state,
+                                            game_data,
+                                            buffer,
+                                            tile_entity.clone(),
+                                        );
+                                    });
+                                });
+                            }
+                        }
+
+                        if let Some(Data::Amount(max_amount)) = tile_info
+                            .data
+                            .get(&state.resource_man.registry.data_ids.max_amount)
                             .cloned()
                         {
                             group(|| {
-                                row(|| {
-                                    label(
-                                        &state.resource_man.translates.gui
-                                            [&state.resource_man.registry.gui_ids.inventory],
-                                    );
-
-                                    info_tip(
-                                        &state.resource_man.translates.gui
-                                            [&state.resource_man.registry.gui_ids.inventory_tip],
-                                    );
-                                });
-
-                                column(|| {
-                                    takeable_item(state, game_data, buffer, tile_entity.clone());
-                                });
+                                config_amount(state, &data, max_amount, tile_entity.clone());
                             });
                         }
-                    }
 
-                    if let Some(Data::Amount(max_amount)) = tile_info
-                        .data
-                        .get(&state.resource_man.registry.data_ids.max_amount)
-                        .cloned()
-                    {
-                        group(|| {
-                            config_amount(state, &data, max_amount, tile_entity.clone());
-                        });
-                    }
+                        if let Some(Data::Id(item_type)) = tile_info
+                            .data
+                            .get(&state.resource_man.registry.data_ids.item_type)
+                            .cloned()
+                        {
+                            group(|| {
+                                config_item_type(state, &data, item_type, tile_entity.clone());
+                            });
+                        }
 
-                    if let Some(Data::Id(item_type)) = tile_info
-                        .data
-                        .get(&state.resource_man.registry.data_ids.item_type)
-                        .cloned()
-                    {
-                        group(|| {
-                            config_item_type(state, &data, item_type, tile_entity.clone());
-                        });
-                    }
+                        if !tile_info
+                            .data
+                            .get(&state.resource_man.registry.data_ids.indirectional)
+                            .cloned()
+                            .and_then(Data::into_bool)
+                            .unwrap_or(false)
+                        {
+                            group(|| {
+                                config_direction(state, &data, tile_entity.clone());
+                            });
+                        }
 
-                    if !tile_info
-                        .data
-                        .get(&state.resource_man.registry.data_ids.indirectional)
-                        .cloned()
-                        .and_then(Data::into_bool)
-                        .unwrap_or(false)
-                    {
-                        group(|| {
-                            config_direction(state, &data, tile_entity.clone());
-                        });
-                    }
-
-                    if tile_info
-                        .data
-                        .get(&state.resource_man.registry.data_ids.linking)
-                        .cloned()
-                        .and_then(Data::into_bool)
-                        .unwrap_or(false)
-                    {
-                        group(|| {
-                            config_linking(state, config_open_at);
-                        });
-                    }
-                });
-            },
-        );
+                        if tile_info
+                            .data
+                            .get(&state.resource_man.registry.data_ids.linking)
+                            .cloned()
+                            .and_then(Data::into_bool)
+                            .unwrap_or(false)
+                        {
+                            group(|| {
+                                config_linking(state, config_open_at);
+                            });
+                        }
+                    });
+                },
+            );
+        });
+        state.gui_state.tile_config_ui_position = pos;
     });
-    state.gui_state.tile_config_ui_position = pos;
 }
