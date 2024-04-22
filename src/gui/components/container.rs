@@ -1,6 +1,6 @@
 use automancy_defs::colors;
 use yakui::{
-    colored_box_container, pad, row,
+    colored_box_container, column, pad, row,
     shapes::RoundedRectangle,
     util::{widget, widget_children},
     widgets::{Layer, Pad},
@@ -94,7 +94,9 @@ pub fn group(children: impl FnOnce()) {
     colored_box_container(colors::BACKGROUND_3, || {
         pad(Pad::all(2.0), || {
             colored_box_container(colors::BACKGROUND_1, || {
-                Pad::all(PADDING_MEDIUM).show(children);
+                Pad::all(PADDING_MEDIUM).show(|| {
+                    column(children);
+                });
             });
         });
     });

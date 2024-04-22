@@ -51,3 +51,6 @@ pub const BACKGROUND_2: Color = hex_color!("#cccccc");
 pub const BACKGROUND_3: Color = hex_color!("#bbbbbb");
 pub const INACTIVE: Color = hex_color!("#9a9a9a70");
 pub const TEXT_INACTIVE: Color = hex_color!("#9a9a9a");
+
+pub const INPUT: Color = hex_color!("#44c8ff");
+pub const OUTPUT: Color = hex_color!("#ff9844");

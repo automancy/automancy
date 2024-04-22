@@ -83,12 +83,20 @@ pub fn sized_colored_text(text: &str, font_size: Float, font: FontName, color: C
     text
 }
 
+pub fn colored_label_text(text: &str, color: Color) -> Text {
+    sized_colored_text(text, LABEL_SIZE, "default".into(), color)
+}
+
 pub fn colored_label(text: &str, color: Color) -> Response<TextResponse> {
-    sized_colored_text(text, LABEL_SIZE, "default".into(), color).show()
+    colored_label_text(text, color).show()
 }
 
 pub fn label_text(text: &str) -> Text {
     sized_colored_text(text, LABEL_SIZE, "default".into(), BLACK)
+}
+
+pub fn symbol_text(symbol: &str, color: Color) -> Text {
+    sized_colored_text(symbol, LABEL_SIZE, "symbols".into(), color)
 }
 
 pub fn label(text: &str) -> Response<TextResponse> {
@@ -97,8 +105,4 @@ pub fn label(text: &str) -> Response<TextResponse> {
 
 pub fn heading(text: &str) -> Response<TextResponse> {
     sized_colored_text(text, HEADING_SIZE, "default".into(), BLACK).show()
-}
-
-pub fn symbol_text(symbol: &str, color: Color) -> Text {
-    sized_colored_text(symbol, LABEL_SIZE, "symbols".into(), color)
 }

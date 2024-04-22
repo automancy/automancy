@@ -358,17 +358,17 @@ pub fn on_event(
             if let Some(id) = state.gui_state.selected_tile_id {
                 let mut data = DataMap::default();
 
-                if let Some(mut dir) = state.gui_state.placement_direction.take() {
-                    if let Some(old) = state.gui_state.prev_placement_direction.replace(dir) {
-                        if old == -dir {
-                            dir = old;
+                if let Some(mut coord) = state.gui_state.placement_direction.take() {
+                    if let Some(old) = state.gui_state.prev_placement_direction.replace(coord) {
+                        if old == -coord {
+                            coord = old;
                             state.gui_state.prev_placement_direction.replace(old);
                         }
                     }
 
                     data.insert(
-                        state.resource_man.registry.data_ids.target,
-                        Data::Coord(dir),
+                        state.resource_man.registry.data_ids.direction,
+                        Data::Coord(coord),
                     );
                 } else {
                     state.gui_state.prev_placement_direction = None;
@@ -488,7 +488,7 @@ pub fn on_event(
             if state.input_handler.shift_held
                 && !state.resource_man.registry.tiles[&selected_tile_id]
                     .data
-                    .get(&state.resource_man.registry.data_ids.not_targeted)
+                    .get(&state.resource_man.registry.data_ids.indirectional)
                     .cloned()
                     .and_then(Data::into_bool)
                     .unwrap_or(false)

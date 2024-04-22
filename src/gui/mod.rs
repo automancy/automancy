@@ -23,7 +23,7 @@ use automancy_resources::data::item::Item;
 use automancy_resources::data::Data;
 use automancy_resources::ResourceManager;
 use yakui::{
-    column,
+    column, constrained,
     font::{Font, Fonts},
     offset,
     paint::PaintCall,
@@ -31,7 +31,7 @@ use yakui::{
     util::widget,
     widget::Widget,
     widgets::{Absolute, Layer},
-    Alignment, Dim2, Pivot, Rect, Response, Yakui,
+    Alignment, Constraints, Dim2, Pivot, Rect, Response, Yakui,
 };
 
 use crate::game::TAKE_ITEM_ANIMATION_SPEED;
@@ -45,7 +45,7 @@ use self::components::{
     interactive::interactive,
     scrollable::scroll_vertical,
     select::radio,
-    text::{label_text, symbol_text},
+    text::{label_text, symbol_text, Text},
     textbox::textbox,
 };
 
@@ -284,15 +284,32 @@ impl TextFieldState {
     }
 }
 
+thread_local! {
+    static HOVER_TIP: Cell<Option<Text>> = Cell::default();
+}
+
+fn render_info_tip(state: &mut GameState) {
+    if let Some(tip) = HOVER_TIP.take() {
+        Layer::new().show(|| {
+            hover_tip(|| {
+                constrained(
+                    Constraints::loose(state.gui.yak.layout_dom().viewport().size()),
+                    || {
+                        tip.show();
+                    },
+                );
+            });
+        });
+    }
+}
+
 pub fn info_tip(info: &str) {
     let label = interactive(|| {
         symbol_text("\u{f449}", colors::BLACK).show();
     });
 
     if label.hovering {
-        hover_tip(|| {
-            label_text(info).show();
-        });
+        HOVER_TIP.set(Some(label_text(info)));
     }
 }
 
@@ -358,43 +375,41 @@ pub fn searchable_id(
 ) {
     textbox(state.gui_state.text_field.get(field), &hint_text);
 
-    Layer::new().show(|| {
-        scroll_vertical(200.0, || {
-            column(|| {
-                let ids = if !state.gui_state.text_field.get(field).is_empty() {
-                    let text = state.gui_state.text_field.get(field).clone();
-                    let mut filtered = ids
-                        .iter()
-                        .flat_map(|id| {
-                            let score = state
-                                .gui_state
-                                .text_field
-                                .fuse
-                                .fuzzy_match(&to_string(state, id), &text);
+    scroll_vertical(200.0, || {
+        column(|| {
+            let ids = if !state.gui_state.text_field.get(field).is_empty() {
+                let text = state.gui_state.text_field.get(field).clone();
+                let mut filtered = ids
+                    .iter()
+                    .flat_map(|id| {
+                        let score = state
+                            .gui_state
+                            .text_field
+                            .fuse
+                            .fuzzy_match(&to_string(state, id), &text);
 
-                            if score.unwrap_or(0) <= 5 {
-                                None
-                            } else {
-                                Some(*id).zip(score)
-                            }
-                        })
-                        .collect::<Vec<_>>();
+                        if score.unwrap_or(0) <= 5 {
+                            None
+                        } else {
+                            Some(*id).zip(score)
+                        }
+                    })
+                    .collect::<Vec<_>>();
 
-                    filtered.sort_unstable_by(|a, b| a.1.cmp(&b.1));
+                filtered.sort_unstable_by(|a, b| a.1.cmp(&b.1));
 
-                    filtered.into_iter().map(|v| v.0).collect::<Vec<_>>()
-                } else {
-                    ids.to_vec()
-                };
+                filtered.into_iter().map(|v| v.0).collect::<Vec<_>>()
+            } else {
+                ids.to_vec()
+            };
 
-                for id in ids {
-                    row(|| {
-                        radio(new_id, Some(id), || {
-                            draw_item(state, &id);
-                        });
+            for id in ids {
+                row(|| {
+                    radio(new_id, Some(id), || {
+                        draw_item(state, &id);
                     });
-                }
-            });
+                });
+            }
         });
     });
 }
@@ -752,7 +767,7 @@ pub fn render_ui(
                         if dir != TileCoord::ZERO
                             && !state.resource_man.registry.tiles[&selected_tile_id]
                                 .data
-                                .get(&state.resource_man.registry.data_ids.not_targeted)
+                                .get(&state.resource_man.registry.data_ids.indirectional)
                                 .cloned()
                                 .and_then(Data::into_bool)
                                 .unwrap_or(false)
@@ -796,6 +811,8 @@ pub fn render_ui(
             popup::invalid_name_popup(state);
         }
     }
+
+    render_info_tip(state);
 
     state.renderer.tile_tints.insert(
         state.camera.pointing_at,

@@ -1,9 +1,10 @@
+use std::cell::Cell;
+
 use automancy_defs::colors;
 use yakui::{
     util::widget_children,
     widget::{LayoutContext, Widget},
-    widgets::{Absolute, Layer},
-    Alignment, Constraints, Dim2, Pivot, Rect, Response, Vec2,
+    Alignment, Constraints, Dim2, Flow, Rect, Response, Vec2,
 };
 
 use crate::gui::util::constrain_to_viewport;
@@ -14,11 +15,11 @@ use super::container::RoundRect;
 pub struct Hover {}
 
 impl Hover {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self::default()
     }
 
-    fn show<F: FnOnce()>(self, children: F) -> Response<HoverResponse> {
+    pub fn show<F: FnOnce()>(self, children: F) -> Response<HoverResponse> {
         widget_children::<HoverWidget, F>(children, self)
     }
 }
@@ -26,6 +27,7 @@ impl Hover {
 #[derive(Debug)]
 pub struct HoverWidget {
     props: Hover,
+    pos: Cell<Vec2>,
 }
 
 pub type HoverResponse = ();
@@ -37,11 +39,19 @@ impl Widget for HoverWidget {
     fn new() -> Self {
         Self {
             props: Hover::new(),
+            pos: Cell::default(),
         }
     }
 
     fn update(&mut self, props: Self::Props<'_>) -> Self::Response {
         self.props = props;
+    }
+
+    fn flow(&self) -> Flow {
+        Flow::Absolute {
+            anchor: Alignment::new(self.pos.get().x, self.pos.get().y),
+            offset: Dim2::ZERO,
+        }
     }
 
     fn layout(&self, mut ctx: LayoutContext<'_>, _constraints: Constraints) -> Vec2 {
@@ -56,25 +66,15 @@ impl Widget for HoverWidget {
             let mut rect = Rect::from_pos_size(pos, size);
             constrain_to_viewport(&mut rect, ctx.layout.viewport());
 
-            for &child in &node.children {
-                ctx.layout.set_pos(child, rect.pos());
-            }
+            self.pos.set(rect.pos() / ctx.layout.viewport().size());
         }
 
         size
     }
 }
 
-pub fn follow_cursor(children: impl FnOnce()) {
-    Absolute::new(Alignment::TOP_LEFT, Pivot::TOP_LEFT, Dim2::ZERO).show(|| {
-        Hover::new().show(|| {
-            Layer::new().show(children);
-        });
-    });
-}
-
 pub fn hover_tip(children: impl FnOnce()) {
-    follow_cursor(|| {
+    Hover::new().show(|| {
         RoundRect::new(8.0, colors::BACKGROUND_1).show_children(|| {
             children();
         });

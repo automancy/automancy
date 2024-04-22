@@ -72,24 +72,22 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                                             Dim2::ZERO,
                                         )
                                         .show(|| {
-                                            let mut pos = PositionRecord::new().show(|| {
-                                                draw_item(
-                                                    &state.resource_man,
-                                                    None,
-                                                    ItemStack { item, amount },
-                                                    MEDIUM_ICON_SIZE,
-                                                    true,
+                                            if let Some(rect) = draw_item(
+                                                &state.resource_man,
+                                                None,
+                                                ItemStack { item, amount },
+                                                MEDIUM_ICON_SIZE,
+                                                true,
+                                            ) {
+                                                take_item_animation(
+                                                    state,
+                                                    item,
+                                                    Rect::from_pos_size(
+                                                        rect.pos(),
+                                                        vec2(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE),
+                                                    ),
                                                 );
-                                            });
-
-                                            take_item_animation(
-                                                state,
-                                                item,
-                                                Rect::from_pos_size(
-                                                    pos.into_inner(),
-                                                    vec2(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE),
-                                                ),
-                                            );
+                                            }
                                         });
                                     }
                                 }

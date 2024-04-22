@@ -11,6 +11,7 @@ pub const ICON_SIZE: Vec2 = vec2(12.0, 12.0);
 pub const PADDING_SMALL: Float = 4.0;
 pub const PADDING_MEDIUM: Float = 8.0;
 pub const PADDING_LARGE: Float = 12.0;
+pub const PADDING_XLARGE: Float = 16.0;
 
 pub mod button;
 pub mod checkbox;

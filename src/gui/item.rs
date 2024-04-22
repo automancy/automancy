@@ -4,30 +4,37 @@ use automancy_defs::math::Float;
 use automancy_defs::rendering::InstanceData;
 use automancy_resources::data::stack::ItemStack;
 use automancy_resources::ResourceManager;
+use yakui::Rect;
 
 use super::{
-    components::{layout::centered_row, text::label},
+    components::{
+        layout::centered_row,
+        text::{label, Text},
+    },
     ui_game_object,
 };
 
 /// Draws an Item's icon.
 pub fn draw_item(
     resource_man: &ResourceManager,
-    prefix: Option<&'static str>,
+    prefix: Option<Text>,
     stack: ItemStack,
     size: Float,
     add_label: bool,
-) {
+) -> Option<Rect> {
+    let mut rect = None;
+
     centered_row(|| {
         if let Some(prefix) = prefix {
-            label(prefix);
+            prefix.show();
         }
 
-        ui_game_object(
+        rect = ui_game_object(
             InstanceData::default().with_world_matrix(math::view(dvec3(0.0, 0.0, 1.0)).as_mat4()),
             resource_man.get_item_model(stack.item.model),
             vec2(size, size),
-        );
+        )
+        .into_inner();
 
         if add_label {
             if stack.amount > 0 {
@@ -41,4 +48,6 @@ pub fn draw_item(
             }
         }
     });
+
+    rect
 }

@@ -9,7 +9,11 @@ use automancy_defs::rendering::InstanceData;
 use automancy_defs::{colors, math};
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::format;
-use yakui::{column, use_state, widgets::Absolute, Alignment, Dim2, Pivot};
+use yakui::{
+    column, use_state,
+    widgets::{Absolute, Layer},
+    Alignment, Dim2, Pivot,
+};
 
 use crate::gui::{LARGE_ICON_SIZE, MEDIUM_ICON_SIZE};
 use crate::util::is_research_unlocked;
@@ -75,7 +79,7 @@ fn draw_tile_selection(
     selection_send: &mut Option<oneshot::Sender<Id>>,
     current_category: Option<Id>,
     size: Float,
-) {
+) -> Option<(Id, bool)> {
     let projection = DMatrix4::perspective_lh(FRAC_PI_4, 1.0, z_near(), z_far())
         * math::view(dvec3(0.0, 0.0, 2.75));
     let projection = projection.as_mat4();
@@ -157,29 +161,7 @@ fn draw_tile_selection(
         }
     }
 
-    if let Some((id, active)) = hovered {
-        hover_tip(|| {
-            column(|| {
-                label(&state.resource_man.tile_name(&id));
-
-                if !active {
-                    if let Some(item) = current_category
-                        .and_then(|id| state.resource_man.registry.categories[&id].item)
-                    {
-                        label(&format(
-                            state.resource_man.translates.gui[&state
-                                .resource_man
-                                .registry
-                                .gui_ids
-                                .lbl_cannot_place_missing_item]
-                                .as_str(),
-                            &[&state.resource_man.item_name(&item)],
-                        ));
-                    };
-                }
-            });
-        });
-    }
+    hovered
 }
 
 /// Creates the tile selection GUI.
@@ -192,11 +174,12 @@ pub fn tile_selections(
         * math::view(dvec3(0.0, 0.0, 2.75));
     let projection = projection.as_mat4();
 
+    let mut hovered_category = None;
+    let mut hovered_tile = None;
+
     Absolute::new(Alignment::BOTTOM_CENTER, Pivot::BOTTOM_CENTER, Dim2::ZERO).show(|| {
         centered_column(|| {
             RoundRect::new(8.0, colors::BACKGROUND_1).show_children(|| {
-                let mut hovered = None;
-
                 scroll_horizontal(state.gui.yak.layout_dom().viewport().size().x, || {
                     centered_row(|| {
                         for id in &state.resource_man.ordered_categories {
@@ -218,23 +201,17 @@ pub fn tile_selections(
                             }
 
                             if response.hovering {
-                                hovered = Some(*id);
+                                hovered_category = Some(*id);
                             }
                         }
                     });
                 });
-
-                if let Some(id) = hovered {
-                    hover_tip(|| {
-                        label(&state.resource_man.category_name(&id));
-                    });
-                }
             });
 
             RoundRect::new(8.0, colors::BACKGROUND_1).show_children(|| {
                 scroll_horizontal(state.gui.yak.layout_dom().viewport().size().x, || {
                     centered_row(|| {
-                        draw_tile_selection(
+                        hovered_tile = draw_tile_selection(
                             state,
                             game_data,
                             &mut Some(selection_send),
@@ -245,5 +222,39 @@ pub fn tile_selections(
                 });
             });
         });
+    });
+
+    Layer::new().show(|| {
+        if let Some(id) = hovered_category {
+            hover_tip(|| {
+                label(&state.resource_man.category_name(&id));
+            });
+        }
+
+        if let Some((id, active)) = hovered_tile {
+            hover_tip(|| {
+                column(|| {
+                    label(&state.resource_man.tile_name(&id));
+
+                    if !active {
+                        if let Some(item) = state
+                            .gui_state
+                            .tile_selection_category
+                            .and_then(|id| state.resource_man.registry.categories[&id].item)
+                        {
+                            label(&format(
+                                state.resource_man.translates.gui[&state
+                                    .resource_man
+                                    .registry
+                                    .gui_ids
+                                    .lbl_cannot_place_missing_item]
+                                    .as_str(),
+                                &[&state.resource_man.item_name(&item)],
+                            ));
+                        };
+                    }
+                });
+            });
+        }
     });
 }

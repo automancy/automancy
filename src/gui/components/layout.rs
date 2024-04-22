@@ -1,4 +1,5 @@
-use yakui::{widgets::List, CrossAxisAlignment, MainAxisAlignment};
+use automancy_defs::glam::vec2;
+use yakui::{constrained, widgets::List, Constraints, CrossAxisAlignment, MainAxisAlignment};
 
 pub fn centered_row(children: impl FnOnce()) {
     let mut c = List::column();
@@ -28,9 +29,11 @@ pub fn centered_column(children: impl FnOnce()) {
     });
 }
 
-pub fn stretch_column(children: impl FnOnce()) {
+pub fn stretch_column(width: f32, children: impl FnOnce()) {
     let mut c = List::column();
     c.cross_axis_alignment = CrossAxisAlignment::Stretch;
 
-    c.show(children);
+    constrained(Constraints::loose(vec2(width, f32::INFINITY)), || {
+        c.show(children);
+    });
 }

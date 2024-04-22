@@ -285,7 +285,7 @@ pub fn scroll_vertical(max_height: Float, children: impl FnOnce()) {
             pad_x(0.0, SCROLL_SIZE).show(children);
         });
 
-        Relative::new(Alignment::CENTER_RIGHT, Pivot::CENTER_RIGHT, Dim2::ZERO).show(|| {
+        Relative::new(Alignment::TOP_RIGHT, Pivot::TOP_RIGHT, Dim2::ZERO).show(|| {
             RoundRect::new(SCROLL_RADIUS, colors::WHITE).show_children(|| {
                 let ratio = res.size / res.canvas_size;
                 let diff = res.canvas_size - res.size;
@@ -310,7 +310,7 @@ pub fn scroll_horizontal(max_width: Float, children: impl FnOnce()) {
             pad_y(0.0, SCROLL_SIZE).show(children);
         });
 
-        Relative::new(Alignment::BOTTOM_CENTER, Pivot::BOTTOM_CENTER, Dim2::ZERO).show(|| {
+        Relative::new(Alignment::BOTTOM_LEFT, Pivot::BOTTOM_LEFT, Dim2::ZERO).show(|| {
             RoundRect::new(SCROLL_RADIUS, colors::WHITE).show_children(|| {
                 let ratio = res.size / res.canvas_size;
                 let diff = res.canvas_size - res.size;

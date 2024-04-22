@@ -5,8 +5,6 @@ use yakui::{
     Alignment, Dim2, Pivot, Response,
 };
 
-use crate::gui::util::pad_x;
-
 use super::{
     button::{button, Button, ButtonResponse},
     container::RoundRect,
@@ -90,7 +88,7 @@ pub fn radio<T: Eq>(
             };
             outer_circle.min_radius = 12.0;
 
-            pad_x(0.0, 4.0).show(|| {
+            Pad::horizontal(PADDING_MEDIUM).show(|| {
                 outer_circle.show_children(|| {
                     Pad::all(4.0).show(|| {
                         colored_circle(
