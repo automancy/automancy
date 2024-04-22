@@ -693,6 +693,9 @@ pub fn render_ui(
 
                         let (selection_send, selection_recv) = oneshot::channel();
 
+                        // tile_config
+                        tile_config::tile_config_ui(state, game_data);
+
                         // tile_selections
                         tile_selection::tile_selections(state, game_data, selection_send);
 
@@ -705,9 +708,6 @@ pub fn render_ui(
                                 state.gui_state.selected_tile_id = Some(id);
                             }
                         }
-
-                        // tile_config
-                        tile_config::tile_config_ui(state, game_data);
 
                         if state.input_handler.key_active(KeyActions::Player) {
                             player::player(state, game_data);

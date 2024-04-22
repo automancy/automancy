@@ -103,25 +103,25 @@ pub fn group(children: impl FnOnce()) {
 }
 
 pub fn window_box(title: String, children: impl FnOnce()) {
-    RoundRect::new(4.0, colors::BACKGROUND_1).show_children(|| {
-        Pad::all(PADDING_LARGE).show(|| {
-            centered_column(|| {
-                Pad::vertical(PADDING_SMALL).show(|| {
-                    row(|| {
-                        heading(&title);
+    Layer::new().show(|| {
+        RoundRect::new(4.0, colors::BACKGROUND_1).show_children(|| {
+            Pad::all(PADDING_LARGE).show(|| {
+                centered_column(|| {
+                    Pad::vertical(PADDING_SMALL).show(|| {
+                        row(|| {
+                            heading(&title);
+                        });
                     });
-                });
 
-                children()
+                    children()
+                });
             });
         });
     });
 }
 
 pub fn window(title: String, children: impl FnOnce()) {
-    Layer::new().show(|| {
-        centered_column(|| {
-            window_box(title, children);
-        });
+    centered_column(|| {
+        window_box(title, children);
     });
 }

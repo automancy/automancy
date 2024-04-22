@@ -51,6 +51,7 @@ impl MovableWidget {
     }
 }
 
+// TODO hover.rs also needs this?
 fn clamp_pos(size: Vec2, mut props: Movable, viewport: Rect) -> Movable {
     let mut rect = Rect::from_pos_size((props.position * viewport.size()).floor(), size);
 
