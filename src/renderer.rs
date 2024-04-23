@@ -232,8 +232,8 @@ impl<'a> Renderer<'a> {
             if let Some(theta) = all_data
                 .get(coord)
                 .and_then(|data| data.get(&resource_man.registry.data_ids.direction))
-                .and_then(|target| {
-                    if let Data::Coord(target) = target {
+                .and_then(|direction| {
+                    if let Data::Coord(target) = direction {
                         math::tile_direction_to_angle(*target)
                     } else {
                         None

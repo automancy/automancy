@@ -2,11 +2,14 @@ use std::mem;
 
 use hashbrown::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
-use winit::event::ElementState::{Pressed, Released};
 use winit::event::{
     DeviceEvent, ElementState, KeyEvent, Modifiers, MouseButton, MouseScrollDelta, WindowEvent,
 };
 use winit::keyboard::{Key, NamedKey, SmolStr};
+use winit::{
+    event::ElementState::{Pressed, Released},
+    platform::modifier_supplement::KeyEventExtModifierSupplement,
+};
 
 use automancy_defs::glam::dvec2;
 use automancy_defs::math::{DVec2, Double};
@@ -15,23 +18,37 @@ use crate::options::Options;
 
 pub static DEFAULT_KEYMAP: &[(Key, KeyAction)] = &[
     (Key::Character(SmolStr::new_inline("z")), actions::UNDO),
+    (Key::Character(SmolStr::new_inline("r")), actions::REDO),
     (Key::Character(SmolStr::new_inline("e")), actions::PLAYER),
+    (Key::Character(SmolStr::new_inline("x")), actions::CUT),
+    (Key::Character(SmolStr::new_inline("c")), actions::COPY),
+    (Key::Character(SmolStr::new_inline("v")), actions::PASTE),
     (Key::Named(NamedKey::Escape), actions::ESCAPE),
     (Key::Named(NamedKey::F1), actions::HIDE_GUI),
     (Key::Named(NamedKey::F2), actions::SCREENSHOT),
     (Key::Named(NamedKey::F3), actions::DEBUG),
     (Key::Named(NamedKey::F11), actions::FULLSCREEN),
+    (Key::Named(NamedKey::Backspace), actions::DELETE),
+    (Key::Named(NamedKey::Shift), actions::SELECT_MODE),
+    (Key::Named(NamedKey::Control), actions::HOTKEY),
 ];
 
 #[derive(Serialize, Deserialize, Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub enum KeyActions {
     Escape,
     Undo,
+    Redo,
     Debug,
     Fullscreen,
     Screenshot,
     HideGui,
     Player,
+    Delete,
+    SelectMode,
+    HotkeyActive,
+    Cut,
+    Copy,
+    Paste,
 }
 
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -58,6 +75,10 @@ pub mod actions {
         action: KeyActions::Undo,
         press_type: PressTypes::Tap,
     };
+    pub static REDO: KeyAction = KeyAction {
+        action: KeyActions::Redo,
+        press_type: PressTypes::Tap,
+    };
     pub static DEBUG: KeyAction = KeyAction {
         action: KeyActions::Debug,
         press_type: PressTypes::Toggle,
@@ -77,6 +98,30 @@ pub mod actions {
     pub static PLAYER: KeyAction = KeyAction {
         action: KeyActions::Player,
         press_type: PressTypes::Toggle,
+    };
+    pub static DELETE: KeyAction = KeyAction {
+        action: KeyActions::Delete,
+        press_type: PressTypes::Tap,
+    };
+    pub static SELECT_MODE: KeyAction = KeyAction {
+        action: KeyActions::SelectMode,
+        press_type: PressTypes::Hold,
+    };
+    pub static HOTKEY: KeyAction = KeyAction {
+        action: KeyActions::HotkeyActive,
+        press_type: PressTypes::Hold,
+    };
+    pub static CUT: KeyAction = KeyAction {
+        action: KeyActions::Cut,
+        press_type: PressTypes::Tap,
+    };
+    pub static COPY: KeyAction = KeyAction {
+        action: KeyActions::Copy,
+        press_type: PressTypes::Tap,
+    };
+    pub static PASTE: KeyAction = KeyAction {
+        action: KeyActions::Paste,
+        press_type: PressTypes::Tap,
     };
 }
 
@@ -196,9 +241,6 @@ pub struct InputHandler {
     pub alternate_held: bool,
     pub tertiary_held: bool,
 
-    pub control_held: bool,
-    pub shift_held: bool,
-
     pub main_pressed: bool,
     pub alternate_pressed: bool,
     pub tertiary_pressed: bool,
@@ -219,9 +261,6 @@ impl InputHandler {
             main_held: false,
             alternate_held: false,
             tertiary_held: false,
-
-            control_held: false,
-            shift_held: false,
 
             main_pressed: false,
             alternate_pressed: false,
@@ -279,23 +318,8 @@ impl InputHandler {
             GameInputEvent::TertiaryReleased => {
                 self.tertiary_held = false;
             }
-            GameInputEvent::ModifierChanged { modifier } => {
-                self.shift_held = false;
-                self.control_held = false;
-
-                if modifier.state().shift_key() {
-                    self.shift_held = true;
-                }
-                if modifier.state().control_key() {
-                    self.control_held = true;
-                }
-            }
-            GameInputEvent::KeyboardEvent {
-                event: KeyEvent {
-                    state, logical_key, ..
-                },
-            } => {
-                self.handle_key(state, logical_key);
+            GameInputEvent::KeyboardEvent { event } => {
+                self.handle_key(event.state, event.key_without_modifiers());
             }
             _ => {}
         }

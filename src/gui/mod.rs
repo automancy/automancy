@@ -19,8 +19,8 @@ use automancy_defs::math::{Float, Matrix4, FAR, HEX_GRID_LAYOUT};
 use automancy_defs::rendering::{make_line, InstanceData};
 use automancy_defs::{bytemuck, colors, math, window};
 use automancy_defs::{coord::TileCoord, glam::vec2};
-use automancy_resources::data::item::Item;
 use automancy_resources::data::Data;
+use automancy_resources::data::{item::Item, DataMap};
 use automancy_resources::ResourceManager;
 use yakui::{
     column, constrained,
@@ -121,15 +121,14 @@ pub struct GuiState {
     pub already_placed_at: Option<TileCoord>,
     /// the tile that has its config menu open.
     pub config_open_at: Option<TileCoord>,
-
     /// tile currently linking
     pub linking_tile: Option<TileCoord>,
     /// the currently grouped tiles
     pub grouped_tiles: HashSet<TileCoord>,
-    /// the stored initial cursor position, for moving tiles
-    pub initial_cursor_position: Option<TileCoord>,
-    /// the current tile placement target direction, only Some when shift is held
-    /// TODO shift is only on keyboard
+    /// the stored initial cursor position, for moving/copying tiles
+    pub paste_from: Option<TileCoord>,
+    pub paste_content: Vec<(TileCoord, Id, Option<DataMap>)>,
+
     pub placement_direction: Option<TileCoord>,
     pub prev_placement_direction: Option<TileCoord>,
 
@@ -159,7 +158,8 @@ impl Default for GuiState {
 
             linking_tile: Default::default(),
             grouped_tiles: Default::default(),
-            initial_cursor_position: Default::default(),
+            paste_from: Default::default(),
+            paste_content: Default::default(),
             placement_direction: Default::default(),
             prev_placement_direction: Default::default(),
 
@@ -832,31 +832,57 @@ pub fn render_ui(
             .insert(*coord, colors::ORANGE.with_alpha(0.4).to_linear());
     }
 
-    if state.input_handler.control_held {
-        if let Some(start) = state.gui_state.initial_cursor_position {
-            let direction = state.camera.pointing_at - start;
+    if let Some(start) = state.gui_state.paste_from {
+        if start != state.camera.pointing_at {
+            state.renderer.extra_instances.push((
+                InstanceData::default()
+                    .with_color_offset(colors::LIGHT_BLUE.to_linear())
+                    .with_light_pos(state.camera.get_pos().as_vec3(), None)
+                    .with_world_matrix(state.camera.get_matrix().as_mat4())
+                    .with_model_matrix(make_line(
+                        HEX_GRID_LAYOUT.hex_to_world_pos(*start),
+                        HEX_GRID_LAYOUT.hex_to_world_pos(*state.camera.pointing_at),
+                    )),
+                state.resource_man.registry.model_ids.cube1x1,
+            ));
+        }
 
-            if start != state.camera.pointing_at {
-                state.renderer.extra_instances.push((
+        let diff = state.camera.pointing_at - start;
+
+        for (coord, id, data) in &state.gui_state.paste_content {
+            let coord = *coord + diff;
+            let p = HEX_GRID_LAYOUT.hex_to_world_pos(*coord);
+
+            let mut model_matrix = Matrix4::from_translation(vec3(p.x, p.y, FAR as Float));
+
+            if let Some(data) = data {
+                let rotate = Matrix4::from_rotation_z(
+                    data.get(&state.resource_man.registry.data_ids.direction)
+                        .and_then(|direction| {
+                            if let Data::Coord(direction) = direction {
+                                math::tile_direction_to_angle(*direction)
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or(0.0)
+                        .to_radians(),
+                );
+
+                model_matrix *= rotate;
+            }
+
+            Layer::new().show(|| {
+                ui_game_object(
                     InstanceData::default()
-                        .with_color_offset(colors::LIGHT_BLUE.to_linear())
+                        .with_alpha(0.5)
                         .with_light_pos(state.camera.get_pos().as_vec3(), None)
                         .with_world_matrix(state.camera.get_matrix().as_mat4())
-                        .with_model_matrix(make_line(
-                            HEX_GRID_LAYOUT.hex_to_world_pos(*start),
-                            HEX_GRID_LAYOUT.hex_to_world_pos(*state.camera.pointing_at),
-                        )),
-                    state.resource_man.registry.model_ids.cube1x1,
-                ));
-            }
-
-            for coord in &state.gui_state.grouped_tiles {
-                let dest = *coord + direction;
-                state
-                    .renderer
-                    .tile_tints
-                    .insert(dest, colors::LIGHT_BLUE.with_alpha(0.3).to_linear());
-            }
+                        .with_model_matrix(model_matrix),
+                    state.resource_man.registry.tiles[id].model,
+                    state.gui.yak.layout_dom().viewport().size(),
+                );
+            });
         }
     }
 

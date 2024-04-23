@@ -42,6 +42,7 @@ pub struct DataIds {
     pub amount: Id,
     pub direction: Id,
     pub link: Id,
+
     pub player_inventory: Id,
     pub research_items_filled: Id,
     pub research_puzzle_completed: Id,

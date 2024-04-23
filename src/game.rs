@@ -97,6 +97,12 @@ pub enum GameSystemMessage {
         record: bool,
         reply: Option<RpcReplyPort<PlaceTileResponse>>,
     },
+    PlaceTiles {
+        tiles: Vec<(TileCoord, Id, Option<DataMap>)>,
+        reply: Option<RpcReplyPort<Vec<(TileCoord, Id, Option<DataMap>)>>>,
+        place_over: bool,
+        record: bool,
+    },
     MoveTiles(Vec<TileCoord>, TileCoord, bool),
     Undo,
 
@@ -118,6 +124,10 @@ pub enum GameSystemMessage {
         culling_range: TileBounds,
         reply: RpcReplyPort<HashMap<TileCoord, RenderUnit>>,
     },
+    GetTiles(
+        Vec<TileCoord>,
+        RpcReplyPort<Vec<(TileCoord, Id, Option<DataMap>)>>,
+    ),
 
     GetRecordedTransactions(RpcReplyPort<TransactionRecords>),
     RecordTransaction(ItemStack, TileCoord, TileCoord),
@@ -245,72 +255,54 @@ impl Actor for GameSystem {
                             }
                         }
 
-                        let mut skip = false;
-
+                        if id == self.resource_man.registry.none
+                            && !state.map.tiles.contains_key(&coord)
                         {
-                            let lock = &mut state.map.info.lock().await;
+                            if let Some(reply) = reply {
+                                reply.send(PlaceTileResponse::Ignored)?;
+                            }
 
-                            try_category(&self.resource_man, id, |item| {
-                                if let Data::Inventory(inventory) = lock
-                                    .data
-                                    .entry(self.resource_man.registry.data_ids.player_inventory)
-                                    .or_insert_with(|| Data::Inventory(Default::default()))
-                                {
-                                    if inventory.get(item) < 1 {
-                                        skip = true
-                                    }
-                                }
-                            });
+                            return Ok(());
                         }
 
-                        if skip {
+                        let place_result = insert_new_tile(
+                            self.resource_man.clone(),
+                            myself.clone(),
+                            state,
+                            coord,
+                            id,
+                            data,
+                        )
+                        .await;
+
+                        if place_result.is_none() {
                             if let Some(reply) = reply {
                                 reply.send(PlaceTileResponse::Ignored)?;
                             }
                             return Ok(());
                         }
 
-                        let old_tile = if id == self.resource_man.registry.none {
-                            if !state.map.tiles.contains_key(&coord) {
-                                if let Some(reply) = reply {
-                                    reply.send(PlaceTileResponse::Ignored)?;
+                        if let Some(old_tile) = place_result {
+                            if let Some(reply) = reply {
+                                if id == self.resource_man.registry.none {
+                                    reply.send(PlaceTileResponse::Removed)?;
+                                } else {
+                                    reply.send(PlaceTileResponse::Placed)?;
                                 }
-
-                                return Ok(());
                             }
 
-                            if let Some(reply) = reply {
-                                reply.send(PlaceTileResponse::Removed)?;
+                            if record {
+                                let (id, data) =
+                                    old_tile.unwrap_or((self.resource_man.registry.none, None));
+
+                                state.undo_steps.push_back(vec![PlaceTile {
+                                    coord,
+                                    id,
+                                    record: false,
+                                    reply: None,
+                                    data,
+                                }]);
                             }
-
-                            remove_tile(&self.resource_man, state, coord).await
-                        } else {
-                            if let Some(reply) = reply {
-                                reply.send(PlaceTileResponse::Placed)?;
-                            }
-
-                            insert_new_tile(
-                                self.resource_man.clone(),
-                                myself.clone(),
-                                state,
-                                coord,
-                                id,
-                                data,
-                            )
-                            .await
-                        };
-
-                        if record {
-                            let (id, data) =
-                                old_tile.unwrap_or((self.resource_man.registry.none, None));
-
-                            state.undo_steps.push_back(vec![PlaceTile {
-                                coord,
-                                id,
-                                record: false,
-                                reply: None,
-                                data,
-                            }]);
                         }
                     }
                     GetTile(coord, reply) => {
@@ -408,6 +400,73 @@ impl Actor for GameSystem {
                                         id,
                                     },
                                 ));
+                        }
+                    }
+                    GetTiles(coords, reply) => {
+                        let mut tiles = vec![];
+
+                        for (id, coord) in coords
+                            .into_iter()
+                            .flat_map(|coord| state.map.tiles.get(&coord).zip(Some(coord)))
+                        {
+                            if let Some(entity) = state.tile_entities.get(&coord) {
+                                let mut data =
+                                    entity.call(TileEntityMsg::GetData, None).await?.unwrap();
+
+                                let mut copied = DataMap::default();
+
+                                if let Some(v) =
+                                    data.remove(&self.resource_man.registry.data_ids.direction)
+                                {
+                                    copied.insert(self.resource_man.registry.data_ids.direction, v);
+                                }
+                                if let Some(v) =
+                                    data.remove(&self.resource_man.registry.data_ids.link)
+                                {
+                                    copied.insert(self.resource_man.registry.data_ids.link, v);
+                                }
+
+                                tiles.push((coord, *id, Some(copied)));
+                            } else {
+                                tiles.push((coord, *id, None));
+                            }
+                        }
+                        reply.send(tiles)?;
+                    }
+                    PlaceTiles {
+                        tiles,
+                        reply,
+                        place_over,
+                        record,
+                    } => {
+                        let mut old = vec![];
+
+                        for (coord, id, data) in tiles {
+                            if place_over || state.map.tiles.get(&coord).is_none() {
+                                if let Some(Some((id, data))) = insert_new_tile(
+                                    self.resource_man.clone(),
+                                    myself.clone(),
+                                    state,
+                                    coord,
+                                    id,
+                                    data,
+                                )
+                                .await
+                                {
+                                    old.push((coord, id, data));
+                                }
+                            }
+                        }
+
+                        if let Some(reply) = reply {
+                            reply.send(old)?;
+                        } else if record {
+                            state.undo_steps.push_back(vec![PlaceTiles {
+                                tiles: old,
+                                reply: None,
+                                place_over: false,
+                                record: false,
+                            }]);
                         }
                     }
                     MoveTiles(tiles, direction, record) => {
@@ -566,9 +625,7 @@ async fn insert_new_tile(
     coord: TileCoord,
     tile: Id,
     data: Option<DataMap>,
-) -> Option<(Id, Option<DataMap>)> {
-    let old = remove_tile(&resource_man, state, coord).await;
-
+) -> Option<Option<(Id, Option<DataMap>)>> {
     let mut skip = false;
 
     {
@@ -593,6 +650,12 @@ async fn insert_new_tile(
         return None;
     }
 
+    let old = remove_tile(&resource_man, state, coord).await;
+
+    if tile == resource_man.registry.none {
+        return Some(old);
+    }
+
     let tile_entity = new_tile(resource_man, game, coord, tile).await;
 
     if let Some(data) = data {
@@ -604,7 +667,7 @@ async fn insert_new_tile(
     state.tile_entities.insert(coord, tile_entity);
     state.map.tiles.insert(coord, tile);
 
-    old
+    Some(old)
 }
 
 fn inner_tick(state: &mut GameSystemState) {

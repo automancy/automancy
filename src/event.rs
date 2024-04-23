@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 use std::{fs, mem};
 
-use hashbrown::{HashMap, HashSet};
+use hashbrown::HashMap;
 use ractor::rpc::CallResult;
 use ractor::ActorRef;
 use tokio::sync::Mutex;
@@ -266,6 +266,60 @@ async fn on_link_tile(
     }
 }
 
+fn place_tile(id: Id, coord: TileCoord, state: &mut GameState) -> anyhow::Result<()> {
+    let mut data = DataMap::default();
+
+    if let Some(mut coord) = state.gui_state.placement_direction.take() {
+        if let Some(old) = state.gui_state.prev_placement_direction.replace(coord) {
+            if old == -coord {
+                coord = old;
+                state.gui_state.prev_placement_direction.replace(old);
+            }
+        }
+
+        data.insert(
+            state.resource_man.registry.data_ids.direction,
+            Data::Coord(coord),
+        );
+    } else {
+        state.gui_state.prev_placement_direction = None;
+    }
+
+    let response = state
+        .tokio
+        .block_on(state.game.call(
+            |reply| GameSystemMessage::PlaceTile {
+                coord,
+                id,
+                record: true,
+                reply: Some(reply),
+                data: Some(data),
+            },
+            None,
+        ))?
+        .unwrap();
+
+    match response {
+        PlaceTileResponse::Placed => {
+            state
+                .audio_man
+                .play(state.resource_man.audio["tile_placement"].clone())
+                .unwrap();
+            state.gui_state.config_open_at = Some(coord);
+            state.gui_state.already_placed_at = Some(coord);
+        }
+        PlaceTileResponse::Removed => {
+            state
+                .audio_man
+                .play(state.resource_man.audio["tile_removal"].clone())
+                .unwrap();
+        }
+        _ => {}
+    }
+
+    Ok(())
+}
+
 /// Triggers every time the event loop is run once.
 pub fn on_event(
     state: &mut GameState,
@@ -335,6 +389,7 @@ pub fn on_event(
             // one by one
             if state.gui_state.selected_tile_id.take().is_none()
                 && state.gui_state.linking_tile.take().is_none()
+                && state.gui_state.paste_from.take().is_none()
             {
                 if state
                     .gui_state
@@ -352,68 +407,27 @@ pub fn on_event(
             }
         }
 
-        if state.input_handler.main_pressed
-            || (state.input_handler.shift_held && state.input_handler.main_held)
+        if (state.input_handler.main_pressed
+            || (state.input_handler.key_active(KeyActions::SelectMode)
+                && state.input_handler.main_held))
+            && state.gui_state.already_placed_at != Some(state.camera.pointing_at)
         {
             if let Some(id) = state.gui_state.selected_tile_id {
-                let mut data = DataMap::default();
-
-                if let Some(mut coord) = state.gui_state.placement_direction.take() {
-                    if let Some(old) = state.gui_state.prev_placement_direction.replace(coord) {
-                        if old == -coord {
-                            coord = old;
-                            state.gui_state.prev_placement_direction.replace(old);
-                        }
-                    }
-
-                    data.insert(
-                        state.resource_man.registry.data_ids.direction,
-                        Data::Coord(coord),
-                    );
-                } else {
-                    state.gui_state.prev_placement_direction = None;
-                }
-
-                let placing = state.camera.pointing_at;
-
-                if state.gui_state.already_placed_at != Some(placing) {
-                    let response = state
-                        .tokio
-                        .block_on(state.game.call(
-                            |reply| GameSystemMessage::PlaceTile {
-                                coord: placing,
-                                id,
-                                record: true,
-                                reply: Some(reply),
-                                data: Some(data),
-                            },
-                            None,
-                        ))?
-                        .unwrap();
-
-                    match response {
-                        PlaceTileResponse::Placed => {
-                            state
-                                .audio_man
-                                .play(state.resource_man.audio["tile_placement"].clone())
-                                .unwrap();
-                            state.gui_state.config_open_at = Some(placing);
-                        }
-                        PlaceTileResponse::Removed => {
-                            state
-                                .audio_man
-                                .play(state.resource_man.audio["tile_removal"].clone())
-                                .unwrap();
-                        }
-                        _ => {}
-                    }
-
-                    state.gui_state.already_placed_at = Some(placing)
-                }
+                place_tile(id, state.camera.pointing_at, state)?;
             }
         }
 
-        if !state.input_handler.control_held && state.input_handler.alternate_pressed {
+        if state.input_handler.key_active(KeyActions::Delete) {
+            place_tile(
+                state.resource_man.registry.none,
+                state.camera.pointing_at,
+                state,
+            )?;
+        }
+
+        if state.input_handler.alternate_pressed
+            && !state.input_handler.key_active(KeyActions::SelectMode)
+        {
             if let Some(linking_tile) = state.gui_state.linking_tile {
                 state.tokio.block_on(on_link_tile(
                     state.resource_man.clone(),
@@ -429,45 +443,10 @@ pub fn on_event(
             }
         }
 
-        if state.input_handler.control_held && state.gui_state.screen == Screen::Ingame {
-            if let Some(start) = state.gui_state.initial_cursor_position {
-                if state.input_handler.alternate_pressed {
-                    let direction = state.camera.pointing_at - start;
-
-                    state.game.send_message(GameSystemMessage::MoveTiles(
-                        state
-                            .gui_state
-                            .grouped_tiles
-                            .iter()
-                            .cloned()
-                            .collect::<Vec<_>>(),
-                        direction,
-                        true,
-                    ))?;
-
-                    let cap = state.gui_state.grouped_tiles.capacity();
-                    for selected in mem::replace(
-                        &mut state.gui_state.grouped_tiles,
-                        HashSet::with_capacity(cap),
-                    ) {
-                        let dest = selected + direction;
-
-                        state.gui_state.grouped_tiles.insert(dest);
-                    }
-
-                    state.gui_state.initial_cursor_position = None;
-                    state
-                        .audio_man
-                        .play(state.resource_man.audio["click"].clone())?; // TODO click2
-                }
-            } else if state.input_handler.alternate_pressed {
-                state.gui_state.initial_cursor_position = Some(state.camera.pointing_at);
-                state
-                    .audio_man
-                    .play(state.resource_man.audio["click"].clone())?;
-            }
-
-            if state.gui_state.initial_cursor_position.is_none() {
+        if state.input_handler.key_active(KeyActions::SelectMode)
+            && state.gui_state.screen == Screen::Ingame
+        {
+            if state.gui_state.paste_from.is_none() {
                 state
                     .gui_state
                     .grouped_tiles
@@ -475,11 +454,90 @@ pub fn on_event(
             }
         } else {
             state.gui_state.grouped_tiles.clear();
-            state.gui_state.initial_cursor_position = None;
         }
 
-        if state.input_handler.control_held && state.input_handler.key_active(KeyActions::Undo) {
+        if state.input_handler.key_active(KeyActions::HotkeyActive)
+            && (state.input_handler.key_active(KeyActions::Cut)
+                || state.input_handler.key_active(KeyActions::Copy))
+            && state.gui_state.paste_from.is_none()
+            && !state.gui_state.grouped_tiles.is_empty()
+        {
+            state.gui_state.paste_from = Some(state.camera.pointing_at);
+            state
+                .audio_man
+                .play(state.resource_man.audio["click"].clone())?;
+
+            let coords = Vec::from_iter(mem::take(&mut state.gui_state.grouped_tiles));
+
+            if state.input_handler.key_active(KeyActions::Cut) {
+                let none = state.resource_man.registry.none;
+
+                state.gui_state.paste_content = state
+                    .tokio
+                    .block_on(state.game.call(
+                        |reply| {
+                            GameSystemMessage::PlaceTiles {
+                                tiles: coords
+                                    .into_iter()
+                                    .map(|coord| (coord, none, None))
+                                    .collect::<Vec<_>>(),
+                                reply: Some(reply),
+                                place_over: true,
+                                record: true,
+                            }
+                        },
+                        None,
+                    ))?
+                    .unwrap();
+            } else {
+                state.gui_state.paste_content = state
+                    .tokio
+                    .block_on(
+                        state
+                            .game
+                            .call(|reply| GameSystemMessage::GetTiles(coords, reply), None),
+                    )?
+                    .unwrap();
+            }
+        }
+
+        if state.input_handler.key_active(KeyActions::HotkeyActive)
+            && state.input_handler.key_active(KeyActions::Paste)
+        {
+            if let Some(start) = state.gui_state.paste_from {
+                let direction = state.camera.pointing_at - start;
+
+                let tiles = state
+                    .gui_state
+                    .paste_content
+                    .clone()
+                    .into_iter()
+                    .map(|(coord, id, data)| (coord + direction, id, data))
+                    .collect::<Vec<_>>();
+
+                state.game.send_message(GameSystemMessage::PlaceTiles {
+                    tiles,
+                    reply: None,
+                    place_over: false,
+                    record: true,
+                })?;
+
+                state
+                    .audio_man
+                    .play(state.resource_man.audio["click"].clone())?; // TODO click2
+            }
+        }
+
+        if state.input_handler.key_active(KeyActions::HotkeyActive)
+            && state.input_handler.key_active(KeyActions::Undo)
+        {
             state.game.send_message(GameSystemMessage::Undo)?;
+        }
+
+        if state.input_handler.key_active(KeyActions::HotkeyActive)
+            && state.input_handler.key_active(KeyActions::Redo)
+        {
+            //TODO state.game.send_message(GameSystemMessage::Redo)?;
         }
 
         if state.input_handler.key_active(KeyActions::Fullscreen) {
@@ -488,7 +546,7 @@ pub fn on_event(
         }
 
         if let Some(selected_tile_id) = state.gui_state.selected_tile_id {
-            if state.input_handler.shift_held
+            if state.input_handler.key_active(KeyActions::SelectMode)
                 && !state.resource_man.registry.tiles[&selected_tile_id]
                     .data
                     .get(&state.resource_man.registry.data_ids.indirectional)
