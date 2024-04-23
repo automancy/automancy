@@ -43,6 +43,7 @@ impl Options {
             .write(true)
             .read(true)
             .create(true)
+            .truncate(true)
             .open(OPTIONS_PATH)?;
 
         let reader = BufReader::new(file);

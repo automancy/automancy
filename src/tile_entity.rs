@@ -96,7 +96,7 @@ impl TileEntity {
 
         let ty: TransactionResultType = result[0].clone().cast();
 
-        return match ty {
+        match ty {
             TransactionResultType::PassOn => {
                 let coord: TileCoord = result[1].clone().cast();
 
@@ -159,7 +159,7 @@ impl TileEntity {
                     self.coord,
                 ))
             }
-        };
+        }
     }
 
     fn handle_rhai_result(&self, state: &mut TileEntityState, result: rhai::Array) {
