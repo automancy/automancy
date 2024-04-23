@@ -374,12 +374,14 @@ pub fn on_event(
                     state.gui_state.prev_placement_direction = None;
                 }
 
-                if state.gui_state.already_placed_at != Some(state.camera.pointing_at) {
+                let placing = state.camera.pointing_at;
+
+                if state.gui_state.already_placed_at != Some(placing) {
                     let response = state
                         .tokio
                         .block_on(state.game.call(
                             |reply| GameSystemMessage::PlaceTile {
-                                coord: state.camera.pointing_at,
+                                coord: placing,
                                 id,
                                 record: true,
                                 reply: Some(reply),
@@ -395,6 +397,7 @@ pub fn on_event(
                                 .audio_man
                                 .play(state.resource_man.audio["tile_placement"].clone())
                                 .unwrap();
+                            state.gui_state.config_open_at = Some(placing);
                         }
                         PlaceTileResponse::Removed => {
                             state
@@ -405,7 +408,7 @@ pub fn on_event(
                         _ => {}
                     }
 
-                    state.gui_state.already_placed_at = Some(state.camera.pointing_at)
+                    state.gui_state.already_placed_at = Some(placing)
                 }
             }
         }
