@@ -12,6 +12,7 @@ use hashbrown::HashMap;
 pub use kira;
 use kira::sound::static_sound::StaticSoundData;
 use kira::track::TrackHandle;
+use registry::KeyIds;
 use rhai::{CallFnOptions, Dynamic, Engine, Scope, AST};
 use thiserror::Error;
 use walkdir::WalkDir;
@@ -142,6 +143,7 @@ impl ResourceManager {
         let data_ids = DataIds::new(&mut interner);
         let model_ids = ModelIds::new(&mut interner);
         let gui_ids = GuiIds::new(&mut interner);
+        let key_ids = KeyIds::new(&mut interner);
         let err_ids = ErrorIds::new(&mut interner);
 
         Self {
@@ -167,6 +169,7 @@ impl ResourceManager {
                 model_ids,
                 gui_ids,
                 err_ids,
+                key_ids,
             },
 
             translates: Default::default(),

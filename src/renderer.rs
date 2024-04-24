@@ -51,7 +51,7 @@ use crate::{
 use crate::{gpu, gui};
 use crate::{
     gpu::GuiResources,
-    input::{InputHandler, KeyActions},
+    input::{ActionType, InputHandler},
 };
 use crate::{
     gpu::{
@@ -869,7 +869,7 @@ impl<'a> Renderer<'a> {
         let buffer_dim = texture_dim.physical_size(output.texture.format());
         let padded_width = size_align(buffer_dim.width * block_size, COPY_BYTES_PER_ROW_ALIGNMENT);
 
-        let screenshot_buffer = if input_handler.key_active(KeyActions::Screenshot) {
+        let screenshot_buffer = if input_handler.key_active(ActionType::Screenshot) {
             let intermediate_texture = self.gpu.device.create_texture(&TextureDescriptor {
                 label: Some("Screenshot Intermediate Texture"),
                 size: texture_dim,

@@ -28,7 +28,7 @@ impl IconMode {
     pub fn model_matrix(self) -> Matrix4 {
         match self {
             IconMode::Item => Matrix4::default(),
-            IconMode::Tile => Matrix4::from_rotation_x(0.25),
+            IconMode::Tile => Matrix4::from_rotation_x(0.4),
         }
     }
     pub fn world_matrix(self) -> Matrix4 {

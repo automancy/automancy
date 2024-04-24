@@ -222,12 +222,6 @@ fn main() -> anyhow::Result<()> {
             .expect("Failed to open window");
         log::info!("Window created.");
 
-        let options = Options::load()?;
-        let input_handler = InputHandler::new(&options);
-
-        let loop_store = EventLoopStorage::default();
-        let camera = Camera::new(window::window_size_double(&window));
-
         log::info!("Initializing audio backend...");
         let mut audio_man = AudioManager::new(AudioManagerSettings::default())?;
         log::info!("Audio backend initialized");
@@ -242,6 +236,12 @@ fn main() -> anyhow::Result<()> {
         let (resource_man, vertices, indices, fonts) = load_resources(track);
         RESOURCE_MAN.write().unwrap().replace(resource_man.clone());
         log::info!("Loaded resources.");
+
+        let options = Options::load(&resource_man)?;
+        let input_handler = InputHandler::new(&options);
+
+        let loop_store = EventLoopStorage::default();
+        let camera = Camera::new(window::window_size_double(&window));
 
         log::info!("Creating game...");
         let (game, game_handle) = tokio.block_on(Actor::spawn(
@@ -325,6 +325,7 @@ fn main() -> anyhow::Result<()> {
         GameState {
             gui_state: GuiState::default(),
             input_handler,
+            input_hints: Default::default(),
             options,
             resource_man,
             camera,

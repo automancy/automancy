@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use gui::{Gui, GuiState};
+use input::{ActionType, KeyAction};
 use ractor::ActorRef;
 use tokio::runtime::Runtime;
 use tokio::task::JoinHandle;
@@ -39,6 +40,7 @@ pub struct GameState {
     pub options: Options,
     pub resource_man: Arc<ResourceManager>,
     pub input_handler: InputHandler,
+    pub input_hints: Vec<Vec<ActionType>>,
     pub camera: Camera,
     pub loop_store: EventLoopStorage,
     pub tokio: Runtime,

@@ -20,6 +20,7 @@ pub struct TranslateRaw {
     categories: HashMap<IdRaw, String>,
     scripts: HashMap<IdRaw, String>,
     gui: HashMap<IdRaw, String>,
+    keys: HashMap<IdRaw, String>,
     error: HashMap<IdRaw, String>,
     research: HashMap<IdRaw, SharedStr>,
 }
@@ -33,6 +34,7 @@ pub struct Translate {
     pub categories: HashMap<Id, SharedStr>,
     pub scripts: HashMap<Id, SharedStr>,
     pub gui: HashMap<Id, SharedStr>,
+    pub keys: HashMap<Id, SharedStr>,
     pub error: HashMap<Id, SharedStr>,
     pub research: HashMap<Id, SharedStr>,
 }
@@ -71,6 +73,11 @@ impl ResourceManager {
             .into_iter()
             .map(|(id, str)| (id.to_id(&mut self.interner), str.into()))
             .collect();
+        let keys = translate
+            .keys
+            .into_iter()
+            .map(|(id, str)| (id.to_id(&mut self.interner), str.into()))
+            .collect();
         let error = translate
             .error
             .into_iter()
@@ -90,6 +97,7 @@ impl ResourceManager {
             categories,
             scripts,
             gui,
+            keys,
             error,
             research,
         };

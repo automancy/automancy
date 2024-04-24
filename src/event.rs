@@ -23,7 +23,7 @@ use automancy_resources::ResourceManager;
 
 use crate::game::{GameSystemMessage, PlaceTileResponse};
 use crate::gui::{Screen, TextField};
-use crate::input::KeyActions;
+use crate::input::ActionType;
 use crate::map::{Map, MapInfo, MapInfoRaw, MAP_PATH};
 use crate::tile_entity::TileEntityMsg;
 use crate::{gui, input, GameState};
@@ -375,8 +375,9 @@ pub fn on_event(
         };
     };
 
+    state.input_handler.reset();
+
     if window_event.is_some() || device_event.is_some() {
-        state.input_handler.reset();
         state.input_handler.update(input::convert_input(
             window_event,
             device_event,
@@ -384,127 +385,160 @@ pub fn on_event(
             1.0, //TODO sensitivity option
         ));
         state.camera.handle_input(&state.input_handler);
+    }
 
-        if state.input_handler.key_active(KeyActions::Escape) {
-            // one by one
-            if state.gui_state.selected_tile_id.take().is_none()
-                && state.gui_state.linking_tile.take().is_none()
-                && state.gui_state.paste_from.take().is_none()
+    state.input_hints.clear();
+
+    state.input_hints.push(vec![ActionType::Cancel]);
+    if state.input_handler.key_active(ActionType::Cancel) {
+        // one by one
+        if state.gui_state.selected_tile_id.take().is_none()
+            && state.gui_state.linking_tile.take().is_none()
+            && state.gui_state.paste_from.take().is_none()
+        {
+            if state
+                .gui_state
+                .switch_screen_when(&|s| s.screen == Screen::Ingame, Screen::Paused)
             {
-                if state
+                state
+                    .tokio
+                    .block_on(state.game.call(GameSystemMessage::SaveMap, None))?
+                    .unwrap();
+            } else {
+                state
                     .gui_state
-                    .switch_screen_when(&|s| s.screen == Screen::Ingame, Screen::Paused)
-                {
-                    state
-                        .tokio
-                        .block_on(state.game.call(GameSystemMessage::SaveMap, None))?
-                        .unwrap();
-                } else {
-                    state
-                        .gui_state
-                        .switch_screen_when(&|s| s.screen == Screen::Paused, Screen::Ingame);
-                }
+                    .switch_screen_when(&|s| s.screen == Screen::Paused, Screen::Ingame);
             }
         }
+    }
 
-        if (state.input_handler.main_pressed
-            || (state.input_handler.key_active(KeyActions::SelectMode)
-                && state.input_handler.main_held))
-            && state.gui_state.already_placed_at != Some(state.camera.pointing_at)
-        {
-            if let Some(id) = state.gui_state.selected_tile_id {
-                place_tile(id, state.camera.pointing_at, state)?;
-            }
+    // TODO hint this
+    if (state.input_handler.main_pressed
+        || (state.input_handler.key_active(ActionType::SelectMode)
+            && state.input_handler.main_held))
+        && state.gui_state.already_placed_at != Some(state.camera.pointing_at)
+    {
+        if let Some(id) = state.gui_state.selected_tile_id {
+            place_tile(id, state.camera.pointing_at, state)?;
         }
+    }
 
-        if state.input_handler.key_active(KeyActions::Delete) {
-            place_tile(
-                state.resource_man.registry.none,
-                state.camera.pointing_at,
-                state,
-            )?;
-        }
+    state.input_hints.push(vec![ActionType::Delete]);
+    if state.input_handler.key_active(ActionType::Delete) {
+        place_tile(
+            state.resource_man.registry.none,
+            state.camera.pointing_at,
+            state,
+        )?;
+    }
 
-        if state.input_handler.alternate_pressed
-            && !state.input_handler.key_active(KeyActions::SelectMode)
-        {
-            if let Some(linking_tile) = state.gui_state.linking_tile {
+    if !state.input_handler.key_active(ActionType::SelectMode) {
+        // TODO hint this
+        if let Some(linking_tile) = state.gui_state.linking_tile {
+            if state.input_handler.alternate_pressed {
                 state.tokio.block_on(on_link_tile(
                     state.resource_man.clone(),
                     &mut state.audio_man,
                     state.loop_store.pointing_cache.clone(),
                     linking_tile,
                 ));
-            } else if Some(state.camera.pointing_at) == state.gui_state.config_open_at {
+            }
+        } else if Some(state.camera.pointing_at) == state.gui_state.config_open_at {
+            if state.input_handler.alternate_pressed {
                 state.gui_state.config_open_at = None;
                 state.gui_state.text_field.get(TextField::Filter).clear();
-            } else {
-                state.gui_state.config_open_at = Some(state.camera.pointing_at);
             }
+        } else if state.input_handler.alternate_pressed {
+            state.gui_state.config_open_at = Some(state.camera.pointing_at);
         }
+    }
 
-        if state.input_handler.key_active(KeyActions::SelectMode)
-            && state.gui_state.screen == Screen::Ingame
-        {
-            if state.gui_state.paste_from.is_none() {
-                state
-                    .gui_state
-                    .grouped_tiles
-                    .insert(state.camera.pointing_at);
-            }
-        } else {
-            state.gui_state.grouped_tiles.clear();
-        }
-
-        if state.input_handler.key_active(KeyActions::HotkeyActive)
-            && (state.input_handler.key_active(KeyActions::Cut)
-                || state.input_handler.key_active(KeyActions::Copy))
-            && state.gui_state.paste_from.is_none()
-            && !state.gui_state.grouped_tiles.is_empty()
-        {
-            state.gui_state.paste_from = Some(state.camera.pointing_at);
+    state.input_hints.push(vec![ActionType::SelectMode]);
+    if state.input_handler.key_active(ActionType::SelectMode)
+        && state.gui_state.screen == Screen::Ingame
+    {
+        if state.gui_state.paste_from.is_none() {
             state
-                .audio_man
-                .play(state.resource_man.audio["click"].clone())?;
+                .gui_state
+                .grouped_tiles
+                .insert(state.camera.pointing_at);
+        }
+    } else {
+        state.gui_state.grouped_tiles.clear();
+    }
 
-            let coords = Vec::from_iter(mem::take(&mut state.gui_state.grouped_tiles));
+    if state.input_handler.key_active(ActionType::HotkeyActive) {
+        state
+            .input_hints
+            .push(vec![ActionType::HotkeyActive, ActionType::Undo]);
+        state
+            .input_hints
+            .push(vec![ActionType::HotkeyActive, ActionType::Redo]);
 
-            if state.input_handler.key_active(KeyActions::Cut) {
-                let none = state.resource_man.registry.none;
+        if state.input_handler.key_active(ActionType::Undo) {
+            state.game.send_message(GameSystemMessage::Undo)?;
+        }
+        if state.input_handler.key_active(ActionType::Redo) {
+            //TODO state.game.send_message(GameSystemMessage::Redo)?;
+        }
 
-                state.gui_state.paste_content = state
-                    .tokio
-                    .block_on(state.game.call(
-                        |reply| {
-                            GameSystemMessage::PlaceTiles {
-                                tiles: coords
-                                    .into_iter()
-                                    .map(|coord| (coord, none, None))
-                                    .collect::<Vec<_>>(),
-                                reply: Some(reply),
-                                place_over: true,
-                                record: true,
-                            }
-                        },
-                        None,
-                    ))?
-                    .unwrap();
-            } else {
-                state.gui_state.paste_content = state
-                    .tokio
-                    .block_on(
-                        state
-                            .game
-                            .call(|reply| GameSystemMessage::GetTiles(coords, reply), None),
-                    )?
-                    .unwrap();
+        if state.gui_state.paste_from.is_none() && !state.gui_state.grouped_tiles.is_empty() {
+            state
+                .input_hints
+                .push(vec![ActionType::HotkeyActive, ActionType::Cut]);
+            state
+                .input_hints
+                .push(vec![ActionType::HotkeyActive, ActionType::Copy]);
+
+            if (state.input_handler.key_active(ActionType::Cut)
+                || state.input_handler.key_active(ActionType::Copy))
+            {
+                state.gui_state.paste_from = Some(state.camera.pointing_at);
+                state
+                    .audio_man
+                    .play(state.resource_man.audio["click"].clone())?;
+
+                let coords = Vec::from_iter(mem::take(&mut state.gui_state.grouped_tiles));
+
+                if state.input_handler.key_active(ActionType::Cut) {
+                    let none = state.resource_man.registry.none;
+
+                    state.gui_state.paste_content = state
+                        .tokio
+                        .block_on(state.game.call(
+                            |reply| {
+                                GameSystemMessage::PlaceTiles {
+                                    tiles: coords
+                                        .into_iter()
+                                        .map(|coord| (coord, none, None))
+                                        .collect::<Vec<_>>(),
+                                    reply: Some(reply),
+                                    place_over: true,
+                                    record: true,
+                                }
+                            },
+                            None,
+                        ))?
+                        .unwrap();
+                } else {
+                    state.gui_state.paste_content = state
+                        .tokio
+                        .block_on(
+                            state
+                                .game
+                                .call(|reply| GameSystemMessage::GetTiles(coords, reply), None),
+                        )?
+                        .unwrap();
+                }
             }
         }
 
-        if state.input_handler.key_active(KeyActions::HotkeyActive)
-            && state.input_handler.key_active(KeyActions::Paste)
-        {
-            if let Some(start) = state.gui_state.paste_from {
+        if let Some(start) = state.gui_state.paste_from {
+            state
+                .input_hints
+                .push(vec![ActionType::HotkeyActive, ActionType::Paste]);
+
+            if state.input_handler.key_active(ActionType::Paste) {
                 let direction = state.camera.pointing_at - start;
 
                 let tiles = state
@@ -527,46 +561,36 @@ pub fn on_event(
                     .play(state.resource_man.audio["click"].clone())?; // TODO click2
             }
         }
+    } else {
+        state.input_hints.push(vec![ActionType::HotkeyActive]);
+    }
 
-        if state.input_handler.key_active(KeyActions::HotkeyActive)
-            && state.input_handler.key_active(KeyActions::Undo)
+    if state.input_handler.key_active(ActionType::Fullscreen) {
+        state.options.graphics.fullscreen = !state.options.graphics.fullscreen;
+        state.options.synced = false
+    }
+
+    if let Some(selected_tile_id) = state.gui_state.selected_tile_id {
+        if state.input_handler.key_active(ActionType::SelectMode)
+            && !state.resource_man.registry.tiles[&selected_tile_id]
+                .data
+                .get(&state.resource_man.registry.data_ids.indirectional)
+                .cloned()
+                .and_then(Data::into_bool)
+                .unwrap_or(false)
         {
-            state.game.send_message(GameSystemMessage::Undo)?;
-        }
+            let hex = math::main_pos_to_fract_hex(
+                window::window_size_double(&state.renderer.gpu.window),
+                state.input_handler.main_pos,
+                state.camera.get_pos(),
+            );
+            let rounded = Hex::round(hex.to_array()).as_vec2();
+            let fract = (hex - rounded) * 2.0;
 
-        if state.input_handler.key_active(KeyActions::HotkeyActive)
-            && state.input_handler.key_active(KeyActions::Redo)
-        {
-            //TODO state.game.send_message(GameSystemMessage::Redo)?;
-        }
-
-        if state.input_handler.key_active(KeyActions::Fullscreen) {
-            state.options.graphics.fullscreen = !state.options.graphics.fullscreen;
-            state.options.synced = false
-        }
-
-        if let Some(selected_tile_id) = state.gui_state.selected_tile_id {
-            if state.input_handler.key_active(KeyActions::SelectMode)
-                && !state.resource_man.registry.tiles[&selected_tile_id]
-                    .data
-                    .get(&state.resource_man.registry.data_ids.indirectional)
-                    .cloned()
-                    .and_then(Data::into_bool)
-                    .unwrap_or(false)
-            {
-                let hex = math::main_pos_to_fract_hex(
-                    window::window_size_double(&state.renderer.gpu.window),
-                    state.input_handler.main_pos,
-                    state.camera.get_pos(),
-                );
-                let rounded = Hex::round(hex.to_array()).as_vec2();
-                let fract = (hex - rounded) * 2.0;
-
-                state.gui_state.placement_direction = Some(Hex::round(fract.to_array()).into())
-            } else {
-                state.gui_state.placement_direction = None;
-                state.gui_state.prev_placement_direction = None;
-            }
+            state.gui_state.placement_direction = Some(Hex::round(fract.to_array()).into())
+        } else {
+            state.gui_state.placement_direction = None;
+            state.gui_state.prev_placement_direction = None;
         }
     }
 

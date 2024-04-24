@@ -35,7 +35,7 @@ use yakui::{
 
 use crate::game::TAKE_ITEM_ANIMATION_SPEED;
 use crate::gpu::{AnimationMap, GlobalBuffers, GuiResources};
-use crate::input::KeyActions;
+use crate::input::ActionType;
 use crate::renderer::try_add_animation;
 use crate::{gpu, GameState};
 
@@ -688,14 +688,14 @@ pub fn render_ui(
     if state.gui_state.popup == PopupState::None {
         match state.gui_state.screen {
             Screen::Ingame => {
-                if !state.input_handler.key_active(KeyActions::HideGui) {
+                // tile_info
+                info::info_ui(state);
+
+                if !state.input_handler.key_active(ActionType::ToggleGui) {
                     if let Some(map_info) = state.loop_store.map_info.as_ref().map(|v| v.0.clone())
                     {
                         let mut lock = map_info.blocking_lock();
                         let game_data = &mut lock.data;
-
-                        // tile_info
-                        info::info_ui(state);
 
                         let (selection_send, selection_recv) = oneshot::channel();
 
@@ -715,7 +715,7 @@ pub fn render_ui(
                             }
                         }
 
-                        if state.input_handler.key_active(KeyActions::Player) {
+                        if state.input_handler.key_active(ActionType::Player) {
                             player::player(state, game_data);
                         }
                     }
@@ -886,7 +886,7 @@ pub fn render_ui(
         }
     }
 
-    if state.input_handler.key_active(KeyActions::Debug) {
+    if state.input_handler.key_active(ActionType::Debug) {
         debug::debugger(state);
     }
 

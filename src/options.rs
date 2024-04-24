@@ -1,6 +1,7 @@
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, Write};
 
+use automancy_resources::ResourceManager;
 use enum_ordinalize::Ordinalize;
 use hashbrown::HashMap;
 use ron::ser::PrettyConfig;
@@ -10,9 +11,9 @@ use winit::keyboard::Key;
 use automancy_defs::log;
 use automancy_defs::math::Double;
 
-use crate::input::{KeyAction, DEFAULT_KEYMAP};
+use crate::input::{get_default_keymap, KeyAction};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct Options {
     pub graphics: GraphicsOptions,
     pub audio: AudioOptions,
@@ -21,13 +22,13 @@ pub struct Options {
     pub synced: bool,
 }
 
-impl Default for Options {
-    fn default() -> Self {
+impl Options {
+    pub fn new(resource_man: &ResourceManager) -> Self {
         Self {
             graphics: Default::default(),
             audio: Default::default(),
             gui: Default::default(),
-            keymap: DEFAULT_KEYMAP.iter().cloned().collect(),
+            keymap: get_default_keymap(resource_man).iter().cloned().collect(),
             synced: false,
         }
     }
@@ -36,7 +37,7 @@ impl Default for Options {
 static OPTIONS_PATH: &str = "options.ron";
 
 impl Options {
-    pub fn load() -> anyhow::Result<Options> {
+    pub fn load(resource_man: &ResourceManager) -> anyhow::Result<Options> {
         log::info!("Loading options...");
 
         let file = OpenOptions::new()
@@ -50,9 +51,11 @@ impl Options {
 
         let mut this: Options = ron::de::from_reader(reader).unwrap_or_default();
 
-        if this.keymap.len() != DEFAULT_KEYMAP.len() {
+        let default = get_default_keymap(resource_man);
+
+        if this.keymap.len() != default.len() {
             // TODO show a popup warning the player
-            this.keymap = DEFAULT_KEYMAP.iter().cloned().collect();
+            this.keymap = default.iter().cloned().collect();
         }
 
         this.save()?;

@@ -5,6 +5,7 @@ use automancy_defs::{
 
 pub const HEADING_SIZE: Float = 20.0;
 pub const LABEL_SIZE: Float = 14.0;
+pub const SMALL_SIZE: Float = 12.0;
 pub const DIVIER_SIZE: Float = 1.0;
 pub const ICON_SIZE: Vec2 = vec2(12.0, 12.0);
 

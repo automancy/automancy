@@ -1,5 +1,6 @@
-use std::mem;
+use std::{cell::Cell, mem};
 
+use automancy_resources::ResourceManager;
 use hashbrown::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use winit::event::{
@@ -11,37 +12,128 @@ use winit::{
     platform::modifier_supplement::KeyEventExtModifierSupplement,
 };
 
-use automancy_defs::glam::dvec2;
 use automancy_defs::math::{DVec2, Double};
+use automancy_defs::{glam::dvec2, id::Id};
 
 use crate::options::Options;
 
-pub static DEFAULT_KEYMAP: &[(Key, KeyAction)] = &[
-    (Key::Character(SmolStr::new_inline("z")), actions::UNDO),
-    (Key::Character(SmolStr::new_inline("r")), actions::REDO),
-    (Key::Character(SmolStr::new_inline("e")), actions::PLAYER),
-    (Key::Character(SmolStr::new_inline("x")), actions::CUT),
-    (Key::Character(SmolStr::new_inline("c")), actions::COPY),
-    (Key::Character(SmolStr::new_inline("v")), actions::PASTE),
-    (Key::Named(NamedKey::Escape), actions::ESCAPE),
-    (Key::Named(NamedKey::F1), actions::HIDE_GUI),
-    (Key::Named(NamedKey::F2), actions::SCREENSHOT),
-    (Key::Named(NamedKey::F3), actions::DEBUG),
-    (Key::Named(NamedKey::F11), actions::FULLSCREEN),
-    (Key::Named(NamedKey::Backspace), actions::DELETE),
-    (Key::Named(NamedKey::Shift), actions::SELECT_MODE),
-    (Key::Named(NamedKey::Control), actions::HOTKEY),
-];
+thread_local! {
+    static DEFAULT_KEYMAP: Cell<Option<Vec<(Key, KeyAction)>>> = Cell::default();
+}
+
+pub fn get_default_keymap(resource_man: &ResourceManager) -> Vec<(Key, KeyAction)> {
+    let taken = DEFAULT_KEYMAP.take();
+
+    if let Some(taken) = taken {
+        DEFAULT_KEYMAP.set(Some(taken.clone()));
+
+        taken
+    } else {
+        set_default_keymap(resource_man);
+
+        get_default_keymap(resource_man)
+    }
+}
+
+fn set_default_keymap(resource_man: &ResourceManager) {
+    let cancel: KeyAction = KeyAction {
+        action: ActionType::Cancel,
+        press_type: PressType::Tap,
+        name: Some(resource_man.registry.key_ids.cancel),
+    };
+    let undo: KeyAction = KeyAction {
+        action: ActionType::Undo,
+        press_type: PressType::Tap,
+        name: Some(resource_man.registry.key_ids.undo),
+    };
+    let redo: KeyAction = KeyAction {
+        action: ActionType::Redo,
+        press_type: PressType::Tap,
+        name: Some(resource_man.registry.key_ids.redo),
+    };
+    let debug: KeyAction = KeyAction {
+        action: ActionType::Debug,
+        press_type: PressType::Toggle,
+        name: None,
+    };
+    let fullscreen: KeyAction = KeyAction {
+        action: ActionType::Fullscreen,
+        press_type: PressType::Tap,
+        name: None,
+    };
+    let screenshot: KeyAction = KeyAction {
+        action: ActionType::Screenshot,
+        press_type: PressType::Tap,
+        name: None,
+    };
+    let toggle_gui: KeyAction = KeyAction {
+        action: ActionType::ToggleGui,
+        press_type: PressType::Toggle,
+        name: Some(resource_man.registry.key_ids.toggle_gui),
+    };
+    let player: KeyAction = KeyAction {
+        action: ActionType::Player,
+        press_type: PressType::Toggle,
+        name: Some(resource_man.registry.key_ids.player_menu),
+    };
+    let delete: KeyAction = KeyAction {
+        action: ActionType::Delete,
+        press_type: PressType::Tap,
+        name: Some(resource_man.registry.key_ids.remove_tile),
+    };
+    let select_mode: KeyAction = KeyAction {
+        action: ActionType::SelectMode,
+        press_type: PressType::Hold,
+        name: Some(resource_man.registry.key_ids.select_mode),
+    };
+    let hotkey: KeyAction = KeyAction {
+        action: ActionType::HotkeyActive,
+        press_type: PressType::Hold,
+        name: Some(resource_man.registry.key_ids.hotkey),
+    };
+    let cut: KeyAction = KeyAction {
+        action: ActionType::Cut,
+        press_type: PressType::Tap,
+        name: Some(resource_man.registry.key_ids.cut),
+    };
+    let copy: KeyAction = KeyAction {
+        action: ActionType::Copy,
+        press_type: PressType::Tap,
+        name: Some(resource_man.registry.key_ids.copy),
+    };
+    let paste: KeyAction = KeyAction {
+        action: ActionType::Paste,
+        press_type: PressType::Tap,
+        name: Some(resource_man.registry.key_ids.paste),
+    };
+
+    DEFAULT_KEYMAP.set(Some(vec![
+        (Key::Character(SmolStr::new_inline("z")), undo),
+        (Key::Character(SmolStr::new_inline("r")), redo),
+        (Key::Character(SmolStr::new_inline("e")), player),
+        (Key::Character(SmolStr::new_inline("x")), cut),
+        (Key::Character(SmolStr::new_inline("c")), copy),
+        (Key::Character(SmolStr::new_inline("v")), paste),
+        (Key::Named(NamedKey::Escape), cancel),
+        (Key::Named(NamedKey::F1), toggle_gui),
+        (Key::Named(NamedKey::F2), screenshot),
+        (Key::Named(NamedKey::F3), debug),
+        (Key::Named(NamedKey::F11), fullscreen),
+        (Key::Named(NamedKey::Backspace), delete),
+        (Key::Named(NamedKey::Shift), select_mode),
+        (Key::Named(NamedKey::Control), hotkey),
+    ]));
+}
 
 #[derive(Serialize, Deserialize, Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
-pub enum KeyActions {
-    Escape,
+pub enum ActionType {
+    Cancel,
     Undo,
     Redo,
     Debug,
     Fullscreen,
     Screenshot,
-    HideGui,
+    ToggleGui,
     Player,
     Delete,
     SelectMode,
@@ -52,7 +144,7 @@ pub enum KeyActions {
 }
 
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
-pub enum PressTypes {
+pub enum PressType {
     Tap,    // returns true when the key is pressed once and will not press again until released
     Hold,   // returns true whenever the key is down
     Toggle, // pressing the key will either toggle it on or off
@@ -60,69 +152,9 @@ pub enum PressTypes {
 
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct KeyAction {
-    pub action: KeyActions,
-    pub press_type: PressTypes,
-}
-
-pub mod actions {
-    use super::{KeyAction, KeyActions, PressTypes};
-
-    pub static ESCAPE: KeyAction = KeyAction {
-        action: KeyActions::Escape,
-        press_type: PressTypes::Tap,
-    };
-    pub static UNDO: KeyAction = KeyAction {
-        action: KeyActions::Undo,
-        press_type: PressTypes::Tap,
-    };
-    pub static REDO: KeyAction = KeyAction {
-        action: KeyActions::Redo,
-        press_type: PressTypes::Tap,
-    };
-    pub static DEBUG: KeyAction = KeyAction {
-        action: KeyActions::Debug,
-        press_type: PressTypes::Toggle,
-    };
-    pub static FULLSCREEN: KeyAction = KeyAction {
-        action: KeyActions::Fullscreen,
-        press_type: PressTypes::Tap,
-    };
-    pub static SCREENSHOT: KeyAction = KeyAction {
-        action: KeyActions::Screenshot,
-        press_type: PressTypes::Tap,
-    };
-    pub static HIDE_GUI: KeyAction = KeyAction {
-        action: KeyActions::HideGui,
-        press_type: PressTypes::Toggle,
-    };
-    pub static PLAYER: KeyAction = KeyAction {
-        action: KeyActions::Player,
-        press_type: PressTypes::Toggle,
-    };
-    pub static DELETE: KeyAction = KeyAction {
-        action: KeyActions::Delete,
-        press_type: PressTypes::Tap,
-    };
-    pub static SELECT_MODE: KeyAction = KeyAction {
-        action: KeyActions::SelectMode,
-        press_type: PressTypes::Hold,
-    };
-    pub static HOTKEY: KeyAction = KeyAction {
-        action: KeyActions::HotkeyActive,
-        press_type: PressTypes::Hold,
-    };
-    pub static CUT: KeyAction = KeyAction {
-        action: KeyActions::Cut,
-        press_type: PressTypes::Tap,
-    };
-    pub static COPY: KeyAction = KeyAction {
-        action: KeyActions::Copy,
-        press_type: PressTypes::Tap,
-    };
-    pub static PASTE: KeyAction = KeyAction {
-        action: KeyActions::Paste,
-        press_type: PressTypes::Tap,
-    };
+    pub action: ActionType,
+    pub press_type: PressType,
+    pub name: Option<Id>,
 }
 
 /// The various controls of the game.
@@ -246,7 +278,7 @@ pub struct InputHandler {
     pub tertiary_pressed: bool,
 
     pub key_map: HashMap<Key, KeyAction>,
-    pub key_states: HashSet<KeyActions>,
+    pub key_states: HashSet<ActionType>,
 
     to_clear: Vec<KeyAction>,
 }
@@ -329,7 +361,7 @@ impl InputHandler {
         let action = *self.key_map.get(&key)?;
 
         match action.press_type {
-            PressTypes::Tap => match state {
+            PressType::Tap => match state {
                 Pressed => {
                     self.key_states.insert(action.action);
                     self.to_clear.push(action);
@@ -338,7 +370,7 @@ impl InputHandler {
                     self.key_states.remove(&action.action);
                 }
             },
-            PressTypes::Hold => match state {
+            PressType::Hold => match state {
                 Pressed => {
                     self.key_states.insert(action.action);
                 }
@@ -346,7 +378,7 @@ impl InputHandler {
                     self.key_states.remove(&action.action);
                 }
             },
-            PressTypes::Toggle => match state {
+            PressType::Toggle => match state {
                 Pressed => {
                     if self.key_states.contains(&action.action) {
                         self.key_states.remove(&action.action);
@@ -361,7 +393,7 @@ impl InputHandler {
         Some(())
     }
 
-    pub fn key_active(&self, action: KeyActions) -> bool {
+    pub fn key_active(&self, action: ActionType) -> bool {
         self.key_states.contains(&action)
     }
 }

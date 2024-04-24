@@ -29,6 +29,7 @@ pub struct Registry {
     pub data_ids: DataIds,
     pub model_ids: ModelIds,
     pub gui_ids: GuiIds,
+    pub key_ids: KeyIds,
     pub err_ids: ErrorIds,
 }
 
@@ -72,7 +73,6 @@ pub struct ModelIds {
     pub puzzle_space: Id,
 }
 
-/// The list of GUI translation keys.
 #[derive(Clone, Copy, IdReg)]
 pub struct GuiIds {
     pub info: Id,
@@ -124,7 +124,23 @@ pub struct GuiIds {
     pub time_fmt: Id,
 }
 
-/// Contains a list of errors that can be displayed.
+// The list of GUI translation keys.
+#[derive(Clone, Copy, IdReg)]
+pub struct KeyIds {
+    pub cancel: Id,
+    pub pause: Id,
+    pub undo: Id,
+    pub redo: Id,
+    pub toggle_gui: Id,
+    pub player_menu: Id,
+    pub remove_tile: Id,
+    pub select_mode: Id,
+    pub hotkey: Id,
+    pub cut: Id,
+    pub copy: Id,
+    pub paste: Id,
+}
+
 #[derive(Clone, Copy, IdReg)]
 pub struct ErrorIds {
     /// This error is displayed when the map cannot be read.
