@@ -413,20 +413,11 @@ impl Actor for GameSystem {
                                 let mut data =
                                     entity.call(TileEntityMsg::GetData, None).await?.unwrap();
 
-                                let mut copied = DataMap::default();
-
-                                if let Some(v) =
-                                    data.remove(&self.resource_man.registry.data_ids.direction)
-                                {
-                                    copied.insert(self.resource_man.registry.data_ids.direction, v);
-                                }
-                                if let Some(v) =
-                                    data.remove(&self.resource_man.registry.data_ids.link)
-                                {
-                                    copied.insert(self.resource_man.registry.data_ids.link, v);
-                                }
-
-                                tiles.push((coord, *id, Some(copied)));
+                                tiles.push((
+                                    coord,
+                                    *id,
+                                    Some(copy_auxiliary_data(&self.resource_man, &mut data)),
+                                ));
                             } else {
                                 tiles.push((coord, *id, None));
                             }
@@ -443,7 +434,7 @@ impl Actor for GameSystem {
 
                         for (coord, id, data) in tiles {
                             if place_over || state.map.tiles.get(&coord).is_none() {
-                                if let Some(Some((id, data))) = insert_new_tile(
+                                if let Some(Some((old_id, old_data))) = insert_new_tile(
                                     self.resource_man.clone(),
                                     myself.clone(),
                                     state,
@@ -453,7 +444,18 @@ impl Actor for GameSystem {
                                 )
                                 .await
                                 {
-                                    old.push((coord, id, data));
+                                    if let Some(mut old_data) = old_data {
+                                        old.push((
+                                            coord,
+                                            old_id,
+                                            Some(copy_auxiliary_data(
+                                                &self.resource_man,
+                                                &mut old_data,
+                                            )),
+                                        ));
+                                    } else {
+                                        old.push((coord, old_id, None));
+                                    }
                                 }
                             }
                         }
@@ -697,6 +699,28 @@ pub fn tick(state: &mut GameSystemState) {
             MAX_ALLOWED_TICK_INTERVAL
         );
     }
+}
+
+pub fn copy_auxiliary_data(resource_man: &ResourceManager, data: &mut DataMap) -> DataMap {
+    let mut copied = DataMap::default();
+
+    if let Some(v) = data.remove(&resource_man.registry.data_ids.direction) {
+        copied.insert(resource_man.registry.data_ids.direction, v);
+    }
+    if let Some(v) = data.remove(&resource_man.registry.data_ids.link) {
+        copied.insert(resource_man.registry.data_ids.link, v);
+    }
+    if let Some(v) = data.remove(&resource_man.registry.data_ids.script) {
+        copied.insert(resource_man.registry.data_ids.script, v);
+    }
+    if let Some(v) = data.remove(&resource_man.registry.data_ids.amount) {
+        copied.insert(resource_man.registry.data_ids.amount, v);
+    }
+    if let Some(v) = data.remove(&resource_man.registry.data_ids.item) {
+        copied.insert(resource_man.registry.data_ids.item, v);
+    }
+
+    copied
 }
 
 impl Default for GameSystemState {
