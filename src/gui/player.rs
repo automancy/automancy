@@ -454,9 +454,14 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                         });
 
                         row(|| {
-                            column(|| {
-                                current_research(state, game_data);
-                            });
+                            constrained(
+                                Constraints::loose(Vec2::new(520.0, f32::INFINITY)),
+                                || {
+                                    column(|| {
+                                        current_research(state, game_data);
+                                    });
+                                },
+                            );
                         });
 
                         column(|| {
@@ -464,23 +469,32 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                         });
 
                         row(|| {
-                            if let Some(research) = &state
-                                .gui_state
-                                .selected_research
-                                .and_then(|id| state.resource_man.get_research(id))
-                            {
-                                if let Some(Data::SetId(set)) = game_data
-                                    .get(&state.resource_man.registry.data_ids.unlocked_researches)
-                                {
-                                    if set.contains(&research.id) {
-                                        label(
-                                            &state
-                                                .resource_man
-                                                .research_str(&research.completed_description),
-                                        );
-                                    }
-                                }
-                            }
+                            scroll_vertical(200.0, || {
+                                constrained(
+                                    Constraints::loose(Vec2::new(680.0, f32::INFINITY)),
+                                    || {
+                                        if let Some(research) = &state
+                                            .gui_state
+                                            .selected_research
+                                            .and_then(|id| state.resource_man.get_research(id))
+                                        {
+                                            if let Some(Data::SetId(set)) = game_data.get(
+                                                &state
+                                                    .resource_man
+                                                    .registry
+                                                    .data_ids
+                                                    .unlocked_researches,
+                                            ) {
+                                                if set.contains(&research.id) {
+                                                    label(&state.resource_man.research_str(
+                                                        &research.completed_description,
+                                                    ));
+                                                }
+                                            }
+                                        }
+                                    },
+                                );
+                            });
                         });
                     });
                 },
