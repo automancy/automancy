@@ -7,8 +7,11 @@ use automancy_defs::id::Id;
 use automancy_defs::math::{z_far, z_near, DMatrix4, Float, Matrix4};
 use automancy_defs::rendering::InstanceData;
 use automancy_defs::{colors, math};
-use automancy_resources::data::{Data, DataMap};
 use automancy_resources::format;
+use automancy_resources::{
+    data::{Data, DataMap},
+    types::IconMode,
+};
 use yakui::{
     column, use_state,
     widgets::{Absolute, Layer},
@@ -162,9 +165,8 @@ pub fn tile_selections(
     game_data: &mut DataMap,
     selection_send: oneshot::Sender<Id>,
 ) {
-    let projection = DMatrix4::perspective_lh(FRAC_PI_4, 1.0, z_near(), z_far())
-        * math::view(dvec3(0.0, 0.0, 2.75));
-    let projection = projection.as_mat4();
+    let world_matrix = IconMode::Tile.world_matrix();
+    let model_matrix = IconMode::Tile.model_matrix();
 
     let mut hovered_category = None;
     let mut hovered_tile = None;
@@ -181,7 +183,8 @@ pub fn tile_selections(
                             let response = interactive(|| {
                                 ui_game_object(
                                     InstanceData::default()
-                                        .with_world_matrix(projection)
+                                        .with_world_matrix(world_matrix)
+                                        .with_model_matrix(model_matrix)
                                         .with_light_pos(vec3(0.0, 4.0, 14.0), None),
                                     model,
                                     vec2(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE),

@@ -117,7 +117,7 @@ fn research_selection(state: &mut GameState, game_data: &mut DataMap) {
                 }
 
                 let interact = interactive(|| {
-                    row(|| {
+                    centered_row(|| {
                         ui_game_object(
                             InstanceData::default()
                                 .with_model_matrix(research.icon_mode.model_matrix())
