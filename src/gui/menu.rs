@@ -14,9 +14,9 @@ use crate::options::AAType;
 use crate::{GameState, VERSION};
 
 use super::{
-    button, checkbox, scroll_vertical, selection_box, slider, textbox, PADDING_LARGE,
-    PADDING_MEDIUM, PADDING_SMALL, {centered_column, centered_row, stretch_column},
-    {group, window}, {heading, label},
+    button, centered_column, centered_row, checkbox, group, heading, label, scroll_vertical,
+    selection_box, slider, stretch_column, textbox, window, PADDING_LARGE, PADDING_MEDIUM,
+    PADDING_SMALL,
 };
 
 /// Draws the main menu.
