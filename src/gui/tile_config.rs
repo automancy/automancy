@@ -183,7 +183,7 @@ fn config_amount(
     }
 }
 
-fn takeable_item(
+fn takeable_items(
     state: &mut GameState,
     game_data: &mut DataMap,
     mut buffer: Inventory,
@@ -480,27 +480,32 @@ pub fn tile_config_ui(state: &mut GameState, game_data: &mut DataMap) {
                             {
                                 group(|| {
                                     row(|| {
-                                        label(
-                                            &state.resource_man.translates.gui
-                                                [&state.resource_man.registry.gui_ids.inventory],
-                                        );
+                                        column(|| {
+                                            row(|| {
+                                                label(
+                                                    &state.resource_man.translates.gui[&state
+                                                        .resource_man
+                                                        .registry
+                                                        .gui_ids
+                                                        .inventory],
+                                                );
 
-                                        info_tip(
-                                            &state.resource_man.translates.gui[&state
-                                                .resource_man
-                                                .registry
-                                                .gui_ids
-                                                .inventory_tip],
-                                        );
-                                    });
+                                                info_tip(
+                                                    &state.resource_man.translates.gui[&state
+                                                        .resource_man
+                                                        .registry
+                                                        .gui_ids
+                                                        .inventory_tip],
+                                                );
+                                            });
 
-                                    column(|| {
-                                        takeable_item(
-                                            state,
-                                            game_data,
-                                            buffer,
-                                            tile_entity.clone(),
-                                        );
+                                            takeable_items(
+                                                state,
+                                                game_data,
+                                                buffer,
+                                                tile_entity.clone(),
+                                            );
+                                        });
                                     });
                                 });
                             }
