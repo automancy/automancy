@@ -1,7 +1,7 @@
 use std::cell::Cell;
 
 use automancy_defs::colors;
-use yakui::{constrained, widgets::Layer, Constraints};
+use yakui::{constrained, widgets::Layer, Constraints, Vec2};
 
 use crate::GameState;
 
@@ -20,7 +20,15 @@ pub(crate) fn render_info_tip(state: &mut GameState) {
         Layer::new().show(|| {
             hover_tip(|| {
                 constrained(
-                    Constraints::loose(state.gui.yak.layout_dom().viewport().size()),
+                    Constraints::loose(
+                        state
+                            .gui
+                            .yak
+                            .layout_dom()
+                            .viewport()
+                            .size()
+                            .min(Vec2::new(400.0, f32::INFINITY)),
+                    ),
                     || {
                         tip.show();
                     },
