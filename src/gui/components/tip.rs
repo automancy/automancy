@@ -27,7 +27,7 @@ pub(crate) fn render_info_tip(state: &mut GameState) {
                             .layout_dom()
                             .viewport()
                             .size()
-                            .min(Vec2::new(400.0, f32::INFINITY)),
+                            .min(Vec2::new(500.0, f32::INFINITY)),
                     ),
                     || {
                         tip.show();
