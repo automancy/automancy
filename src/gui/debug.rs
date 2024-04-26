@@ -4,7 +4,7 @@ use yakui::{column, divider, use_state, Vec2};
 
 use crate::GameState;
 
-use super::components::{container::window, movable::movable, text::label, DIVIER_SIZE};
+use super::{label, movable, window, DIVIER_SIZE};
 
 /// Draws the debug menu (F3).
 pub fn debugger(state: &GameState) {

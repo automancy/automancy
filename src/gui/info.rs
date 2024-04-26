@@ -16,21 +16,13 @@ use yakui::{
     Alignment, Dim2, Pivot,
 };
 
-use crate::gui::item::draw_item;
-use crate::gui::SMALL_ICON_SIZE;
 use crate::tile_entity::TileEntityMsg;
 use crate::GameState;
 
 use super::{
-    components::{
-        container::{group, window},
-        layout::{centered_column, stretch_column},
-        text::{colored_label, label, label_text, small_text, text_with_padding},
-        PADDING_LARGE, PADDING_MEDIUM, PADDING_SMALL,
-    },
-    ui_game_object,
-    util::pad_y,
-    LARGE_ICON_SIZE,
+    centered_column, colored_label, group, item::draw_item, label, label_text, small_text,
+    stretch_column, text_with_padding, ui_game_object, util::pad_y, window, LARGE_ICON_SIZE,
+    PADDING_LARGE, PADDING_MEDIUM, PADDING_SMALL, SMALL_ICON_SIZE,
 };
 
 fn input_hint(state: &mut GameState) {

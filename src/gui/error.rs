@@ -3,7 +3,7 @@ use yakui::{row, spacer};
 
 use crate::GameState;
 
-use super::components::{button::button, container::window, text::label};
+use super::{button, label, window};
 
 /// Draws an error popup. Can only be called when there are errors in the queue!
 pub fn error_popup(state: &mut GameState) {

@@ -2,7 +2,7 @@ use std::cell::Cell;
 
 use automancy_defs::colors;
 use yakui::{
-    colored_box_container, column, pad, row,
+    colored_box_container, column,
     shapes::RoundedRectangle,
     util::{widget, widget_children},
     widgets::{Layer, Pad},
@@ -13,9 +13,9 @@ use yakui::geometry::{Color, Constraints, Vec2};
 use yakui::widget::{LayoutContext, PaintContext, Widget};
 use yakui::Response;
 
-use crate::gui::util::clamp_percentage_to_viewport;
+use crate::gui::util::{clamp_percentage_to_viewport, pad_y};
 
-use super::{layout::centered_column, text::heading, PADDING_LARGE, PADDING_MEDIUM, PADDING_SMALL};
+use super::{layout::centered_column, text::heading, PADDING_LARGE, PADDING_MEDIUM};
 
 /**
 Changes the flow behavior a widget tree, allowing it to break out of any layouts, and be positioned in relation to the screen instead.
@@ -170,7 +170,7 @@ impl Widget for RoundRectWidget {
 
 pub fn group(children: impl FnOnce()) {
     colored_box_container(colors::BACKGROUND_3, || {
-        pad(Pad::all(2.0), || {
+        Pad::all(2.0).show(|| {
             colored_box_container(colors::BACKGROUND_1, || {
                 Pad::all(PADDING_MEDIUM).show(|| {
                     column(children);
@@ -181,16 +181,16 @@ pub fn group(children: impl FnOnce()) {
 }
 
 pub fn window_box(title: String, children: impl FnOnce()) {
-    RoundRect::new(4.0, colors::BACKGROUND_1).show_children(|| {
+    const RADIUS: f32 = 8.0;
+
+    RoundRect::new(RADIUS, colors::BACKGROUND_1).show_children(|| {
         Pad::all(PADDING_LARGE).show(|| {
             centered_column(|| {
-                Pad::vertical(PADDING_SMALL).show(|| {
-                    row(|| {
-                        heading(&title);
-                    });
+                pad_y(0.0, PADDING_MEDIUM).show(|| {
+                    heading(&title);
                 });
 
-                children()
+                children();
             });
         });
     });

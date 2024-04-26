@@ -13,17 +13,10 @@ use crate::map::{Map, MAIN_MENU};
 use crate::options::AAType;
 use crate::{GameState, VERSION};
 
-use super::components::{
-    button::button,
-    checkbox::checkbox,
-    container::{group, window},
-    layout::{centered_column, centered_row, stretch_column},
-    scrollable::scroll_vertical,
-    select::selection_box,
-    slider::slider,
-    text::{heading, label},
-    textbox::textbox,
-    PADDING_LARGE, PADDING_MEDIUM, PADDING_SMALL,
+use super::{
+    button, checkbox, scroll_vertical, selection_box, slider, textbox, PADDING_LARGE,
+    PADDING_MEDIUM, PADDING_SMALL, {centered_column, centered_row, stretch_column},
+    {group, window}, {heading, label},
 };
 
 /// Draws the main menu.
@@ -190,7 +183,7 @@ pub fn map_menu(state: &mut GameState) {
                                     }
                                 });
 
-                                row(|| {
+                                centered_row(|| {
                                     if let Some(save_time) = save_time {
                                         label(&format_time(
                                             save_time,
@@ -242,34 +235,34 @@ pub fn map_menu(state: &mut GameState) {
                         }
                     });
                 });
-            });
 
-            label(&format(
-                &state.resource_man.translates.gui
-                    [&state.resource_man.registry.gui_ids.lbl_maps_loaded],
-                &[&state.loop_store.map_infos_cache.len().to_string()],
-            ));
+                label(&format(
+                    &state.resource_man.translates.gui
+                        [&state.resource_man.registry.gui_ids.lbl_maps_loaded],
+                    &[&state.loop_store.map_infos_cache.len().to_string()],
+                ));
 
-            row(|| {
-                if button(
-                    state.resource_man.translates.gui
-                        [&state.resource_man.registry.gui_ids.btn_new_map]
-                        .as_str(),
-                )
-                .clicked
-                {
-                    state.gui_state.popup = PopupState::MapCreate
-                }
+                row(|| {
+                    if button(
+                        state.resource_man.translates.gui
+                            [&state.resource_man.registry.gui_ids.btn_new_map]
+                            .as_str(),
+                    )
+                    .clicked
+                    {
+                        state.gui_state.popup = PopupState::MapCreate
+                    }
 
-                if button(
-                    state.resource_man.translates.gui
-                        [&state.resource_man.registry.gui_ids.btn_cancel]
-                        .as_str(),
-                )
-                .clicked
-                {
-                    state.gui_state.switch_screen(Screen::MainMenu)
-                }
+                    if button(
+                        state.resource_man.translates.gui
+                            [&state.resource_man.registry.gui_ids.btn_cancel]
+                            .as_str(),
+                    )
+                    .clicked
+                    {
+                        state.gui_state.switch_screen(Screen::MainMenu)
+                    }
+                });
             });
         },
     );

@@ -10,24 +10,13 @@ use automancy_resources::data::{inventory::Inventory, stack::ItemAmount};
 use automancy_resources::data::{Data, DataMap};
 use yakui::{column, constrained, row, widgets::Layer, Constraints};
 
-use crate::gui::item::draw_item;
-use crate::gui::{info_tip, searchable_id, TextField, MEDIUM_ICON_SIZE, SMALL_ICON_SIZE};
 use crate::tile_entity::TileEntityMsg;
 use crate::GameState;
 
 use super::{
-    components::{
-        button::{button, button_text},
-        container::{group, window_box},
-        interactive::interactive,
-        layout::{centered_row, stretch_column},
-        movable::movable,
-        scrollable::scroll_vertical,
-        select::selection_button,
-        slider::slider,
-        text::{label, symbol_text},
-    },
-    util::pad_x,
+    button, button_text, centered_row, group, info_tip, interactive, item::draw_item, label,
+    movable, scroll_vertical, selection_button, slider, stretch_column, symbol_text, util::pad_x,
+    util::searchable_id, window_box, TextField, MEDIUM_ICON_SIZE, SMALL_ICON_SIZE,
 };
 
 /// Draws the direction selector.

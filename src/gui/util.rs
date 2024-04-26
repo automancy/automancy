@@ -1,4 +1,18 @@
-use yakui::{widgets::Pad, Rect, Vec2};
+use std::time::Instant;
+
+use automancy_defs::{glam::dvec3, id::Id, math, rendering::InstanceData};
+use automancy_resources::data::item::Item;
+use fuzzy_matcher::FuzzyMatcher;
+use hashbrown::HashMap;
+use yakui::{
+    column, row,
+    widgets::{Absolute, Layer, Pad},
+    Alignment, Dim2, Pivot, Rect, Vec2,
+};
+
+use crate::{game::TAKE_ITEM_ANIMATION_SPEED, GameState};
+
+use super::{radio, scroll_vertical, textbox, ui_game_object, TextField};
 
 pub fn pad_y(top: f32, bottom: f32) -> Pad {
     let mut pad = Pad::ZERO;
@@ -28,4 +42,110 @@ pub fn clamp_percentage_to_viewport(size: Vec2, mut pos: Vec2, viewport: Rect) -
     pos = (rect.pos() / viewport.size()).clamp(Vec2::ZERO, Vec2::ONE);
 
     pos
+}
+
+/// Draws a search bar.
+pub fn searchable_id(
+    ids: &[Id],
+    new_id: &mut Option<Id>,
+    field: TextField,
+    hint_text: String,
+    to_string: &'static impl Fn(&GameState, &Id) -> String,
+    draw_item: &'static impl Fn(&mut GameState, &Id),
+    state: &mut GameState,
+) {
+    textbox(state.gui_state.text_field.get(field), &hint_text);
+
+    scroll_vertical(200.0, || {
+        column(|| {
+            let ids = if !state.gui_state.text_field.get(field).is_empty() {
+                let text = state.gui_state.text_field.get(field).clone();
+                let mut filtered = ids
+                    .iter()
+                    .flat_map(|id| {
+                        let score = state
+                            .gui_state
+                            .text_field
+                            .fuse
+                            .fuzzy_match(&to_string(state, id), &text);
+
+                        if score.unwrap_or(0) <= 5 {
+                            None
+                        } else {
+                            Some(*id).zip(score)
+                        }
+                    })
+                    .collect::<Vec<_>>();
+
+                filtered.sort_unstable_by(|a, b| a.1.cmp(&b.1));
+
+                filtered.into_iter().map(|v| v.0).collect::<Vec<_>>()
+            } else {
+                ids.to_vec()
+            };
+
+            for id in ids {
+                row(|| {
+                    radio(new_id, Some(id), || {
+                        draw_item(state, &id);
+                    });
+                });
+            }
+        });
+    });
+}
+
+pub fn take_item_animation(state: &mut GameState, item: Item, dst_rect: Rect) {
+    let now = Instant::now();
+
+    let mut to_remove = HashMap::new();
+
+    for (coord, deque) in &state.renderer.take_item_animations {
+        to_remove.insert(
+            *coord,
+            deque
+                .iter()
+                .take_while(|(instant, _)| {
+                    now.duration_since(*instant) >= TAKE_ITEM_ANIMATION_SPEED
+                })
+                .count(),
+        );
+    }
+
+    for (coord, v) in to_remove {
+        for _ in 0..v {
+            state
+                .renderer
+                .take_item_animations
+                .get_mut(&coord)
+                .unwrap()
+                .pop_front();
+        }
+    }
+
+    if let Some(animations) = state.renderer.take_item_animations.get(&item) {
+        for (instant, src_rect) in animations {
+            let d = now.duration_since(*instant).as_secs_f32()
+                / TAKE_ITEM_ANIMATION_SPEED.as_secs_f32();
+
+            let pos = src_rect.pos().lerp(dst_rect.pos(), d);
+            let size = src_rect.size().lerp(dst_rect.size(), d);
+
+            Absolute::new(
+                Alignment::TOP_LEFT,
+                Pivot::TOP_LEFT,
+                Dim2::pixels(pos.x, pos.y),
+            )
+            .show(|| {
+                Layer::new().show(|| {
+                    ui_game_object(
+                        InstanceData::default()
+                            .with_world_matrix(math::view(dvec3(0.0, 0.0, 1.0)).as_mat4()),
+                        state.resource_man.get_item_model(item.model),
+                        size,
+                    );
+                });
+            });
+        }
+    }
 }

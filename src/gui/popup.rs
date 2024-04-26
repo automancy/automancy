@@ -8,13 +8,7 @@ use crate::gui::{PopupState, Screen, TextField};
 use crate::map::Map;
 use crate::GameState;
 
-use super::components::{
-    button::button,
-    container::window,
-    layout::{centered_column, centered_row},
-    text::label,
-    textbox::textbox,
-};
+use super::{button, centered_column, centered_row, label, textbox, window};
 
 pub fn invalid_name_popup(state: &mut GameState) {
     window(

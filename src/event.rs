@@ -490,8 +490,8 @@ pub fn on_event(
                 .input_hints
                 .push(vec![ActionType::HotkeyActive, ActionType::Copy]);
 
-            if (state.input_handler.key_active(ActionType::Cut)
-                || state.input_handler.key_active(ActionType::Copy))
+            if state.input_handler.key_active(ActionType::Cut)
+                || state.input_handler.key_active(ActionType::Copy)
             {
                 state.gui_state.paste_from = Some(state.camera.pointing_at);
                 state

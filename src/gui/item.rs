@@ -6,13 +6,7 @@ use automancy_resources::data::stack::ItemStack;
 use automancy_resources::ResourceManager;
 use yakui::Rect;
 
-use super::{
-    components::{
-        layout::centered_row,
-        text::{label, Text},
-    },
-    ui_game_object,
-};
+use super::{centered_row, label, ui_game_object, Text};
 
 /// Draws an Item's icon.
 pub fn draw_item(

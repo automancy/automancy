@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use gui::{Gui, GuiState};
-use input::{ActionType, KeyAction};
+use input::ActionType;
 use ractor::ActorRef;
 use tokio::runtime::Runtime;
 use tokio::task::JoinHandle;

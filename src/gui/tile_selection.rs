@@ -15,20 +15,12 @@ use yakui::{
     Alignment, Dim2, Pivot,
 };
 
-use crate::gui::{LARGE_ICON_SIZE, MEDIUM_ICON_SIZE};
 use crate::util::is_research_unlocked;
 use crate::GameState;
 
 use super::{
-    components::{
-        container::RoundRect,
-        hover::hover_tip,
-        interactive::interactive,
-        layout::{centered_column, centered_row},
-        scrollable::scroll_horizontal,
-        text::label,
-    },
-    ui_game_object,
+    centered_column, centered_row, hover_tip, interactive, label, scroll_horizontal,
+    ui_game_object, RoundRect, LARGE_ICON_SIZE, MEDIUM_ICON_SIZE,
 };
 
 fn tile_hover_z_angle(elapsed: Float, hovered: bool) -> Float {

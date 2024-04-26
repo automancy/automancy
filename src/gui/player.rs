@@ -23,28 +23,14 @@ use yakui::{
     Alignment, Constraints, Dim2, Pivot, Rect,
 };
 
-use crate::gui::{
-    components::{
-        container::RoundRect, layout::centered_row, scrollable::scroll_horizontal, PADDING_MEDIUM,
-    },
-    item::draw_item,
-};
-use crate::gui::{take_item_animation, MEDIUM_ICON_SIZE, SMALLISH_ICON_SIZE, SMALL_ICON_SIZE};
 use crate::util::is_research_unlocked;
 use crate::GameState;
 
 use super::{
-    components::{
-        button::{button, inactive_button},
-        container::{group, window_box, AbsoluteRect},
-        interactive::interactive,
-        movable::movable,
-        position::PositionRecord,
-        relative::Relative,
-        scrollable::scroll_vertical,
-        text::{heading, label},
-    },
-    ui_game_object,
+    button, centered_row, group, heading, inactive_button, interactive, item::draw_item, label,
+    movable, scroll_horizontal, scroll_vertical, ui_game_object, util::take_item_animation,
+    window_box, AbsoluteRect, PositionRecord, Relative, RoundRect, MEDIUM_ICON_SIZE,
+    PADDING_MEDIUM, SMALLISH_ICON_SIZE, SMALL_ICON_SIZE,
 };
 
 const PUZZLE_HEX_GRID_LAYOUT: HexLayout = HexLayout {
