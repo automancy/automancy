@@ -226,23 +226,25 @@ impl Widget for GameElementWidget {
                 let rect = layout_rect;
 
                 let inside = clip.constrain(layout_rect);
+                if !inside.size().abs_diff_eq(Vec2::ZERO, 0.1) {
+                    let sign =
+                        (rect.max() - rect.size() / 2.0) - (inside.max() - inside.size() / 2.0);
 
-                let sign = (rect.max() - rect.size() / 2.0) - (inside.max() - inside.size() / 2.0);
+                    let sx = rect.size().x / inside.size().x;
+                    let sy = rect.size().y / inside.size().y;
 
-                let sx = rect.size().x / inside.size().x;
-                let sy = rect.size().y / inside.size().y;
+                    let dx = (sx - 1.0) * sign.x.signum();
+                    let dy = (sy - 1.0) * sign.y.signum();
 
-                let dx = (sx - 1.0) * sign.x.signum();
-                let dy = (sy - 1.0) * sign.y.signum();
-
-                self.adjusted_matrix.set(Some(
-                    Matrix4::from_translation(vec3(dx, dy, 0.0))
-                        * paint
-                            .instance
-                            .get_world_matrix()
-                            .unwrap_or(Matrix4::IDENTITY)
-                        * Matrix4::from_scale(vec3(sx, sy, 1.0)),
-                ));
+                    self.adjusted_matrix.set(Some(
+                        Matrix4::from_translation(vec3(dx, dy, 0.0))
+                            * paint
+                                .instance
+                                .get_world_matrix()
+                                .unwrap_or(Matrix4::IDENTITY)
+                            * Matrix4::from_scale(vec3(sx, sy, 1.0)),
+                    ));
+                }
             }
         }
 
