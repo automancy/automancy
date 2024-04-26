@@ -120,6 +120,7 @@ pub struct GuiState {
     pub tile_config_ui_position: Vec2,
     pub player_ui_position: Vec2,
 
+    pub force_show_puzzle: bool,
     pub selected_research: Option<Id>,
     pub selected_research_puzzle_tile: Option<TileCoord>,
     pub research_puzzle_selections: Option<(TileCoord, Vec<Id>)>,
@@ -151,6 +152,7 @@ impl Default for GuiState {
             tile_config_ui_position: vec2(0.1, 0.1), // TODO make default pos screen center?
             player_ui_position: vec2(0.1, 0.1),
 
+            force_show_puzzle: false,
             selected_research: Default::default(),
             selected_research_puzzle_tile: Default::default(),
             research_puzzle_selections: Default::default(),

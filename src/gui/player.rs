@@ -136,6 +136,7 @@ fn research_selection(state: &mut GameState, game_data: &mut DataMap) {
                     state.gui_state.selected_research_puzzle_tile = None;
                     state.gui_state.research_puzzle_selections = None;
                     state.puzzle_state = None; // TODO have a better save system for this
+                    state.gui_state.force_show_puzzle = false;
                 };
             }
         });
@@ -219,17 +220,24 @@ fn current_research(state: &mut GameState, game_data: &mut DataMap) {
 }
 
 fn research_puzzle(state: &mut GameState, game_data: &mut DataMap) -> Option<Vec2> {
-    let mut board_pos = None;
-
-    let Some(research) = state
+    let research = state
         .gui_state
         .selected_research
-        .and_then(|id| state.resource_man.get_research(id))
-    else {
-        return board_pos;
-    };
+        .and_then(|id| state.resource_man.get_research(id))?;
 
-    let show_research_puzzle = {
+    if !state.gui_state.force_show_puzzle {
+        if research.required_items.is_some()
+            && game_data
+                .get(&state.resource_man.registry.data_ids.research_items_filled)
+                .and_then(|filled_items| match filled_items {
+                    Data::SetId(set) => Some(!set.contains(&research.id)),
+                    _ => None,
+                })
+                .unwrap_or(true)
+        {
+            return None;
+        }
+
         if game_data
             .get(
                 &state
@@ -238,197 +246,182 @@ fn research_puzzle(state: &mut GameState, game_data: &mut DataMap) -> Option<Vec
                     .data_ids
                     .research_puzzle_completed,
             )
-            .and_then(|v| match v {
+            .and_then(|completed| match completed {
                 Data::SetId(set) => Some(set.contains(&research.id)),
                 _ => None,
             })
             .unwrap_or(false)
         {
-            false
-        } else if research.required_items.is_some() {
-            game_data
-                .get(&state.resource_man.registry.data_ids.research_items_filled)
-                .and_then(|filled_items| match filled_items {
-                    Data::SetId(set) => Some(set.contains(&research.id)),
-                    _ => None,
-                })
-                .unwrap_or(false)
-        } else {
-            true
+            return None;
         }
-    };
+    }
 
-    if show_research_puzzle {
-        if let Some(((ast, default_scope, function_id), setup)) = state
-            .gui_state
-            .selected_research
-            .and_then(|id| state.resource_man.get_research(id))
-            .and_then(|research| research.attached_puzzle.as_ref())
-            .and_then(|(id, setup)| state.resource_man.functions.get(id).zip(Some(setup)))
-        {
-            let mut scope = default_scope.clone_visible();
+    let mut board_pos = None;
+    if let Some(((ast, default_scope, function_id), setup)) = state
+        .gui_state
+        .selected_research
+        .and_then(|id| state.resource_man.get_research(id))
+        .and_then(|research| research.attached_puzzle.as_ref())
+        .and_then(|(id, setup)| state.resource_man.functions.get(id).zip(Some(setup)))
+    {
+        let mut scope = default_scope.clone_visible();
 
-            let puzzle_state = state.puzzle_state.get_or_insert_with(|| {
-                let data = RhaiDataMap::default();
-                let mut rhai_state = Dynamic::from(data);
+        let puzzle_state = state.puzzle_state.get_or_insert_with(|| {
+            let data = RhaiDataMap::default();
+            let mut rhai_state = Dynamic::from(data);
 
-                let result = state.resource_man.engine.call_fn_with_options::<()>(
-                    rhai_call_options(&mut rhai_state),
-                    &mut scope,
-                    ast,
-                    "pre_setup",
-                    (Dynamic::from(setup.clone()),),
-                );
+            let result = state.resource_man.engine.call_fn_with_options::<()>(
+                rhai_call_options(&mut rhai_state),
+                &mut scope,
+                ast,
+                "pre_setup",
+                (Dynamic::from(setup.clone()),),
+            );
 
-                if let Err(err) = result {
-                    rhai_log_err(function_id, &err)
-                }
-
-                (rhai_state.take().cast::<RhaiDataMap>(), true)
-            });
-
-            if puzzle_state.1 {
-                let mut rhai_state = Dynamic::from(mem::take(&mut puzzle_state.0));
-
-                let result = state.resource_man.engine.call_fn_with_options::<bool>(
-                    rhai_call_options(&mut rhai_state),
-                    &mut scope,
-                    ast,
-                    "evaluate",
-                    (Dynamic::from(setup.clone()),),
-                );
-
-                *puzzle_state = (rhai_state.take().cast::<RhaiDataMap>(), false);
-
-                match result {
-                    Ok(result) => {
-                        if result {
-                            if let Data::SetId(set) = game_data
-                                .entry(
-                                    state
-                                        .resource_man
-                                        .registry
-                                        .data_ids
-                                        .research_puzzle_completed,
-                                )
-                                .or_insert_with(|| Data::SetId(Default::default()))
-                            {
-                                set.insert(research.id);
-                            }
-                        }
-                    }
-                    Err(err) => rhai_log_err(function_id, &err),
-                }
+            if let Err(err) = result {
+                rhai_log_err(function_id, &err)
             }
 
-            if let Some(selected) = state.gui_state.selected_research_puzzle_tile {
-                let mut rhai_state = Dynamic::from(mem::take(&mut puzzle_state.0));
+            (rhai_state.take().cast::<RhaiDataMap>(), true)
+        });
 
-                let result = state.resource_man.engine.call_fn_with_options::<Dynamic>(
-                    rhai_call_options(&mut rhai_state),
-                    &mut scope,
-                    ast,
-                    "selection_at_coord",
-                    (Dynamic::from(setup.clone()), selected),
-                );
+        if puzzle_state.1 {
+            let mut rhai_state = Dynamic::from(mem::take(&mut puzzle_state.0));
 
-                state.puzzle_state = Some((rhai_state.take().cast::<RhaiDataMap>(), false));
+            let result = state.resource_man.engine.call_fn_with_options::<bool>(
+                rhai_call_options(&mut rhai_state),
+                &mut scope,
+                ast,
+                "evaluate",
+                (Dynamic::from(setup.clone()),),
+            );
 
-                match result {
-                    Ok(result) => {
-                        if let Some(vec) = result.try_cast::<Vec<Id>>() {
-                            if !vec.is_empty() {
-                                state.gui_state.research_puzzle_selections = Some((selected, vec));
-                            }
-                        } else {
-                            state.gui_state.research_puzzle_selections = None;
+            *puzzle_state = (rhai_state.take().cast::<RhaiDataMap>(), false);
+
+            match result {
+                Ok(result) => {
+                    if result {
+                        if let Data::SetId(set) = game_data
+                            .entry(
+                                state
+                                    .resource_man
+                                    .registry
+                                    .data_ids
+                                    .research_puzzle_completed,
+                            )
+                            .or_insert_with(|| Data::SetId(Default::default()))
+                        {
+                            set.insert(research.id);
                         }
-
-                        state.gui_state.selected_research_puzzle_tile = None;
                     }
-                    Err(err) => rhai_log_err(function_id, &err),
                 }
+                Err(err) => rhai_log_err(function_id, &err),
             }
+        }
 
-            if let Some((data, ..)) = &mut state.puzzle_state {
-                if let Some(Data::TileMap(tiles)) =
-                    data.get_mut(state.resource_man.registry.data_ids.tiles)
-                {
-                    const BOARD_SIZE: f32 = 200.0;
+        if let Some(selected) = state.gui_state.selected_research_puzzle_tile {
+            let mut rhai_state = Dynamic::from(mem::take(&mut puzzle_state.0));
 
-                    let mut clicked = false;
+            let result = state.resource_man.engine.call_fn_with_options::<Dynamic>(
+                rhai_call_options(&mut rhai_state),
+                &mut scope,
+                ast,
+                "selection_at_coord",
+                (Dynamic::from(setup.clone()), selected),
+            );
 
-                    group(|| {
-                        scroll_horizontal(BOARD_SIZE, || {
-                            scroll_vertical(BOARD_SIZE, || {
-                                let pos = PositionRecord::new().show(|| {
-                                    constrained(
-                                        Constraints::tight(vec2(BOARD_SIZE, BOARD_SIZE)),
-                                        || {
-                                            let interact = interactive(|| {
-                                                column(|| {
-                                                    for (coord, id) in tiles.iter() {
-                                                        let pos = hex_to_board_pixels(*coord)
-                                                            / BOARD_SIZE;
+            state.puzzle_state = Some((rhai_state.take().cast::<RhaiDataMap>(), false));
 
-                                                        Relative::new(
-                                                            Alignment::new(pos.x, pos.y),
-                                                            Pivot::TOP_LEFT,
-                                                            Dim2::ZERO,
-                                                        )
-                                                        .show(|| {
-                                                            ui_game_object(
-                                                                InstanceData::default()
-                                                                    .with_world_matrix(
-                                                                        math::view(dvec3(
-                                                                            0.0, 0.0, 1.0,
-                                                                        ))
-                                                                        .as_mat4(),
-                                                                    ),
-                                                                state.resource_man.get_item_model(
-                                                                    state
-                                                                        .resource_man
-                                                                        .get_puzzle_model(*id),
+            match result {
+                Ok(result) => {
+                    if let Some(vec) = result.try_cast::<Vec<Id>>() {
+                        if !vec.is_empty() {
+                            state.gui_state.research_puzzle_selections = Some((selected, vec));
+                        }
+                    } else {
+                        state.gui_state.research_puzzle_selections = None;
+                    }
+
+                    state.gui_state.selected_research_puzzle_tile = None;
+                }
+                Err(err) => rhai_log_err(function_id, &err),
+            }
+        }
+
+        if let Some((data, ..)) = &mut state.puzzle_state {
+            if let Some(Data::TileMap(tiles)) =
+                data.get_mut(state.resource_man.registry.data_ids.tiles)
+            {
+                const BOARD_SIZE: f32 = 200.0;
+
+                let mut clicked = false;
+
+                group(|| {
+                    scroll_horizontal(BOARD_SIZE, || {
+                        scroll_vertical(BOARD_SIZE, || {
+                            let pos = PositionRecord::new().show(|| {
+                                constrained(
+                                    Constraints::tight(vec2(BOARD_SIZE, BOARD_SIZE)),
+                                    || {
+                                        let interact = interactive(|| {
+                                            column(|| {
+                                                for (coord, id) in tiles.iter() {
+                                                    let pos =
+                                                        hex_to_board_pixels(*coord) / BOARD_SIZE;
+
+                                                    Relative::new(
+                                                        Alignment::new(pos.x, pos.y),
+                                                        Pivot::TOP_LEFT,
+                                                        Dim2::ZERO,
+                                                    )
+                                                    .show(|| {
+                                                        ui_game_object(
+                                                            InstanceData::default()
+                                                                .with_world_matrix(
+                                                                    math::view(dvec3(
+                                                                        0.0, 0.0, 1.0,
+                                                                    ))
+                                                                    .as_mat4(),
                                                                 ),
-                                                                vec2(
-                                                                    PUZZLE_HEX_GRID_LAYOUT
-                                                                        .hex_size
-                                                                        .x,
-                                                                    PUZZLE_HEX_GRID_LAYOUT
-                                                                        .hex_size
-                                                                        .y,
-                                                                ),
-                                                            );
-                                                        });
-                                                    }
-                                                });
+                                                            state.resource_man.get_item_model(
+                                                                state
+                                                                    .resource_man
+                                                                    .get_puzzle_model(*id),
+                                                            ),
+                                                            vec2(
+                                                                PUZZLE_HEX_GRID_LAYOUT.hex_size.x,
+                                                                PUZZLE_HEX_GRID_LAYOUT.hex_size.y,
+                                                            ),
+                                                        );
+                                                    });
+                                                }
                                             });
+                                        });
 
-                                            clicked = interact.clicked;
-                                        },
-                                    );
-                                });
-                                board_pos = Some(pos.into_inner());
+                                        clicked = interact.clicked;
+                                    },
+                                );
                             });
+                            board_pos = Some(pos.into_inner());
                         });
                     });
+                });
 
-                    if clicked {
-                        if let Some(min) = board_pos {
-                            let p = state.input_handler.main_pos.as_vec2() - min;
+                if clicked {
+                    if let Some(min) = board_pos {
+                        let p = state.input_handler.main_pos.as_vec2() - min;
 
-                            let p = p * 2.0
-                                - vec2(
-                                    PUZZLE_HEX_GRID_LAYOUT.hex_size.x * 2.0,
-                                    PUZZLE_HEX_GRID_LAYOUT.hex_size.y,
-                                );
-
-                            let p = TileCoord::from(
-                                PUZZLE_HEX_GRID_LAYOUT.world_pos_to_hex(vec2(p.x, p.y)),
+                        let p = p * 2.0
+                            - vec2(
+                                PUZZLE_HEX_GRID_LAYOUT.hex_size.x * 2.0,
+                                PUZZLE_HEX_GRID_LAYOUT.hex_size.y,
                             );
 
-                            state.gui_state.selected_research_puzzle_tile = Some(p);
-                        }
+                        let p = TileCoord::from(
+                            PUZZLE_HEX_GRID_LAYOUT.world_pos_to_hex(vec2(p.x, p.y)),
+                        );
+
+                        state.gui_state.selected_research_puzzle_tile = Some(p);
                     }
                 }
             }
@@ -464,7 +457,13 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                             column(|| {
                                 current_research(state, game_data);
                             });
+                        });
 
+                        column(|| {
+                            board_pos = research_puzzle(state, game_data);
+                        });
+
+                        row(|| {
                             if let Some(research) = &state
                                 .gui_state
                                 .selected_research
@@ -482,10 +481,6 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                                     }
                                 }
                             }
-                        });
-
-                        column(|| {
-                            board_pos = research_puzzle(state, game_data);
                         });
                     });
                 },
@@ -627,6 +622,7 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
             {
                 set.remove(&research.id);
             }
+
             if let Some(Data::SetId(set)) = game_data.get_mut(
                 &state
                     .resource_man
@@ -646,6 +642,7 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
 
             state.gui_state.selected_research_puzzle_tile = None;
             state.gui_state.research_puzzle_selections = None;
+            state.gui_state.force_show_puzzle = true;
         }
     }
 }
