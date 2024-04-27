@@ -2,7 +2,7 @@
 
 use std::f64::consts::PI;
 
-use glam::{dvec2, dvec3, dvec4, vec2};
+use glam::{dvec2, dvec3, dvec4, vec2, DQuat};
 use hexx::{HexLayout, HexOrientation};
 
 use crate::coord::{TileBounds, TileCoord};
@@ -58,10 +58,6 @@ pub fn fov() -> Double {
     PI / 2.0
 }
 
-pub fn projection(aspect: Double) -> DMatrix4 {
-    DMatrix4::perspective_lh(fov(), aspect, z_near(), z_far())
-}
-
 pub fn camera_angle(z: Double) -> Double {
     // TODO magic values
     let max = 6.5;
@@ -75,20 +71,31 @@ pub fn camera_angle(z: Double) -> Double {
     }
 }
 
-pub fn angle(z: Double) -> DMatrix4 {
-    DMatrix4::from_rotation_x(camera_angle(z))
-}
-
 pub fn view(pos: DVec3) -> DMatrix4 {
     DMatrix4::look_to_rh(pos, dvec3(0.0, 0.0, 1.0), dvec3(0.0, 1.0, 0.0))
 }
 
+fn projection(aspect: Double) -> DMatrix4 {
+    DMatrix4::perspective_lh(fov(), aspect, z_near(), z_far())
+}
+
+fn angle(z: Double) -> DQuat {
+    DQuat::from_rotation_x(camera_angle(z))
+}
+
+fn camera_view_dir(z: Double) -> DVec3 {
+    (angle(z) * dvec3(0.0, 0.0, 1.0)).normalize()
+}
+
+fn camera_view(pos: DVec3) -> DMatrix4 {
+    DMatrix4::look_to_rh(pos, camera_view_dir(pos.z), dvec3(0.0, 1.0, 0.0))
+}
+
 pub fn matrix(pos: DVec3, aspect: Double) -> DMatrix4 {
     let projection = projection(aspect);
-    let view = view(pos);
-    let angle = angle(pos.z);
+    let view = camera_view(pos);
 
-    projection * angle * view
+    projection * view
 }
 
 pub fn lerp_coords_to_pixel(a: TileCoord, b: TileCoord, t: Float) -> Vec2 {
@@ -142,22 +149,28 @@ pub fn normalized_to_world(
 ) -> DVec3 {
     let aspect = width / height;
 
-    let angle = angle(camera_pos.z).inverse();
-    let view = view(dvec3(0.0, 0.0, camera_pos.z)).inverse();
-    let projection = projection(aspect).inverse();
+    let matrix =
+        camera_view(dvec3(0.0, 0.0, camera_pos.z)).inverse() * projection(aspect).inverse();
 
-    let pos = dvec4(normalized.x, normalized.y, camera_pos.z, camera_pos.z);
-    let pos = view * pos;
-    let pos = angle * pos;
-    let pos = projection * pos;
-    let pos = pos.truncate() * pos.z;
+    let pos = dvec4(normalized.x, normalized.y, -1.0, 1.0);
+    let pos = matrix * pos;
+    let pos = pos.truncate() / pos.w;
 
-    dvec3(pos.x, pos.y, pos.z) + camera_pos
+    let end = dvec4(normalized.x, normalized.y, 1.0, 1.0);
+    let end = matrix * end;
+    let end = end.truncate() / end.w;
+
+    let ray = (end - pos).normalize();
+    let normal = dvec3(0.0, 0.0, -1.0);
+    let d = -camera_pos.dot(normal) / ray.dot(normal);
+    let p = ray * d;
+
+    p + camera_pos
 }
 
 /// Gets the culling range from the camera's position
 pub fn get_culling_range(size: (Double, Double), camera_pos: DVec3) -> TileBounds {
-    let v = normalized_to_world(size, dvec2(1.0, 1.0), dvec3(0.0, 0.0, camera_pos.z)).abs();
+    let v = normalized_to_world(size, dvec2(1.0, -1.0), dvec3(0.0, 0.0, camera_pos.z)).abs();
 
     TileBounds::new(
         HEX_GRID_LAYOUT
