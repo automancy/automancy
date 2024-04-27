@@ -223,9 +223,11 @@ impl Widget for GameElementWidget {
             let clip = self.clip.get();
 
             if clip.size().x > 0.0 && clip.size().y > 0.0 {
-                let rect = layout_rect;
+                let mut rect = layout_rect;
+                rect.set_size(rect.size() * ctx.layout.scale_factor());
+                rect.set_pos(rect.pos() * ctx.layout.scale_factor());
 
-                let inside = clip.constrain(layout_rect);
+                let inside = clip.constrain(rect);
                 if !inside.size().abs_diff_eq(Vec2::ZERO, 0.1) {
                     let sign =
                         (rect.max() - rect.size() / 2.0) - (inside.max() - inside.size() / 2.0);
