@@ -5,8 +5,11 @@ use std::sync::Arc;
 
 use hashbrown::HashMap;
 use image::EncodableLayout;
-use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::util::{DrawIndexedIndirectArgs, TextureDataOrder};
+use wgpu::{
+    util::{BufferInitDescriptor, DeviceExt},
+    InstanceFlags,
+};
 use wgpu::{AdapterInfo, Surface};
 use wgpu::{
     AddressMode, Backends, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout,
@@ -1779,6 +1782,8 @@ impl<'a> Gpu<'a> {
         // Backends::all => Vulkan + Metal + DX12 + Browser WebGPU
         let instance = Instance::new(InstanceDescriptor {
             backends: GPU_BACKENDS,
+            flags: InstanceFlags::default()
+                .union(InstanceFlags::ALLOW_UNDERLYING_NONCOMPLIANT_ADAPTER),
             ..Default::default()
         });
 
