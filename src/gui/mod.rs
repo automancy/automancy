@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::{collections::BTreeMap, mem};
 use tokio::sync::oneshot;
 use wgpu::{util::DrawIndexedIndirectArgs, Device, Queue};
-use winit::{event_loop::EventLoopWindowTarget, window::Window};
+use winit::{event_loop::ActiveEventLoop, window::Window};
 use yakui_wgpu::YakuiWgpu;
 use yakui_winit::YakuiWinit;
 
@@ -284,7 +284,7 @@ pub type YakuiRenderResources = (
 pub fn render_ui(
     state: &mut GameState,
     result: &mut anyhow::Result<bool>,
-    target: &EventLoopWindowTarget<()>,
+    event_loop: &ActiveEventLoop,
 ) {
     if state.gui_state.popup == PopupState::None {
         match state.gui_state.screen {
@@ -322,7 +322,7 @@ pub fn render_ui(
                     }
 
                     let cursor_pos = math::screen_to_world(
-                        window::window_size_double(&state.renderer.gpu.window),
+                        window::window_size_double(&state.renderer.as_ref().unwrap().gpu.window),
                         state.input_handler.main_pos,
                         state.camera.get_pos(),
                     );
@@ -346,14 +346,21 @@ pub fn render_ui(
                                             FAR as Float,
                                         ))),
                                     tile_def.model,
-                                    state.gui.yak.layout_dom().viewport().size(),
+                                    state
+                                        .gui
+                                        .as_ref()
+                                        .unwrap()
+                                        .yak
+                                        .layout_dom()
+                                        .viewport()
+                                        .size(),
                                 );
                             },
                         );
                     }
 
                     if let Some(coord) = state.gui_state.linking_tile {
-                        state.renderer.extra_instances.push((
+                        state.renderer.as_mut().unwrap().extra_instances.push((
                             InstanceData::default()
                                 .with_color_offset(colors::RED.to_linear())
                                 .with_light_pos(state.camera.get_pos().as_vec3(), None)
@@ -379,7 +386,7 @@ pub fn render_ui(
                                 .and_then(Data::into_bool)
                                 .unwrap_or(false)
                         {
-                            state.renderer.extra_instances.push((
+                            state.renderer.as_mut().unwrap().extra_instances.push((
                                 InstanceData::default()
                                     .with_color_offset(colors::RED.to_linear())
                                     .with_light_pos(state.camera.get_pos().as_vec3(), None)
@@ -395,7 +402,7 @@ pub fn render_ui(
                     }
                 }
             }
-            Screen::MainMenu => *result = menu::main_menu(state, target),
+            Screen::MainMenu => *result = menu::main_menu(state, event_loop),
             Screen::MapLoad => {
                 menu::map_menu(state);
             }
@@ -421,7 +428,7 @@ pub fn render_ui(
 
     render_info_tip(state);
 
-    state.renderer.tile_tints.insert(
+    state.renderer.as_mut().unwrap().tile_tints.insert(
         state.camera.pointing_at,
         colors::RED.with_alpha(0.2).to_linear(),
     );
@@ -429,13 +436,15 @@ pub fn render_ui(
     for coord in &state.gui_state.grouped_tiles {
         state
             .renderer
+            .as_mut()
+            .unwrap()
             .tile_tints
             .insert(*coord, colors::ORANGE.with_alpha(0.4).to_linear());
     }
 
     if let Some(start) = state.gui_state.paste_from {
         if start != state.camera.pointing_at {
-            state.renderer.extra_instances.push((
+            state.renderer.as_mut().unwrap().extra_instances.push((
                 InstanceData::default()
                     .with_color_offset(colors::LIGHT_BLUE.to_linear())
                     .with_light_pos(state.camera.get_pos().as_vec3(), None)
@@ -481,7 +490,14 @@ pub fn render_ui(
                         .with_world_matrix(state.camera.get_matrix().as_mat4())
                         .with_model_matrix(model_matrix),
                     state.resource_man.registry.tiles[id].model,
-                    state.gui.yak.layout_dom().viewport().size(),
+                    state
+                        .gui
+                        .as_ref()
+                        .unwrap()
+                        .yak
+                        .layout_dom()
+                        .viewport()
+                        .size(),
                 );
             });
         }

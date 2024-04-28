@@ -38,7 +38,7 @@ pub fn debugger(state: &GameState) {
                     label(&format!(
                         "WGPU: {}",
                         ron::ser::to_string_pretty(
-                            &state.renderer.gpu.adapter_info,
+                            &state.renderer.as_ref().unwrap().gpu.adapter_info,
                             PrettyConfig::default()
                         )
                         .unwrap_or("could not format wgpu info".to_string())

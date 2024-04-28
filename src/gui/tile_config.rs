@@ -221,6 +221,8 @@ fn takeable_items(
                 if let Some(rect) = rect {
                     state
                         .renderer
+                        .as_mut()
+                        .unwrap()
                         .take_item_animations
                         .entry(item)
                         .or_default()

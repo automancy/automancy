@@ -100,7 +100,7 @@ pub fn take_item_animation(state: &mut GameState, item: Item, dst_rect: Rect) {
 
     let mut to_remove = HashMap::new();
 
-    for (coord, deque) in &state.renderer.take_item_animations {
+    for (coord, deque) in &state.renderer.as_ref().unwrap().take_item_animations {
         to_remove.insert(
             *coord,
             deque
@@ -116,6 +116,8 @@ pub fn take_item_animation(state: &mut GameState, item: Item, dst_rect: Rect) {
         for _ in 0..v {
             state
                 .renderer
+                .as_mut()
+                .unwrap()
                 .take_item_animations
                 .get_mut(&coord)
                 .unwrap()
@@ -123,7 +125,13 @@ pub fn take_item_animation(state: &mut GameState, item: Item, dst_rect: Rect) {
         }
     }
 
-    if let Some(animations) = state.renderer.take_item_animations.get(&item) {
+    if let Some(animations) = state
+        .renderer
+        .as_ref()
+        .unwrap()
+        .take_item_animations
+        .get(&item)
+    {
         for (instant, src_rect) in animations {
             let d = now.duration_since(*instant).as_secs_f32()
                 / TAKE_ITEM_ANIMATION_SPEED.as_secs_f32();

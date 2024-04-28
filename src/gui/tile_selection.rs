@@ -174,47 +174,69 @@ pub fn tile_selections(
     Absolute::new(Alignment::BOTTOM_CENTER, Pivot::BOTTOM_CENTER, Dim2::ZERO).show(|| {
         centered_column(|| {
             RoundRect::new(8.0, colors::BACKGROUND_1).show_children(|| {
-                scroll_horizontal(state.gui.yak.layout_dom().viewport().size().x, || {
-                    centered_row(|| {
-                        for id in &state.resource_man.ordered_categories {
-                            let category = &state.resource_man.registry.categories[id];
-                            let model = state.resource_man.get_model(category.icon);
+                scroll_horizontal(
+                    state
+                        .gui
+                        .as_ref()
+                        .unwrap()
+                        .yak
+                        .layout_dom()
+                        .viewport()
+                        .size()
+                        .x,
+                    || {
+                        centered_row(|| {
+                            for id in &state.resource_man.ordered_categories {
+                                let category = &state.resource_man.registry.categories[id];
+                                let model = state.resource_man.get_model(category.icon);
 
-                            let response = interactive(|| {
-                                ui_game_object(
-                                    InstanceData::default()
-                                        .with_world_matrix(world_matrix)
-                                        .with_model_matrix(model_matrix)
-                                        .with_light_pos(vec3(0.0, 4.0, 14.0), None),
-                                    model,
-                                    vec2(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE),
-                                );
-                            });
+                                let response = interactive(|| {
+                                    ui_game_object(
+                                        InstanceData::default()
+                                            .with_world_matrix(world_matrix)
+                                            .with_model_matrix(model_matrix)
+                                            .with_light_pos(vec3(0.0, 4.0, 14.0), None),
+                                        model,
+                                        vec2(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE),
+                                    );
+                                });
 
-                            if response.clicked {
-                                state.gui_state.tile_selection_category = Some(*id);
+                                if response.clicked {
+                                    state.gui_state.tile_selection_category = Some(*id);
+                                }
+
+                                if response.hovering {
+                                    hovered_category = Some(*id);
+                                }
                             }
-
-                            if response.hovering {
-                                hovered_category = Some(*id);
-                            }
-                        }
-                    });
-                });
+                        });
+                    },
+                );
             });
 
             RoundRect::new(8.0, colors::BACKGROUND_1).show_children(|| {
-                scroll_horizontal(state.gui.yak.layout_dom().viewport().size().x, || {
-                    centered_row(|| {
-                        hovered_tile = draw_tile_selection(
-                            state,
-                            game_data,
-                            &mut Some(selection_send),
-                            state.gui_state.tile_selection_category,
-                            LARGE_ICON_SIZE,
-                        );
-                    });
-                });
+                scroll_horizontal(
+                    state
+                        .gui
+                        .as_ref()
+                        .unwrap()
+                        .yak
+                        .layout_dom()
+                        .viewport()
+                        .size()
+                        .x,
+                    || {
+                        centered_row(|| {
+                            hovered_tile = draw_tile_selection(
+                                state,
+                                game_data,
+                                &mut Some(selection_send),
+                                state.gui_state.tile_selection_category,
+                                LARGE_ICON_SIZE,
+                            );
+                        });
+                    },
+                );
             });
         });
     });

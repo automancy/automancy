@@ -23,6 +23,8 @@ pub(crate) fn render_info_tip(state: &mut GameState) {
                     Constraints::loose(
                         state
                             .gui
+                            .as_ref()
+                            .unwrap()
                             .yak
                             .layout_dom()
                             .viewport()

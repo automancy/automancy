@@ -1,9 +1,8 @@
 use std::{fs, mem};
 
-use winit::event_loop::EventLoopWindowTarget;
-
 use automancy_defs::{glam::vec2, log};
 use automancy_resources::{format, format_time};
+use winit::event_loop::ActiveEventLoop;
 use yakui::{column, image, row, spacer, widgets::Pad};
 
 use crate::event::{refresh_maps, shutdown_graceful};
@@ -20,15 +19,12 @@ use super::{
 };
 
 /// Draws the main menu.
-pub fn main_menu(
-    state: &mut GameState,
-    target: &EventLoopWindowTarget<()>,
-) -> anyhow::Result<bool> {
+pub fn main_menu(state: &mut GameState, event_loop: &ActiveEventLoop) -> anyhow::Result<bool> {
     let mut result = Ok(false);
 
     window("Main Menu".to_string(), || {
         centered_column(|| {
-            image(state.logo, vec2(128.0, 128.0));
+            image(state.logo.unwrap(), vec2(128.0, 128.0));
 
             if button(
                 state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.btn_play]
@@ -76,7 +72,7 @@ pub fn main_menu(
                 result = state.tokio.block_on(shutdown_graceful(
                     &state.game,
                     &mut state.game_handle,
-                    target,
+                    event_loop,
                 ));
             };
 
@@ -374,9 +370,11 @@ pub fn options_menu(state: &mut GameState) {
                                     label("Font:");
 
                                     state.options.gui.font = selection_box(
-                                        state.gui.font_names.keys().cloned(),
+                                        state.gui.as_ref().unwrap().font_names.keys().cloned(),
                                         state.options.gui.font.clone(),
-                                        &|font| state.gui.font_names[font].to_string(),
+                                        &|font| {
+                                            state.gui.as_ref().unwrap().font_names[font].to_string()
+                                        },
                                     );
                                 });
                             })),

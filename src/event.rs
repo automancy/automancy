@@ -9,8 +9,10 @@ use ractor::ActorRef;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use wgpu::SurfaceError;
-use winit::event::{Event, WindowEvent};
-use winit::event_loop::EventLoopWindowTarget;
+use winit::{
+    event::{Event, WindowEvent},
+    event_loop::ActiveEventLoop,
+};
 
 use automancy_defs::coord::TileCoord;
 use automancy_defs::hexx::Hex;
@@ -74,7 +76,7 @@ pub struct EventLoopStorage {
 pub async fn shutdown_graceful(
     game: &ActorRef<GameSystemMessage>,
     game_handle: &mut Option<JoinHandle<()>>,
-    target: &EventLoopWindowTarget<()>,
+    event_loop: &ActiveEventLoop,
 ) -> anyhow::Result<bool> {
     game.send_message(GameSystemMessage::StopTicking)?;
 
@@ -82,22 +84,22 @@ pub async fn shutdown_graceful(
     game.stop(Some("Game closed".to_string()));
     game_handle.take().unwrap().await?;
 
-    target.exit();
+    event_loop.exit();
 
     log::info!("Shut down gracefully");
 
     Ok(true)
 }
 
-fn render(state: &mut GameState, target: &EventLoopWindowTarget<()>) -> anyhow::Result<bool> {
+fn render(state: &mut GameState, event_loop: &ActiveEventLoop) -> anyhow::Result<bool> {
     let mut result = Ok(false);
 
     state.camera.update_pointing_at(
         state.input_handler.main_pos,
-        window::window_size_double(&state.renderer.gpu.window),
+        window::window_size_double(&state.renderer.as_ref().unwrap().gpu.window),
     );
     state.camera.update_pos(
-        window::window_size_double(&state.renderer.gpu.window),
+        window::window_size_double(&state.renderer.as_ref().unwrap().gpu.window),
         state.loop_store.elapsed.as_secs_f64(),
     );
 
@@ -175,34 +177,38 @@ fn render(state: &mut GameState, target: &EventLoopWindowTarget<()>) -> anyhow::
 
     {
         {
-            state.gui.yak.start();
+            state.gui.as_mut().unwrap().yak.start();
 
-            gui::render_ui(state, &mut result, target);
+            gui::render_ui(state, &mut result, event_loop);
 
-            state.gui.yak.finish();
+            state.gui.as_mut().unwrap().yak.finish();
         }
 
         if !matches!(result, Ok(true)) {
-            match state.renderer.render(
+            match state.renderer.as_mut().unwrap().render(
                 state.start_instant,
                 state.resource_man.clone(),
                 &state.tokio,
                 &state.input_handler,
                 &state.camera,
-                &mut state.gui,
+                state.gui.as_mut().unwrap(),
                 &state.game,
             ) {
                 Ok(_) => {}
-                Err(SurfaceError::Lost) => state.renderer.gpu.resize(
-                    &mut state.renderer.shared_resources,
-                    &mut state.renderer.render_resources,
-                    state.renderer.gpu.window.inner_size(),
-                ),
+                Err(SurfaceError::Lost) => {
+                    let renderer = state.renderer.as_mut().unwrap();
+
+                    renderer.gpu.resize(
+                        &mut renderer.shared_resources,
+                        &mut renderer.render_resources,
+                        renderer.gpu.window.inner_size(),
+                    )
+                }
                 Err(SurfaceError::OutOfMemory) => {
                     return state.tokio.block_on(shutdown_graceful(
                         &state.game,
                         &mut state.game_handle,
-                        target,
+                        event_loop,
                     ));
                 }
                 Err(e) => log::error!("{e:?}"),
@@ -323,13 +329,18 @@ fn place_tile(id: Id, coord: TileCoord, state: &mut GameState) -> anyhow::Result
 /// Triggers every time the event loop is run once.
 pub fn on_event(
     state: &mut GameState,
-    target: &EventLoopWindowTarget<()>,
+    event_loop: &ActiveEventLoop,
     event: Event<()>,
 ) -> anyhow::Result<bool> {
     let mut window_event = None;
     let mut device_event = None;
 
-    if !state.gui.window.handle_event(&mut state.gui.yak, &event) {
+    let consumed = {
+        let gui = state.gui.as_mut().unwrap();
+        gui.window.handle_event(&mut gui.yak, &event)
+    };
+
+    if !consumed {
         match &event {
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
@@ -339,25 +350,25 @@ pub fn on_event(
                 return state.tokio.block_on(shutdown_graceful(
                     &state.game,
                     &mut state.game_handle,
-                    target,
+                    event_loop,
                 ));
             }
 
             Event::WindowEvent { event, window_id }
-                if window_id == &state.renderer.gpu.window.id() =>
+                if window_id == &state.renderer.as_ref().unwrap().gpu.window.id() =>
             {
                 window_event = Some(event);
 
                 match event {
                     WindowEvent::RedrawRequested => {
-                        state.renderer.gpu.window.pre_present_notify();
-
-                        return render(state, target);
+                        return render(state, event_loop);
                     }
                     WindowEvent::Resized(size) => {
-                        state.renderer.gpu.resize(
-                            &mut state.renderer.shared_resources,
-                            &mut state.renderer.render_resources,
+                        let renderer = state.renderer.as_mut().unwrap();
+
+                        renderer.gpu.resize(
+                            &mut renderer.shared_resources,
+                            &mut renderer.render_resources,
                             *size,
                         );
 
@@ -381,7 +392,7 @@ pub fn on_event(
         state.input_handler.update(input::convert_input(
             window_event,
             device_event,
-            window::window_size_double(&state.renderer.gpu.window),
+            window::window_size_double(&state.renderer.as_ref().unwrap().gpu.window),
             1.0, //TODO sensitivity option
         ));
         state.camera.handle_input(&state.input_handler);
@@ -580,7 +591,7 @@ pub fn on_event(
                 .unwrap_or(false)
         {
             let hex = math::main_pos_to_fract_hex(
-                window::window_size_double(&state.renderer.gpu.window),
+                window::window_size_double(&state.renderer.as_ref().unwrap().gpu.window),
                 state.input_handler.main_pos,
                 state.camera.get_pos(),
             );

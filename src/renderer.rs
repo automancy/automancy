@@ -61,8 +61,8 @@ use crate::{
     gui::Gui,
 };
 
-pub struct Renderer<'a> {
-    pub gpu: Gpu<'a>,
+pub struct Renderer {
+    pub gpu: Gpu,
     pub shared_resources: SharedResources,
     pub render_resources: RenderResources,
     pub global_buffers: Arc<GlobalBuffers>,
@@ -81,9 +81,9 @@ pub struct Renderer<'a> {
     pub take_item_animations: HashMap<Item, VecDeque<(Instant, Rect)>>,
 }
 
-impl<'a> Renderer<'a> {
+impl Renderer {
     pub fn new(
-        gpu: Gpu<'a>,
+        gpu: Gpu,
         shared_resources: SharedResources,
         render_resources: RenderResources,
         global_buffers: Arc<GlobalBuffers>,
@@ -141,7 +141,7 @@ pub fn try_add_animation(
     }
 }
 
-impl<'a> Renderer<'a> {
+impl Renderer {
     pub fn render(
         &mut self,
         start_instant: Instant,
@@ -984,6 +984,8 @@ impl<'a> Renderer<'a> {
 
             buffer.unmap();
         }
+
+        self.gpu.window.pre_present_notify();
 
         output.present();
 

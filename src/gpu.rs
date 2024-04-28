@@ -1731,7 +1731,7 @@ impl SharedResources {
     }
 }
 
-pub struct Gpu<'a> {
+pub struct Gpu {
     vsync: bool,
 
     pub window: Arc<Window>,
@@ -1740,11 +1740,11 @@ pub struct Gpu<'a> {
     pub instance: Instance,
     pub device: Device,
     pub queue: Queue,
-    pub surface: Surface<'a>,
+    pub surface: Surface<'static>,
     pub config: SurfaceConfiguration,
 }
 
-impl<'a> Gpu<'a> {
+impl Gpu {
     fn pick_present_mode(vsync: bool) -> PresentMode {
         if vsync {
             PresentMode::Fifo
@@ -1839,7 +1839,7 @@ impl<'a> Gpu<'a> {
         surface.configure(&device, &config);
 
         Gpu {
-            vsync: false,
+            vsync,
 
             window,
 

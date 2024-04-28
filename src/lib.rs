@@ -1,15 +1,16 @@
-use std::sync::Arc;
 use std::time::Instant;
+use std::{collections::BTreeMap, sync::Arc};
 
+use automancy_defs::rendering::Vertex;
 use gui::{Gui, GuiState};
 use input::ActionType;
 use ractor::ActorRef;
 use tokio::runtime::Runtime;
 use tokio::task::JoinHandle;
 
-use automancy_resources::kira::manager::AudioManager;
 use automancy_resources::types::function::RhaiDataMap;
 use automancy_resources::ResourceManager;
+use automancy_resources::{kira::manager::AudioManager, types::font::Font};
 use yakui::ManagedTextureId;
 
 use crate::camera::Camera;
@@ -41,15 +42,21 @@ pub struct GameState {
     pub resource_man: Arc<ResourceManager>,
     pub input_handler: InputHandler,
     pub input_hints: Vec<Vec<ActionType>>,
-    pub camera: Camera,
     pub loop_store: EventLoopStorage,
     pub tokio: Runtime,
     pub game: ActorRef<GameSystemMessage>,
-    pub gui: Gui,
+    pub camera: Camera,
     pub audio_man: AudioManager,
     pub start_instant: Instant,
-    pub renderer: Renderer<'static>,
+
+    pub gui: Option<Gui>,
+    pub renderer: Option<Renderer>,
+
     pub game_handle: Option<JoinHandle<()>>,
     pub puzzle_state: Option<(RhaiDataMap, bool)>,
-    pub logo: ManagedTextureId,
+    pub logo: Option<ManagedTextureId>,
+
+    pub vertices_init: Option<Vec<Vertex>>,
+    pub indices_init: Option<Vec<u16>>,
+    pub fonts_init: Option<BTreeMap<String, Font>>,
 }

@@ -16,9 +16,17 @@ use ractor::Actor;
 use rfd::{MessageButtons, MessageDialog, MessageLevel};
 use tokio::runtime::Runtime;
 use uuid::Uuid;
-use winit::dpi::PhysicalSize;
-use winit::event_loop::{ControlFlow, EventLoop};
-use winit::window::{Fullscreen, Icon, WindowBuilder};
+use winit::{
+    application::ApplicationHandler,
+    event::{DeviceEvent, DeviceId, WindowEvent},
+    event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
+    window::WindowId,
+};
+use winit::{dpi::PhysicalSize, window::Window};
+use winit::{
+    event::Event,
+    window::{Fullscreen, Icon},
+};
 
 use automancy::event::{on_event, EventLoopStorage};
 use automancy::gpu::{init_gpu_resources, Gpu};
@@ -34,8 +42,8 @@ use automancy::{
 };
 use automancy::{GameState, LOGO};
 use automancy_defs::glam::uvec2;
+use automancy_defs::log;
 use automancy_defs::rendering::Vertex;
-use automancy_defs::{log, window};
 use automancy_resources::kira::track::{TrackBuilder, TrackHandle};
 use automancy_resources::kira::tween::Tween;
 use automancy_resources::{
@@ -148,6 +156,215 @@ fn write_msg<P: AsRef<Path>>(buffer: &mut impl Write, file_path: P) -> std::fmt:
     Ok(())
 }
 
+struct Automancy {
+    state: GameState,
+    window: Option<Arc<Window>>,
+    closed: bool,
+}
+
+impl ApplicationHandler for Automancy {
+    fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
+        self.closed = true;
+    }
+
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        log::info!("Creating window...");
+        let icon = get_icon();
+
+        let window_attributes = Window::default_attributes()
+            .with_title("automancy")
+            .with_window_icon(Some(icon))
+            .with_min_inner_size(PhysicalSize::new(200, 200));
+
+        self.window = Some(Arc::new(
+            event_loop
+                .create_window(window_attributes)
+                .expect("Failed to open window"),
+        ));
+        log::info!("Window created.");
+
+        let gpu = self.state.tokio.block_on(Gpu::new(
+            self.window.as_ref().unwrap().clone(),
+            self.state.options.graphics.fps_limit == 0,
+        ));
+
+        log::info!("Setting up rendering...");
+        let (shared_resources, render_resources, global_buffers, gui_resources) =
+            init_gpu_resources(
+                &gpu.device,
+                &gpu.queue,
+                &gpu.config,
+                &self.state.resource_man,
+                self.state.vertices_init.take().unwrap(),
+                self.state.indices_init.take().unwrap(),
+            );
+        let global_buffers = Arc::new(global_buffers);
+        let renderer = Renderer::new(
+            gpu,
+            shared_resources,
+            render_resources,
+            global_buffers.clone(),
+            gui_resources,
+        );
+        log::info!("Render setup.");
+
+        log::info!("Setting up gui...");
+        let mut gui = Gui::new(
+            &renderer.gpu.device,
+            &renderer.gpu.queue,
+            &renderer.gpu.window,
+        );
+
+        gui.font_names = self
+            .state
+            .fonts_init
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(|(k, v)| (k.clone(), v.name.clone()))
+            .collect();
+
+        gui.fonts.insert(
+            SYMBOLS_FONT_KEY.to_string(),
+            Lazy::new(Box::new(|| {
+                yakui::font::Font::from_bytes(SYMBOLS_FONT, yakui::font::FontSettings::default())
+                    .unwrap()
+            })),
+        );
+        for (name, font) in self.state.fonts_init.take().unwrap().into_iter() {
+            gui.fonts.insert(
+                name,
+                Lazy::new(Box::new(move || {
+                    yakui::font::Font::from_bytes(font.data, yakui::font::FontSettings::default())
+                        .unwrap()
+                })),
+            );
+        }
+        gui.set_font(SYMBOLS_FONT_KEY, &self.state.options.gui.font);
+        log::info!("Gui setup.");
+
+        let logo = image::load_from_memory(LOGO).unwrap();
+        let logo = gui.yak.add_texture(Texture::new(
+            yakui::paint::TextureFormat::Rgba8Srgb,
+            uvec2(logo.width(), logo.height()),
+            logo.into_bytes(),
+        ));
+
+        self.state.logo = Some(logo);
+        self.state.gui = Some(gui);
+        self.state.renderer = Some(renderer);
+    }
+
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        if !self.state.options.synced {
+            self.state
+                .gui
+                .as_mut()
+                .unwrap()
+                .set_font(SYMBOLS_FONT_KEY, &self.state.options.gui.font);
+
+            self.state
+                .audio_man
+                .main_track()
+                .set_volume(self.state.options.audio.sfx_volume, Tween::default())
+                .unwrap();
+
+            self.state
+                .renderer
+                .as_mut()
+                .unwrap()
+                .gpu
+                .set_vsync(self.state.options.graphics.fps_limit == 0);
+
+            if self.state.options.graphics.fullscreen {
+                self.state
+                    .renderer
+                    .as_ref()
+                    .unwrap()
+                    .gpu
+                    .window
+                    .set_fullscreen(Some(Fullscreen::Borderless(None)));
+            } else {
+                self.state
+                    .renderer
+                    .as_ref()
+                    .unwrap()
+                    .gpu
+                    .window
+                    .set_fullscreen(None);
+            }
+
+            self.state.options.synced = true;
+        }
+
+        if !self.state.options.graphics.fps_limit.is_zero() {
+            let frame_time;
+
+            if self.state.options.graphics.fps_limit >= 250 {
+                frame_time = Duration::ZERO;
+            } else {
+                frame_time =
+                    Duration::from_secs_f64(1.0 / self.state.options.graphics.fps_limit as f64);
+            }
+
+            if self.state.loop_store.frame_start.unwrap().elapsed() > frame_time {
+                self.window.as_ref().unwrap().request_redraw();
+                event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + frame_time));
+            }
+        } else {
+            self.window.as_ref().unwrap().request_redraw();
+            event_loop.set_control_flow(ControlFlow::Poll);
+        }
+
+        let new_elapsed = Instant::now().duration_since(self.state.loop_store.frame_start.unwrap());
+        self.state.loop_store.elapsed = new_elapsed;
+    }
+
+    fn window_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        window_id: WindowId,
+        event: WindowEvent,
+    ) {
+        if !self.closed {
+            match on_event(
+                &mut self.state,
+                event_loop,
+                Event::WindowEvent { window_id, event },
+            ) {
+                Ok(closed) => {
+                    self.closed = closed;
+                }
+                Err(e) => {
+                    log::warn!("Window event error: {e}");
+                }
+            }
+        }
+    }
+
+    fn device_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        device_id: DeviceId,
+        event: DeviceEvent,
+    ) {
+        if !self.closed {
+            match on_event(
+                &mut self.state,
+                event_loop,
+                Event::DeviceEvent { device_id, event },
+            ) {
+                Ok(closed) => {
+                    self.closed = closed;
+                }
+                Err(e) => {
+                    log::warn!("Device event error: {e}");
+                }
+            }
+        }
+    }
+}
+
 fn main() -> anyhow::Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
@@ -211,17 +428,6 @@ fn main() -> anyhow::Result<()> {
     let mut state = {
         let tokio = Runtime::new().unwrap();
 
-        log::info!("Creating window...");
-        let icon = get_icon();
-
-        let window = WindowBuilder::new()
-            .with_title("automancy")
-            .with_window_icon(Some(icon))
-            .with_min_inner_size(PhysicalSize::new(200, 200))
-            .build(&event_loop)
-            .expect("Failed to open window");
-        log::info!("Window created.");
-
         log::info!("Initializing audio backend...");
         let mut audio_man = AudioManager::new(AudioManagerSettings::default())?;
         log::info!("Audio backend initialized");
@@ -241,7 +447,7 @@ fn main() -> anyhow::Result<()> {
         let input_handler = InputHandler::new(&options);
 
         let loop_store = EventLoopStorage::default();
-        let camera = Camera::new(window::window_size_double(&window));
+        let camera = Camera::new((1.0, 1.0)); // dummy value
 
         log::info!("Creating game...");
         let (game, game_handle) = tokio.block_on(Actor::spawn(
@@ -259,68 +465,8 @@ fn main() -> anyhow::Result<()> {
         }
         log::info!("Game created.");
 
-        let gpu = tokio.block_on(Gpu::new(Arc::new(window), options.graphics.fps_limit == 0));
-
-        log::info!("Setting up rendering...");
-        let (shared_resources, render_resources, global_buffers, gui_resources) =
-            init_gpu_resources(
-                &gpu.device,
-                &gpu.queue,
-                &gpu.config,
-                &resource_man,
-                vertices,
-                indices,
-            );
-        let global_buffers = Arc::new(global_buffers);
-        let renderer = Renderer::new(
-            gpu,
-            shared_resources,
-            render_resources,
-            global_buffers.clone(),
-            gui_resources,
-        );
-        log::info!("Render setup.");
-
-        log::info!("Setting up gui...");
-        let mut gui = Gui::new(
-            &renderer.gpu.device,
-            &renderer.gpu.queue,
-            &renderer.gpu.window,
-        );
-
-        gui.font_names = fonts
-            .iter()
-            .map(|(k, v)| (k.clone(), v.name.clone()))
-            .collect();
-
-        gui.fonts.insert(
-            SYMBOLS_FONT_KEY.to_string(),
-            Lazy::new(Box::new(|| {
-                yakui::font::Font::from_bytes(SYMBOLS_FONT, yakui::font::FontSettings::default())
-                    .unwrap()
-            })),
-        );
-        for (name, font) in fonts.into_iter() {
-            gui.fonts.insert(
-                name,
-                Lazy::new(Box::new(move || {
-                    yakui::font::Font::from_bytes(font.data, yakui::font::FontSettings::default())
-                        .unwrap()
-                })),
-            );
-        }
-        gui.set_font(SYMBOLS_FONT_KEY, &options.gui.font);
-        log::info!("Gui setup.");
-
         let start_instant = Instant::now();
         init_custom_paint_state(start_instant);
-
-        let logo = image::load_from_memory(LOGO).unwrap();
-        let logo = gui.yak.add_texture(Texture::new(
-            yakui::paint::TextureFormat::Rgba8Srgb,
-            uvec2(logo.width(), logo.height()),
-            logo.into_bytes(),
-        ));
 
         GameState {
             gui_state: GuiState::default(),
@@ -332,17 +478,19 @@ fn main() -> anyhow::Result<()> {
             loop_store,
             tokio,
             game,
-            gui,
-            renderer,
+            gui: None,
+            renderer: None,
             game_handle: Some(game_handle),
             start_instant,
             audio_man,
             puzzle_state: Default::default(),
-            logo,
+            logo: None,
+
+            vertices_init: Some(vertices),
+            indices_init: Some(indices),
+            fonts_init: Some(fonts),
         }
     };
-
-    let mut closed = false;
 
     // load the main menu
     state
@@ -353,76 +501,15 @@ fn main() -> anyhow::Result<()> {
             MAIN_MENU.to_string(),
         ))
         .unwrap();
-
     state.loop_store.frame_start = Some(Instant::now());
 
-    event_loop.run(move |event, target| {
-        if closed {
-            return;
-        }
+    let mut automancy = Automancy {
+        state,
+        window: None,
+        closed: false,
+    };
 
-        match on_event(&mut state, target, event) {
-            Ok(to_exit) => {
-                if to_exit {
-                    closed = true;
-                    return;
-                }
-            }
-            Err(e) => {
-                log::warn!("Event loop returned error: {e}");
-            }
-        }
-
-        if !state.options.synced {
-            state
-                .gui
-                .set_font(SYMBOLS_FONT_KEY, &state.options.gui.font);
-
-            state
-                .audio_man
-                .main_track()
-                .set_volume(state.options.audio.sfx_volume, Tween::default())
-                .unwrap();
-
-            state
-                .renderer
-                .gpu
-                .set_vsync(state.options.graphics.fps_limit == 0);
-
-            if state.options.graphics.fullscreen {
-                state
-                    .renderer
-                    .gpu
-                    .window
-                    .set_fullscreen(Some(Fullscreen::Borderless(None)));
-            } else {
-                state.renderer.gpu.window.set_fullscreen(None);
-            }
-
-            state.options.synced = true;
-        }
-
-        if !state.options.graphics.fps_limit.is_zero() {
-            let frame_time;
-
-            if state.options.graphics.fps_limit >= 250 {
-                frame_time = Duration::ZERO;
-            } else {
-                frame_time = Duration::from_secs_f64(1.0 / state.options.graphics.fps_limit as f64);
-            }
-
-            if state.loop_store.frame_start.unwrap().elapsed() > frame_time {
-                state.renderer.gpu.window.request_redraw();
-                target.set_control_flow(ControlFlow::WaitUntil(Instant::now() + frame_time));
-            }
-        } else {
-            state.renderer.gpu.window.request_redraw();
-            target.set_control_flow(ControlFlow::Poll);
-        }
-
-        let new_elapsed = Instant::now().duration_since(state.loop_store.frame_start.unwrap());
-        state.loop_store.elapsed = new_elapsed;
-    })?;
+    event_loop.run_app(&mut automancy)?;
 
     Ok(())
 }
