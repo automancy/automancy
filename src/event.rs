@@ -332,15 +332,15 @@ pub fn on_event(
     event_loop: &ActiveEventLoop,
     event: Event<()>,
 ) -> anyhow::Result<bool> {
-    let mut window_event = None;
-    let mut device_event = None;
-
     let consumed = {
         let gui = state.gui.as_mut().unwrap();
         gui.window.handle_event(&mut gui.yak, &event)
     };
 
     if !consumed {
+        let mut window_event = None;
+        let mut device_event = None;
+
         match &event {
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
@@ -357,10 +357,231 @@ pub fn on_event(
             Event::WindowEvent { event, window_id }
                 if window_id == &state.renderer.as_ref().unwrap().gpu.window.id() =>
             {
-                window_event = Some(event);
-
                 match event {
                     WindowEvent::RedrawRequested => {
+                        state.camera.handle_input(&state.input_handler);
+
+                        state.input_hints.clear();
+
+                        state.input_hints.push(vec![ActionType::Cancel]);
+                        if state.input_handler.key_active(ActionType::Cancel) {
+                            // one by one
+                            if state.gui_state.selected_tile_id.take().is_none()
+                                && state.gui_state.linking_tile.take().is_none()
+                                && state.gui_state.paste_from.take().is_none()
+                            {
+                                if state.gui_state.switch_screen_when(
+                                    &|s| s.screen == Screen::Ingame,
+                                    Screen::Paused,
+                                ) {
+                                    state
+                                        .tokio
+                                        .block_on(
+                                            state.game.call(GameSystemMessage::SaveMap, None),
+                                        )?
+                                        .unwrap();
+                                } else {
+                                    state.gui_state.switch_screen_when(
+                                        &|s| s.screen == Screen::Paused,
+                                        Screen::Ingame,
+                                    );
+                                }
+                            }
+                        }
+
+                        // TODO hint this
+                        if (state.input_handler.main_pressed
+                            || (state.input_handler.key_active(ActionType::SelectMode)
+                                && state.input_handler.main_held))
+                            && state.gui_state.already_placed_at != Some(state.camera.pointing_at)
+                        {
+                            if let Some(id) = state.gui_state.selected_tile_id {
+                                place_tile(id, state.camera.pointing_at, state)?;
+                            }
+                        }
+
+                        state.input_hints.push(vec![ActionType::Delete]);
+                        if state.input_handler.key_active(ActionType::Delete) {
+                            place_tile(
+                                state.resource_man.registry.none,
+                                state.camera.pointing_at,
+                                state,
+                            )?;
+                        }
+
+                        if !state.input_handler.key_active(ActionType::SelectMode) {
+                            // TODO hint this
+                            if let Some(linking_tile) = state.gui_state.linking_tile {
+                                if state.input_handler.alternate_pressed {
+                                    state.tokio.block_on(on_link_tile(
+                                        state.resource_man.clone(),
+                                        &mut state.audio_man,
+                                        state.loop_store.pointing_cache.clone(),
+                                        linking_tile,
+                                    ));
+                                }
+                            } else if Some(state.camera.pointing_at)
+                                == state.gui_state.config_open_at
+                            {
+                                if state.input_handler.alternate_pressed {
+                                    state.gui_state.config_open_at = None;
+                                    state.gui_state.text_field.get(TextField::Filter).clear();
+                                }
+                            } else if state.input_handler.alternate_pressed {
+                                state.gui_state.config_open_at = Some(state.camera.pointing_at);
+                            }
+                        }
+
+                        state.input_hints.push(vec![ActionType::SelectMode]);
+                        if state.input_handler.key_active(ActionType::SelectMode)
+                            && state.gui_state.screen == Screen::Ingame
+                        {
+                            if state.gui_state.paste_from.is_none() {
+                                state
+                                    .gui_state
+                                    .grouped_tiles
+                                    .insert(state.camera.pointing_at);
+                            }
+                        } else {
+                            state.gui_state.grouped_tiles.clear();
+                        }
+
+                        if state.input_handler.key_active(ActionType::HotkeyActive) {
+                            state
+                                .input_hints
+                                .push(vec![ActionType::HotkeyActive, ActionType::Undo]);
+                            state
+                                .input_hints
+                                .push(vec![ActionType::HotkeyActive, ActionType::Redo]);
+
+                            if state.input_handler.key_active(ActionType::Undo) {
+                                state.game.send_message(GameSystemMessage::Undo)?;
+                            }
+                            if state.input_handler.key_active(ActionType::Redo) {
+                                //TODO state.game.send_message(GameSystemMessage::Redo)?;
+                            }
+
+                            if state.gui_state.paste_from.is_none()
+                                && !state.gui_state.grouped_tiles.is_empty()
+                            {
+                                state
+                                    .input_hints
+                                    .push(vec![ActionType::HotkeyActive, ActionType::Cut]);
+                                state
+                                    .input_hints
+                                    .push(vec![ActionType::HotkeyActive, ActionType::Copy]);
+
+                                if state.input_handler.key_active(ActionType::Cut)
+                                    || state.input_handler.key_active(ActionType::Copy)
+                                {
+                                    state.gui_state.paste_from = Some(state.camera.pointing_at);
+                                    state
+                                        .audio_man
+                                        .play(state.resource_man.audio["click"].clone())?;
+
+                                    let coords = Vec::from_iter(mem::take(
+                                        &mut state.gui_state.grouped_tiles,
+                                    ));
+
+                                    if state.input_handler.key_active(ActionType::Cut) {
+                                        let none = state.resource_man.registry.none;
+
+                                        state.gui_state.paste_content = state
+                                            .tokio
+                                            .block_on(state.game.call(
+                                                |reply| {
+                                                    GameSystemMessage::PlaceTiles {
+                                                        tiles: coords
+                                                            .into_iter()
+                                                            .map(|coord| (coord, none, None))
+                                                            .collect::<Vec<_>>(),
+                                                        reply: Some(reply),
+                                                        place_over: true,
+                                                        record: true,
+                                                    }
+                                                },
+                                                None,
+                                            ))?
+                                            .unwrap();
+                                    } else {
+                                        state.gui_state.paste_content = state
+                                            .tokio
+                                            .block_on(state.game.call(
+                                                |reply| GameSystemMessage::GetTiles(coords, reply),
+                                                None,
+                                            ))?
+                                            .unwrap();
+                                    }
+                                }
+                            }
+
+                            if let Some(start) = state.gui_state.paste_from {
+                                state
+                                    .input_hints
+                                    .push(vec![ActionType::HotkeyActive, ActionType::Paste]);
+
+                                if state.input_handler.key_active(ActionType::Paste) {
+                                    let direction = state.camera.pointing_at - start;
+
+                                    let tiles = state
+                                        .gui_state
+                                        .paste_content
+                                        .clone()
+                                        .into_iter()
+                                        .map(|(coord, id, data)| (coord + direction, id, data))
+                                        .collect::<Vec<_>>();
+
+                                    state.game.send_message(GameSystemMessage::PlaceTiles {
+                                        tiles,
+                                        reply: None,
+                                        place_over: false,
+                                        record: true,
+                                    })?;
+
+                                    state
+                                        .audio_man
+                                        .play(state.resource_man.audio["click"].clone())?;
+                                    // TODO click2
+                                }
+                            }
+                        } else {
+                            state.input_hints.push(vec![ActionType::HotkeyActive]);
+                        }
+
+                        if state.input_handler.key_active(ActionType::Fullscreen) {
+                            state.options.graphics.fullscreen = !state.options.graphics.fullscreen;
+                            state.options.synced = false
+                        }
+
+                        if let Some(selected_tile_id) = state.gui_state.selected_tile_id {
+                            if state.input_handler.key_active(ActionType::SelectMode)
+                                && !state.resource_man.registry.tiles[&selected_tile_id]
+                                    .data
+                                    .get(&state.resource_man.registry.data_ids.indirectional)
+                                    .cloned()
+                                    .and_then(Data::into_bool)
+                                    .unwrap_or(false)
+                            {
+                                let hex = math::main_pos_to_fract_hex(
+                                    window::window_size_double(
+                                        &state.renderer.as_ref().unwrap().gpu.window,
+                                    ),
+                                    state.input_handler.main_pos,
+                                    state.camera.get_pos(),
+                                );
+                                let rounded = Hex::round(hex.to_array()).as_vec2();
+                                let fract = (hex - rounded) * 2.0;
+
+                                state.gui_state.placement_direction =
+                                    Some(Hex::round(fract.to_array()).into())
+                            } else {
+                                state.gui_state.placement_direction = None;
+                                state.gui_state.prev_placement_direction = None;
+                            }
+                        }
+
+                        state.input_handler.reset();
+
                         return render(state, event_loop);
                     }
                     WindowEvent::Resized(size) => {
@@ -374,7 +595,9 @@ pub fn on_event(
 
                         return Ok(false);
                     }
-                    _ => {}
+                    event => {
+                        window_event = Some(event);
+                    }
                 }
             }
 
@@ -384,226 +607,16 @@ pub fn on_event(
 
             _ => {}
         };
-    };
 
-    state.input_handler.reset();
-
-    if window_event.is_some() || device_event.is_some() {
-        state.input_handler.update(input::convert_input(
-            window_event,
-            device_event,
-            window::window_size_double(&state.renderer.as_ref().unwrap().gpu.window),
-            1.0, //TODO sensitivity option
-        ));
-        state.camera.handle_input(&state.input_handler);
-    }
-
-    state.input_hints.clear();
-
-    state.input_hints.push(vec![ActionType::Cancel]);
-    if state.input_handler.key_active(ActionType::Cancel) {
-        // one by one
-        if state.gui_state.selected_tile_id.take().is_none()
-            && state.gui_state.linking_tile.take().is_none()
-            && state.gui_state.paste_from.take().is_none()
-        {
-            if state
-                .gui_state
-                .switch_screen_when(&|s| s.screen == Screen::Ingame, Screen::Paused)
-            {
-                state
-                    .tokio
-                    .block_on(state.game.call(GameSystemMessage::SaveMap, None))?
-                    .unwrap();
-            } else {
-                state
-                    .gui_state
-                    .switch_screen_when(&|s| s.screen == Screen::Paused, Screen::Ingame);
-            }
-        }
-    }
-
-    // TODO hint this
-    if (state.input_handler.main_pressed
-        || (state.input_handler.key_active(ActionType::SelectMode)
-            && state.input_handler.main_held))
-        && state.gui_state.already_placed_at != Some(state.camera.pointing_at)
-    {
-        if let Some(id) = state.gui_state.selected_tile_id {
-            place_tile(id, state.camera.pointing_at, state)?;
-        }
-    }
-
-    state.input_hints.push(vec![ActionType::Delete]);
-    if state.input_handler.key_active(ActionType::Delete) {
-        place_tile(
-            state.resource_man.registry.none,
-            state.camera.pointing_at,
-            state,
-        )?;
-    }
-
-    if !state.input_handler.key_active(ActionType::SelectMode) {
-        // TODO hint this
-        if let Some(linking_tile) = state.gui_state.linking_tile {
-            if state.input_handler.alternate_pressed {
-                state.tokio.block_on(on_link_tile(
-                    state.resource_man.clone(),
-                    &mut state.audio_man,
-                    state.loop_store.pointing_cache.clone(),
-                    linking_tile,
-                ));
-            }
-        } else if Some(state.camera.pointing_at) == state.gui_state.config_open_at {
-            if state.input_handler.alternate_pressed {
-                state.gui_state.config_open_at = None;
-                state.gui_state.text_field.get(TextField::Filter).clear();
-            }
-        } else if state.input_handler.alternate_pressed {
-            state.gui_state.config_open_at = Some(state.camera.pointing_at);
-        }
-    }
-
-    state.input_hints.push(vec![ActionType::SelectMode]);
-    if state.input_handler.key_active(ActionType::SelectMode)
-        && state.gui_state.screen == Screen::Ingame
-    {
-        if state.gui_state.paste_from.is_none() {
-            state
-                .gui_state
-                .grouped_tiles
-                .insert(state.camera.pointing_at);
-        }
-    } else {
-        state.gui_state.grouped_tiles.clear();
-    }
-
-    if state.input_handler.key_active(ActionType::HotkeyActive) {
-        state
-            .input_hints
-            .push(vec![ActionType::HotkeyActive, ActionType::Undo]);
-        state
-            .input_hints
-            .push(vec![ActionType::HotkeyActive, ActionType::Redo]);
-
-        if state.input_handler.key_active(ActionType::Undo) {
-            state.game.send_message(GameSystemMessage::Undo)?;
-        }
-        if state.input_handler.key_active(ActionType::Redo) {
-            //TODO state.game.send_message(GameSystemMessage::Redo)?;
-        }
-
-        if state.gui_state.paste_from.is_none() && !state.gui_state.grouped_tiles.is_empty() {
-            state
-                .input_hints
-                .push(vec![ActionType::HotkeyActive, ActionType::Cut]);
-            state
-                .input_hints
-                .push(vec![ActionType::HotkeyActive, ActionType::Copy]);
-
-            if state.input_handler.key_active(ActionType::Cut)
-                || state.input_handler.key_active(ActionType::Copy)
-            {
-                state.gui_state.paste_from = Some(state.camera.pointing_at);
-                state
-                    .audio_man
-                    .play(state.resource_man.audio["click"].clone())?;
-
-                let coords = Vec::from_iter(mem::take(&mut state.gui_state.grouped_tiles));
-
-                if state.input_handler.key_active(ActionType::Cut) {
-                    let none = state.resource_man.registry.none;
-
-                    state.gui_state.paste_content = state
-                        .tokio
-                        .block_on(state.game.call(
-                            |reply| {
-                                GameSystemMessage::PlaceTiles {
-                                    tiles: coords
-                                        .into_iter()
-                                        .map(|coord| (coord, none, None))
-                                        .collect::<Vec<_>>(),
-                                    reply: Some(reply),
-                                    place_over: true,
-                                    record: true,
-                                }
-                            },
-                            None,
-                        ))?
-                        .unwrap();
-                } else {
-                    state.gui_state.paste_content = state
-                        .tokio
-                        .block_on(
-                            state
-                                .game
-                                .call(|reply| GameSystemMessage::GetTiles(coords, reply), None),
-                        )?
-                        .unwrap();
-                }
-            }
-        }
-
-        if let Some(start) = state.gui_state.paste_from {
-            state
-                .input_hints
-                .push(vec![ActionType::HotkeyActive, ActionType::Paste]);
-
-            if state.input_handler.key_active(ActionType::Paste) {
-                let direction = state.camera.pointing_at - start;
-
-                let tiles = state
-                    .gui_state
-                    .paste_content
-                    .clone()
-                    .into_iter()
-                    .map(|(coord, id, data)| (coord + direction, id, data))
-                    .collect::<Vec<_>>();
-
-                state.game.send_message(GameSystemMessage::PlaceTiles {
-                    tiles,
-                    reply: None,
-                    place_over: false,
-                    record: true,
-                })?;
-
-                state
-                    .audio_man
-                    .play(state.resource_man.audio["click"].clone())?; // TODO click2
-            }
-        }
-    } else {
-        state.input_hints.push(vec![ActionType::HotkeyActive]);
-    }
-
-    if state.input_handler.key_active(ActionType::Fullscreen) {
-        state.options.graphics.fullscreen = !state.options.graphics.fullscreen;
-        state.options.synced = false
-    }
-
-    if let Some(selected_tile_id) = state.gui_state.selected_tile_id {
-        if state.input_handler.key_active(ActionType::SelectMode)
-            && !state.resource_man.registry.tiles[&selected_tile_id]
-                .data
-                .get(&state.resource_man.registry.data_ids.indirectional)
-                .cloned()
-                .and_then(Data::into_bool)
-                .unwrap_or(false)
-        {
-            let hex = math::main_pos_to_fract_hex(
+        if window_event.is_some() || device_event.is_some() {
+            state.input_handler.update(input::convert_input(
+                window_event,
+                device_event,
                 window::window_size_double(&state.renderer.as_ref().unwrap().gpu.window),
-                state.input_handler.main_pos,
-                state.camera.get_pos(),
-            );
-            let rounded = Hex::round(hex.to_array()).as_vec2();
-            let fract = (hex - rounded) * 2.0;
-
-            state.gui_state.placement_direction = Some(Hex::round(fract.to_array()).into())
-        } else {
-            state.gui_state.placement_direction = None;
-            state.gui_state.prev_placement_direction = None;
+                1.0, //TODO sensitivity option
+            ));
         }
-    }
+    };
 
     Ok(false)
 }
