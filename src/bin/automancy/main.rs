@@ -262,6 +262,15 @@ impl ApplicationHandler for Automancy {
         event: WindowEvent,
     ) {
         if !self.closed {
+            let consumed = {
+                let gui = self.state.gui.as_mut().unwrap();
+                gui.window.handle_event(&mut gui.yak, &event)
+            };
+
+            if consumed {
+                return;
+            }
+
             match on_event(
                 &mut self.state,
                 event_loop,
