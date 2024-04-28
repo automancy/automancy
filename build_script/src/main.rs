@@ -85,7 +85,11 @@ fn main() {
                 println!("{}", str::from_utf8(&output.stdout).unwrap());
 
                 if !output.status.success() {
-                    panic!("Process bad status code: {}", output.status)
+                    panic!(
+                        "Process bad status code: {}\n{}",
+                        output.status,
+                        String::from_utf8(output.stderr).unwrap()
+                    )
                 }
             }));
         }
@@ -123,7 +127,11 @@ fn main() {
                 println!("{}", str::from_utf8(&output.stdout).unwrap());
 
                 if !output.status.success() {
-                    panic!("Process bad status code: {}", output.status)
+                    panic!(
+                        "Process bad status code: {}\n{}",
+                        output.status,
+                        String::from_utf8(output.stderr).unwrap()
+                    )
                 }
             }));
         }
