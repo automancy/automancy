@@ -2,7 +2,6 @@ import bmesh
 import bpy
 import sys
 
-
 def main():
     dst = sys.argv[-1]
 
@@ -10,8 +9,6 @@ def main():
         bpy.context.active_object.select_set(False)
 
     for obj in filter(lambda o: o.type == 'MESH', bpy.data.objects):
-        obj.rotation_euler.z += -3.14159265358979323846264338327950288
-
         bpy.context.view_layer.objects.active = obj
 
         bpy.ops.object.mode_set(mode='EDIT')
