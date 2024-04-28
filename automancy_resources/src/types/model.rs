@@ -149,13 +149,12 @@ impl ResourceManager {
                         }
                         ReadOutputs::Rotations(outputs) => {
                             for (input, output) in inputs.zip(outputs.into_f32()) {
-                                let original = Quaternion::from_array(
-                                    models[&target].transform.clone().decomposed().1,
-                                );
+                                let transform = models[&target].transform.clone().decomposed();
+                                let rotate = Quaternion::from_array(transform.1);
                                 let output = Quaternion::from_array(output);
 
                                 read_inputs.push(input);
-                                read_outputs.push(Matrix4::from_quat(original.inverse() * output));
+                                read_outputs.push(Matrix4::from_quat(rotate.inverse() * output));
                             }
                         }
                         _ => {}
