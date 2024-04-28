@@ -80,7 +80,9 @@ pub async fn shutdown_graceful(
 ) -> anyhow::Result<bool> {
     game.send_message(GameSystemMessage::StopTicking)?;
 
-    game.call(GameSystemMessage::SaveMap, None).await.unwrap();
+    game.call(GameSystemMessage::SaveMap, None)
+        .await
+        .expect("Could not save the game on exit!");
     game.stop(Some("Game closed".to_string()));
     game_handle.take().unwrap().await?;
 
@@ -110,23 +112,25 @@ fn render(state: &mut GameState, event_loop: &ActiveEventLoop) -> anyhow::Result
                 updating.store(true, Ordering::Relaxed);
 
                 state.tokio.spawn(async move {
-                    let tile = game
+                    let Ok(CallResult::Success(tile)) = game
                         .call(
                             |reply| GameSystemMessage::GetTile(config_open_at, reply),
                             None,
                         )
                         .await
-                        .unwrap()
-                        .unwrap();
+                    else {
+                        return;
+                    };
 
-                    let entity = game
+                    let Ok(CallResult::Success(entity)) = game
                         .call(
                             |reply| GameSystemMessage::GetTileEntity(config_open_at, reply),
                             None,
                         )
                         .await
-                        .unwrap()
-                        .unwrap();
+                    else {
+                        return;
+                    };
 
                     *cache.lock().await = tile.zip(entity);
 
@@ -144,20 +148,22 @@ fn render(state: &mut GameState, event_loop: &ActiveEventLoop) -> anyhow::Result
             updating.store(true, Ordering::Relaxed);
 
             state.tokio.spawn(async move {
-                let tile = game
+                let Ok(CallResult::Success(tile)) = game
                     .call(|reply| GameSystemMessage::GetTile(pointing_at, reply), None)
                     .await
-                    .unwrap()
-                    .unwrap();
+                else {
+                    return;
+                };
 
-                let entity = game
+                let Ok(CallResult::Success(entity)) = game
                     .call(
                         |reply| GameSystemMessage::GetTileEntity(pointing_at, reply),
                         None,
                     )
                     .await
-                    .unwrap()
-                    .unwrap();
+                else {
+                    return;
+                };
 
                 *cache.lock().await = tile.zip(entity);
 
