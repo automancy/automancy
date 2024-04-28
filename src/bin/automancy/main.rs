@@ -315,9 +315,6 @@ impl ApplicationHandler for Automancy {
             self.window.as_ref().unwrap().request_redraw();
             event_loop.set_control_flow(ControlFlow::Poll);
         }
-
-        let new_elapsed = Instant::now().duration_since(self.state.loop_store.frame_start.unwrap());
-        self.state.loop_store.elapsed = new_elapsed;
     }
 
     fn window_event(

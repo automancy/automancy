@@ -94,15 +94,6 @@ pub async fn shutdown_graceful(
 fn render(state: &mut GameState, event_loop: &ActiveEventLoop) -> anyhow::Result<bool> {
     let mut result = Ok(false);
 
-    state.camera.update_pointing_at(
-        state.input_handler.main_pos,
-        window::window_size_double(&state.renderer.as_ref().unwrap().gpu.window),
-    );
-    state.camera.update_pos(
-        window::window_size_double(&state.renderer.as_ref().unwrap().gpu.window),
-        state.loop_store.elapsed.as_secs_f64(),
-    );
-
     state.loop_store.frame_start = Some(Instant::now());
 
     {
@@ -353,13 +344,28 @@ pub fn on_event(
                     event_loop,
                 ));
             }
-
             Event::WindowEvent { event, window_id }
                 if window_id == &state.renderer.as_ref().unwrap().gpu.window.id() =>
             {
                 match event {
                     WindowEvent::RedrawRequested => {
                         state.camera.handle_input(&state.input_handler);
+
+                        state.loop_store.elapsed = Instant::now()
+                            .duration_since(state.loop_store.frame_start.take().unwrap());
+
+                        state.camera.update_pointing_at(
+                            state.input_handler.main_pos,
+                            window::window_size_double(
+                                &state.renderer.as_ref().unwrap().gpu.window,
+                            ),
+                        );
+                        state.camera.update_pos(
+                            window::window_size_double(
+                                &state.renderer.as_ref().unwrap().gpu.window,
+                            ),
+                            state.loop_store.elapsed.as_secs_f64(),
+                        );
 
                         state.input_hints.clear();
 
