@@ -1,6 +1,6 @@
-use std::ffi::OsStr;
 use std::fs::read_to_string;
 use std::path::Path;
+use std::{f32::consts::PI, ffi::OsStr};
 
 use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
@@ -101,7 +101,8 @@ impl ResourceManager {
                             indices: read_indices,
                             name,
                             index,
-                            matrix: Matrix4::from_cols_array_2d(&transform.clone().matrix()),
+                            matrix: Matrix4::from_rotation_z(PI)
+                                * Matrix4::from_cols_array_2d(&transform.clone().matrix()),
                             transform,
                         },
                     );
