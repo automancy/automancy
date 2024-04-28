@@ -255,68 +255,6 @@ impl ApplicationHandler for Automancy {
         self.state.renderer = Some(renderer);
     }
 
-    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        if !self.state.options.synced {
-            self.state
-                .gui
-                .as_mut()
-                .unwrap()
-                .set_font(SYMBOLS_FONT_KEY, &self.state.options.gui.font);
-
-            self.state
-                .audio_man
-                .main_track()
-                .set_volume(self.state.options.audio.sfx_volume, Tween::default())
-                .unwrap();
-
-            self.state
-                .renderer
-                .as_mut()
-                .unwrap()
-                .gpu
-                .set_vsync(self.state.options.graphics.fps_limit == 0);
-
-            if self.state.options.graphics.fullscreen {
-                self.state
-                    .renderer
-                    .as_ref()
-                    .unwrap()
-                    .gpu
-                    .window
-                    .set_fullscreen(Some(Fullscreen::Borderless(None)));
-            } else {
-                self.state
-                    .renderer
-                    .as_ref()
-                    .unwrap()
-                    .gpu
-                    .window
-                    .set_fullscreen(None);
-            }
-
-            self.state.options.synced = true;
-        }
-
-        if !self.state.options.graphics.fps_limit.is_zero() {
-            let frame_time;
-
-            if self.state.options.graphics.fps_limit >= 250 {
-                frame_time = Duration::ZERO;
-            } else {
-                frame_time =
-                    Duration::from_secs_f64(1.0 / self.state.options.graphics.fps_limit as f64);
-            }
-
-            if self.state.loop_store.frame_start.unwrap().elapsed() > frame_time {
-                self.window.as_ref().unwrap().request_redraw();
-                event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + frame_time));
-            }
-        } else {
-            self.window.as_ref().unwrap().request_redraw();
-            event_loop.set_control_flow(ControlFlow::Poll);
-        }
-    }
-
     fn window_event(
         &mut self,
         event_loop: &ActiveEventLoop,
@@ -335,6 +273,47 @@ impl ApplicationHandler for Automancy {
                 Err(e) => {
                     log::warn!("Window event error: {e}");
                 }
+            }
+
+            if !self.state.options.synced {
+                self.state
+                    .gui
+                    .as_mut()
+                    .unwrap()
+                    .set_font(SYMBOLS_FONT_KEY, &self.state.options.gui.font);
+
+                self.state
+                    .audio_man
+                    .main_track()
+                    .set_volume(self.state.options.audio.sfx_volume, Tween::default())
+                    .unwrap();
+
+                self.state
+                    .renderer
+                    .as_mut()
+                    .unwrap()
+                    .gpu
+                    .set_vsync(self.state.options.graphics.fps_limit == 0);
+
+                if self.state.options.graphics.fullscreen {
+                    self.state
+                        .renderer
+                        .as_ref()
+                        .unwrap()
+                        .gpu
+                        .window
+                        .set_fullscreen(Some(Fullscreen::Borderless(None)));
+                } else {
+                    self.state
+                        .renderer
+                        .as_ref()
+                        .unwrap()
+                        .gpu
+                        .window
+                        .set_fullscreen(None);
+                }
+
+                self.state.options.synced = true;
             }
         }
     }
@@ -358,6 +337,27 @@ impl ApplicationHandler for Automancy {
                     log::warn!("Device event error: {e}");
                 }
             }
+        }
+    }
+
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        if !self.state.options.graphics.fps_limit.is_zero() {
+            let frame_time;
+
+            if self.state.options.graphics.fps_limit >= 250 {
+                frame_time = Duration::ZERO;
+            } else {
+                frame_time =
+                    Duration::from_secs_f64(1.0 / self.state.options.graphics.fps_limit as f64);
+            }
+
+            if self.state.loop_store.frame_start.unwrap().elapsed() > frame_time {
+                self.window.as_ref().unwrap().request_redraw();
+                event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + frame_time));
+            }
+        } else {
+            self.window.as_ref().unwrap().request_redraw();
+            event_loop.set_control_flow(ControlFlow::Poll);
         }
     }
 }
