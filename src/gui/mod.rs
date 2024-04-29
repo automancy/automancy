@@ -300,9 +300,6 @@ pub fn render_ui(
 
                         let (selection_send, selection_recv) = oneshot::channel();
 
-                        // tile_config
-                        tile_config::tile_config_ui(state, game_data);
-
                         // tile_selections
                         tile_selection::tile_selections(state, game_data, selection_send);
 
@@ -316,9 +313,10 @@ pub fn render_ui(
                             }
                         }
 
-                        if state.input_handler.key_active(ActionType::Player) {
-                            player::player(state, game_data);
-                        }
+                        player::player(state, game_data);
+
+                        // tile_config
+                        tile_config::tile_config_ui(state, game_data);
                     }
 
                     let cursor_pos = math::screen_to_world(
@@ -345,7 +343,7 @@ pub fn render_ui(
                                             cursor_pos.y as Float,
                                             FAR as Float,
                                         ))),
-                                    tile_def.model,
+                                    state.resource_man.get_model(tile_def.model),
                                     state
                                         .gui
                                         .as_ref()

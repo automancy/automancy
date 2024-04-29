@@ -23,8 +23,8 @@ use yakui::{
     Alignment, Constraints, Dim2, Pivot, Rect,
 };
 
-use crate::util::is_research_unlocked;
 use crate::GameState;
+use crate::{input::ActionType, util::is_research_unlocked};
 
 use super::{
     button, centered_row, group, heading, inactive_button, interactive, item::draw_item, label,
@@ -225,6 +225,20 @@ fn research_puzzle(state: &mut GameState, game_data: &mut DataMap) -> Option<Vec
         .selected_research
         .and_then(|id| state.resource_man.get_research(id))?;
 
+    let completed = game_data
+        .get(
+            &state
+                .resource_man
+                .registry
+                .data_ids
+                .research_puzzle_completed,
+        )
+        .and_then(|completed| match completed {
+            Data::SetId(set) => Some(set.contains(&research.id)),
+            _ => None,
+        })
+        .unwrap_or(false);
+
     if !state.gui_state.force_show_puzzle {
         if research.required_items.is_some()
             && game_data
@@ -238,20 +252,7 @@ fn research_puzzle(state: &mut GameState, game_data: &mut DataMap) -> Option<Vec
             return None;
         }
 
-        if game_data
-            .get(
-                &state
-                    .resource_man
-                    .registry
-                    .data_ids
-                    .research_puzzle_completed,
-            )
-            .and_then(|completed| match completed {
-                Data::SetId(set) => Some(set.contains(&research.id)),
-                _ => None,
-            })
-            .unwrap_or(false)
-        {
+        if completed {
             return None;
         }
     }
@@ -407,7 +408,7 @@ fn research_puzzle(state: &mut GameState, game_data: &mut DataMap) -> Option<Vec
                     });
                 });
 
-                if clicked {
+                if !completed && clicked {
                     if let Some(min) = board_pos {
                         let p = state.input_handler.main_pos.as_vec2() - min;
 
@@ -435,8 +436,11 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
     let mut board_pos = None;
 
     Layer::new().show(|| {
-        let mut pos = state.gui_state.player_ui_position;
+        if !state.input_handler.key_active(ActionType::Player) {
+            return;
+        }
 
+        let mut pos = state.gui_state.player_ui_position;
         movable(&mut pos, || {
             window_box(
                 state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.player_menu]
