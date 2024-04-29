@@ -1,4 +1,4 @@
-use automancy_defs::colors::INACTIVE;
+use automancy_defs::colors;
 use ron::ser::PrettyConfig;
 use yakui::{column, divider, use_state, Vec2};
 
@@ -44,11 +44,11 @@ pub fn debugger(state: &GameState) {
                         .unwrap_or("could not format wgpu info".to_string())
                     ));
 
-                    divider(INACTIVE, DIVIER_SIZE, DIVIER_SIZE);
+                    divider(colors::INACTIVE, DIVIER_SIZE, DIVIER_SIZE);
 
                     label(&format!("ResourceMan: Tiles={reg_tiles} Items={reg_items} Tags={tags} Functions={functions} Scripts={scripts} Audio={audio} Meshes={meshes}"));
 
-                    divider(INACTIVE, DIVIER_SIZE, DIVIER_SIZE);
+                    divider(colors::INACTIVE, DIVIER_SIZE, DIVIER_SIZE);
 
                     label(&format!("Map \"{map_name}\"",));
                     label(&format!("Save Time: {:?}", &map_info.save_time));

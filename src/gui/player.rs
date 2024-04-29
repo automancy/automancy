@@ -18,7 +18,7 @@ use automancy_resources::types::function::RhaiDataMap;
 use automancy_resources::types::IconMode;
 use automancy_resources::{rhai_call_options, rhai_log_err};
 use yakui::{
-    column, constrained, row,
+    column, constrained, divider, row,
     widgets::{Layer, Pad},
     Alignment, Constraints, Dim2, Pivot, Rect,
 };
@@ -29,7 +29,7 @@ use crate::GameState;
 use super::{
     button, centered_row, group, heading, inactive_button, interactive, item::draw_item, label,
     movable, scroll_horizontal, scroll_vertical, ui_game_object, util::take_item_animation,
-    window_box, AbsoluteRect, PositionRecord, Relative, RoundRect, MEDIUM_ICON_SIZE,
+    window_box, AbsoluteRect, PositionRecord, Relative, RoundRect, DIVIER_SIZE, MEDIUM_ICON_SIZE,
     PADDING_MEDIUM, SMALLISH_ICON_SIZE, SMALL_ICON_SIZE,
 };
 
@@ -469,32 +469,29 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                         });
 
                         row(|| {
-                            scroll_vertical(200.0, || {
-                                constrained(
-                                    Constraints::loose(Vec2::new(680.0, f32::INFINITY)),
-                                    || {
-                                        if let Some(research) = &state
-                                            .gui_state
-                                            .selected_research
-                                            .and_then(|id| state.resource_man.get_research(id))
-                                        {
-                                            if let Some(Data::SetId(set)) = game_data.get(
-                                                &state
-                                                    .resource_man
-                                                    .registry
-                                                    .data_ids
-                                                    .unlocked_researches,
-                                            ) {
+                            if let Some(research) = &state
+                                .gui_state
+                                .selected_research
+                                .and_then(|id| state.resource_man.get_research(id))
+                            {
+                                if let Some(Data::SetId(set)) = game_data
+                                    .get(&state.resource_man.registry.data_ids.unlocked_researches)
+                                {
+                                    divider(colors::INACTIVE, DIVIER_SIZE, DIVIER_SIZE);
+                                    scroll_vertical(200.0, || {
+                                        constrained(
+                                            Constraints::loose(Vec2::new(680.0, f32::INFINITY)),
+                                            || {
                                                 if set.contains(&research.id) {
                                                     label(&state.resource_man.research_str(
                                                         &research.completed_description,
                                                     ));
                                                 }
-                                            }
-                                        }
-                                    },
-                                );
-                            });
+                                            },
+                                        );
+                                    });
+                                }
+                            }
                         });
                     });
                 },
