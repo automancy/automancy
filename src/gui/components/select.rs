@@ -6,13 +6,12 @@ use yakui::{
 };
 
 use super::{
-    button::{button, Button, ButtonResponse},
+    button::{button, ButtonResponse},
     container::RoundRect,
     interactive::{interactive, InteractiveResponse},
     layout::centered_row,
     relative::Relative,
     scrollable::scroll_vertical,
-    text::Text,
     PADDING_MEDIUM,
 };
 
@@ -54,15 +53,12 @@ pub fn selection_box<T: Clone + Eq>(
     selected
 }
 
-pub fn selection_button<T: Eq>(current: &mut T, this: T, text: Text) -> Response<ButtonResponse> {
-    let mut button = Button::styled(text);
-
-    if *current == this {
-        button.style.fill = colors::LIGHT_BLUE;
-        button.hover_style.fill = colors::LIGHT_BLUE.adjust(1.5);
-    }
-
-    let r = button.show();
+pub fn selection_button<T: Eq>(
+    current: &mut T,
+    this: T,
+    button: impl FnOnce(bool) -> Response<ButtonResponse>,
+) -> Response<ButtonResponse> {
+    let r = button(*current == this);
 
     if r.clicked {
         *current = this;

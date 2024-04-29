@@ -6,12 +6,12 @@ use automancy_resources::data::stack::ItemStack;
 use automancy_resources::ResourceManager;
 use yakui::Rect;
 
-use super::{centered_row, label, ui_game_object, Text};
+use super::{centered_row, label, ui_game_object};
 
 /// Draws an Item's icon.
 pub fn draw_item(
     resource_man: &ResourceManager,
-    prefix: Option<Text>,
+    prefix: impl FnOnce(),
     stack: ItemStack,
     size: Float,
     add_label: bool,
@@ -19,9 +19,7 @@ pub fn draw_item(
     let mut rect = None;
 
     centered_row(|| {
-        if let Some(prefix) = prefix {
-            prefix.show();
-        }
+        prefix();
 
         rect = ui_game_object(
             InstanceData::default().with_world_matrix(math::view(dvec3(0.0, 0.0, 1.0)).as_mat4()),

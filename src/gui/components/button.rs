@@ -18,8 +18,8 @@ use yakui::{
 use yakui::{Alignment, Response};
 
 use super::{
-    text::{label_text, sized_colored_text, Text},
-    LABEL_SIZE,
+    colored_label_text, symbol_text,
+    text::{label_text, Text},
 };
 
 /**
@@ -239,25 +239,40 @@ pub fn button_text(text: Text) -> Response<ButtonResponse> {
     r.unwrap()
 }
 
+pub fn selectable_symbol_button(
+    symbol: &str,
+    color: Color,
+    selected: bool,
+) -> Response<ButtonResponse> {
+    let mut r = None;
+
+    Pad::all(2.0).show(|| {
+        let mut button = Button::styled(symbol_text(symbol, color));
+
+        if selected {
+            button.style.fill = colors::LIGHT_BLUE;
+            button.hover_style.fill = colors::LIGHT_BLUE.adjust(1.5);
+        }
+
+        r = Some(button.show());
+    });
+
+    r.unwrap()
+}
+
+pub fn symbol_button(symbol: &str, color: Color) -> Response<ButtonResponse> {
+    selectable_symbol_button(symbol, color, false)
+}
+
 pub fn button(text: &str) -> Response<ButtonResponse> {
-    button_text(sized_colored_text(
-        text,
-        LABEL_SIZE,
-        "default".into(),
-        colors::BLACK,
-    ))
+    button_text(colored_label_text(text, colors::BLACK))
 }
 
 pub fn inactive_button(text: &str) -> Response<ButtonResponse> {
     let mut r = None;
 
     opaque(|| {
-        r = Some(button_text(sized_colored_text(
-            text,
-            LABEL_SIZE,
-            "default".into(),
-            colors::GRAY,
-        )));
+        r = Some(button_text(colored_label_text(text, colors::GRAY)));
     });
 
     r.unwrap()

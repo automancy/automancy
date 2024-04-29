@@ -70,7 +70,7 @@ fn player_inventory(state: &mut GameState, game_data: &mut DataMap) {
                     if let Some(item) = state.resource_man.registry.items.get(id).cloned() {
                         let rect = draw_item(
                             &state.resource_man,
-                            None,
+                            || {},
                             ItemStack { item, amount },
                             MEDIUM_ICON_SIZE,
                             true,
@@ -174,7 +174,7 @@ fn current_research(state: &mut GameState, game_data: &mut DataMap) {
             column(|| {
                 if let Some(stacks) = &research.required_items {
                     for stack in stacks {
-                        draw_item(&state.resource_man, None, *stack, SMALL_ICON_SIZE, true);
+                        draw_item(&state.resource_man, || {}, *stack, SMALL_ICON_SIZE, true);
                     }
                 }
             });

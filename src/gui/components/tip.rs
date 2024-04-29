@@ -8,7 +8,8 @@ use crate::GameState;
 use super::{
     hover::hover_tip,
     interactive::interactive,
-    text::{label_text, symbol_text, Text},
+    symbol,
+    text::{label_text, Text},
 };
 
 thread_local! {
@@ -42,7 +43,7 @@ pub(crate) fn render_info_tip(state: &mut GameState) {
 
 pub fn info_tip(info: &str) {
     let label = interactive(|| {
-        symbol_text("\u{f449}", colors::BLACK).show();
+        symbol("\u{f449}", colors::BLACK);
     });
 
     if label.hovering {

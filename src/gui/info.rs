@@ -20,9 +20,9 @@ use crate::tile_entity::TileEntityMsg;
 use crate::GameState;
 
 use super::{
-    centered_column, colored_label, group, item::draw_item, label, label_text, small_text,
-    stretch_column, text_with_padding, ui_game_object, util::pad_y, window, LARGE_ICON_SIZE,
-    PADDING_LARGE, PADDING_MEDIUM, PADDING_SMALL, SMALL_ICON_SIZE,
+    centered_column, colored_label, group, item::draw_item, label, stretch_column, ui_game_object,
+    util::pad_y, window, Text, LABEL_SIZE, LARGE_ICON_SIZE, PADDING_LARGE, PADDING_MEDIUM,
+    PADDING_SMALL, SMALL_ICON_SIZE, SMALL_SIZE,
 };
 
 fn input_hint(state: &mut GameState) {
@@ -43,11 +43,13 @@ fn input_hint(state: &mut GameState) {
                     .and_then(|v| v.name)
                 {
                     if let Some(name) = state.resource_man.translates.keys.get(&name) {
-                        text_with_padding(label_text(name), Pad::ZERO).show();
+                        Text::new(LABEL_SIZE, colors::BLACK, name, false).show();
                     } else {
-                        text_with_padding(
-                            label_text(&state.resource_man.translates.unnamed),
-                            Pad::ZERO,
+                        Text::new(
+                            LABEL_SIZE,
+                            colors::BLACK,
+                            &state.resource_man.translates.unnamed,
+                            false,
                         )
                         .show();
                     }
@@ -102,7 +104,7 @@ fn input_hint(state: &mut GameState) {
                     .collect::<Vec<_>>()
                     .join(" + ");
 
-                text_with_padding(small_text(&hint_text), Pad::ZERO).show();
+                Text::new(SMALL_SIZE, colors::GRAY, &hint_text, false).show();
             });
         });
     }
@@ -181,7 +183,7 @@ pub fn info_ui(state: &mut GameState) {
 
                                 draw_item(
                                     &state.resource_man,
-                                    None,
+                                    || {},
                                     ItemStack {
                                         item: *item,
                                         amount: *amount,

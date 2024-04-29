@@ -1,15 +1,17 @@
-use automancy_defs::{colors::BLACK, math::Float};
+use automancy_defs::colors::BLACK;
 use yakui::{
-    font::FontName,
-    pad,
+    constrained, pad,
     style::TextStyle,
     util::widget,
     widget::Widget,
     widgets::{Pad, RenderText},
-    Color,
+    Color, Constraints, Vec2,
 };
 
-use super::{HEADING_SIZE, LABEL_SIZE, PADDING_MEDIUM, SMALL_SIZE};
+use super::{
+    centered_column, centered_row, HEADING_SIZE, LABEL_SIZE, PADDING_MEDIUM, PADDING_SMALL,
+    SMALL_SIZE,
+};
 
 use yakui::Response;
 
@@ -19,25 +21,20 @@ pub struct Text {
     pub text: String,
     pub style: TextStyle,
     pub padding: Pad,
+    pub square_sized: bool,
 }
 
 impl Text {
-    pub fn new(font_size: f32, text: &str) -> Self {
+    pub fn new(font_size: f32, color: Color, text: &str, square_sized: bool) -> Self {
         let mut style = TextStyle::label();
         style.font_size = font_size;
+        style.color = color;
 
         Self {
             text: text.to_string(),
             style,
             padding: Pad::ZERO,
-        }
-    }
-
-    fn label(text: &str) -> Self {
-        Self {
-            text: text.to_string(),
-            style: TextStyle::label(),
-            padding: Pad::all(PADDING_MEDIUM),
+            square_sized,
         }
     }
 
@@ -59,7 +56,7 @@ impl Widget for TextWidget {
 
     fn new() -> Self {
         Self {
-            props: Text::new(0.0, ""),
+            props: Text::new(0.0, BLACK, "", false),
         }
     }
 
@@ -70,44 +67,55 @@ impl Widget for TextWidget {
         render.style = self.props.style.clone();
 
         pad(self.props.padding, || {
-            render.show();
+            if self.props.square_sized {
+                constrained(
+                    Constraints::tight(Vec2::new(LABEL_SIZE, LABEL_SIZE)),
+                    || {
+                        centered_column(|| {
+                            centered_row(|| {
+                                render.show();
+                            });
+                        });
+                    },
+                );
+            } else {
+                render.show();
+            }
         });
     }
 }
 
-pub fn sized_colored_text(text: &str, font_size: Float, font: FontName, color: Color) -> Text {
-    let mut text = Text::label(text);
-    text.style.color = color;
-    text.style.font_size = font_size;
-    text.style.font = font;
-    text
-}
-
-pub fn text_with_padding(mut text: Text, padding: Pad) -> Text {
-    text.padding = padding;
-
-    text
-}
-//TODO fucking make these a builder method on Text
-
 pub fn colored_label_text(text: &str, color: Color) -> Text {
-    sized_colored_text(text, LABEL_SIZE, "default".into(), color)
+    let mut text = Text::new(LABEL_SIZE, color, text, false);
+    text.padding = Pad::all(PADDING_MEDIUM);
+    text
 }
 
 pub fn colored_label(text: &str, color: Color) -> Response<TextResponse> {
     colored_label_text(text, color).show()
 }
 
-pub fn small_text(text: &str) -> Text {
-    sized_colored_text(text, SMALL_SIZE, "default".into(), BLACK)
+pub fn label_text(text: &str) -> Text {
+    colored_label_text(text, BLACK)
 }
 
-pub fn label_text(text: &str) -> Text {
-    sized_colored_text(text, LABEL_SIZE, "default".into(), BLACK)
+pub fn small_text(text: &str) -> Text {
+    let mut text = label_text(text);
+    text.style.font_size = SMALL_SIZE;
+    text
+}
+
+pub fn headin_text(text: &str) -> Text {
+    let mut text = label_text(text);
+    text.style.font_size = HEADING_SIZE;
+    text
 }
 
 pub fn symbol_text(symbol: &str, color: Color) -> Text {
-    sized_colored_text(symbol, LABEL_SIZE, "symbols".into(), color)
+    let mut text = Text::new(LABEL_SIZE, color, symbol, true);
+    text.padding = Pad::all(PADDING_SMALL);
+    text.style.font = "symbols".into();
+    text
 }
 
 pub fn label(text: &str) -> Response<TextResponse> {
@@ -115,5 +123,9 @@ pub fn label(text: &str) -> Response<TextResponse> {
 }
 
 pub fn heading(text: &str) -> Response<TextResponse> {
-    sized_colored_text(text, HEADING_SIZE, "default".into(), BLACK).show()
+    headin_text(text).show()
+}
+
+pub fn symbol(symbol: &str, color: Color) {
+    symbol_text(symbol, color).show();
 }

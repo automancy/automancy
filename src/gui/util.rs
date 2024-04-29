@@ -5,7 +5,7 @@ use automancy_resources::data::item::Item;
 use fuzzy_matcher::FuzzyMatcher;
 use hashbrown::HashMap;
 use yakui::{
-    column, row,
+    column,
     widgets::{Absolute, Layer, Pad},
     Alignment, Dim2, Pivot, Rect, Vec2,
 };
@@ -85,10 +85,8 @@ pub fn searchable_id(
             };
 
             for id in ids {
-                row(|| {
-                    radio(new_id, Some(id), || {
-                        draw_item(state, &id);
-                    });
+                radio(new_id, Some(id), || {
+                    draw_item(state, &id);
                 });
             }
         });

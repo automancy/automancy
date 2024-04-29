@@ -15,7 +15,7 @@ use yakui::Response;
 
 use crate::gui::util::{clamp_percentage_to_viewport, pad_y};
 
-use super::{layout::centered_column, text::heading, PADDING_LARGE, PADDING_MEDIUM};
+use super::{centered_row, layout::centered_column, text::heading, PADDING_LARGE, PADDING_MEDIUM};
 
 /**
 Changes the flow behavior a widget tree, allowing it to break out of any layouts, and be positioned in relation to the screen instead.
@@ -199,7 +199,9 @@ pub fn window_box(title: String, children: impl FnOnce()) {
 pub fn window(title: String, children: impl FnOnce()) {
     Layer::new().show(|| {
         centered_column(|| {
-            window_box(title, children);
+            centered_row(|| {
+                window_box(title, children);
+            });
         });
     });
 }
