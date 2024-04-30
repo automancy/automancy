@@ -1,5 +1,4 @@
 use std::collections::VecDeque;
-use std::ops::Div;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -30,12 +29,13 @@ pub const TPS: u64 = 30;
 pub const TICK_INTERVAL: Duration = Duration::from_nanos(1_000_000_000 / TPS);
 pub const MAX_ALLOWED_TICK_INTERVAL: Duration = TICK_INTERVAL.saturating_mul(5);
 
-pub const TRANSACTION_ANIMATION_SPEED: Duration = Duration::from_nanos(666_666_666);
+pub const TRANSACTION_ANIMATION_SPEED: Duration = Duration::from_nanos(800_000_000);
+pub const TRANSACTION_MIN_INTERVAL: Duration = Duration::from_nanos(250_000_000);
 pub const TAKE_ITEM_ANIMATION_SPEED: Duration = Duration::from_nanos(200_000_000);
 
 pub type TickUnit = u16;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TransactionRecord {
     pub stack: ItemStack,
     pub source_id: Id,
@@ -369,18 +369,6 @@ impl Actor for GameSystem {
                         reply.send(all_data)?;
                     }
                     RecordTransaction(stack, source_coord, coord) => {
-                        if let Some((instant, _)) = state
-                            .transaction_records
-                            .get(&(source_coord, coord))
-                            .and_then(|v| v.back())
-                        {
-                            if Instant::now().duration_since(*instant)
-                                < TRANSACTION_ANIMATION_SPEED.div(4)
-                            {
-                                return Ok(());
-                            }
-                        }
-
                         if let Some((source_id, id)) = state
                             .map
                             .tiles
@@ -388,18 +376,29 @@ impl Actor for GameSystem {
                             .cloned()
                             .zip(state.map.tiles.get(&coord).cloned())
                         {
+                            let record = TransactionRecord {
+                                stack,
+                                source_id,
+                                id,
+                            };
+
+                            if let Some(transactions) =
+                                state.transaction_records.get(&(source_coord, coord))
+                            {
+                                if transactions.iter().any(|(instant, other)| {
+                                    &record == other
+                                        || Instant::now().duration_since(*instant)
+                                            < TRANSACTION_MIN_INTERVAL
+                                }) {
+                                    return Ok(());
+                                }
+                            }
+
                             state
                                 .transaction_records
                                 .entry((source_coord, coord))
                                 .or_insert_with(Default::default)
-                                .push_back((
-                                    Instant::now(),
-                                    TransactionRecord {
-                                        stack,
-                                        source_id,
-                                        id,
-                                    },
-                                ));
+                                .push_back((Instant::now(), record));
                         }
                     }
                     GetTiles(coords, reply) => {
