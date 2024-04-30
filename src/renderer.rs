@@ -37,6 +37,7 @@ use automancy_resources::ResourceManager;
 use yakui::Rect;
 use yakui_wgpu::SurfaceInfo;
 
+use crate::gpu::GuiResources;
 use crate::{
     camera::Camera,
     gui::{GameElementWidget, YakuiRenderResources},
@@ -49,10 +50,6 @@ use crate::{
     gpu::DEPTH_FORMAT,
 };
 use crate::{gpu, gui};
-use crate::{
-    gpu::GuiResources,
-    input::{ActionType, InputHandler},
-};
 use crate::{
     gpu::{
         AnimationMap, GlobalBuffers, Gpu, RenderResources, SharedResources, NORMAL_CLEAR,
@@ -79,6 +76,8 @@ pub struct Renderer {
     pub in_world_item_instances: Vec<(InstanceData, Id)>,
 
     pub take_item_animations: HashMap<Item, VecDeque<(Instant, Rect)>>,
+
+    screenshot_clipboard: Clipboard,
 }
 
 impl Renderer {
@@ -106,6 +105,8 @@ impl Renderer {
             in_world_item_instances: vec![],
 
             take_item_animations: Default::default(),
+
+            screenshot_clipboard: Clipboard::new().unwrap(),
         }
     }
 }
@@ -147,7 +148,7 @@ impl Renderer {
         start_instant: Instant,
         resource_man: Arc<ResourceManager>,
         tokio: &Runtime,
-        input_handler: &InputHandler,
+        screenshotting: bool,
         camera: &Camera,
         gui: &mut Gui,
         game: &ActorRef<GameSystemMessage>,
@@ -419,7 +420,7 @@ impl Renderer {
         in_world_item_instances.sort_by_key(|v| v.1);
 
         let r = self.inner_render(
-            input_handler,
+            screenshotting,
             gui,
             resource_man,
             &game_instances,
@@ -434,7 +435,7 @@ impl Renderer {
 
     fn inner_render(
         &mut self,
-        input_handler: &InputHandler,
+        screenshotting: bool,
         gui: &mut Gui,
         resource_man: Arc<ResourceManager>,
         game_instances: &[(InstanceData, Id, ())],
@@ -869,7 +870,7 @@ impl Renderer {
         let buffer_dim = texture_dim.physical_size(output.texture.format());
         let padded_width = size_align(buffer_dim.width * block_size, COPY_BYTES_PER_ROW_ALIGNMENT);
 
-        let screenshot_buffer = if input_handler.key_active(ActionType::Screenshot) {
+        let screenshot_buffer = if screenshotting {
             let intermediate_texture = self.gpu.device.create_texture(&TextureDescriptor {
                 label: Some("Screenshot Intermediate Texture"),
                 size: texture_dim,
@@ -970,9 +971,7 @@ impl Renderer {
                 if let Some(image) =
                     RgbaImage::from_vec(texture_dim.width, texture_dim.height, result)
                 {
-                    let mut clipboard = Clipboard::new().unwrap();
-
-                    clipboard
+                    self.screenshot_clipboard
                         .set_image(ImageData {
                             width: image.width() as usize,
                             height: image.height() as usize,

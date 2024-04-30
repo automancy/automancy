@@ -93,7 +93,11 @@ pub async fn shutdown_graceful(
     Ok(true)
 }
 
-fn render(state: &mut GameState, event_loop: &ActiveEventLoop) -> anyhow::Result<bool> {
+fn render(
+    state: &mut GameState,
+    event_loop: &ActiveEventLoop,
+    screenshotting: bool,
+) -> anyhow::Result<bool> {
     let mut result = Ok(false);
 
     state.loop_store.frame_start = Some(Instant::now());
@@ -186,7 +190,7 @@ fn render(state: &mut GameState, event_loop: &ActiveEventLoop) -> anyhow::Result
                 state.start_instant,
                 state.resource_man.clone(),
                 &state.tokio,
-                &state.input_handler,
+                screenshotting,
                 &state.camera,
                 state.gui.as_mut().unwrap(),
                 &state.game,
@@ -577,9 +581,11 @@ pub fn on_event(
                         }
                     }
 
+                    let screenshotting = state.input_handler.key_active(ActionType::Screenshot);
+
                     state.input_handler.reset();
 
-                    return render(state, event_loop);
+                    return render(state, event_loop, screenshotting);
                 }
                 WindowEvent::Resized(size) => {
                     let renderer = state.renderer.as_mut().unwrap();

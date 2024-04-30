@@ -1,5 +1,8 @@
-use std::fs::{File, OpenOptions};
-use std::io::{BufReader, Write};
+use std::{
+    fs::{read_to_string, File},
+    path::Path,
+};
+use std::{io::Write, mem};
 
 use automancy_resources::ResourceManager;
 use enum_ordinalize::Ordinalize;
@@ -23,12 +26,12 @@ pub struct Options {
 }
 
 impl Options {
-    pub fn new(resource_man: &ResourceManager) -> Self {
+    pub fn new() -> Self {
         Self {
             graphics: Default::default(),
             audio: Default::default(),
             gui: Default::default(),
-            keymap: get_default_keymap(resource_man).iter().cloned().collect(),
+            keymap: Default::default(),
             synced: false,
         }
     }
@@ -40,23 +43,36 @@ impl Options {
     pub fn load(resource_man: &ResourceManager) -> anyhow::Result<Options> {
         log::info!("Loading options...");
 
-        let file = OpenOptions::new()
-            .write(true)
-            .read(true)
-            .create(true)
-            .truncate(true)
-            .open(OPTIONS_PATH)?;
+        let file = read_to_string(Path::new(OPTIONS_PATH))?;
 
-        let reader = BufReader::new(file);
+        let mut this: Options = ron::de::from_str(&file).unwrap_or_default();
+        let read_keymap = mem::take(&mut this.keymap);
 
-        let mut this: Options = ron::de::from_reader(reader).unwrap_or_default();
+        let mut default = get_default_keymap(resource_man);
+        for (key, read_action) in read_keymap {
+            let mut modified_action = default[&key];
+            modified_action.action = read_action.action;
 
-        let default = get_default_keymap(resource_man);
-
-        if this.keymap.len() != default.len() {
-            // TODO show a popup warning the player
-            this.keymap = default.iter().cloned().collect();
+            default.insert(key, modified_action);
         }
+
+        for original in &default {
+            if let Some(other) = default
+                .iter()
+                .find(|other| original.0 != other.0 && original.1.action == other.1.action)
+            {
+                log::error!(
+                    "Action {:?} has multiple bound keys! First: {:?}, second: {:?}. Resetting keymap.",
+                    original.1.action,
+                    original.0,
+                    other.0
+                );
+                default = get_default_keymap(resource_man);
+                break;
+            }
+        }
+
+        this.keymap = default;
 
         this.save()?;
 

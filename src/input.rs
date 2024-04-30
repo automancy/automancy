@@ -18,10 +18,10 @@ use automancy_defs::{glam::dvec2, id::Id};
 use crate::options::Options;
 
 thread_local! {
-    static DEFAULT_KEYMAP: Cell<Option<Vec<(Key, KeyAction)>>> = Cell::default();
+    static DEFAULT_KEYMAP: Cell<Option<HashMap<Key, KeyAction>>> = Cell::default();
 }
 
-pub fn get_default_keymap(resource_man: &ResourceManager) -> Vec<(Key, KeyAction)> {
+pub fn get_default_keymap(resource_man: &ResourceManager) -> HashMap<Key, KeyAction> {
     let taken = DEFAULT_KEYMAP.take();
 
     if let Some(taken) = taken {
@@ -107,7 +107,7 @@ fn set_default_keymap(resource_man: &ResourceManager) {
         name: Some(resource_man.registry.key_ids.paste),
     };
 
-    DEFAULT_KEYMAP.set(Some(vec![
+    DEFAULT_KEYMAP.set(Some(HashMap::from_iter([
         (Key::Character(SmolStr::new_inline("z")), undo),
         (Key::Character(SmolStr::new_inline("r")), redo),
         (Key::Character(SmolStr::new_inline("e")), player),
@@ -122,7 +122,7 @@ fn set_default_keymap(resource_man: &ResourceManager) {
         (Key::Named(NamedKey::Backspace), delete),
         (Key::Named(NamedKey::Shift), select_mode),
         (Key::Named(NamedKey::Control), hotkey),
-    ]));
+    ])));
 }
 
 #[derive(Serialize, Deserialize, Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
@@ -154,6 +154,7 @@ pub enum PressType {
 pub struct KeyAction {
     pub action: ActionType,
     pub press_type: PressType,
+    #[serde(skip)]
     pub name: Option<Id>,
 }
 
