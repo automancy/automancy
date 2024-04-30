@@ -372,6 +372,8 @@ impl ApplicationHandler for Automancy {
 }
 
 fn main() -> anyhow::Result<()> {
+    env::set_var("RUST_BACKTRACE", "1");
+
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
     {
