@@ -199,19 +199,18 @@ checksum = "7d5a26814d8dcb93b0e5a0ff3c6d80a8843bafb21b39e8e18a6f05471870e110"
 
 [[package]]
 name = "arboard"
-version = "3.3.2"
+version = "3.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a2041f1943049c7978768d84e6d0fd95de98b76d6c4727b09e78ec253d29fa58"
+checksum = "9fb4009533e8ff8f1450a5bcbc30f4242a1d34442221f72314bea1f5dc9c7f89"
 dependencies = [
  "clipboard-win",
  "core-graphics",
- "image 0.24.9",
+ "image 0.25.1",
  "log",
- "objc",
- "objc-foundation",
- "objc_id",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
  "parking_lot",
- "thiserror",
  "windows-sys 0.48.0",
  "x11rb",
 ]
@@ -472,7 +471,7 @@ dependencies = [
  "env_logger",
  "fontdue",
  "fuzzy-matcher",
- "hashbrown 0.14.3",
+ "hashbrown 0.14.5",
  "human-panic",
  "image 0.25.1",
  "lazy_static",
@@ -508,7 +507,7 @@ dependencies = [
  "flexstr",
  "glam",
  "gltf",
- "hashbrown 0.14.3",
+ "hashbrown 0.14.5",
  "hexx",
  "log",
  "ordered-float",
@@ -541,7 +540,7 @@ dependencies = [
  "automancy_defs",
  "automancy_macros",
  "chrono",
- "hashbrown 0.14.3",
+ "hashbrown 0.14.5",
  "hex",
  "kira",
  "ordered-float",
@@ -789,9 +788,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.0.95"
+version = "1.0.96"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d32a725bc159af97c3e629873bb9f88fb8cf8a4867175f76dc987815ea07c83b"
+checksum = "065a29261d53ba54260972629f9ca6bffa69bac13cd1fed61420f7fa68b9f8bd"
 dependencies = [
  "jobserver",
  "libc",
@@ -1169,7 +1168,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "978747c1d849a7d2ee5e8adc0159961c48fb7e5db2f06af6723b80123bb53856"
 dependencies = [
  "cfg-if",
- "hashbrown 0.14.3",
+ "hashbrown 0.14.5",
  "lock_api",
  "once_cell",
  "parking_lot_core",
@@ -1180,17 +1179,6 @@ name = "dasp_sample"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c87e182de0887fd5361989c677c4e8f5000cd9491d6d563161a8f3a5519fc7f"
-
-[[package]]
-name = "derivative"
-version = "2.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fcc3dd5e9e9c0b295d6e1e4d811fb6f157d5ffd784b8d202fc62eac8035a770b"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
 
 [[package]]
 name = "digest"
@@ -1462,9 +1450,9 @@ checksum = "0ce7134b9999ecaf8bcd65542e436736ef32ddca1b3e06094cb6ec5755203b80"
 
 [[package]]
 name = "flate2"
-version = "1.0.29"
+version = "1.0.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4556222738635b7a3417ae6130d8f52201e45a0c4d1a907f0826383adb5f85e7"
+checksum = "5f54427cfd1c7829e2a139fcefea601bf088ebca651d2bf53ebc600eac295dae"
 dependencies = [
  "crc32fast",
  "miniz_oxide",
@@ -1823,7 +1811,7 @@ checksum = "cc11df1ace8e7e564511f53af41f3e42ddc95b56fd07b3f4445d2a6048bc682c"
 dependencies = [
  "bitflags 2.5.0",
  "gpu-descriptor-types",
- "hashbrown 0.14.3",
+ "hashbrown 0.14.5",
 ]
 
 [[package]]
@@ -1856,9 +1844,9 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
-version = "0.14.3"
+version = "0.14.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "290f1a1d9242c78d09ce40a5e87e7554ee637af1351968159f4952f028f75604"
+checksum = "e5274423e17b7c9fc20b6e7e208532f9b19825d82dfd615708b70edd83df41f1"
 dependencies = [
  "ahash",
  "allocator-api2",
@@ -1982,7 +1970,6 @@ dependencies = [
  "jpeg-decoder",
  "num-traits",
  "png",
- "tiff",
 ]
 
 [[package]]
@@ -2037,7 +2024,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "168fb715dda47215e360912c096649d23d58bf392ac62f73919e831745e40f26"
 dependencies = [
  "equivalent",
- "hashbrown 0.14.3",
+ "hashbrown 0.14.5",
  "serde",
 ]
 
@@ -2208,9 +2195,9 @@ checksum = "03087c2bad5e1034e8cace5926dec053fb3790248370865f5117a7d0213354c8"
 
 [[package]]
 name = "libc"
-version = "0.2.153"
+version = "0.2.154"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c198f91728a82281a64e1f4f9eeb25d82cb32a5de251c6bd1b5154d63a8e7bd"
+checksum = "ae743338b92ff9146ce83992f766a31066a91a8c84a45e0e9f21e7cf6de6d346"
 
 [[package]]
 name = "libfuzzer-sys"
@@ -3556,9 +3543,9 @@ dependencies = [
 
 [[package]]
 name = "socket2"
-version = "0.5.6"
+version = "0.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05ffd9c0a93b7543e062e759284fcf5f5e3b098501104bfbdde4d404db792871"
+checksum = "ce305eb0b4296696835b71df73eb912e0f1ffd2556a501fcede6e0c50349191c"
 dependencies = [
  "libc",
  "windows-sys 0.52.0",
@@ -3600,7 +3587,7 @@ version = "0.14.0"
 source = "git+https://github.com/automancy/string-interner#5f3ae61057d45acdc81693b1498629372370bec4"
 dependencies = [
  "cfg-if",
- "hashbrown 0.14.3",
+ "hashbrown 0.14.5",
  "serde",
 ]
 
@@ -4969,7 +4956,7 @@ checksum = "791978798f0597cfc70478424c2b4fdc2b7a8024aaff78497ef00f24ef674193"
 [[package]]
 name = "yakui"
 version = "0.2.0"
-source = "git+https://github.com/automancy/yakui.git#bcef2a1cb0bc8334e3eeffb81d97a26740ed6a2e"
+source = "git+https://github.com/automancy/yakui.git#02b43c4f8f33be794ce9d13a110be08fb444228e"
 dependencies = [
  "yakui-core",
  "yakui-widgets",
@@ -4978,7 +4965,7 @@ dependencies = [
 [[package]]
 name = "yakui-core"
 version = "0.2.0"
-source = "git+https://github.com/automancy/yakui.git#bcef2a1cb0bc8334e3eeffb81d97a26740ed6a2e"
+source = "git+https://github.com/automancy/yakui.git#02b43c4f8f33be794ce9d13a110be08fb444228e"
 dependencies = [
  "anymap",
  "bitflags 2.5.0",
@@ -4994,7 +4981,7 @@ dependencies = [
 [[package]]
 name = "yakui-wgpu"
 version = "0.2.0"
-source = "git+https://github.com/automancy/yakui.git#bcef2a1cb0bc8334e3eeffb81d97a26740ed6a2e"
+source = "git+https://github.com/automancy/yakui.git#02b43c4f8f33be794ce9d13a110be08fb444228e"
 dependencies = [
  "bytemuck",
  "glam",
@@ -5007,7 +4994,7 @@ dependencies = [
 [[package]]
 name = "yakui-widgets"
 version = "0.2.0"
-source = "git+https://github.com/automancy/yakui.git#bcef2a1cb0bc8334e3eeffb81d97a26740ed6a2e"
+source = "git+https://github.com/automancy/yakui.git#02b43c4f8f33be794ce9d13a110be08fb444228e"
 dependencies = [
  "fontdue",
  "smol_str 0.1.24",
@@ -5018,7 +5005,7 @@ dependencies = [
 [[package]]
 name = "yakui-winit"
 version = "0.2.0"
-source = "git+https://github.com/automancy/yakui.git#bcef2a1cb0bc8334e3eeffb81d97a26740ed6a2e"
+source = "git+https://github.com/automancy/yakui.git#02b43c4f8f33be794ce9d13a110be08fb444228e"
 dependencies = [
  "winit",
  "yakui-core",
@@ -5026,9 +5013,9 @@ dependencies = [
 
 [[package]]
 name = "zbus"
-version = "4.1.2"
+version = "4.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9ff46f2a25abd690ed072054733e0bc3157e3d4c45f41bd183dce09c2ff8ab9"
+checksum = "6aea58d1af0aaa8abf87f3d9ade9b8f46bf13727e5f9fb24bc31ee9d94a9b4ad"
 dependencies = [
  "async-broadcast",
  "async-executor",
@@ -5040,7 +5027,6 @@ dependencies = [
  "async-task",
  "async-trait",
  "blocking",
- "derivative",
  "enumflags2",
  "event-listener 5.3.0",
  "futures-core",
@@ -5065,14 +5051,13 @@ dependencies = [
 
 [[package]]
 name = "zbus_macros"
-version = "4.1.2"
+version = "4.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e0e3852c93dcdb49c9462afe67a2a468f7bd464150d866e861eaf06208633e0"
+checksum = "1bf2b496ec1e2d3c4a7878e351607f7a2bec1e1029b353683dfc28a22999e369"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
  "quote",
- "regex",
  "syn 1.0.109",
  "zvariant_utils",
 ]
@@ -5162,9 +5147,9 @@ dependencies = [
 
 [[package]]
 name = "zvariant"
-version = "4.0.2"
+version = "4.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c1b3ca6db667bfada0f1ebfc94b2b1759ba25472ee5373d4551bb892616389a"
+checksum = "4e9282c6945d9e27742ba7ad7191325546636295de7b83f6735af73159b32ac7"
 dependencies = [
  "endi",
  "enumflags2",
@@ -5176,9 +5161,9 @@ dependencies = [
 
 [[package]]
 name = "zvariant_derive"
-version = "4.0.2"
+version = "4.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7a4b236063316163b69039f77ce3117accb41a09567fd24c168e43491e521bc"
+checksum = "0142549e559746ff09d194dd43d256a554299d286cc56460a082b8ae24652aa1"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -5189,9 +5174,9 @@ dependencies = [
 
 [[package]]
 name = "zvariant_utils"
-version = "1.1.0"
+version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00bedb16a193cc12451873fee2a1bc6550225acece0e36f333e68326c73c8172"
+checksum = "75fa7291bdd68cd13c4f97cc9d78cbf16d96305856dfc7ac942aeff4c2de7d5a"
 dependencies = [
  "proc-macro2",
  "quote",

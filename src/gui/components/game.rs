@@ -148,7 +148,6 @@ impl CallbackTrait<YakuiRenderResources> for GameElementWidget {
         render_pass.set_index_buffer(global_buffers.index_buffer.slice(..), IndexFormat::Uint16);
 
         let clip = self.clip.get();
-
         if clip.size().x > 0.0 && clip.size().y > 0.0 && clip.pos().x >= 0.0 && clip.pos().y >= 0.0
         {
             render_pass.set_viewport(
@@ -201,7 +200,7 @@ impl Widget for GameElementWidget {
     fn layout(
         &self,
         ctx: yakui::widget::LayoutContext<'_>,
-        _constraints: yakui::Constraints,
+        constraints: yakui::Constraints,
     ) -> yakui::Vec2 {
         ctx.layout.enable_clipping(ctx.dom);
 
@@ -210,20 +209,19 @@ impl Widget for GameElementWidget {
         }
 
         if let Some(paint) = self.paint.get() {
-            paint.size
+            constraints.constrain(paint.size)
         } else {
-            Vec2::ZERO
+            constraints.min
         }
     }
 
     fn paint(&self, ctx: yakui::widget::PaintContext<'_>) {
         let clip = ctx.paint.get_current_clip();
 
-        if let Some((paint, layout_rect)) = self.paint.get().zip(self.layout_rect.get()) {
+        if let Some((paint, mut rect)) = self.paint.get().zip(self.layout_rect.get()) {
             let clip = self.clip.get();
 
             if clip.size().x > 0.0 && clip.size().y > 0.0 {
-                let mut rect = layout_rect;
                 rect.set_size(rect.size() * ctx.layout.scale_factor());
                 rect.set_pos(rect.pos() * ctx.layout.scale_factor());
 

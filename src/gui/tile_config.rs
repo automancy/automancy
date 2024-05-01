@@ -442,7 +442,7 @@ pub fn tile_config_ui(state: &mut GameState, game_data: &mut DataMap) {
                 state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.tile_config]
                     .to_string(),
                 || {
-                    scroll_vertical(400.0, || {
+                    scroll_vertical(300.0, || {
                         let mut col = List::column();
                         col.item_spacing = PADDING_LARGE;
 

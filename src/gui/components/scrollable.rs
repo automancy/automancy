@@ -131,7 +131,7 @@ impl Widget for ScrollableWidget {
     }
 
     fn layout(&self, mut ctx: LayoutContext<'_>, constraints: Constraints) -> Vec2 {
-        ctx.layout.new_clip_stack(ctx.dom);
+        ctx.layout.enable_clipping(ctx.dom);
 
         let node = ctx.dom.get_current();
         let mut canvas_size = Vec2::ZERO;
@@ -285,22 +285,26 @@ pub fn scroll_vertical(max_height: Float, children: impl FnOnce()) {
             pad_x(0.0, SCROLL_SIZE).show(children);
         });
 
-        Relative::new(Alignment::TOP_RIGHT, Pivot::TOP_RIGHT, Dim2::ZERO).show(|| {
-            RoundRect::new(SCROLL_RADIUS, colors::WHITE).show_children(|| {
-                let ratio = res.size / res.canvas_size;
-                let diff = res.canvas_size - res.size;
+        let ratio = res.size / res.canvas_size;
+        let diff = res.canvas_size - res.size;
 
-                pad_y(
-                    diff * ratio * res.pos_percentage,
-                    diff * ratio * (1.0 - res.pos_percentage),
-                )
-                .show(|| {
-                    let mut rect = RoundRect::new(SCROLL_RADIUS, colors::ORANGE);
-                    rect.min_size = vec2(SCROLL_SIZE, (res.size * ratio).floor());
-                    rect.show();
+        if diff > 0.0 {
+            pad_x(SCROLL_SIZE, SCROLL_SIZE).show(|| {
+                Relative::new(Alignment::TOP_RIGHT, Pivot::TOP_RIGHT, Dim2::ZERO).show(|| {
+                    RoundRect::new(SCROLL_RADIUS, colors::WHITE).show_children(|| {
+                        pad_y(
+                            diff * ratio * res.pos_percentage,
+                            diff * ratio * (1.0 - res.pos_percentage),
+                        )
+                        .show(|| {
+                            let mut rect = RoundRect::new(SCROLL_RADIUS, colors::ORANGE);
+                            rect.min_size = vec2(SCROLL_SIZE, (res.size * ratio).floor());
+                            rect.show();
+                        });
+                    });
                 });
             });
-        });
+        }
     });
 }
 
@@ -310,21 +314,25 @@ pub fn scroll_horizontal(max_width: Float, children: impl FnOnce()) {
             pad_y(0.0, SCROLL_SIZE).show(children);
         });
 
-        Relative::new(Alignment::BOTTOM_LEFT, Pivot::BOTTOM_LEFT, Dim2::ZERO).show(|| {
-            RoundRect::new(SCROLL_RADIUS, colors::WHITE).show_children(|| {
-                let ratio = res.size / res.canvas_size;
-                let diff = res.canvas_size - res.size;
+        let ratio = res.size / res.canvas_size;
+        let diff = res.canvas_size - res.size;
 
-                pad_x(
-                    diff * ratio * res.pos_percentage,
-                    diff * ratio * (1.0 - res.pos_percentage),
-                )
-                .show(|| {
-                    let mut rect = RoundRect::new(SCROLL_RADIUS, colors::ORANGE);
-                    rect.min_size = vec2((res.size * ratio).floor(), SCROLL_SIZE);
-                    rect.show();
+        if diff > 0.0 {
+            pad_y(SCROLL_SIZE, SCROLL_SIZE).show(|| {
+                Relative::new(Alignment::BOTTOM_LEFT, Pivot::BOTTOM_LEFT, Dim2::ZERO).show(|| {
+                    RoundRect::new(SCROLL_RADIUS, colors::WHITE).show_children(|| {
+                        pad_x(
+                            diff * ratio * res.pos_percentage,
+                            diff * ratio * (1.0 - res.pos_percentage),
+                        )
+                        .show(|| {
+                            let mut rect = RoundRect::new(SCROLL_RADIUS, colors::ORANGE);
+                            rect.min_size = vec2((res.size * ratio).floor(), SCROLL_SIZE);
+                            rect.show();
+                        });
+                    });
                 });
             });
-        });
+        }
     });
 }

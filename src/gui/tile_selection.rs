@@ -110,6 +110,8 @@ fn draw_tile_selection(
                 if !is_research_unlocked(research.id, &state.resource_man, game_data) {
                     continue;
                 }
+            } else {
+                continue;
             }
         }
 
