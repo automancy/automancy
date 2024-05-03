@@ -297,7 +297,10 @@ pub fn scroll_vertical(max_height: Float, children: impl FnOnce()) {
                             diff * ratio * (1.0 - res.pos_percentage),
                         )
                         .show(|| {
-                            let mut rect = RoundRect::new(SCROLL_RADIUS, colors::ORANGE);
+                            let mut rect = RoundRect::colored_y(
+                                SCROLL_RADIUS,
+                                (colors::ORANGE, colors::ORANGE.adjust(1.0 + (1.0 - ratio))),
+                            );
                             rect.min_size = vec2(SCROLL_SIZE, (res.size * ratio).floor());
                             rect.show();
                         });
@@ -326,7 +329,10 @@ pub fn scroll_horizontal(max_width: Float, children: impl FnOnce()) {
                             diff * ratio * (1.0 - res.pos_percentage),
                         )
                         .show(|| {
-                            let mut rect = RoundRect::new(SCROLL_RADIUS, colors::ORANGE);
+                            let mut rect = RoundRect::colored_x(
+                                SCROLL_RADIUS,
+                                (colors::ORANGE, colors::ORANGE.adjust(1.0 + ratio)),
+                            );
                             rect.min_size = vec2((res.size * ratio).floor(), SCROLL_SIZE);
                             rect.show();
                         });

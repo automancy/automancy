@@ -25,18 +25,6 @@ macro_rules! hex_color {
     }};
 }
 
-pub trait ColorAdj {
-    /// Change the alpha
-    fn with_alpha(&self, a: u8) -> Self;
-}
-
-impl ColorAdj for Color {
-    #[inline]
-    fn with_alpha(&self, a: u8) -> Self {
-        Color::from([self.r, self.g, self.b, a])
-    }
-}
-
 pub const RED: Color = hex_color!("#ff0000");
 pub const ORANGE: Color = hex_color!("#ffa160");
 pub const LIGHT_BLUE: Color = hex_color!("#c2fffe");

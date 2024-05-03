@@ -63,13 +63,10 @@ pub fn searchable_id(
                 let mut filtered = ids
                     .iter()
                     .flat_map(|id| {
-                        let score = state
-                            .gui_state
-                            .text_field
-                            .fuse
-                            .fuzzy_match(&to_string(state, id), &text);
+                        let name = to_string(state, id);
+                        let score = state.gui_state.text_field.fuse.fuzzy_match(&name, &text);
 
-                        if score.unwrap_or(0) <= 5 {
+                        if score.unwrap_or(0) < (name.len() / 2) as i64 {
                             None
                         } else {
                             Some(*id).zip(score)
@@ -79,7 +76,7 @@ pub fn searchable_id(
 
                 filtered.sort_unstable_by(|a, b| a.1.cmp(&b.1));
 
-                filtered.into_iter().map(|v| v.0).collect::<Vec<_>>()
+                filtered.into_iter().rev().map(|v| v.0).collect::<Vec<_>>()
             } else {
                 ids.to_vec()
             };

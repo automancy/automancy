@@ -42,6 +42,7 @@ pub mod item;
 pub mod menu;
 pub mod player;
 pub mod popup;
+pub mod shapes;
 pub mod tile_config;
 pub mod tile_selection;
 pub mod util;

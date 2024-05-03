@@ -3,7 +3,6 @@ use std::cell::Cell;
 use automancy_defs::colors;
 use yakui::{
     colored_box_container, column,
-    shapes::RoundedRectangle,
     util::{widget, widget_children},
     widgets::{Layer, Pad},
     Alignment, Dim2, Flow, Pivot,
@@ -13,7 +12,10 @@ use yakui::geometry::{Color, Constraints, Vec2};
 use yakui::widget::{LayoutContext, PaintContext, Widget};
 use yakui::Response;
 
-use crate::gui::util::{clamp_percentage_to_viewport, pad_y};
+use crate::gui::{
+    shapes::RoundedRectLerpedColor,
+    util::{clamp_percentage_to_viewport, pad_y},
+};
 
 use super::{centered_row, layout::centered_column, text::heading, PADDING_LARGE, PADDING_MEDIUM};
 
@@ -99,7 +101,7 @@ Responds with [RoundRectResponse].
 #[non_exhaustive]
 pub struct RoundRect {
     pub radius: f32,
-    pub color: Color,
+    pub color: (Color, Color, Color, Color),
     pub min_size: Vec2,
 }
 
@@ -107,7 +109,31 @@ impl RoundRect {
     pub fn new(radius: f32, color: Color) -> Self {
         Self {
             radius,
+            color: (color, color, color, color),
+            min_size: Vec2::ZERO,
+        }
+    }
+
+    pub fn colored_xy(radius: f32, color: (Color, Color, Color, Color)) -> Self {
+        Self {
+            radius,
             color,
+            min_size: Vec2::ZERO,
+        }
+    }
+
+    pub fn colored_x(radius: f32, (x0, x1): (Color, Color)) -> Self {
+        Self {
+            radius,
+            color: (x0, x1, x0, x1),
+            min_size: Vec2::ZERO,
+        }
+    }
+
+    pub fn colored_y(radius: f32, (y0, y1): (Color, Color)) -> Self {
+        Self {
+            radius,
+            color: (y0, y0, y1, y1),
             min_size: Vec2::ZERO,
         }
     }
@@ -158,7 +184,7 @@ impl Widget for RoundRectWidget {
         let node = ctx.dom.get_current();
         let layout_node = ctx.layout.get(ctx.dom.current()).unwrap();
 
-        let mut rect = RoundedRectangle::new(layout_node.rect, self.props.radius);
+        let mut rect = RoundedRectLerpedColor::new(layout_node.rect, self.props.radius);
         rect.color = self.props.color;
         rect.add(ctx.paint);
 
