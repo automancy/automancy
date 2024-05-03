@@ -490,7 +490,7 @@ impl Renderer {
                 indirect_buffer.as_slice(),
             );
 
-            let mut game_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+            let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Game Render Pass"),
                 color_attachments: &[
                     Some(RenderPassColorAttachment {
@@ -542,22 +542,26 @@ impl Renderer {
                     bytemuck::cast_slice(game_matrix_data.as_slice()),
                 );
 
-                game_pass.set_pipeline(&self.render_resources.game_resources.pipeline);
-                game_pass.set_bind_group(0, &self.render_resources.game_resources.bind_group, &[]);
-                game_pass.set_vertex_buffer(0, self.global_buffers.vertex_buffer.slice(..));
-                game_pass.set_vertex_buffer(
+                render_pass.set_pipeline(&self.render_resources.game_resources.pipeline);
+                render_pass.set_bind_group(
+                    0,
+                    &self.render_resources.game_resources.bind_group,
+                    &[],
+                );
+                render_pass.set_vertex_buffer(0, self.global_buffers.vertex_buffer.slice(..));
+                render_pass.set_vertex_buffer(
                     1,
                     self.render_resources
                         .game_resources
                         .instance_buffer
                         .slice(..),
                 );
-                game_pass.set_index_buffer(
+                render_pass.set_index_buffer(
                     self.global_buffers.index_buffer.slice(..),
                     IndexFormat::Uint16,
                 );
 
-                game_pass.multi_draw_indexed_indirect(
+                render_pass.multi_draw_indexed_indirect(
                     &self.render_resources.game_resources.indirect_buffer,
                     0,
                     game_draw_count,
@@ -590,7 +594,7 @@ impl Renderer {
                 indirect_buffer.as_slice(),
             );
 
-            let mut in_world_item_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+            let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("In-world Item Render Pass"),
                 color_attachments: &[
                     Some(RenderPassColorAttachment {
@@ -645,28 +649,26 @@ impl Renderer {
                     bytemuck::cast_slice(in_world_item_matrix_data.as_slice()),
                 );
 
-                in_world_item_pass
-                    .set_pipeline(&self.render_resources.in_world_item_resources.pipeline);
-                in_world_item_pass.set_bind_group(
+                render_pass.set_pipeline(&self.render_resources.in_world_item_resources.pipeline);
+                render_pass.set_bind_group(
                     0,
                     &self.render_resources.in_world_item_resources.bind_group,
                     &[],
                 );
-                in_world_item_pass
-                    .set_vertex_buffer(0, self.global_buffers.vertex_buffer.slice(..));
-                in_world_item_pass.set_vertex_buffer(
+                render_pass.set_vertex_buffer(0, self.global_buffers.vertex_buffer.slice(..));
+                render_pass.set_vertex_buffer(
                     1,
                     self.render_resources
                         .in_world_item_resources
                         .instance_buffer
                         .slice(..),
                 );
-                in_world_item_pass.set_index_buffer(
+                render_pass.set_index_buffer(
                     self.global_buffers.index_buffer.slice(..),
                     IndexFormat::Uint16,
                 );
 
-                in_world_item_pass.multi_draw_indexed_indirect(
+                render_pass.multi_draw_indexed_indirect(
                     &self
                         .render_resources
                         .in_world_item_resources
@@ -678,7 +680,7 @@ impl Renderer {
         }
 
         {
-            let mut post_processing_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+            let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Game Post Processing Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
                     view: &self
@@ -697,20 +699,19 @@ impl Renderer {
                 timestamp_writes: None,
             });
 
-            post_processing_pass
-                .set_pipeline(&self.render_resources.post_processing_resources.pipeline);
-            post_processing_pass.set_bind_group(
+            render_pass.set_pipeline(&self.render_resources.post_processing_resources.pipeline);
+            render_pass.set_bind_group(
                 0,
                 self.render_resources
                     .game_resources
                     .post_processing_bind_group(),
                 &[],
             );
-            post_processing_pass.draw(0..3, 0..1);
+            render_pass.draw(0..3, 0..1);
         }
 
         {
-            let mut antialiasing_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+            let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Game Antialiasing Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
                     view: &self
@@ -729,16 +730,15 @@ impl Renderer {
                 timestamp_writes: None,
             });
 
-            antialiasing_pass
-                .set_pipeline(&self.render_resources.antialiasing_resources.fxaa_pipeline);
-            antialiasing_pass.set_bind_group(
+            render_pass.set_pipeline(&self.render_resources.antialiasing_resources.fxaa_pipeline);
+            render_pass.set_bind_group(
                 0,
                 self.render_resources
                     .game_resources
                     .antialiasing_bind_group(),
                 &[],
             );
-            antialiasing_pass.draw(0..3, 0..1);
+            render_pass.draw(0..3, 0..1);
         }
 
         {
@@ -801,7 +801,7 @@ impl Renderer {
         };
 
         {
-            let mut combine_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+            let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Combine Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
                     view: &self.render_resources.first_combine_resources.texture().1,
@@ -816,13 +816,13 @@ impl Renderer {
                 timestamp_writes: None,
             });
 
-            combine_pass.set_pipeline(&self.render_resources.first_combine_resources.pipeline);
-            combine_pass.set_bind_group(
+            render_pass.set_pipeline(&self.render_resources.first_combine_resources.pipeline);
+            render_pass.set_bind_group(
                 0,
                 self.render_resources.first_combine_resources.bind_group(),
                 &[],
             );
-            combine_pass.draw(0..3, 0..1)
+            render_pass.draw(0..3, 0..1)
         }
 
         {
@@ -830,7 +830,7 @@ impl Renderer {
                 .texture
                 .create_view(&TextureViewDescriptor::default());
 
-            let mut present_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+            let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Present Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
                     view: &view,
@@ -845,20 +845,20 @@ impl Renderer {
                 timestamp_writes: None,
             });
 
-            present_pass.set_pipeline(
+            render_pass.set_pipeline(
                 &self
                     .render_resources
                     .intermediate_resources
                     .present_pipeline,
             );
-            present_pass.set_bind_group(
+            render_pass.set_bind_group(
                 0,
                 self.render_resources
                     .intermediate_resources
                     .present_bind_group(),
                 &[],
             );
-            present_pass.draw(0..3, 0..1)
+            render_pass.draw(0..3, 0..1)
         }
 
         fn size_align<T: PrimInt>(size: T, alignment: T) -> T {
@@ -886,7 +886,7 @@ impl Renderer {
                 intermediate_texture.create_view(&TextureViewDescriptor::default());
 
             {
-                let mut intermediate_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                     label: Some("Screenshot Intermediate Pass"),
                     color_attachments: &[Some(RenderPassColorAttachment {
                         view: &intermediate_texture_view,
@@ -901,20 +901,20 @@ impl Renderer {
                     timestamp_writes: None,
                 });
 
-                intermediate_pass.set_pipeline(
+                render_pass.set_pipeline(
                     &self
                         .render_resources
                         .intermediate_resources
                         .screenshot_pipeline,
                 );
-                intermediate_pass.set_bind_group(
+                render_pass.set_bind_group(
                     0,
                     self.render_resources
                         .intermediate_resources
                         .present_bind_group(),
                     &[],
                 );
-                intermediate_pass.draw(0..3, 0..1);
+                render_pass.draw(0..3, 0..1);
             }
 
             let buffer = self.gpu.device.create_buffer(&BufferDescriptor {

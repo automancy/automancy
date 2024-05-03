@@ -147,15 +147,6 @@ pub fn init_gpu_resources(
         ..Default::default()
     });
 
-    let repeating_sampler = device.create_sampler(&SamplerDescriptor {
-        address_mode_u: AddressMode::Repeat,
-        address_mode_v: AddressMode::Repeat,
-        address_mode_w: AddressMode::Repeat,
-        mag_filter: FilterMode::Nearest,
-        min_filter: FilterMode::Nearest,
-        ..Default::default()
-    });
-
     let game_resources = {
         let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Game Uniform Buffer"),
@@ -746,17 +737,13 @@ pub fn init_gpu_resources(
                 BindGroupLayoutEntry {
                     binding: 0,
                     visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: TextureViewDimension::D2,
-                        sample_type: TextureSampleType::Float { filterable: true },
-                    },
+                    ty: BindingType::Sampler(SamplerBindingType::Filtering),
                     count: None,
                 },
                 BindGroupLayoutEntry {
                     binding: 1,
                     visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::Filtering),
+                    ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
                     count: None,
                 },
                 BindGroupLayoutEntry {
@@ -765,14 +752,18 @@ pub fn init_gpu_resources(
                     ty: BindingType::Texture {
                         multisampled: false,
                         view_dimension: TextureViewDimension::D2,
-                        sample_type: TextureSampleType::Float { filterable: false },
+                        sample_type: TextureSampleType::Float { filterable: true },
                     },
                     count: None,
                 },
                 BindGroupLayoutEntry {
                     binding: 3,
                     visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
+                    ty: BindingType::Texture {
+                        multisampled: false,
+                        view_dimension: TextureViewDimension::D2,
+                        sample_type: TextureSampleType::Float { filterable: false },
+                    },
                     count: None,
                 },
                 BindGroupLayoutEntry {
@@ -788,7 +779,11 @@ pub fn init_gpu_resources(
                 BindGroupLayoutEntry {
                     binding: 5,
                     visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
+                    ty: BindingType::Texture {
+                        multisampled: false,
+                        view_dimension: TextureViewDimension::D2,
+                        sample_type: TextureSampleType::Float { filterable: false },
+                    },
                     count: None,
                 },
                 BindGroupLayoutEntry {
@@ -799,28 +794,6 @@ pub fn init_gpu_resources(
                         view_dimension: TextureViewDimension::D2,
                         sample_type: TextureSampleType::Float { filterable: false },
                     },
-                    count: None,
-                },
-                BindGroupLayoutEntry {
-                    binding: 7,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
-                    count: None,
-                },
-                BindGroupLayoutEntry {
-                    binding: 8,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: TextureViewDimension::D2,
-                        sample_type: TextureSampleType::Float { filterable: false },
-                    },
-                    count: None,
-                },
-                BindGroupLayoutEntry {
-                    binding: 9,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
                     count: None,
                 },
             ],
@@ -880,7 +853,7 @@ pub fn init_gpu_resources(
                     binding: 0,
                     visibility: ShaderStages::FRAGMENT,
                     ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Float { filterable: false },
+                        sample_type: TextureSampleType::Float { filterable: true },
                         view_dimension: TextureViewDimension::D2,
                         multisampled: false,
                     },
@@ -889,7 +862,7 @@ pub fn init_gpu_resources(
                 BindGroupLayoutEntry {
                     binding: 1,
                     visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
+                    ty: BindingType::Sampler(SamplerBindingType::Filtering),
                     count: None,
                 },
             ],
@@ -988,7 +961,6 @@ pub fn init_gpu_resources(
 
         filtering_sampler,
         non_filtering_sampler,
-        repeating_sampler,
     };
 
     let mut render = RenderResources {
@@ -1230,72 +1202,9 @@ fn make_antialiasing_bind_group(
     })
 }
 
-fn make_post_processing_bind_group(
-    device: &Device,
-    bind_group_layout: &BindGroupLayout,
-    frame_texture: &TextureView,
-    frame_sampler: &Sampler,
-    depth_texture: &TextureView,
-    depth_sampler: &Sampler,
-    normal_texture: &TextureView,
-    normal_sampler: &Sampler,
-    model_texture: &TextureView,
-    model_sampler: &Sampler,
-    noise_texture: &TextureView,
-    noise_sampler: &Sampler,
-) -> BindGroup {
-    device.create_bind_group(&BindGroupDescriptor {
-        layout: bind_group_layout,
-        entries: &[
-            BindGroupEntry {
-                binding: 0,
-                resource: BindingResource::TextureView(frame_texture),
-            },
-            BindGroupEntry {
-                binding: 1,
-                resource: BindingResource::Sampler(frame_sampler),
-            },
-            BindGroupEntry {
-                binding: 2,
-                resource: BindingResource::TextureView(depth_texture),
-            },
-            BindGroupEntry {
-                binding: 3,
-                resource: BindingResource::Sampler(depth_sampler),
-            },
-            BindGroupEntry {
-                binding: 4,
-                resource: BindingResource::TextureView(normal_texture),
-            },
-            BindGroupEntry {
-                binding: 5,
-                resource: BindingResource::Sampler(normal_sampler),
-            },
-            BindGroupEntry {
-                binding: 6,
-                resource: BindingResource::TextureView(model_texture),
-            },
-            BindGroupEntry {
-                binding: 7,
-                resource: BindingResource::Sampler(model_sampler),
-            },
-            BindGroupEntry {
-                binding: 8,
-                resource: BindingResource::TextureView(noise_texture),
-            },
-            BindGroupEntry {
-                binding: 9,
-                resource: BindingResource::Sampler(noise_sampler),
-            },
-        ],
-        label: Some("post_processing_bind_group"),
-    })
-}
-
 pub struct SharedDescriptor<'a> {
     pub filtering_sampler: &'a Sampler,
     pub non_filtering_sampler: &'a Sampler,
-    pub repeating_sampler: &'a Sampler,
 
     pub game_texture: &'a TextureView,
     pub normal_texture: &'a TextureView,
@@ -1335,20 +1244,40 @@ impl GameResources {
         shared_descriptor: &SharedDescriptor,
         game_descriptor: &GameDescriptor,
     ) {
-        self.post_processing_bind_group = Some(make_post_processing_bind_group(
-            device,
-            game_descriptor.post_processing_bind_group_layout,
-            shared_descriptor.game_texture,
-            shared_descriptor.filtering_sampler,
-            shared_descriptor.depth_texture,
-            shared_descriptor.non_filtering_sampler,
-            shared_descriptor.normal_texture,
-            shared_descriptor.non_filtering_sampler,
-            shared_descriptor.model_texture,
-            shared_descriptor.non_filtering_sampler,
-            game_descriptor.ssao_noise_map,
-            shared_descriptor.repeating_sampler,
-        ));
+        self.post_processing_bind_group = Some(device.create_bind_group(&BindGroupDescriptor {
+            layout: game_descriptor.post_processing_bind_group_layout,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: BindingResource::Sampler(shared_descriptor.filtering_sampler),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindingResource::Sampler(shared_descriptor.non_filtering_sampler),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: BindingResource::TextureView(shared_descriptor.game_texture),
+                },
+                BindGroupEntry {
+                    binding: 3,
+                    resource: BindingResource::TextureView(shared_descriptor.depth_texture),
+                },
+                BindGroupEntry {
+                    binding: 4,
+                    resource: BindingResource::TextureView(shared_descriptor.normal_texture),
+                },
+                BindGroupEntry {
+                    binding: 5,
+                    resource: BindingResource::TextureView(shared_descriptor.model_texture),
+                },
+                BindGroupEntry {
+                    binding: 6,
+                    resource: BindingResource::TextureView(game_descriptor.ssao_noise_map),
+                },
+            ],
+            label: Some("post_processing_bind_group"),
+        }));
         self.post_processing_texture = Some(create_texture_and_view(
             device,
             &TextureDescriptor {
@@ -1366,6 +1295,7 @@ impl GameResources {
                 view_formats: &[],
             },
         ));
+
         self.antialiasing_bind_group = Some(make_antialiasing_bind_group(
             device,
             game_descriptor.antialiasing_bind_group_layout,
@@ -1578,7 +1508,6 @@ pub struct SharedResources {
 
     pub filtering_sampler: Sampler,
     pub non_filtering_sampler: Sampler,
-    pub repeating_sampler: Sampler,
 }
 
 pub struct RenderResources {
@@ -1688,7 +1617,6 @@ impl SharedResources {
         let shared_descriptor = SharedDescriptor {
             filtering_sampler: &self.filtering_sampler,
             non_filtering_sampler: &self.non_filtering_sampler,
-            repeating_sampler: &self.repeating_sampler,
             game_texture: &self.game_texture().1,
             normal_texture: &self.normal_texture().1,
             depth_texture: &self.depth_texture().1,
