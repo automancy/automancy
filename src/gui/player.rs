@@ -122,7 +122,7 @@ fn research_selection(state: &mut GameState, game_data: &mut DataMap) {
                             InstanceData::default()
                                 .with_model_matrix(research.icon_mode.model_matrix())
                                 .with_world_matrix(research.icon_mode.world_matrix())
-                                .with_light_pos(vec3(0.0, 4.0, 14.0), None),
+                                .with_light_pos(vec3(0.0, 1.0, 8.0), None),
                             icon,
                             vec2(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE),
                         );
