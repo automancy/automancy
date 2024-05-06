@@ -24,6 +24,6 @@ rhai = { workspace = true }
 
 
 chrono = "0.4.24"
-kira = "0.8.3"
+kira = "0.8.7"
 ttf-parser = "0.20.0"
 hex = "0.4.3"
