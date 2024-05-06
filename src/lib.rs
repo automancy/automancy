@@ -51,6 +51,7 @@ pub struct GameState {
 
     pub gui: Option<Gui>,
     pub renderer: Option<Renderer>,
+    pub screenshotting: bool,
 
     pub game_handle: Option<JoinHandle<()>>,
     pub puzzle_state: Option<(RhaiDataMap, bool)>,

@@ -1,5 +1,3 @@
-use std::mem;
-
 use ractor::rpc::CallResult;
 
 use automancy_defs::{
@@ -26,9 +24,7 @@ use super::{
 };
 
 fn input_hint(state: &mut GameState) {
-    let input_hints = mem::take(&mut state.input_hints);
-
-    for hint in input_hints {
+    for hint in &state.input_hints {
         Pad::vertical(PADDING_SMALL).show(|| {
             centered_column(|| {
                 if let Some(name) = hint
@@ -56,13 +52,13 @@ fn input_hint(state: &mut GameState) {
                 }
 
                 let hint_text = hint
-                    .into_iter()
+                    .iter()
                     .flat_map(|action| {
                         if let Some((key, _key_action)) = state
                             .input_handler
                             .key_map
                             .iter()
-                            .find(|(_, v)| v.action == action)
+                            .find(|(_, v)| v.action == *action)
                         {
                             if let Key::Character(c) = key {
                                 Some(c.to_uppercase())

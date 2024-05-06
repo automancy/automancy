@@ -442,10 +442,10 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                 && clip.pos().y >= 0.0
             {
                 render_pass.set_viewport(
-                    clip.pos().x,
-                    clip.pos().y,
-                    clip.size().x,
-                    clip.size().y,
+                    clip.pos().x.round(),
+                    clip.pos().y.round(),
+                    clip.size().x.round(),
+                    clip.size().y.round(),
                     0.0,
                     1.0,
                 );

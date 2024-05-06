@@ -475,26 +475,31 @@ fn main() -> anyhow::Result<()> {
         init_custom_paint_state(start_instant);
 
         GameState {
-            gui_state: GuiState::default(),
             input_handler,
-            input_hints: Default::default(),
             options,
             resource_man,
+            audio_man,
             camera,
             loop_store,
             tokio,
             game,
+
+            screenshotting: false,
+
             gui: None,
             renderer: None,
-            game_handle: Some(game_handle),
-            start_instant,
-            audio_man,
-            puzzle_state: Default::default(),
             logo: None,
+
+            gui_state: GuiState::default(),
+            input_hints: Default::default(),
+            puzzle_state: Default::default(),
 
             vertices_init: Some(vertices),
             indices_init: Some(indices),
             fonts_init: Some(fonts),
+
+            game_handle: Some(game_handle),
+            start_instant,
         }
     };
 

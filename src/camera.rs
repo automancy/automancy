@@ -78,7 +78,7 @@ impl Camera {
             .into()
     }
 
-    /// Updates the movement state of the camera based on control input.
+    /// Updates the movement state of the camera based on input.
     pub fn handle_input(&mut self, input: &InputHandler) {
         if input.tertiary_held {
             if let Some(delta) = input.main_move {
@@ -131,7 +131,7 @@ impl Camera {
     fn on_moving_main(&mut self, delta: DVec2) {
         const MAX_MOVE_VEL: Double = 2.0;
 
-        self.move_vel += delta / 80.0;
+        self.move_vel += delta / 300.0;
         self.move_vel = self.move_vel.clamp(
             dvec2(-MAX_MOVE_VEL, -MAX_MOVE_VEL),
             dvec2(MAX_MOVE_VEL, MAX_MOVE_VEL),
