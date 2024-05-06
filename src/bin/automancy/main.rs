@@ -189,22 +189,20 @@ impl ApplicationHandler for Automancy {
         ));
 
         log::info!("Setting up rendering...");
-        let (shared_resources, render_resources, global_buffers, gui_resources) =
-            init_gpu_resources(
-                &gpu.device,
-                &gpu.queue,
-                &gpu.config,
-                &self.state.resource_man,
-                self.state.vertices_init.take().unwrap(),
-                self.state.indices_init.take().unwrap(),
-            );
-        let global_buffers = Arc::new(global_buffers);
+        let (shared_resources, render_resources, global_resources) = init_gpu_resources(
+            &gpu.device,
+            &gpu.queue,
+            &gpu.config,
+            &self.state.resource_man,
+            self.state.vertices_init.take().unwrap(),
+            self.state.indices_init.take().unwrap(),
+        );
+        let global_resources = Arc::new(global_resources);
         let renderer = Renderer::new(
             gpu,
             shared_resources,
             render_resources,
-            global_buffers.clone(),
-            gui_resources,
+            global_resources.clone(),
         );
         log::info!("Render setup.");
 

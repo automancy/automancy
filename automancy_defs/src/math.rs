@@ -71,24 +71,28 @@ pub fn camera_angle(z: Double) -> Double {
     }
 }
 
+pub fn camera_up_dir() -> DVec3 {
+    dvec3(0.0, 1.0, 0.0)
+}
+
 pub fn view(pos: DVec3) -> DMatrix4 {
-    DMatrix4::look_to_rh(pos, dvec3(0.0, 0.0, 1.0), dvec3(0.0, 1.0, 0.0))
+    DMatrix4::look_to_rh(pos, dvec3(0.0, 0.0, 1.0), camera_up_dir())
 }
 
 fn projection(aspect: Double) -> DMatrix4 {
     DMatrix4::perspective_lh(fov(), aspect, z_near(), z_far())
 }
 
-fn angle(z: Double) -> DQuat {
+pub fn angle(z: Double) -> DQuat {
     DQuat::from_rotation_x(camera_angle(z))
 }
 
-fn camera_view_dir(z: Double) -> DVec3 {
+pub fn camera_view_dir(z: Double) -> DVec3 {
     (angle(z) * dvec3(0.0, 0.0, 1.0)).normalize()
 }
 
 fn camera_view(pos: DVec3) -> DMatrix4 {
-    DMatrix4::look_to_rh(pos, camera_view_dir(pos.z), dvec3(0.0, 1.0, 0.0))
+    DMatrix4::look_to_rh(pos, camera_view_dir(pos.z), camera_up_dir())
 }
 
 pub fn matrix(pos: DVec3, aspect: Double) -> DMatrix4 {

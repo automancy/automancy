@@ -13,7 +13,7 @@ use num::PrimInt;
 use ractor::ActorRef;
 use tokio::runtime::Runtime;
 use tokio::sync::{oneshot, Mutex};
-use wgpu::{util::DrawIndexedIndirectArgs, StoreOp};
+use wgpu::{util::DrawIndexedIndirectArgs, CommandBuffer, StoreOp};
 use wgpu::{
     BufferAddress, BufferDescriptor, BufferUsages, Color, CommandEncoderDescriptor,
     ImageCopyBuffer, ImageDataLayout, IndexFormat, LoadOp, Maintain, MapMode, Operations,
@@ -22,37 +22,36 @@ use wgpu::{
     COPY_BUFFER_ALIGNMENT, COPY_BYTES_PER_ROW_ALIGNMENT,
 };
 
-use automancy_defs::glam::vec3;
 use automancy_defs::id::Id;
 use automancy_defs::math::{
     direction_to_angle, lerp_coords_to_pixel, Float, Matrix4, FAR, HEX_GRID_LAYOUT, SQRT_3,
 };
 use automancy_defs::rendering::{make_line, GameUBO, InstanceData, LINE_DEPTH};
 use automancy_defs::slice_group_by::GroupBy;
-use automancy_defs::{bytemuck, colors, math};
+use automancy_defs::{colors, math};
 use automancy_defs::{coord::TileCoord, math::Vec4};
+use automancy_defs::{
+    glam::vec3,
+    rendering::{PostProcessingUBO, RawMat4},
+};
 use automancy_resources::data::item::Item;
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::ResourceManager;
 use yakui::Rect;
 use yakui_wgpu::SurfaceInfo;
 
-use crate::gpu::GuiResources;
-use crate::{
-    camera::Camera,
-    gui::{GameElementWidget, YakuiRenderResources},
-};
+use crate::camera::Camera;
 use crate::{
     game::{
         GameSystemMessage, RenderUnit, TransactionRecord, TransactionRecords,
         TRANSACTION_ANIMATION_SPEED,
     },
-    gpu::DEPTH_FORMAT,
+    gui::GameElementPaintRef,
 };
 use crate::{gpu, gui};
 use crate::{
     gpu::{
-        AnimationMap, GlobalBuffers, Gpu, RenderResources, SharedResources, NORMAL_CLEAR,
+        AnimationMap, GlobalResources, Gpu, RenderResources, SharedResources, NORMAL_CLEAR,
         SCREENSHOT_FORMAT,
     },
     gui::Gui,
@@ -62,8 +61,7 @@ pub struct Renderer {
     pub gpu: Gpu,
     pub shared_resources: SharedResources,
     pub render_resources: RenderResources,
-    pub global_buffers: Arc<GlobalBuffers>,
-    pub gui_resources: Option<GuiResources>,
+    pub global_resources: Arc<GlobalResources>,
 
     render_info_cache:
         Arc<Mutex<Option<(HashMap<TileCoord, RenderUnit>, HashMap<TileCoord, DataMap>)>>>,
@@ -85,15 +83,13 @@ impl Renderer {
         gpu: Gpu,
         shared_resources: SharedResources,
         render_resources: RenderResources,
-        global_buffers: Arc<GlobalBuffers>,
-        gui_resources: GuiResources,
+        global_resources: Arc<GlobalResources>,
     ) -> Self {
         Self {
             gpu,
             shared_resources,
             render_resources,
-            global_buffers,
-            gui_resources: Some(gui_resources),
+            global_resources,
 
             render_info_cache: Arc::new(Default::default()),
             render_info_updating: Arc::new(Default::default()),
@@ -116,7 +112,7 @@ pub fn try_add_animation(
     start_instant: Instant,
     model: Id,
     animation_map: &mut AnimationMap,
-) {
+) -> bool {
     if !animation_map.contains_key(&model) {
         let elapsed = Instant::now().duration_since(start_instant).as_secs_f32();
 
@@ -138,8 +134,12 @@ pub fn try_add_animation(
                 .collect::<HashMap<_, _>>();
 
             animation_map.insert(model, anims);
+
+            return true;
         }
     }
+
+    false
 }
 
 impl Renderer {
@@ -426,6 +426,7 @@ impl Renderer {
             &game_instances,
             &in_world_item_instances,
             animation_map,
+            world_matrix.to_cols_array_2d(),
         );
 
         gui::reset_custom_paint_state();
@@ -441,6 +442,7 @@ impl Renderer {
         game_instances: &[(InstanceData, Id, ())],
         in_world_item_instances: &[(InstanceData, Id, ())],
         animation_map: AnimationMap,
+        world_matrix: RawMat4,
     ) -> Result<(), SurfaceError> {
         let size = self.gpu.window.inner_size();
 
@@ -542,13 +544,13 @@ impl Renderer {
                     bytemuck::cast_slice(game_matrix_data.as_slice()),
                 );
 
-                render_pass.set_pipeline(&self.render_resources.game_resources.pipeline);
+                render_pass.set_pipeline(&self.global_resources.game_pipeline);
                 render_pass.set_bind_group(
                     0,
                     &self.render_resources.game_resources.bind_group,
                     &[],
                 );
-                render_pass.set_vertex_buffer(0, self.global_buffers.vertex_buffer.slice(..));
+                render_pass.set_vertex_buffer(0, self.global_resources.vertex_buffer.slice(..));
                 render_pass.set_vertex_buffer(
                     1,
                     self.render_resources
@@ -557,7 +559,7 @@ impl Renderer {
                         .slice(..),
                 );
                 render_pass.set_index_buffer(
-                    self.global_buffers.index_buffer.slice(..),
+                    self.global_resources.index_buffer.slice(..),
                     IndexFormat::Uint16,
                 );
 
@@ -655,7 +657,7 @@ impl Renderer {
                     &self.render_resources.in_world_item_resources.bind_group,
                     &[],
                 );
-                render_pass.set_vertex_buffer(0, self.global_buffers.vertex_buffer.slice(..));
+                render_pass.set_vertex_buffer(0, self.global_resources.vertex_buffer.slice(..));
                 render_pass.set_vertex_buffer(
                     1,
                     self.render_resources
@@ -664,7 +666,7 @@ impl Renderer {
                         .slice(..),
                 );
                 render_pass.set_index_buffer(
-                    self.global_buffers.index_buffer.slice(..),
+                    self.global_resources.index_buffer.slice(..),
                     IndexFormat::Uint16,
                 );
 
@@ -680,6 +682,15 @@ impl Renderer {
         }
 
         {
+            self.gpu.queue.write_buffer(
+                &self
+                    .render_resources
+                    .post_processing_resources
+                    .uniform_buffer,
+                0,
+                bytemuck::cast_slice(&[PostProcessingUBO { world_matrix }]),
+            );
+
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Game Post Processing Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
@@ -699,12 +710,20 @@ impl Renderer {
                 timestamp_writes: None,
             });
 
-            render_pass.set_pipeline(&self.render_resources.post_processing_resources.pipeline);
+            render_pass.set_pipeline(&self.global_resources.post_processing_pipeline);
             render_pass.set_bind_group(
                 0,
                 self.render_resources
                     .game_resources
                     .post_processing_bind_group(),
+                &[],
+            );
+            render_pass.set_bind_group(
+                1,
+                &self
+                    .render_resources
+                    .post_processing_resources
+                    .bind_group_uniform,
                 &[],
             );
             render_pass.draw(0..3, 0..1);
@@ -730,7 +749,7 @@ impl Renderer {
                 timestamp_writes: None,
             });
 
-            render_pass.set_pipeline(&self.render_resources.antialiasing_resources.fxaa_pipeline);
+            render_pass.set_pipeline(&self.global_resources.fxaa_pipeline);
             render_pass.set_bind_group(
                 0,
                 self.render_resources
@@ -741,63 +760,53 @@ impl Renderer {
             render_pass.draw(0..3, 0..1);
         }
 
+        let custom_gui_commands: CommandBuffer;
         {
             let surface = SurfaceInfo {
                 format: self.gpu.config.format,
-                sample_count: 4,
-                color_attachment: &self.shared_resources.multisampling_texture().1,
-                resolve_target: Some(&self.render_resources.yakui_resources.texture().1),
-                depth_format: Some(DEPTH_FORMAT),
-                depth_attachment: Some(&self.shared_resources.multisampling_depth_texture().1),
-                depth_load_op: Some(LoadOp::Clear(1.0)),
+                sample_count: 1,
+                color_attachments: vec![Some(RenderPassColorAttachment {
+                    view: &self.shared_resources.gui_texture().1,
+                    resolve_target: None,
+                    ops: Operations {
+                        load: LoadOp::Clear(Color::TRANSPARENT),
+                        store: StoreOp::Store,
+                    },
+                })],
+                depth_format: None,
+                depth_attachment: None,
+                depth_load_op: None,
             };
 
             let resources = &mut (
                 resource_man.clone(),
-                self.global_buffers.clone(),
-                self.gui_resources.take(),
+                self.global_resources.clone(),
+                self.render_resources.gui_resources.take(),
+                surface.format,
                 animation_map,
                 Some(Vec::<(InstanceData, Id, usize)>::new()),
                 HashMap::<Id, Vec<(DrawIndexedIndirectArgs, usize)>>::new(),
             );
 
             {
-                let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                     label: Some("yakui Render Pass"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: surface.color_attachment,
-                        resolve_target: surface.resolve_target,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(Color::TRANSPARENT),
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })],
-                    depth_stencil_attachment: surface
-                        .depth_attachment
-                        .zip(surface.depth_load_op)
-                        .map(|(view, load_op)| wgpu::RenderPassDepthStencilAttachment {
-                            view,
-                            depth_ops: Some(wgpu::Operations {
-                                load: load_op,
-                                store: wgpu::StoreOp::Store,
-                            }),
-                            stencil_ops: None,
-                        }),
+                    color_attachments: &surface.color_attachments,
+                    depth_stencil_attachment: None,
                     ..Default::default()
                 });
 
-                gui.renderer
-                    .paint_with::<YakuiRenderResources, GameElementWidget>(
-                        &mut gui.yak,
-                        &self.gpu.device,
-                        &self.gpu.queue,
-                        &mut render_pass,
-                        surface,
-                        resources,
-                    );
+                custom_gui_commands = gui.renderer.paint_with::<GameElementPaintRef>(
+                    &mut gui.yak,
+                    &self.gpu.device,
+                    &self.gpu.queue,
+                    &mut render_pass,
+                    surface,
+                    resources,
+                );
             }
 
-            self.gui_resources = resources.2.take();
+            self.render_resources.gui_resources = resources.2.take();
         };
 
         {
@@ -845,19 +854,8 @@ impl Renderer {
                 timestamp_writes: None,
             });
 
-            render_pass.set_pipeline(
-                &self
-                    .render_resources
-                    .intermediate_resources
-                    .present_pipeline,
-            );
-            render_pass.set_bind_group(
-                0,
-                self.render_resources
-                    .intermediate_resources
-                    .present_bind_group(),
-                &[],
-            );
+            render_pass.set_pipeline(&self.global_resources.present_pipeline);
+            render_pass.set_bind_group(0, self.shared_resources.present_bind_group(), &[]);
             render_pass.draw(0..3, 0..1)
         }
 
@@ -901,19 +899,8 @@ impl Renderer {
                     timestamp_writes: None,
                 });
 
-                render_pass.set_pipeline(
-                    &self
-                        .render_resources
-                        .intermediate_resources
-                        .screenshot_pipeline,
-                );
-                render_pass.set_bind_group(
-                    0,
-                    self.render_resources
-                        .intermediate_resources
-                        .present_bind_group(),
-                    &[],
-                );
+                render_pass.set_pipeline(&self.global_resources.screenshot_pipeline);
+                render_pass.set_bind_group(0, self.shared_resources.present_bind_group(), &[]);
                 render_pass.draw(0..3, 0..1);
             }
 
@@ -945,7 +932,9 @@ impl Renderer {
             None
         };
 
-        self.gpu.queue.submit([encoder.finish()]);
+        self.gpu
+            .queue
+            .submit([custom_gui_commands, encoder.finish()]);
 
         if let Some(buffer) = screenshot_buffer {
             {

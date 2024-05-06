@@ -8,7 +8,7 @@ use automancy_defs::math::{matrix, DMatrix4, DVec2, DVec3, Double, Float, HEX_GR
 
 use crate::input::InputHandler;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Camera {
     pos: DVec3,
     move_vel: DVec2,

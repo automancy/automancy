@@ -63,6 +63,7 @@ enum-ordinalize = "4.1.0"
 ordered-float = "4.2.0"
 walkdir = "2.3.3"
 hashbrown = { version = "0.14.3", features = ["serde", "rayon"] }
+bytemuck = "1.8.0"
 
 rhai = { version = "1.16.2", features = [
     "sync",
@@ -96,6 +97,7 @@ thiserror = { workspace = true }
 enum-ordinalize = { workspace = true }
 walkdir = { workspace = true }
 hashbrown = { workspace = true }
+bytemuck = { workspace = true }
 
 rhai = { workspace = true }
 

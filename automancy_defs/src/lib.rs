@@ -1,4 +1,3 @@
-pub use bytemuck;
 pub use flexstr;
 pub use glam;
 pub use gltf;

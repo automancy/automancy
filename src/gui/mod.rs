@@ -6,7 +6,7 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use std::{collections::BTreeMap, mem};
 use tokio::sync::oneshot;
-use wgpu::{util::DrawIndexedIndirectArgs, Device, Queue};
+use wgpu::{util::DrawIndexedIndirectArgs, Device, Queue, TextureFormat};
 use winit::{event_loop::ActiveEventLoop, window::Window};
 use yakui_wgpu::YakuiWgpu;
 use yakui_winit::YakuiWinit;
@@ -27,7 +27,7 @@ use yakui::{
     Alignment, Dim2, Pivot, Yakui,
 };
 
-use crate::gpu::{AnimationMap, GlobalBuffers, GuiResources};
+use crate::gpu::{AnimationMap, GlobalResources, GuiResources};
 use crate::input::ActionType;
 use crate::GameState;
 
@@ -53,7 +53,7 @@ pub const MEDIUM_ICON_SIZE: Float = 48.0;
 pub const LARGE_ICON_SIZE: Float = 96.0;
 
 pub struct Gui {
-    pub renderer: YakuiWgpu,
+    pub renderer: YakuiWgpu<YakuiRenderResources>,
     pub yak: Yakui,
     pub window: YakuiWinit,
     pub fonts: HashMap<String, Lazy<Font, Box<dyn FnOnce() -> Font>>>,
@@ -275,8 +275,9 @@ impl TextFieldState {
 
 pub type YakuiRenderResources = (
     Arc<ResourceManager>,
-    Arc<GlobalBuffers>,
+    Arc<GlobalResources>,
     Option<GuiResources>,
+    TextureFormat,
     AnimationMap,
     Option<Vec<(InstanceData, Id, usize)>>,
     HashMap<Id, Vec<(DrawIndexedIndirectArgs, usize)>>,

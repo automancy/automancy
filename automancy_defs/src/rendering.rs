@@ -55,7 +55,7 @@ impl Vertex {
 
 // instance
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct InstanceData {
     color_offset: VertexColor,
     alpha: Float,
@@ -268,6 +268,20 @@ impl Default for GameUBO {
     fn default() -> Self {
         Self {
             light_color: DEFAULT_LIGHT_COLOR,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Zeroable, Pod)]
+pub struct PostProcessingUBO {
+    pub world_matrix: RawMat4,
+}
+
+impl Default for PostProcessingUBO {
+    fn default() -> Self {
+        Self {
+            world_matrix: Matrix4::IDENTITY.to_cols_array_2d(),
         }
     }
 }
