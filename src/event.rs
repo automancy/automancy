@@ -201,7 +201,6 @@ fn render(
 
                     renderer.gpu.resize(
                         &mut renderer.shared_resources,
-                        &mut renderer.render_resources,
                         &renderer.global_resources,
                         renderer.gpu.window.inner_size(),
                     )
@@ -379,7 +378,6 @@ pub fn on_event(
 
                     renderer.gpu.resize(
                         &mut renderer.shared_resources,
-                        &mut renderer.render_resources,
                         &renderer.global_resources,
                         *size,
                     );

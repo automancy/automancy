@@ -2503,11 +2503,10 @@ dependencies = [
 
 [[package]]
 name = "num-bigint"
-version = "0.4.4"
+version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "608e7659b5c3d7cba262d894801b9ec9d00de989e8a82bd4bef91d08da45cdc0"
+checksum = "c165a9ab64cf766f73521c0dd2cfdff64f488b8f0b3e621face3462d3db536d7"
 dependencies = [
- "autocfg",
  "num-integer",
  "num-traits",
 ]
@@ -4947,7 +4946,7 @@ checksum = "791978798f0597cfc70478424c2b4fdc2b7a8024aaff78497ef00f24ef674193"
 [[package]]
 name = "yakui"
 version = "0.2.0"
-source = "git+https://github.com/automancy/yakui.git#053f6a604a0728a6d21b28bc2dd0d22ef674144a"
+source = "git+https://github.com/automancy/yakui.git#a6e7c4d5f7963eadeea91c6b3a7c4eb0034f9215"
 dependencies = [
  "yakui-core",
  "yakui-widgets",
@@ -4956,7 +4955,7 @@ dependencies = [
 [[package]]
 name = "yakui-core"
 version = "0.2.0"
-source = "git+https://github.com/automancy/yakui.git#053f6a604a0728a6d21b28bc2dd0d22ef674144a"
+source = "git+https://github.com/automancy/yakui.git#a6e7c4d5f7963eadeea91c6b3a7c4eb0034f9215"
 dependencies = [
  "anymap",
  "bitflags 2.5.0",
@@ -4972,7 +4971,7 @@ dependencies = [
 [[package]]
 name = "yakui-wgpu"
 version = "0.2.0"
-source = "git+https://github.com/automancy/yakui.git#053f6a604a0728a6d21b28bc2dd0d22ef674144a"
+source = "git+https://github.com/automancy/yakui.git#a6e7c4d5f7963eadeea91c6b3a7c4eb0034f9215"
 dependencies = [
  "bytemuck",
  "glam 0.27.0",
@@ -4985,7 +4984,7 @@ dependencies = [
 [[package]]
 name = "yakui-widgets"
 version = "0.2.0"
-source = "git+https://github.com/automancy/yakui.git#053f6a604a0728a6d21b28bc2dd0d22ef674144a"
+source = "git+https://github.com/automancy/yakui.git#a6e7c4d5f7963eadeea91c6b3a7c4eb0034f9215"
 dependencies = [
  "fontdue",
  "smol_str",
@@ -4996,7 +4995,7 @@ dependencies = [
 [[package]]
 name = "yakui-winit"
 version = "0.2.0"
-source = "git+https://github.com/automancy/yakui.git#053f6a604a0728a6d21b28bc2dd0d22ef674144a"
+source = "git+https://github.com/automancy/yakui.git#a6e7c4d5f7963eadeea91c6b3a7c4eb0034f9215"
 dependencies = [
  "winit",
  "yakui-core",

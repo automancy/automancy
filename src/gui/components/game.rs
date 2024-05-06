@@ -151,7 +151,7 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
         }
 
         let mut clip = self.clip;
-        if clip.pos().x < 0.0 || clip.pos().y < 0.0 || clip.size().x < 1.0 || clip.size().y < 1.0 {
+        if clip.pos().x < 0.0 || clip.pos().y < 0.0 || clip.size().x < 2.0 || clip.size().y < 2.0 {
             return;
         }
         clip.set_size(clip.size() * 2.0);
@@ -191,7 +191,9 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                         },
                         BindGroupEntry {
                             binding: 1,
-                            resource: BindingResource::Sampler(&global_resources.filtering_sampler),
+                            resource: BindingResource::Sampler(
+                                &global_resources.nonfiltering_sampler,
+                            ),
                         },
                     ],
                 }),
@@ -435,23 +437,7 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
         ): &'a YakuiRenderResources,
     ) {
         if let Some(present) = &self.present_bind_group {
-            let clip = self.clip;
-            if clip.size().x > 0.0
-                && clip.size().y > 0.0
-                && clip.pos().x >= 0.0
-                && clip.pos().y >= 0.0
-            {
-                render_pass.set_viewport(
-                    clip.pos().x.round(),
-                    clip.pos().y.round(),
-                    clip.size().x.round(),
-                    clip.size().y.round(),
-                    0.0,
-                    1.0,
-                );
-            }
-
-            render_pass.set_pipeline(&global_resources.present_pipeline);
+            render_pass.set_pipeline(&global_resources.multisampled_present_pipeline);
             render_pass.set_bind_group(0, present, &[]);
             render_pass.draw(0..3, 0..1);
         }
@@ -589,6 +575,9 @@ impl Widget for GameElementWidget {
 
                     let dx = (sx - 1.0) * sign.x.signum();
                     let dy = (sy - 1.0) * sign.y.signum();
+
+                    let dx = (dx * own_clip.size().x).round() / own_clip.size().x;
+                    let dy = (dy * own_clip.size().y).round() / own_clip.size().y;
 
                     paint.inner.borrow_mut().adjusted_matrix = Some(
                         Matrix4::from_translation(vec3(dx, dy, 0.0))

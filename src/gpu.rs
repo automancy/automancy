@@ -1,6 +1,5 @@
 use core::slice;
 use std::mem;
-use std::rc::Rc;
 use std::sync::Arc;
 
 use hashbrown::HashMap;
@@ -275,10 +274,6 @@ pub fn init_gpu_resources(
             matrix_data_buffer,
             uniform_buffer,
             bind_group,
-            post_processing_bind_group: None,
-            post_processing_texture: None,
-            antialiasing_bind_group: None,
-            antialiasing_texture: None,
         }
     };
 
@@ -481,44 +476,43 @@ pub fn init_gpu_resources(
         }
     };
 
-    let combine_bind_group_layout =
-        Rc::new(device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            entries: &[
-                BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: TextureViewDimension::D2,
-                        sample_type: TextureSampleType::Float { filterable: true },
-                    },
-                    count: None,
+    let combine_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+        entries: &[
+            BindGroupLayoutEntry {
+                binding: 0,
+                visibility: ShaderStages::FRAGMENT,
+                ty: BindingType::Texture {
+                    multisampled: false,
+                    view_dimension: TextureViewDimension::D2,
+                    sample_type: TextureSampleType::Float { filterable: true },
                 },
-                BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::Filtering),
-                    count: None,
+                count: None,
+            },
+            BindGroupLayoutEntry {
+                binding: 1,
+                visibility: ShaderStages::FRAGMENT,
+                ty: BindingType::Sampler(SamplerBindingType::Filtering),
+                count: None,
+            },
+            BindGroupLayoutEntry {
+                binding: 2,
+                visibility: ShaderStages::FRAGMENT,
+                ty: BindingType::Texture {
+                    multisampled: false,
+                    view_dimension: TextureViewDimension::D2,
+                    sample_type: TextureSampleType::Float { filterable: true },
                 },
-                BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: TextureViewDimension::D2,
-                        sample_type: TextureSampleType::Float { filterable: true },
-                    },
-                    count: None,
-                },
-                BindGroupLayoutEntry {
-                    binding: 3,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::Filtering),
-                    count: None,
-                },
-            ],
-            label: Some("combine_bind_group_layout"),
-        }));
+                count: None,
+            },
+            BindGroupLayoutEntry {
+                binding: 3,
+                visibility: ShaderStages::FRAGMENT,
+                ty: BindingType::Sampler(SamplerBindingType::Filtering),
+                count: None,
+            },
+        ],
+        label: Some("combine_bind_group_layout"),
+    });
 
     let combine_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
         label: Some("Combine Render Pipeline Layout"),
@@ -556,15 +550,6 @@ pub fn init_gpu_resources(
         },
         multiview: None,
     });
-
-    let combine_pipeline = Rc::new(combine_pipeline);
-
-    let first_combine_resources = CombineResources {
-        bind_group_layout: combine_bind_group_layout.clone(),
-        pipeline: combine_pipeline.clone(),
-        bind_group: None,
-        texture: None,
-    };
 
     let fxaa_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
         entries: &[
@@ -865,21 +850,61 @@ pub fn init_gpu_resources(
         multiview: None,
     });
 
+    let multisampled_present_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+        label: Some("Present Pipeline"),
+        layout: Some(&intermediate_pipeline_layout),
+        vertex: VertexState {
+            module: &intermediate_shader,
+            entry_point: "vs_main",
+            buffers: &[],
+        },
+        fragment: Some(FragmentState {
+            module: &intermediate_shader,
+            entry_point: "fs_main",
+            targets: &[Some(ColorTargetState {
+                format: config.format,
+                blend: Some(BlendState::ALPHA_BLENDING),
+                write_mask: ColorWrites::ALL,
+            })],
+        }),
+        primitive: PrimitiveState {
+            topology: PrimitiveTopology::TriangleList,
+            front_face: FrontFace::Ccw,
+            cull_mode: None,
+            ..Default::default()
+        },
+        depth_stencil: None,
+        multisample: MultisampleState {
+            count: 4, // TODO this is a magic value!
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        },
+        multiview: None,
+    });
+
     let mut shared = SharedResources {
         game_texture: None,
         gui_texture: None,
+        gui_texture_resolve: None,
         normal_texture: None,
         depth_texture: None,
         model_texture: None,
 
+        game_post_processing_bind_group: None,
+        game_post_processing_texture: None,
+        game_antialiasing_bind_group: None,
+        game_antialiasing_texture: None,
+
+        first_combine_bind_group: None,
+        first_combine_texture: None,
+
         present_bind_group: None,
     };
 
-    let mut render = RenderResources {
+    let render = RenderResources {
         game_resources,
         gui_resources: Some(gui_resources),
         in_world_item_resources,
-        first_combine_resources,
         post_processing_resources,
     };
 
@@ -896,6 +921,7 @@ pub fn init_gpu_resources(
         intermediate_bind_group_layout,
         screenshot_pipeline,
         present_pipeline,
+        multisampled_present_pipeline,
 
         post_processing_pipeline,
         post_processing_bind_group_layout_uniform,
@@ -904,13 +930,17 @@ pub fn init_gpu_resources(
         fxaa_pipeline,
         fxaa_bind_group_layout,
 
+        combine_pipeline,
+        combine_bind_group_layout,
+
         filtering_sampler,
         nonfiltering_sampler,
         repeating_sampler,
+
         ssao_noise_map,
     };
 
-    shared.create(device, config, &mut render, &global);
+    shared.create(device, config, &global);
 
     (shared, render, global)
 }
@@ -1131,23 +1161,6 @@ fn make_fxaa_bind_group(
     })
 }
 
-pub struct SharedDescriptor<'a> {
-    pub filtering_sampler: &'a Sampler,
-    pub nonfiltering_sampler: &'a Sampler,
-    pub repeating_sampler: &'a Sampler,
-
-    pub game_texture: &'a TextureView,
-    pub gui_texture: &'a TextureView,
-    pub normal_texture: &'a TextureView,
-    pub depth_texture: &'a TextureView,
-    pub model_texture: &'a TextureView,
-
-    pub ssao_noise_map: &'a TextureView,
-
-    pub fxaa_bind_group_layout: &'a BindGroupLayout,
-    pub post_processing_bind_group_layout_textures: &'a BindGroupLayout,
-}
-
 #[derive(OptionGetter)]
 pub struct GameResources {
     pub instance_buffer: Buffer,
@@ -1155,99 +1168,6 @@ pub struct GameResources {
     pub uniform_buffer: Buffer,
     pub matrix_data_buffer: Buffer,
     pub bind_group: BindGroup,
-    #[getters(get)]
-    post_processing_bind_group: Option<BindGroup>,
-    #[getters(get)]
-    post_processing_texture: Option<(Texture, TextureView)>,
-    #[getters(get)]
-    antialiasing_bind_group: Option<BindGroup>,
-    #[getters(get)]
-    antialiasing_texture: Option<(Texture, TextureView)>,
-}
-
-impl GameResources {
-    pub fn create(
-        &mut self,
-        device: &Device,
-        config: &SurfaceConfiguration,
-        shared_descriptor: &SharedDescriptor,
-    ) {
-        self.post_processing_bind_group = Some(device.create_bind_group(&BindGroupDescriptor {
-            layout: shared_descriptor.post_processing_bind_group_layout_textures,
-            entries: &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: BindingResource::Sampler(shared_descriptor.filtering_sampler),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: BindingResource::Sampler(shared_descriptor.nonfiltering_sampler),
-                },
-                BindGroupEntry {
-                    binding: 2,
-                    resource: BindingResource::Sampler(shared_descriptor.repeating_sampler),
-                },
-                BindGroupEntry {
-                    binding: 3,
-                    resource: BindingResource::TextureView(shared_descriptor.game_texture),
-                },
-                BindGroupEntry {
-                    binding: 4,
-                    resource: BindingResource::TextureView(shared_descriptor.normal_texture),
-                },
-                BindGroupEntry {
-                    binding: 5,
-                    resource: BindingResource::TextureView(shared_descriptor.model_texture),
-                },
-                BindGroupEntry {
-                    binding: 6,
-                    resource: BindingResource::TextureView(shared_descriptor.ssao_noise_map),
-                },
-            ],
-            label: None,
-        }));
-        self.post_processing_texture = Some(create_texture_and_view(
-            device,
-            &TextureDescriptor {
-                label: None,
-                size: Extent3d {
-                    width: config.width,
-                    height: config.height,
-                    ..Default::default()
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: TextureDimension::D2,
-                format: config.format,
-                usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            },
-        ));
-
-        self.antialiasing_bind_group = Some(make_fxaa_bind_group(
-            device,
-            shared_descriptor.fxaa_bind_group_layout,
-            &self.post_processing_texture().1,
-            shared_descriptor.filtering_sampler,
-        ));
-        self.antialiasing_texture = Some(create_texture_and_view(
-            device,
-            &TextureDescriptor {
-                label: None,
-                size: Extent3d {
-                    width: config.width,
-                    height: config.height,
-                    ..Default::default()
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: TextureDimension::D2,
-                format: config.format,
-                usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            },
-        ));
-    }
 }
 
 #[derive(OptionGetter)]
@@ -1269,53 +1189,6 @@ pub struct GuiResources {
 }
 
 #[derive(OptionGetter)]
-pub struct CombineResources {
-    pub bind_group_layout: Rc<BindGroupLayout>,
-    pub pipeline: Rc<RenderPipeline>,
-    #[getters(get)]
-    bind_group: Option<BindGroup>,
-    #[getters(get)]
-    texture: Option<(Texture, TextureView)>,
-}
-
-impl CombineResources {
-    pub fn create(
-        &mut self,
-        device: &Device,
-        config: &SurfaceConfiguration,
-        shared_descriptor: &SharedDescriptor,
-        first_texture: &TextureView,
-        second_texture: &TextureView,
-    ) {
-        self.texture = Some(create_texture_and_view(
-            device,
-            &TextureDescriptor {
-                label: None,
-                size: Extent3d {
-                    width: config.width,
-                    height: config.height,
-                    ..Default::default()
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: TextureDimension::D2,
-                format: config.format,
-                usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            },
-        ));
-        self.bind_group = Some(make_combine_bind_group(
-            device,
-            &self.bind_group_layout,
-            first_texture,
-            shared_descriptor.filtering_sampler,
-            second_texture,
-            shared_descriptor.filtering_sampler,
-        ));
-    }
-}
-
-#[derive(OptionGetter)]
 pub struct PostProcessingResources {
     pub bind_group_uniform: BindGroup,
     pub uniform_buffer: Buffer,
@@ -1325,8 +1198,6 @@ pub struct RenderResources {
     pub game_resources: GameResources,
     pub gui_resources: Option<GuiResources>,
     pub in_world_item_resources: InWorldItemResources,
-
-    pub first_combine_resources: CombineResources,
 
     pub post_processing_resources: PostProcessingResources,
 }
@@ -1339,13 +1210,12 @@ pub struct GlobalResources {
     pub vertex_buffer: Buffer,
     pub index_buffer: Buffer,
 
-    pub ssao_noise_map: Texture,
-
     pub game_pipeline: RenderPipeline,
 
     pub intermediate_bind_group_layout: BindGroupLayout,
     pub screenshot_pipeline: RenderPipeline,
     pub present_pipeline: RenderPipeline,
+    pub multisampled_present_pipeline: RenderPipeline,
 
     pub post_processing_pipeline: RenderPipeline,
     pub post_processing_bind_group_layout_uniform: BindGroupLayout,
@@ -1354,9 +1224,14 @@ pub struct GlobalResources {
     pub fxaa_pipeline: RenderPipeline,
     pub fxaa_bind_group_layout: BindGroupLayout,
 
+    pub combine_pipeline: RenderPipeline,
+    pub combine_bind_group_layout: BindGroupLayout,
+
     pub filtering_sampler: Sampler,
     pub nonfiltering_sampler: Sampler,
     pub repeating_sampler: Sampler,
+
+    pub ssao_noise_map: Texture,
 }
 
 #[derive(OptionGetter)]
@@ -1366,11 +1241,27 @@ pub struct SharedResources {
     #[getters(get)]
     gui_texture: Option<(Texture, TextureView)>,
     #[getters(get)]
+    gui_texture_resolve: Option<(Texture, TextureView)>,
+    #[getters(get)]
     normal_texture: Option<(Texture, TextureView)>,
     #[getters(get)]
     depth_texture: Option<(Texture, TextureView)>,
     #[getters(get)]
     model_texture: Option<(Texture, TextureView)>,
+
+    #[getters(get)]
+    game_post_processing_bind_group: Option<BindGroup>,
+    #[getters(get)]
+    game_post_processing_texture: Option<(Texture, TextureView)>,
+    #[getters(get)]
+    game_antialiasing_bind_group: Option<BindGroup>,
+    #[getters(get)]
+    game_antialiasing_texture: Option<(Texture, TextureView)>,
+
+    #[getters(get)]
+    first_combine_bind_group: Option<BindGroup>,
+    #[getters(get)]
+    first_combine_texture: Option<(Texture, TextureView)>,
 
     #[getters(get)]
     present_bind_group: Option<BindGroup>,
@@ -1381,7 +1272,6 @@ impl SharedResources {
         &mut self,
         device: &Device,
         config: &SurfaceConfiguration,
-        render_resources: &mut RenderResources,
         global_resources: &GlobalResources,
     ) {
         let extent = Extent3d {
@@ -1404,6 +1294,19 @@ impl SharedResources {
             },
         ));
         self.gui_texture = Some(create_texture_and_view(
+            device,
+            &TextureDescriptor {
+                label: None,
+                size: extent,
+                mip_level_count: 1,
+                sample_count: 4,
+                dimension: TextureDimension::D2,
+                format: config.format,
+                usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            },
+        ));
+        self.gui_texture_resolve = Some(create_texture_and_view(
             device,
             &TextureDescriptor {
                 label: None,
@@ -1456,48 +1359,125 @@ impl SharedResources {
             },
         ));
 
-        let shared_descriptor = SharedDescriptor {
-            filtering_sampler: &global_resources.filtering_sampler,
-            nonfiltering_sampler: &global_resources.nonfiltering_sampler,
-            repeating_sampler: &global_resources.repeating_sampler,
-            game_texture: &self.game_texture().1,
-            gui_texture: &self.gui_texture().1,
-            normal_texture: &self.normal_texture().1,
-            depth_texture: &self.depth_texture().1,
-            model_texture: &self.model_texture().1,
-            ssao_noise_map: &global_resources
-                .ssao_noise_map
-                .create_view(&TextureViewDescriptor::default()),
-            fxaa_bind_group_layout: &global_resources.fxaa_bind_group_layout,
-            post_processing_bind_group_layout_textures: &global_resources
-                .post_processing_bind_group_layout_textures,
-        };
-
-        render_resources
-            .game_resources
-            .create(device, config, &shared_descriptor);
-
-        render_resources.first_combine_resources.create(
-            device,
-            config,
-            &shared_descriptor,
-            &render_resources.game_resources.antialiasing_texture().1,
-            &self.gui_texture().1,
+        self.game_post_processing_bind_group = Some(
+            device.create_bind_group(&BindGroupDescriptor {
+                layout: &global_resources.post_processing_bind_group_layout_textures,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: BindingResource::Sampler(&global_resources.filtering_sampler),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: BindingResource::Sampler(&global_resources.nonfiltering_sampler),
+                    },
+                    BindGroupEntry {
+                        binding: 2,
+                        resource: BindingResource::Sampler(&global_resources.repeating_sampler),
+                    },
+                    BindGroupEntry {
+                        binding: 3,
+                        resource: BindingResource::TextureView(&self.game_texture().1),
+                    },
+                    BindGroupEntry {
+                        binding: 4,
+                        resource: BindingResource::TextureView(&self.normal_texture().1),
+                    },
+                    BindGroupEntry {
+                        binding: 5,
+                        resource: BindingResource::TextureView(&self.model_texture().1),
+                    },
+                    BindGroupEntry {
+                        binding: 6,
+                        resource: BindingResource::TextureView(
+                            &global_resources
+                                .ssao_noise_map
+                                .create_view(&TextureViewDescriptor::default()),
+                        ),
+                    },
+                ],
+                label: None,
+            }),
         );
+        self.game_post_processing_texture = Some(create_texture_and_view(
+            device,
+            &TextureDescriptor {
+                label: None,
+                size: Extent3d {
+                    width: config.width,
+                    height: config.height,
+                    ..Default::default()
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: config.format,
+                usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            },
+        ));
+
+        self.game_antialiasing_bind_group = Some(make_fxaa_bind_group(
+            device,
+            &global_resources.fxaa_bind_group_layout,
+            &self.game_post_processing_texture().1,
+            &global_resources.filtering_sampler,
+        ));
+        self.game_antialiasing_texture = Some(create_texture_and_view(
+            device,
+            &TextureDescriptor {
+                label: None,
+                size: Extent3d {
+                    width: config.width,
+                    height: config.height,
+                    ..Default::default()
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: config.format,
+                usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            },
+        ));
+
+        self.first_combine_texture = Some(create_texture_and_view(
+            device,
+            &TextureDescriptor {
+                label: None,
+                size: Extent3d {
+                    width: config.width,
+                    height: config.height,
+                    ..Default::default()
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: config.format,
+                usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            },
+        ));
+        self.first_combine_bind_group = Some(make_combine_bind_group(
+            device,
+            &global_resources.combine_bind_group_layout,
+            &self.game_antialiasing_texture().1,
+            &global_resources.filtering_sampler,
+            &self.gui_texture_resolve().1,
+            &global_resources.filtering_sampler,
+        ));
 
         self.present_bind_group = Some(device.create_bind_group(&BindGroupDescriptor {
             label: None,
-            layout: &global_resources.fxaa_bind_group_layout,
+            layout: &global_resources.intermediate_bind_group_layout,
             entries: &[
                 BindGroupEntry {
                     binding: 0,
-                    resource: BindingResource::TextureView(
-                        &render_resources.first_combine_resources.texture().1,
-                    ),
+                    resource: BindingResource::TextureView(&self.first_combine_texture().1),
                 },
                 BindGroupEntry {
                     binding: 1,
-                    resource: BindingResource::Sampler(&global_resources.filtering_sampler),
+                    resource: BindingResource::Sampler(&global_resources.nonfiltering_sampler),
                 },
             ],
         }));
@@ -1538,7 +1518,6 @@ impl Gpu {
     pub fn resize(
         &mut self,
         shared_resources: &mut SharedResources,
-        render_resources: &mut RenderResources,
         global_resources: &GlobalResources,
         size: PhysicalSize<u32>,
     ) {
@@ -1546,12 +1525,7 @@ impl Gpu {
         self.config.height = size.height;
 
         self.surface.configure(&self.device, &self.config);
-        shared_resources.create(
-            &self.device,
-            &self.config,
-            render_resources,
-            global_resources,
-        );
+        shared_resources.create(&self.device, &self.config, global_resources);
     }
 
     pub async fn new(window: Arc<Window>, vsync: bool) -> Self {

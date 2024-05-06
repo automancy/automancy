@@ -694,11 +694,7 @@ impl Renderer {
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Game Post Processing Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self
-                        .render_resources
-                        .game_resources
-                        .post_processing_texture()
-                        .1,
+                    view: &self.shared_resources.game_post_processing_texture().1,
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(Color::BLACK),
@@ -713,9 +709,7 @@ impl Renderer {
             render_pass.set_pipeline(&self.global_resources.post_processing_pipeline);
             render_pass.set_bind_group(
                 0,
-                self.render_resources
-                    .game_resources
-                    .post_processing_bind_group(),
+                self.shared_resources.game_post_processing_bind_group(),
                 &[],
             );
             render_pass.set_bind_group(
@@ -733,11 +727,7 @@ impl Renderer {
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Game Antialiasing Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self
-                        .render_resources
-                        .game_resources
-                        .antialiasing_texture()
-                        .1,
+                    view: &self.shared_resources.game_antialiasing_texture().1,
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(Color::BLACK),
@@ -752,9 +742,7 @@ impl Renderer {
             render_pass.set_pipeline(&self.global_resources.fxaa_pipeline);
             render_pass.set_bind_group(
                 0,
-                self.render_resources
-                    .game_resources
-                    .antialiasing_bind_group(),
+                self.shared_resources.game_antialiasing_bind_group(),
                 &[],
             );
             render_pass.draw(0..3, 0..1);
@@ -764,10 +752,10 @@ impl Renderer {
         {
             let surface = SurfaceInfo {
                 format: self.gpu.config.format,
-                sample_count: 1,
+                sample_count: 4,
                 color_attachments: vec![Some(RenderPassColorAttachment {
                     view: &self.shared_resources.gui_texture().1,
-                    resolve_target: None,
+                    resolve_target: Some(&self.shared_resources.gui_texture_resolve().1),
                     ops: Operations {
                         load: LoadOp::Clear(Color::TRANSPARENT),
                         store: StoreOp::Store,
@@ -813,7 +801,7 @@ impl Renderer {
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Combine Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.render_resources.first_combine_resources.texture().1,
+                    view: &self.shared_resources.first_combine_texture().1,
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(Color::BLACK),
@@ -825,12 +813,8 @@ impl Renderer {
                 timestamp_writes: None,
             });
 
-            render_pass.set_pipeline(&self.render_resources.first_combine_resources.pipeline);
-            render_pass.set_bind_group(
-                0,
-                self.render_resources.first_combine_resources.bind_group(),
-                &[],
-            );
+            render_pass.set_pipeline(&self.global_resources.combine_pipeline);
+            render_pass.set_bind_group(0, self.shared_resources.first_combine_bind_group(), &[]);
             render_pass.draw(0..3, 0..1)
         }
 

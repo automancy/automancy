@@ -416,7 +416,7 @@ pub fn textbox(text: &mut String, placeholder: &str) -> Response<TextBoxResponse
     let mut res = TextBox::new(label_text(text.as_str()), placeholder.to_string()).show();
 
     if let Some(new) = res.text.take() {
-        *text = new.clone()
+        text.clone_from(&new)
     }
 
     res

@@ -6,7 +6,7 @@ use automancy_defs::{
     math::Float,
 };
 use yakui::{
-    column,
+    column, constrained,
     input::MouseButton,
     widget::{EventContext, LayoutContext, Widget},
     Alignment, Dim2,
@@ -32,28 +32,22 @@ const SCROLL_RADIUS: f32 = 4.0;
 #[non_exhaustive]
 pub struct Scrollable {
     pub direction: Option<ScrollDirection>,
-    pub max_size: Float,
 }
 
 impl Scrollable {
     pub fn none() -> Self {
-        Scrollable {
-            direction: None,
-            max_size: 0.0,
-        }
+        Scrollable { direction: None }
     }
 
-    fn vertical(max_size: Float) -> Self {
+    fn vertical() -> Self {
         Scrollable {
             direction: Some(ScrollDirection::Y),
-            max_size,
         }
     }
 
-    fn horizontal(max_size: Float) -> Self {
+    fn horizontal() -> Self {
         Scrollable {
             direction: Some(ScrollDirection::X),
-            max_size,
         }
     }
 
@@ -153,13 +147,7 @@ impl Widget for ScrollableWidget {
             canvas_size = canvas_size.max(child_size);
         }
 
-        let size = constraints
-            .constrain(canvas_size)
-            .min(match self.props.direction {
-                Some(ScrollDirection::Y) => Vec2::new(f32::INFINITY, self.props.max_size),
-                Some(ScrollDirection::X) => Vec2::new(self.props.max_size, f32::INFINITY),
-                None => Vec2::INFINITY,
-            });
+        let size = constraints.constrain(canvas_size);
 
         self.canvas_size.set(canvas_size);
         self.size.set(size);
@@ -281,9 +269,13 @@ impl Widget for ScrollableWidget {
 
 pub fn scroll_vertical(max_height: Float, children: impl FnOnce()) {
     row(|| {
-        let res = Scrollable::vertical(max_height).show(|| {
-            pad_x(0.0, SCROLL_SIZE).show(children);
+        let mut res = None;
+        constrained(Constraints::loose(vec2(f32::INFINITY, max_height)), || {
+            res = Some(Scrollable::vertical().show(|| {
+                pad_x(0.0, SCROLL_SIZE).show(children);
+            }));
         });
+        let res = res.unwrap();
 
         let ratio = res.size / res.canvas_size;
         let diff = res.canvas_size - res.size;
@@ -313,9 +305,13 @@ pub fn scroll_vertical(max_height: Float, children: impl FnOnce()) {
 
 pub fn scroll_horizontal(max_width: Float, children: impl FnOnce()) {
     column(|| {
-        let res = Scrollable::horizontal(max_width).show(|| {
-            pad_y(0.0, SCROLL_SIZE).show(children);
+        let mut res = None;
+        constrained(Constraints::loose(vec2(max_width, f32::INFINITY)), || {
+            res = Some(Scrollable::horizontal().show(|| {
+                pad_y(0.0, SCROLL_SIZE).show(children);
+            }));
         });
+        let res = res.unwrap();
 
         let ratio = res.size / res.canvas_size;
         let diff = res.canvas_size - res.size;

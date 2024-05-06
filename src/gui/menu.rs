@@ -173,8 +173,11 @@ pub fn map_menu(state: &mut GameState) {
                                             }
                                         }
                                     } else if button(map_name.as_str()).clicked {
-                                        *state.gui_state.text_field.get(TextField::MapRenaming) =
-                                            map_name.clone();
+                                        state
+                                            .gui_state
+                                            .text_field
+                                            .get(TextField::MapRenaming)
+                                            .clone_from(&map_name);
                                         state.gui_state.renaming_map = Some(map_name.clone());
                                     }
                                 });
