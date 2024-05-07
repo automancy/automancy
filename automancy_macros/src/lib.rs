@@ -21,8 +21,8 @@ fn parse_meta(attr: &Attribute) -> Vec<String> {
     .unwrap_or_else(|| panic!("should be either an identifier or a string in quotes"))
 }
 
-mod cell_getter;
 mod ids;
+mod option_getter;
 
 #[proc_macro_derive(IdReg, attributes(name, namespace))]
 pub fn derive_id_reg(item: TokenStream) -> TokenStream {
@@ -31,5 +31,5 @@ pub fn derive_id_reg(item: TokenStream) -> TokenStream {
 
 #[proc_macro_derive(OptionGetter, attributes(getters))]
 pub fn derive_option_getter(item: TokenStream) -> TokenStream {
-    cell_getter::derive_option_getter(item)
+    option_getter::derive_option_getter(item)
 }
