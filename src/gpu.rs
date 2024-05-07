@@ -1161,7 +1161,6 @@ fn make_fxaa_bind_group(
     })
 }
 
-#[derive(OptionGetter)]
 pub struct GameResources {
     pub instance_buffer: Buffer,
     pub indirect_buffer: Buffer,
@@ -1170,7 +1169,6 @@ pub struct GameResources {
     pub bind_group: BindGroup,
 }
 
-#[derive(OptionGetter)]
 pub struct InWorldItemResources {
     pub instance_buffer: Buffer,
     pub indirect_buffer: Buffer,
@@ -1180,7 +1178,6 @@ pub struct InWorldItemResources {
     pub pipeline: RenderPipeline,
 }
 
-#[derive(OptionGetter)]
 pub struct GuiResources {
     pub instance_buffer: Buffer,
     pub uniform_buffer: Buffer,
@@ -1188,7 +1185,6 @@ pub struct GuiResources {
     pub bind_group: BindGroup,
 }
 
-#[derive(OptionGetter)]
 pub struct PostProcessingResources {
     pub bind_group_uniform: BindGroup,
     pub uniform_buffer: Buffer,
