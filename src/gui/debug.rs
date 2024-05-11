@@ -31,7 +31,9 @@ pub fn debugger(state: &GameState) {
     let mut pos = pos_state.get();
     movable(&mut pos, || {
         window(
-            resource_man.translates.gui[&resource_man.registry.gui_ids.debug_menu].to_string(),
+            resource_man
+                .gui_str(&resource_man.registry.gui_ids.debug_menu)
+                .to_string(),
             || {
                 column(|| {
                     label(&format!("FPS: {fps:.1}"));

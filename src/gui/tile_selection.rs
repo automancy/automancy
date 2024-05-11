@@ -262,11 +262,15 @@ pub fn tile_selections(
                             .and_then(|id| state.resource_man.registry.categories[&id].item)
                         {
                             label(&format(
-                                state.resource_man.translates.gui[&state
+                                state
                                     .resource_man
-                                    .registry
-                                    .gui_ids
-                                    .lbl_cannot_place_missing_item]
+                                    .gui_str(
+                                        &state
+                                            .resource_man
+                                            .registry
+                                            .gui_ids
+                                            .lbl_cannot_place_missing_item,
+                                    )
                                     .as_str(),
                                 &[&state.resource_man.item_name(&item)],
                             ));

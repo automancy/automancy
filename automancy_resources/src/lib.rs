@@ -246,6 +246,13 @@ impl ResourceManager {
         }
     }
 
+    pub fn gui_str(&self, id: &Id) -> SharedStr {
+        match self.translates.gui.get(id) {
+            Some(name) => name.clone(),
+            None => self.translates.unnamed.clone(),
+        }
+    }
+
     pub fn research_str(&self, id: &Id) -> SharedStr {
         match self.translates.research.get(id) {
             Some(name) => name.clone(),

@@ -12,19 +12,23 @@ use super::{button, centered_column, centered_row, label, textbox, window};
 
 pub fn invalid_name_popup(state: &mut GameState) {
     window(
-        state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.invalid_name]
+        state
+            .resource_man
+            .gui_str(&state.resource_man.registry.gui_ids.invalid_name)
             .to_string(),
         || {
             centered_column(|| {
                 label(
-                    state.resource_man.translates.gui
-                        [&state.resource_man.registry.gui_ids.lbl_pick_another_name]
+                    state
+                        .resource_man
+                        .gui_str(&state.resource_man.registry.gui_ids.lbl_pick_another_name)
                         .as_str(),
                 );
 
                 if button(
-                    state.resource_man.translates.gui
-                        [&state.resource_man.registry.gui_ids.btn_confirm]
+                    state
+                        .resource_man
+                        .gui_str(&state.resource_man.registry.gui_ids.btn_confirm)
                         .as_str(),
                 )
                 .clicked
@@ -40,19 +44,23 @@ pub fn map_delete_popup(state: &mut GameState, map_name: &str) {
     let mut dirty = false;
 
     window(
-        state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.delete_map]
+        state
+            .resource_man
+            .gui_str(&state.resource_man.registry.gui_ids.delete_map)
             .to_string(),
         || {
             centered_column(|| {
                 label(
-                    state.resource_man.translates.gui
-                        [&state.resource_man.registry.gui_ids.lbl_delete_map_confirm]
+                    state
+                        .resource_man
+                        .gui_str(&state.resource_man.registry.gui_ids.lbl_delete_map_confirm)
                         .as_str(),
                 );
 
                 if button(
-                    state.resource_man.translates.gui
-                        [&state.resource_man.registry.gui_ids.btn_confirm]
+                    state
+                        .resource_man
+                        .gui_str(&state.resource_man.registry.gui_ids.btn_confirm)
                         .as_str(),
                 )
                 .clicked
@@ -64,8 +72,9 @@ pub fn map_delete_popup(state: &mut GameState, map_name: &str) {
                 }
 
                 if button(
-                    state.resource_man.translates.gui
-                        [&state.resource_man.registry.gui_ids.btn_cancel]
+                    state
+                        .resource_man
+                        .gui_str(&state.resource_man.registry.gui_ids.btn_cancel)
                         .as_str(),
                 )
                 .clicked
@@ -84,7 +93,9 @@ pub fn map_delete_popup(state: &mut GameState, map_name: &str) {
 /// Draws the map creation popup.
 pub fn map_create_popup(state: &mut GameState) {
     window(
-        state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.create_map]
+        state
+            .resource_man
+            .gui_str(&state.resource_man.registry.gui_ids.create_map)
             .to_string(),
         || {
             centered_column(|| {
@@ -99,8 +110,9 @@ pub fn map_create_popup(state: &mut GameState) {
                 });
 
                 if button(
-                    &state.resource_man.translates.gui
-                        [&state.resource_man.registry.gui_ids.btn_confirm],
+                    &state
+                        .resource_man
+                        .gui_str(&state.resource_man.registry.gui_ids.btn_confirm),
                 )
                 .clicked
                 {
@@ -117,8 +129,9 @@ pub fn map_create_popup(state: &mut GameState) {
                 }
 
                 if button(
-                    state.resource_man.translates.gui
-                        [&state.resource_man.registry.gui_ids.btn_cancel]
+                    state
+                        .resource_man
+                        .gui_str(&state.resource_man.registry.gui_ids.btn_cancel)
                         .as_str(),
                 )
                 .clicked

@@ -8,7 +8,7 @@ use ractor::ActorRef;
 use tokio::runtime::Runtime;
 use tokio::task::JoinHandle;
 
-use automancy_resources::types::function::RhaiDataMap;
+use automancy_resources::types::function::{RhaiDataMap, TileConfigUnit};
 use automancy_resources::ResourceManager;
 use automancy_resources::{kira::manager::AudioManager, types::font::Font};
 use yakui::ManagedTextureId;
@@ -41,7 +41,6 @@ pub struct GameState {
     pub options: Options,
     pub resource_man: Arc<ResourceManager>,
     pub input_handler: InputHandler,
-    pub input_hints: Vec<Vec<ActionType>>,
     pub loop_store: EventLoopStorage,
     pub tokio: Runtime,
     pub game: ActorRef<GameSystemMessage>,
@@ -53,9 +52,12 @@ pub struct GameState {
     pub renderer: Option<Renderer>,
     pub screenshotting: bool,
 
-    pub game_handle: Option<JoinHandle<()>>,
-    pub puzzle_state: Option<(RhaiDataMap, bool)>,
     pub logo: Option<ManagedTextureId>,
+    pub input_hints: Vec<Vec<ActionType>>,
+    pub puzzle_state: Option<(RhaiDataMap, bool)>,
+    pub tile_config_ui_cache: Vec<TileConfigUnit>,
+
+    pub game_handle: Option<JoinHandle<()>>,
 
     pub vertices_init: Option<Vec<Vertex>>,
     pub indices_init: Option<Vec<u16>>,

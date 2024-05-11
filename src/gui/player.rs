@@ -50,8 +50,9 @@ fn hex_to_board_pixels(coord: TileCoord) -> Vec2 {
 
 fn player_inventory(state: &mut GameState, game_data: &mut DataMap) {
     heading(
-        state.resource_man.translates.gui
-            [&state.resource_man.registry.gui_ids.player_inventory_title]
+        state
+            .resource_man
+            .gui_str(&state.resource_man.registry.gui_ids.player_inventory_title)
             .as_str(),
     );
 
@@ -95,7 +96,9 @@ fn player_inventory(state: &mut GameState, game_data: &mut DataMap) {
 
 fn research_selection(state: &mut GameState, game_data: &mut DataMap) {
     heading(
-        state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.research_menu_title]
+        state
+            .resource_man
+            .gui_str(&state.resource_man.registry.gui_ids.research_menu_title)
             .as_str(),
     );
 
@@ -181,8 +184,9 @@ fn current_research(state: &mut GameState, game_data: &mut DataMap) {
         });
 
         if let Some(stacks) = &research.required_items {
-            let submit_text = &state.resource_man.translates.gui
-                [&state.resource_man.registry.gui_ids.research_submit_items];
+            let submit_text = &state
+                .resource_man
+                .gui_str(&state.resource_man.registry.gui_ids.research_submit_items);
 
             let submit_button = if !already_filled {
                 button(submit_text)
@@ -443,7 +447,9 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
         let mut pos = state.gui_state.player_ui_position;
         movable(&mut pos, || {
             window_box(
-                state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.player_menu]
+                state
+                    .resource_man
+                    .gui_str(&state.resource_man.registry.gui_ids.player_menu)
                     .to_string(),
                 || {
                     column(|| {

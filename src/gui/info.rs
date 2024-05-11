@@ -135,7 +135,9 @@ pub fn info_ui(state: &mut GameState) {
         Absolute::new(Alignment::TOP_RIGHT, Pivot::TOP_RIGHT, Dim2::ZERO).show(|| {
             Pad::all(PADDING_LARGE).show(|| {
                 window(
-                    state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.info]
+                    state
+                        .resource_man
+                        .gui_str(&state.resource_man.registry.gui_ids.info)
                         .to_string(),
                     || {
                         colored_label(&state.camera.pointing_at.to_string(), colors::DARK_GRAY);

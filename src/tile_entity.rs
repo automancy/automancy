@@ -7,9 +7,15 @@ use rhai::{Dynamic, Scope, INT};
 
 use automancy_defs::coord::TileCoord;
 use automancy_defs::id::Id;
-use automancy_resources::data::stack::{ItemAmount, ItemStack};
-use automancy_resources::data::{Data, DataMap};
 use automancy_resources::types::function::{ResultType, RhaiDataMap, TransactionResultType};
+use automancy_resources::{
+    data::stack::{ItemAmount, ItemStack},
+    types::function::TileConfigUnit,
+};
+use automancy_resources::{
+    data::{Data, DataMap},
+    types::function::TileConfigUnitTag,
+};
 use automancy_resources::{rhai_call_options, rhai_log_err, ResourceManager};
 
 use crate::game::{GameSystemMessage, TickUnit};
@@ -36,6 +42,8 @@ pub struct TileEntityState {
 
     /// Rhai scope
     scope: Option<Scope<'static>>,
+
+    ui_rerender: bool,
 }
 
 impl TileEntityState {
@@ -46,6 +54,8 @@ impl TileEntityState {
             data: Default::default(),
 
             scope: Default::default(),
+
+            ui_rerender: true,
         }
     }
 }
@@ -77,6 +87,7 @@ pub enum TileEntityMsg {
     GetData(RpcReplyPort<DataMap>),
     GetDataValue(Id, RpcReplyPort<Option<Data>>),
     GetDataWithCoord(RpcReplyPort<(TileCoord, DataMap)>),
+    GetTileConfigUi(RpcReplyPort<Option<Vec<TileConfigUnit>>>),
 }
 
 impl TileEntity {
@@ -396,14 +407,21 @@ impl Actor for TileEntity {
             }
             SetData(data) => {
                 state.data = RhaiDataMap::from_data_map(data);
+                state.ui_rerender = true;
             }
             SetDataValue(key, value) => {
                 state.data.set(key, value);
+                state.ui_rerender = true;
             }
             TakeData(reply) => {
                 reply
                     .send(mem::take(&mut state.data).to_data_map())
                     .unwrap();
+                state.ui_rerender = true;
+            }
+            RemoveData(key) => {
+                state.data.remove(key);
+                state.ui_rerender = true;
             }
             GetData(reply) => {
                 reply.send(state.data.clone().to_data_map()).unwrap();
@@ -415,9 +433,6 @@ impl Actor for TileEntity {
                 reply
                     .send((self.coord, state.data.clone().to_data_map()))
                     .unwrap();
-            }
-            RemoveData(key) => {
-                state.data.remove(key);
             }
             ExtractRequest {
                 requested_from_id,
@@ -469,6 +484,130 @@ impl Actor for TileEntity {
                     }
                 }
             }
+            GetTileConfigUi(reply) => {
+                if !state.ui_rerender {
+                    reply.send(None).unwrap();
+                    return Ok(());
+                }
+
+                let tile = self.resource_man.registry.tiles.get(&self.id).unwrap();
+
+                if let Some((ast, default_scope, _)) = tile
+                    .function
+                    .as_ref()
+                    .and_then(|v| self.resource_man.functions.get(v))
+                {
+                    let scope = state
+                        .scope
+                        .get_or_insert_with(|| default_scope.clone_visible());
+
+                    let data = mem::take(&mut state.data);
+                    let mut rhai_state = Dynamic::from(data);
+
+                    let result = self.resource_man.engine.call_fn_with_options::<Dynamic>(
+                        rhai_call_options(&mut rhai_state),
+                        scope,
+                        ast,
+                        "tile_config",
+                        (rhai::Map::from([
+                            ("coord".into(), Dynamic::from(self.coord)),
+                            ("id".into(), Dynamic::from_int(self.id.into())),
+                        ]),),
+                    );
+
+                    state.data = rhai_state.take().cast::<RhaiDataMap>();
+
+                    match result {
+                        Ok(result) => {
+                            if let Some(result) = result.try_cast::<rhai::Array>() {
+                                let mut r = vec![];
+
+                                for ui in result
+                                    .into_iter()
+                                    .flat_map(|v: Dynamic| v.try_cast::<rhai::Array>())
+                                {
+                                    let Some(tag) = ui
+                                        .first()
+                                        .and_then(|v| v.clone().try_cast::<TileConfigUnitTag>())
+                                    else {
+                                        continue;
+                                    };
+
+                                    match tag {
+                                        TileConfigUnitTag::Amount => {
+                                            let Some(id) =
+                                                ui.get(1).and_then(|v| v.clone().try_cast::<Id>())
+                                            else {
+                                                continue;
+                                            };
+                                            let Some(label_id) =
+                                                ui.get(2).and_then(|v| v.clone().try_cast::<Id>())
+                                            else {
+                                                continue;
+                                            };
+                                            let Some(max_amount) = ui
+                                                .get(3)
+                                                .and_then(|v| v.clone().try_cast::<ItemAmount>())
+                                            else {
+                                                continue;
+                                            };
+
+                                            r.push(TileConfigUnit::Amount {
+                                                id,
+                                                label_id,
+                                                max_amount,
+                                            });
+                                        }
+                                        TileConfigUnitTag::SelectableId => {
+                                            let Some(id) =
+                                                ui.get(1).and_then(|v| v.clone().try_cast::<Id>())
+                                            else {
+                                                continue;
+                                            };
+                                            let Some(label_id) =
+                                                ui.get(2).and_then(|v| v.clone().try_cast::<Id>())
+                                            else {
+                                                continue;
+                                            };
+                                            let Some(list) = ui
+                                                .get(3)
+                                                .and_then(|v| v.clone().try_cast::<rhai::Array>())
+                                            else {
+                                                continue;
+                                            };
+
+                                            let list = list
+                                                .into_iter()
+                                                .flat_map(|v| v.try_cast::<rhai::Array>())
+                                                .flat_map(|v| {
+                                                    v.first()
+                                                        .and_then(|v| v.clone().try_cast::<Id>())
+                                                        .zip(v.get(1).and_then(|v| {
+                                                            v.clone().into_string().ok()
+                                                        }))
+                                                })
+                                                .collect::<Vec<_>>();
+
+                                            r.push(TileConfigUnit::SelectableId {
+                                                id,
+                                                label_id,
+                                                list,
+                                            });
+                                        }
+                                    }
+                                }
+
+                                reply.send(Some(r)).unwrap();
+                            } else {
+                                reply.send(None).unwrap();
+                            }
+                        }
+                        Err(_) => {
+                            reply.send(None).unwrap();
+                        }
+                    }
+                }
+            }
         }
 
         Ok(())
@@ -483,6 +622,7 @@ fn send_to_tile(state: &mut TileEntityState, coord: TileCoord, message: TileEnti
         Ok(_) => {}
         Err(_) => {
             state.data = Default::default();
+            state.ui_rerender = true;
         }
     }
 }

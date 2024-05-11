@@ -7,7 +7,7 @@ use rhai::{Dynamic, ImmutableString, Scope};
 use automancy_defs::id::{Id, IdRaw};
 use automancy_defs::log;
 
-use crate::data::{Data, DataMap};
+use crate::data::{stack::ItemAmount, Data, DataMap};
 use crate::{load_recursively, ResourceManager, FUNCTION_EXT};
 
 #[derive(Debug, Clone, Copy)]
@@ -21,6 +21,26 @@ pub enum TransactionResultType {
     PassOn,
     Proxy,
     Consume,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TileConfigUnitTag {
+    Amount,
+    SelectableId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TileConfigUnit {
+    Amount {
+        id: Id,
+        label_id: Id,
+        max_amount: ItemAmount,
+    },
+    SelectableId {
+        id: Id,
+        label_id: Id,
+        list: Vec<(Id, String)>,
+    },
 }
 
 #[derive(Default, Debug, Clone)]

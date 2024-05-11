@@ -29,14 +29,14 @@ pub struct TranslateRaw {
 pub struct Translate {
     pub none: SharedStr,
     pub unnamed: SharedStr,
-    pub items: HashMap<Id, SharedStr>,
-    pub tiles: HashMap<Id, SharedStr>,
-    pub categories: HashMap<Id, SharedStr>,
-    pub scripts: HashMap<Id, SharedStr>,
-    pub gui: HashMap<Id, SharedStr>,
+    pub(crate) items: HashMap<Id, SharedStr>,
+    pub(crate) tiles: HashMap<Id, SharedStr>,
+    pub(crate) categories: HashMap<Id, SharedStr>,
+    pub(crate) scripts: HashMap<Id, SharedStr>,
+    pub(crate) gui: HashMap<Id, SharedStr>,
+    pub(crate) error: HashMap<Id, SharedStr>,
+    pub(crate) research: HashMap<Id, SharedStr>,
     pub keys: HashMap<Id, SharedStr>,
-    pub error: HashMap<Id, SharedStr>,
-    pub research: HashMap<Id, SharedStr>,
 }
 
 impl ResourceManager {

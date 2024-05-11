@@ -47,11 +47,11 @@ pub fn clamp_percentage_to_viewport(size: Vec2, mut pos: Vec2, viewport: Rect) -
 /// Draws a search bar.
 pub fn searchable_id(
     ids: &[Id],
+    names: &[String],
     new_id: &mut Option<Id>,
     field: TextField,
     hint_text: String,
-    to_string: &'static impl Fn(&GameState, &Id) -> String,
-    draw_item: &'static impl Fn(&mut GameState, &Id),
+    draw: &'static impl Fn(&mut GameState, &Id, &str),
     state: &mut GameState,
 ) {
     textbox(state.gui_state.text_field.get(field), &hint_text);
@@ -62,9 +62,10 @@ pub fn searchable_id(
                 let text = state.gui_state.text_field.get(field).clone();
                 let mut filtered = ids
                     .iter()
-                    .flat_map(|id| {
-                        let name = to_string(state, id);
-                        let score = state.gui_state.text_field.fuse.fuzzy_match(&name, &text);
+                    .enumerate()
+                    .flat_map(|(idx, id)| {
+                        let name = &names[idx];
+                        let score = state.gui_state.text_field.fuse.fuzzy_match(name, &text);
 
                         if score.unwrap_or(0) < (name.len() / 2) as i64 {
                             None
@@ -81,9 +82,9 @@ pub fn searchable_id(
                 ids.to_vec()
             };
 
-            for id in ids {
-                radio(new_id, Some(id), || {
-                    draw_item(state, &id);
+            for (idx, id) in ids.iter().enumerate() {
+                radio(new_id, Some(*id), || {
+                    draw(state, id, &names[idx]);
                 });
             }
         });

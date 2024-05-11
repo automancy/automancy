@@ -27,7 +27,9 @@ pub fn main_menu(state: &mut GameState, event_loop: &ActiveEventLoop) -> anyhow:
             image(state.logo.unwrap(), vec2(128.0, 128.0));
 
             if button(
-                state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.btn_play]
+                state
+                    .resource_man
+                    .gui_str(&state.resource_man.registry.gui_ids.btn_play)
                     .as_str(),
             )
             .clicked
@@ -37,7 +39,9 @@ pub fn main_menu(state: &mut GameState, event_loop: &ActiveEventLoop) -> anyhow:
             };
 
             if button(
-                state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.btn_options]
+                state
+                    .resource_man
+                    .gui_str(&state.resource_man.registry.gui_ids.btn_options)
                     .as_str(),
             )
             .clicked
@@ -46,7 +50,9 @@ pub fn main_menu(state: &mut GameState, event_loop: &ActiveEventLoop) -> anyhow:
             };
 
             if button(
-                state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.btn_fedi]
+                state
+                    .resource_man
+                    .gui_str(&state.resource_man.registry.gui_ids.btn_fedi)
                     .as_str(),
             )
             .clicked
@@ -55,7 +61,9 @@ pub fn main_menu(state: &mut GameState, event_loop: &ActiveEventLoop) -> anyhow:
             }
 
             if button(
-                state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.btn_source]
+                state
+                    .resource_man
+                    .gui_str(&state.resource_man.registry.gui_ids.btn_source)
                     .as_str(),
             )
             .clicked
@@ -64,7 +72,9 @@ pub fn main_menu(state: &mut GameState, event_loop: &ActiveEventLoop) -> anyhow:
             }
 
             if button(
-                state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.btn_exit]
+                state
+                    .resource_man
+                    .gui_str(&state.resource_man.registry.gui_ids.btn_exit)
                     .as_str(),
             )
             .clicked
@@ -88,7 +98,9 @@ pub fn pause_menu(state: &mut GameState) {
     window("Game Paused".to_string(), || {
         centered_column(|| {
             if button(
-                state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.btn_unpause]
+                state
+                    .resource_man
+                    .gui_str(&state.resource_man.registry.gui_ids.btn_unpause)
                     .as_str(),
             )
             .clicked
@@ -97,7 +109,9 @@ pub fn pause_menu(state: &mut GameState) {
             };
 
             if button(
-                state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.btn_options]
+                state
+                    .resource_man
+                    .gui_str(&state.resource_man.registry.gui_ids.btn_options)
                     .as_str(),
             )
             .clicked
@@ -106,7 +120,9 @@ pub fn pause_menu(state: &mut GameState) {
             };
 
             if button(
-                state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.btn_exit]
+                state
+                    .resource_man
+                    .gui_str(&state.resource_man.registry.gui_ids.btn_exit)
                     .as_str(),
             )
             .clicked
@@ -137,7 +153,9 @@ pub fn pause_menu(state: &mut GameState) {
 /// Draws the map loading menu.
 pub fn map_menu(state: &mut GameState) {
     window(
-        state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.load_map]
+        state
+            .resource_man
+            .gui_str(&state.resource_man.registry.gui_ids.load_map)
             .to_string(),
         || {
             centered_column(|| {
@@ -186,8 +204,9 @@ pub fn map_menu(state: &mut GameState) {
                                     if let Some(save_time) = save_time {
                                         label(&format_time(
                                             save_time,
-                                            &state.resource_man.translates.gui
-                                                [&state.resource_man.registry.gui_ids.time_fmt],
+                                            &state.resource_man.gui_str(
+                                                &state.resource_man.registry.gui_ids.time_fmt,
+                                            ),
                                         ));
                                     }
 
@@ -195,8 +214,11 @@ pub fn map_menu(state: &mut GameState) {
 
                                     row(|| {
                                         if button(
-                                            state.resource_man.translates.gui
-                                                [&state.resource_man.registry.gui_ids.btn_load]
+                                            state
+                                                .resource_man
+                                                .gui_str(
+                                                    &state.resource_man.registry.gui_ids.btn_load,
+                                                )
                                                 .as_str(),
                                         )
                                         .clicked
@@ -213,8 +235,11 @@ pub fn map_menu(state: &mut GameState) {
                                             state.gui_state.switch_screen(Screen::Ingame);
                                         }
                                         if button(
-                                            state.resource_man.translates.gui
-                                                [&state.resource_man.registry.gui_ids.btn_delete]
+                                            state
+                                                .resource_man
+                                                .gui_str(
+                                                    &state.resource_man.registry.gui_ids.btn_delete,
+                                                )
                                                 .as_str(),
                                         )
                                         .clicked
@@ -236,15 +261,17 @@ pub fn map_menu(state: &mut GameState) {
                 });
 
                 label(&format(
-                    &state.resource_man.translates.gui
-                        [&state.resource_man.registry.gui_ids.lbl_maps_loaded],
+                    &state
+                        .resource_man
+                        .gui_str(&state.resource_man.registry.gui_ids.lbl_maps_loaded),
                     &[&state.loop_store.map_infos_cache.len().to_string()],
                 ));
 
                 row(|| {
                     if button(
-                        state.resource_man.translates.gui
-                            [&state.resource_man.registry.gui_ids.btn_new_map]
+                        state
+                            .resource_man
+                            .gui_str(&state.resource_man.registry.gui_ids.btn_new_map)
                             .as_str(),
                     )
                     .clicked
@@ -253,8 +280,9 @@ pub fn map_menu(state: &mut GameState) {
                     }
 
                     if button(
-                        state.resource_man.translates.gui
-                            [&state.resource_man.registry.gui_ids.btn_cancel]
+                        state
+                            .resource_man
+                            .gui_str(&state.resource_man.registry.gui_ids.btn_cancel)
                             .as_str(),
                     )
                     .clicked
@@ -270,7 +298,10 @@ pub fn map_menu(state: &mut GameState) {
 /// Draws the options menu.
 pub fn options_menu(state: &mut GameState) {
     window(
-        state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.options].to_string(),
+        state
+            .resource_man
+            .gui_str(&state.resource_man.registry.gui_ids.options)
+            .to_string(),
         || {
             centered_column(|| {
                 row(|| {
@@ -404,8 +435,9 @@ pub fn options_menu(state: &mut GameState) {
 
                 Pad::vertical(PADDING_MEDIUM).show(|| {
                     if button(
-                        &state.resource_man.translates.gui
-                            [&state.resource_man.registry.gui_ids.btn_confirm],
+                        &state
+                            .resource_man
+                            .gui_str(&state.resource_man.registry.gui_ids.btn_confirm),
                     )
                     .clicked
                     {

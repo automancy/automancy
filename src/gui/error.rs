@@ -9,7 +9,9 @@ use super::{button, label, window};
 pub fn error_popup(state: &mut GameState) {
     if let Some(error) = state.resource_man.error_man.peek() {
         window(
-            state.resource_man.translates.gui[&state.resource_man.registry.gui_ids.error_popup]
+            state
+                .resource_man
+                .gui_str(&state.resource_man.registry.gui_ids.error_popup)
                 .to_string(),
             || {
                 label(&format!(
@@ -22,8 +24,9 @@ pub fn error_popup(state: &mut GameState) {
                     spacer(1);
 
                     if button(
-                        state.resource_man.translates.gui
-                            [&state.resource_man.registry.gui_ids.btn_confirm]
+                        state
+                            .resource_man
+                            .gui_str(&state.resource_man.registry.gui_ids.btn_confirm)
                             .as_str(),
                     )
                     .clicked

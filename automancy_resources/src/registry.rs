@@ -53,7 +53,6 @@ pub struct DataIds {
     pub storage_takeable: Id,
     pub inactive_model: Id,
     pub indirectional: Id,
-    pub max_amount: Id,
     pub linked: Id,
     pub linking: Id,
     pub default_tile: Id,
@@ -88,14 +87,15 @@ pub struct GuiIds {
     pub tile_config: Id,
 
     pub inventory_tip: Id,
+    pub search_tip: Id,
     pub search_script_tip: Id,
     pub search_item_tip: Id,
     pub direction_tip: Id,
     pub link_destination_tip: Id,
 
-    pub tile_config_script: Id,
     pub tile_config_script_info: Id,
-    pub tile_config_type: Id,
+    pub tile_config_script: Id,
+    pub tile_config_item_type: Id,
     pub tile_config_capacity: Id,
     pub tile_config_direction: Id,
 
