@@ -329,18 +329,14 @@ pub fn tile_config_ui(state: &mut GameState, game_data: &mut DataMap) {
             return;
         };
 
+        let tile_config_ui;
         if let Ok(CallResult::Success(ui)) = state
             .tokio
             .block_on(tile_entity.call(TileEntityMsg::GetTileConfigUi, None))
         {
-            match ui {
-                Some(v) => {
-                    state.tile_config_ui_cache = v;
-                }
-                None => {
-                    state.tile_config_ui_cache.clear();
-                }
-            }
+            tile_config_ui = ui;
+        } else {
+            tile_config_ui = None;
         }
 
         let mut pos = state.gui_state.tile_config_ui_position;
@@ -396,44 +392,48 @@ pub fn tile_config_ui(state: &mut GameState, game_data: &mut DataMap) {
                                 }
                             }
 
-                            for ui in state.tile_config_ui_cache.clone() {
-                                column(|| match ui {
-                                    TileConfigUnit::Amount {
-                                        id,
-                                        label_id,
-                                        max_amount,
-                                    } => {
-                                        config_amount(
-                                            state,
-                                            &data,
+                            if let Some(ui) = tile_config_ui {
+                                for ui in ui {
+                                    column(|| match ui {
+                                        TileConfigUnit::Amount {
                                             id,
                                             label_id,
                                             max_amount,
-                                            tile_entity.clone(),
-                                        );
-                                    }
-                                    TileConfigUnit::SelectableId { id, label_id, list } => {
-                                        let (ids, names): (Vec<_>, Vec<_>) =
-                                            list.into_iter().unzip();
+                                        } => {
+                                            config_amount(
+                                                state,
+                                                &data,
+                                                id,
+                                                label_id,
+                                                max_amount,
+                                                tile_entity.clone(),
+                                            );
+                                        }
+                                        TileConfigUnit::SelectableId { id, label_id, list } => {
+                                            let (ids, names): (Vec<_>, Vec<_>) =
+                                                list.into_iter().unzip();
 
-                                        row(|| {
-                                            label(state.resource_man.gui_str(&label_id).as_str());
-                                        });
+                                            row(|| {
+                                                label(
+                                                    state.resource_man.gui_str(&label_id).as_str(),
+                                                );
+                                            });
 
-                                        config_selectable_id(
-                                            state,
-                                            &data,
-                                            id,
-                                            state.resource_man.registry.gui_ids.search_tip,
-                                            &ids,
-                                            &names,
-                                            tile_entity.clone(),
-                                            &|_state, _id, name| {
-                                                label(name);
-                                            },
-                                        );
-                                    }
-                                });
+                                            config_selectable_id(
+                                                state,
+                                                &data,
+                                                id,
+                                                state.resource_man.registry.gui_ids.search_tip,
+                                                &ids,
+                                                &names,
+                                                tile_entity.clone(),
+                                                &|_state, _id, name| {
+                                                    label(name);
+                                                },
+                                            );
+                                        }
+                                    });
+                                }
                             }
 
                             if let Some(Data::VecId(scripts)) = tile_info

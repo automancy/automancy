@@ -493,7 +493,6 @@ fn main() -> anyhow::Result<()> {
             logo: Default::default(),
             input_hints: Default::default(),
             puzzle_state: Default::default(),
-            tile_config_ui_cache: Default::default(),
 
             game_handle: Some(game_handle),
 

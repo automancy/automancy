@@ -55,7 +55,6 @@ pub struct GameState {
     pub logo: Option<ManagedTextureId>,
     pub input_hints: Vec<Vec<ActionType>>,
     pub puzzle_state: Option<(RhaiDataMap, bool)>,
-    pub tile_config_ui_cache: Vec<TileConfigUnit>,
 
     pub game_handle: Option<JoinHandle<()>>,
 

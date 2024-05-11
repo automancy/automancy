@@ -42,8 +42,6 @@ pub struct TileEntityState {
 
     /// Rhai scope
     scope: Option<Scope<'static>>,
-
-    ui_rerender: bool,
 }
 
 impl TileEntityState {
@@ -54,8 +52,6 @@ impl TileEntityState {
             data: Default::default(),
 
             scope: Default::default(),
-
-            ui_rerender: true,
         }
     }
 }
@@ -407,21 +403,17 @@ impl Actor for TileEntity {
             }
             SetData(data) => {
                 state.data = RhaiDataMap::from_data_map(data);
-                state.ui_rerender = true;
             }
             SetDataValue(key, value) => {
                 state.data.set(key, value);
-                state.ui_rerender = true;
             }
             TakeData(reply) => {
                 reply
                     .send(mem::take(&mut state.data).to_data_map())
                     .unwrap();
-                state.ui_rerender = true;
             }
             RemoveData(key) => {
                 state.data.remove(key);
-                state.ui_rerender = true;
             }
             GetData(reply) => {
                 reply.send(state.data.clone().to_data_map()).unwrap();
@@ -485,11 +477,6 @@ impl Actor for TileEntity {
                 }
             }
             GetTileConfigUi(reply) => {
-                if !state.ui_rerender {
-                    reply.send(None).unwrap();
-                    return Ok(());
-                }
-
                 let tile = self.resource_man.registry.tiles.get(&self.id).unwrap();
 
                 if let Some((ast, default_scope, _)) = tile
@@ -622,7 +609,6 @@ fn send_to_tile(state: &mut TileEntityState, coord: TileCoord, message: TileEnti
         Ok(_) => {}
         Err(_) => {
             state.data = Default::default();
-            state.ui_rerender = true;
         }
     }
 }
