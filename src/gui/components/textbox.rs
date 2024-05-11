@@ -139,7 +139,6 @@ impl Widget for TextBoxWidget {
     }
 
     fn layout(&self, ctx: LayoutContext<'_>, constraints: Constraints) -> Vec2 {
-        ctx.layout.enable_clipping(ctx.dom);
         self.default_layout(ctx, constraints)
     }
 
