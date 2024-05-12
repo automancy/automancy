@@ -1,6 +1,6 @@
+use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use std::{any::Any, collections::VecDeque};
 
 use arraydeque::{ArrayDeque, Wrapping};
 use hashbrown::HashMap;
@@ -167,7 +167,10 @@ impl Actor for GameSystem {
         match message {
             LoadMap(name) => {
                 for tile_entity in state.tile_entities.values() {
-                    tile_entity.stop(Some("Loading new map".to_string()));
+                    tile_entity
+                        .stop_and_wait(Some("Loading new map".to_string()), None)
+                        .await
+                        .unwrap();
                 }
 
                 let (map, tile_entities) =
@@ -624,7 +627,10 @@ async fn remove_tile(
             .ok()
             .and_then(|v| v.success_or(()).ok());
 
-        tile_entity.stop(Some("Removed from game".to_string()));
+        tile_entity
+            .stop_and_wait(Some("Removed from game".to_string()), None)
+            .await
+            .unwrap();
 
         Some((tile, data))
     } else {
