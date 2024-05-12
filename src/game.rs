@@ -1,6 +1,6 @@
-use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use std::{any::Any, collections::VecDeque};
 
 use arraydeque::{ArrayDeque, Wrapping};
 use hashbrown::HashMap;
@@ -18,11 +18,11 @@ use automancy_resources::data::stack::ItemStack;
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::ResourceManager;
 
-use crate::event::EventLoopStorage;
 use crate::game::GameSystemMessage::*;
 use crate::map::{Map, MapInfo, TileEntities};
 use crate::tile_entity::{TileEntity, TileEntityMsg};
 use crate::util::actor::multi_call_iter;
+use crate::{event::EventLoopStorage, tile_entity::TileEntityError};
 
 /// Game ticks per second
 pub const TPS: u64 = 30;
@@ -236,7 +236,7 @@ impl Actor for GameSystem {
                             })
                             .collect();
 
-                        reply.send(instances).unwrap();
+                        reply.send(instances)?;
                     }
                     PlaceTile {
                         coord,
@@ -363,7 +363,7 @@ impl Actor for GameSystem {
                         )
                         .await?
                         .into_iter()
-                        .map(CallResult::unwrap)
+                        .flat_map(|v| v.success_or(()))
                         .collect();
 
                         reply.send(all_data)?;
@@ -409,14 +409,15 @@ impl Actor for GameSystem {
                             .flat_map(|coord| state.map.tiles.get(&coord).zip(Some(coord)))
                         {
                             if let Some(entity) = state.tile_entities.get(&coord) {
-                                let mut data =
-                                    entity.call(TileEntityMsg::GetData, None).await?.unwrap();
-
-                                tiles.push((
-                                    coord,
-                                    *id,
-                                    Some(copy_auxiliary_data(&self.resource_man, &mut data)),
-                                ));
+                                if let Ok(CallResult::Success(mut data)) =
+                                    entity.call(TileEntityMsg::GetData, None).await
+                                {
+                                    tiles.push((
+                                        coord,
+                                        *id,
+                                        Some(copy_auxiliary_data(&self.resource_man, &mut data)),
+                                    ));
+                                }
                             } else {
                                 tiles.push((coord, *id, None));
                             }
@@ -515,27 +516,40 @@ impl Actor for GameSystem {
         &self,
         _myself: ActorRef<Self::Msg>,
         message: SupervisionEvent,
-        _state: &mut Self::State,
+        state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         match message {
-            SupervisionEvent::ActorPanicked(_dead_actor, panic_msg) => {
-                panic!("Panicked because tile entity panicked with '{}'", panic_msg);
+            SupervisionEvent::ActorPanicked(dead_actor, error) => {
+                log::error!(
+                    "Tile entity {dead_actor:?} panicked, trying to remove. Error: {error}"
+                );
+
+                if let Ok(tile_error) = error.downcast::<Box<TileEntityError>>() {
+                    match **tile_error {
+                        TileEntityError::NonExistent(coord) => {
+                            remove_tile(&self.resource_man, state, coord).await;
+                        }
+                    }
+                }
             }
             SupervisionEvent::ActorTerminated(dead_actor, _tile_state, reason) => {
-                log::debug!("Tile entity {dead_actor:?} has been removed. Reason: {reason:?}")
+                log::debug!("Tile entity {dead_actor:?} has been removed. Reason: {reason:?}");
             }
             other => {
                 log::debug!("Supervision event: {other}")
             }
         }
+
         Ok(())
     }
 }
 
 pub fn try_category(resource_man: &ResourceManager, id: Id, category_item: impl FnOnce(Id)) {
-    if let Some(Data::Id(category)) = resource_man.registry.tiles[&id]
-        .data
-        .get(&resource_man.registry.data_ids.category)
+    if let Some(Data::Id(category)) = resource_man
+        .registry
+        .tiles
+        .get(&id)
+        .and_then(|tile| tile.data.get(&resource_man.registry.data_ids.category))
     {
         if Data::Bool(false)
             == *resource_man.registry.tiles[&id]
@@ -563,7 +577,7 @@ pub async fn new_tile(
     id: Id,
 ) -> ActorRef<TileEntityMsg> {
     let (actor, _handle) = Actor::spawn_linked(
-        None,
+        Some(coord.to_minimal_string()),
         TileEntity {
             id,
             coord,
@@ -608,7 +622,7 @@ async fn remove_tile(
             .call(TileEntityMsg::TakeData, None)
             .await
             .ok()
-            .map(CallResult::unwrap);
+            .and_then(|v| v.success_or(()).ok());
 
         tile_entity.stop(Some("Removed from game".to_string()));
 

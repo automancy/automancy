@@ -228,7 +228,7 @@ impl TileEntity {
         root_coord: TileCoord,
         root_id: Id,
     ) -> Option<GameSystemMessage> {
-        let tile = self.resource_man.registry.tiles.get(&self.id).unwrap();
+        let tile = self.resource_man.registry.tiles.get(&self.id)?;
 
         if let Some((ast, default_scope, function_id)) = tile
             .function
@@ -283,6 +283,12 @@ impl TileEntity {
     }
 }
 
+#[derive(thiserror::Error, Debug)]
+pub enum TileEntityError {
+    #[error("the tile id is no longer existent")]
+    NonExistent(TileCoord),
+}
+
 #[async_trait::async_trait]
 impl Actor for TileEntity {
     type Msg = TileEntityMsg;
@@ -307,7 +313,12 @@ impl Actor for TileEntity {
             Tick {
                 tick_count: _tick_count,
             } => {
-                let tile = self.resource_man.registry.tiles.get(&self.id).unwrap();
+                let tile = self
+                    .resource_man
+                    .registry
+                    .tiles
+                    .get(&self.id)
+                    .ok_or(Box::new(TileEntityError::NonExistent(self.coord)))?;
 
                 if let Some((ast, default_scope, function_id)) = tile
                     .function
@@ -359,12 +370,17 @@ impl Actor for TileEntity {
                     self.transaction(state, stack, source_coord, source_id, root_coord, root_id)
                 {
                     if !hidden {
-                        state.game.send_message(record).unwrap();
+                        state.game.send_message(record)?;
                     }
                 }
             }
             TransactionResult { result } => {
-                let tile = self.resource_man.registry.tiles.get(&self.id).unwrap();
+                let tile = self
+                    .resource_man
+                    .registry
+                    .tiles
+                    .get(&self.id)
+                    .ok_or(Box::new(TileEntityError::NonExistent(self.coord)))?;
 
                 if let Some((ast, default_scope, function_id)) = tile
                     .function
@@ -408,29 +424,30 @@ impl Actor for TileEntity {
                 state.data.set(key, value);
             }
             TakeData(reply) => {
-                reply
-                    .send(mem::take(&mut state.data).to_data_map())
-                    .unwrap();
+                reply.send(mem::take(&mut state.data).to_data_map())?;
             }
             RemoveData(key) => {
                 state.data.remove(key);
             }
             GetData(reply) => {
-                reply.send(state.data.clone().to_data_map()).unwrap();
+                reply.send(state.data.clone().to_data_map())?;
             }
             GetDataValue(key, reply) => {
-                reply.send(state.data.get(key).cloned()).unwrap();
+                reply.send(state.data.get(key).cloned())?;
             }
             GetDataWithCoord(reply) => {
-                reply
-                    .send((self.coord, state.data.clone().to_data_map()))
-                    .unwrap();
+                reply.send((self.coord, state.data.clone().to_data_map()))?;
             }
             ExtractRequest {
                 requested_from_id,
                 requested_from_coord,
             } => {
-                let tile = self.resource_man.registry.tiles.get(&self.id).unwrap();
+                let tile = self
+                    .resource_man
+                    .registry
+                    .tiles
+                    .get(&self.id)
+                    .ok_or(Box::new(TileEntityError::NonExistent(self.coord)))?;
 
                 if let Some((ast, default_scope, function_id)) = tile
                     .function
@@ -477,7 +494,12 @@ impl Actor for TileEntity {
                 }
             }
             GetTileConfigUi(reply) => {
-                let tile = self.resource_man.registry.tiles.get(&self.id).unwrap();
+                let tile = self
+                    .resource_man
+                    .registry
+                    .tiles
+                    .get(&self.id)
+                    .ok_or(Box::new(TileEntityError::NonExistent(self.coord)))?;
 
                 if let Some((ast, default_scope, _)) = tile
                     .function
@@ -584,13 +606,13 @@ impl Actor for TileEntity {
                                     }
                                 }
 
-                                reply.send(Some(r)).unwrap();
+                                reply.send(Some(r))?;
                             } else {
-                                reply.send(None).unwrap();
+                                reply.send(None)?;
                             }
                         }
                         Err(_) => {
-                            reply.send(None).unwrap();
+                            reply.send(None)?;
                         }
                     }
                 }
