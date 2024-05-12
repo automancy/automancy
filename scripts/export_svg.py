@@ -37,8 +37,8 @@ def main():
         bpy.data.objects.remove(obj)
 
         new_dim = new_obj.dimensions.copy()
-        new_dim.x = new_dim.x / 8.0
-        new_dim.y = new_dim.y / 8.0
+        new_dim.x = new_dim.x / 8.35
+        new_dim.y = new_dim.y / 8.35
         new_obj.dimensions = new_dim
 
         bpy.context.view_layer.objects.active = new_obj
