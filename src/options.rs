@@ -40,10 +40,10 @@ impl Options {
 static OPTIONS_PATH: &str = "options.ron";
 
 impl Options {
-    pub fn load(resource_man: &ResourceManager) -> anyhow::Result<Options> {
+    pub fn load(resource_man: &ResourceManager) -> Options {
         log::info!("Loading options...");
 
-        let file = read_to_string(Path::new(OPTIONS_PATH))?;
+        let file = read_to_string(Path::new(OPTIONS_PATH)).unwrap_or_default();
 
         let mut this: Options = ron::de::from_str(&file).unwrap_or_default();
         let read_keymap = mem::take(&mut this.keymap);
@@ -74,9 +74,11 @@ impl Options {
 
         this.keymap = default;
 
-        this.save()?;
+        if let Err(err) = this.save() {
+            log::error!("Error saving options! {err}");
+        }
 
-        Ok(this)
+        this
     }
 
     pub fn save(&mut self) -> anyhow::Result<()> {
