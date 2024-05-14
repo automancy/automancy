@@ -449,7 +449,7 @@ fn main() -> anyhow::Result<()> {
         RESOURCE_MAN.write().unwrap().replace(resource_man.clone());
         log::info!("Loaded resources.");
 
-        let options = Options::load(&resource_man)?;
+        let options = Options::load(&resource_man);
         let input_handler = InputHandler::new(&options);
 
         let loop_store = EventLoopStorage::default();
