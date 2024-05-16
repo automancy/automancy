@@ -277,136 +277,6 @@ pub fn init_gpu_resources(
         }
     };
 
-    let in_world_item_resources = {
-        let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("In-world Item Uniform Buffer"),
-            contents: bytemuck::cast_slice(&[GameUBO::default()]),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
-
-        const MATRIX_DATA_SIZE: usize = 2048;
-        let matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("In-world Item Matrix Data Buffer"),
-            contents: &Vec::from_iter(
-                (0..(mem::size_of::<MatrixData>() * MATRIX_DATA_SIZE)).map(|_| 0),
-            ),
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-        });
-
-        let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            entries: &[
-                BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: ShaderStages::VERTEX_FRAGMENT,
-                    ty: BindingType::Buffer {
-                        ty: BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: ShaderStages::VERTEX,
-                    ty: BindingType::Buffer {
-                        ty: BufferBindingType::Storage { read_only: true },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-            ],
-            label: Some("in_world_item_bind_group_layout"),
-        });
-
-        let bind_group = device.create_bind_group(&BindGroupDescriptor {
-            layout: &bind_group_layout,
-            entries: &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: uniform_buffer.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: matrix_data_buffer.as_entire_binding(),
-                },
-            ],
-            label: Some("in_world_item_bind_group"),
-        });
-
-        let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
-            label: Some("In-World Item Render Pipeline Layout"),
-            bind_group_layouts: &[&bind_group_layout],
-            push_constant_ranges: &[],
-        });
-
-        let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
-            label: Some("In-world Item Render Pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: VertexState {
-                module: &game_shader,
-                entry_point: "vs_main",
-                buffers: &[Vertex::desc(), RawInstanceData::desc()],
-            },
-            fragment: Some(FragmentState {
-                module: &game_shader,
-                entry_point: "fs_main",
-                targets: &[
-                    Some(ColorTargetState {
-                        format: config.format,
-                        blend: Some(BlendState::ALPHA_BLENDING),
-                        write_mask: ColorWrites::ALL,
-                    }),
-                    Some(ColorTargetState {
-                        format: NORMAL_FORMAT,
-                        blend: None,
-                        write_mask: ColorWrites::ALL,
-                    }),
-                    Some(ColorTargetState {
-                        format: MODEL_FORMAT,
-                        blend: None,
-                        write_mask: ColorWrites::ALL,
-                    }),
-                ],
-            }),
-            primitive: PrimitiveState {
-                topology: PrimitiveTopology::TriangleList,
-                front_face: FrontFace::Ccw,
-                cull_mode: None,
-                ..Default::default()
-            },
-            depth_stencil: Some(DepthStencilState {
-                format: DEPTH_FORMAT,
-                depth_write_enabled: true,
-                depth_compare: CompareFunction::Less,
-                stencil: Default::default(),
-                bias: Default::default(),
-            }),
-            multisample: MultisampleState {
-                count: 1,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            multiview: None,
-        });
-
-        InWorldItemResources {
-            instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
-                label: None,
-                contents: &[],
-                usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
-            }),
-            indirect_buffer: device.create_buffer_init(&BufferInitDescriptor {
-                label: None,
-                contents: &[],
-                usage: BufferUsages::INDIRECT | BufferUsages::COPY_DST,
-            }),
-            uniform_buffer,
-            matrix_data_buffer,
-            bind_group,
-            pipeline,
-        }
-    };
     let gui_resources = {
         let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Gui Uniform Buffer"),
@@ -904,7 +774,6 @@ pub fn init_gpu_resources(
     let render = RenderResources {
         game_resources,
         gui_resources: Some(gui_resources),
-        in_world_item_resources,
         post_processing_resources,
     };
 
@@ -1193,7 +1062,6 @@ pub struct PostProcessingResources {
 pub struct RenderResources {
     pub game_resources: GameResources,
     pub gui_resources: Option<GuiResources>,
-    pub in_world_item_resources: InWorldItemResources,
 
     pub post_processing_resources: PostProcessingResources,
 }

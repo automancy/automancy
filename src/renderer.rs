@@ -71,7 +71,6 @@ pub struct Renderer {
 
     pub tile_tints: HashMap<TileCoord, Vec4>,
     pub extra_instances: Vec<(InstanceData, Id)>,
-    pub in_world_item_instances: Vec<(InstanceData, Id)>,
 
     pub take_item_animations: HashMap<Item, VecDeque<(Instant, Rect)>>,
 
@@ -98,7 +97,6 @@ impl Renderer {
 
             tile_tints: Default::default(),
             extra_instances: vec![],
-            in_world_item_instances: vec![],
 
             take_item_animations: Default::default(),
 
@@ -155,7 +153,6 @@ impl Renderer {
     ) -> Result<(), SurfaceError> {
         let tile_tints = mem::take(&mut self.tile_tints);
         let mut extra_instances = mem::take(&mut self.extra_instances);
-        let mut in_world_item_instances = mem::take(&mut self.in_world_item_instances);
 
         let size = self.gpu.window.inner_size();
 
@@ -290,7 +287,7 @@ impl Renderer {
             }
 
             if let Some(Data::Id(id)) = data.get(&resource_man.registry.data_ids.item) {
-                in_world_item_instances.push((
+                extra_instances.push((
                     InstanceData::default()
                         .with_light_pos(camera_pos_float, None)
                         .with_world_matrix(world_matrix)
@@ -334,7 +331,7 @@ impl Renderer {
                             .with_light_pos(camera_pos_float, None);
                         let model = resource_man.get_item_model(stack.item.model);
 
-                        in_world_item_instances.push((instance, model));
+                        extra_instances.push((instance, model));
                     }
                 }
             }
@@ -401,10 +398,6 @@ impl Renderer {
             try_add_animation(&resource_man, start_instant, *model, &mut animation_map);
         }
 
-        for (_, model) in &in_world_item_instances {
-            try_add_animation(&resource_man, start_instant, *model, &mut animation_map);
-        }
-
         let mut extra_instances = extra_instances
             .into_iter()
             .map(|(instance, id)| (instance, id, ()))
@@ -413,18 +406,11 @@ impl Renderer {
         game_instances.append(&mut direction_previews);
         game_instances.sort_by_key(|v| v.1);
 
-        let mut in_world_item_instances = in_world_item_instances
-            .into_iter()
-            .map(|(instance, id)| (instance, id, ()))
-            .collect::<Vec<_>>();
-        in_world_item_instances.sort_by_key(|v| v.1);
-
         let r = self.inner_render(
             screenshotting,
             gui,
             resource_man,
             &game_instances,
-            &in_world_item_instances,
             animation_map,
             world_matrix.to_cols_array_2d(),
         );
@@ -440,7 +426,6 @@ impl Renderer {
         gui: &mut Gui,
         resource_man: Arc<ResourceManager>,
         game_instances: &[(InstanceData, Id, ())],
-        in_world_item_instances: &[(InstanceData, Id, ())],
         animation_map: AnimationMap,
         world_matrix: RawMat4,
     ) -> Result<(), SurfaceError> {
@@ -448,13 +433,6 @@ impl Renderer {
 
         let (game_instances, game_draws, game_draw_count, game_matrix_data) =
             gpu::indirect_instance(&resource_man, game_instances, true, &animation_map);
-
-        let (
-            in_world_item_instances,
-            in_world_item_draws,
-            in_world_item_draw_count,
-            in_world_item_matrix_data,
-        ) = gpu::indirect_instance(&resource_man, in_world_item_instances, true, &animation_map);
 
         let output = self.gpu.surface.get_current_texture()?;
 
@@ -567,116 +545,6 @@ impl Renderer {
                     &self.render_resources.game_resources.indirect_buffer,
                     0,
                     game_draw_count,
-                );
-            }
-        }
-
-        {
-            gpu::create_or_write_buffer(
-                &self.gpu.device,
-                &self.gpu.queue,
-                &mut self
-                    .render_resources
-                    .in_world_item_resources
-                    .instance_buffer,
-                bytemuck::cast_slice(in_world_item_instances.as_slice()),
-            );
-            let mut indirect_buffer = vec![];
-            in_world_item_draws
-                .into_iter()
-                .flat_map(|v| v.1)
-                .for_each(|v| indirect_buffer.extend_from_slice(v.0.as_bytes()));
-            gpu::create_or_write_buffer(
-                &self.gpu.device,
-                &self.gpu.queue,
-                &mut self
-                    .render_resources
-                    .in_world_item_resources
-                    .indirect_buffer,
-                indirect_buffer.as_slice(),
-            );
-
-            let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("In-world Item Render Pass"),
-                color_attachments: &[
-                    Some(RenderPassColorAttachment {
-                        view: &self.shared_resources.game_texture().1,
-                        resolve_target: None,
-                        ops: Operations {
-                            load: LoadOp::Load,
-                            store: StoreOp::Store,
-                        },
-                    }),
-                    Some(RenderPassColorAttachment {
-                        view: &self.shared_resources.normal_texture().1,
-                        resolve_target: None,
-                        ops: Operations {
-                            load: LoadOp::Load,
-                            store: StoreOp::Store,
-                        },
-                    }),
-                    Some(RenderPassColorAttachment {
-                        view: &self.shared_resources.model_texture().1,
-                        resolve_target: None,
-                        ops: Operations {
-                            load: LoadOp::Load,
-                            store: StoreOp::Store,
-                        },
-                    }),
-                ],
-                depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                    view: &self.shared_resources.depth_texture().1,
-                    depth_ops: Some(Operations {
-                        load: LoadOp::Load,
-                        store: StoreOp::Store,
-                    }),
-                    stencil_ops: None,
-                }),
-                occlusion_query_set: None,
-                timestamp_writes: None,
-            });
-
-            if in_world_item_draw_count > 0 {
-                self.gpu.queue.write_buffer(
-                    &self.render_resources.in_world_item_resources.uniform_buffer,
-                    0,
-                    bytemuck::cast_slice(&[GameUBO::default()]),
-                );
-                self.gpu.queue.write_buffer(
-                    &self
-                        .render_resources
-                        .in_world_item_resources
-                        .matrix_data_buffer,
-                    0,
-                    bytemuck::cast_slice(in_world_item_matrix_data.as_slice()),
-                );
-
-                render_pass.set_pipeline(&self.render_resources.in_world_item_resources.pipeline);
-                render_pass.set_bind_group(
-                    0,
-                    &self.render_resources.in_world_item_resources.bind_group,
-                    &[],
-                );
-                render_pass.set_vertex_buffer(0, self.global_resources.vertex_buffer.slice(..));
-                render_pass.set_vertex_buffer(
-                    1,
-                    self.render_resources
-                        .in_world_item_resources
-                        .instance_buffer
-                        .slice(..),
-                );
-                render_pass.set_index_buffer(
-                    self.global_resources.index_buffer.slice(..),
-                    IndexFormat::Uint16,
-                );
-
-                render_pass.multi_draw_indexed_indirect(
-                    &self
-                        .render_resources
-                        .in_world_item_resources
-                        .indirect_buffer,
-                    0,
-                    in_world_item_draw_count,
                 );
             }
         }
