@@ -95,8 +95,8 @@ fn main() {
         }
     }
     for handle in svg_handles {
-        if let Err(e) = handle.join() {
-            panic!("Issue with svg to blend: {e:?}");
+        if handle.join().is_err() {
+            panic!("Issue with svg to blend.");
         }
     }
 
@@ -138,8 +138,8 @@ fn main() {
     }
 
     for handle in model_handles {
-        if let Err(e) = handle.join() {
-            panic!("Issue with blend to gltf: {e:?}");
+        if handle.join().is_err() {
+            panic!("Issue with blend to gltf.");
         }
     }
 }
