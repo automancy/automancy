@@ -29,17 +29,22 @@ def main():
         new_obj = bpy.data.objects.new(obj.name, mesh)
 
         new_obj.matrix_world = obj.matrix_world
-        new_obj.delta_location.z = (ids[obj.name] / total) / 32.0 + 0.01
+        new_obj.delta_location.z = (ids[obj.name] / total) / 64.0 + 0.005
         #alpha = styles[obj.name].get('fill-opacity')
         #if alpha:
         #    new_obj.active_material.diffuse_color[3] = float(alpha)
         bpy.context.collection.objects.link(new_obj)
         bpy.data.objects.remove(obj)
 
+        edge_smallen_ratio = 0.95
+
         new_dim = new_obj.dimensions.copy()
-        new_dim.x = new_dim.x / 8.35
-        new_dim.y = new_dim.y / 8.35
+        new_dim.x = (new_dim.x / 8.0) * edge_smallen_ratio
+        new_dim.y = (new_dim.y / 8.0) * edge_smallen_ratio
         new_obj.dimensions = new_dim
+
+        new_obj.delta_location.x += 1.0 - edge_smallen_ratio
+        new_obj.delta_location.y += 1.0 - edge_smallen_ratio
 
         bpy.context.view_layer.objects.active = new_obj
         bpy.ops.object.mode_set(mode='EDIT')
