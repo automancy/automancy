@@ -27,12 +27,14 @@ def main():
         bpy.ops.object.mode_set(mode='OBJECT')
 
         if not obj.data.color_attributes and obj.active_material:
-            obj.data.color_attributes.new(name='Col', type='BYTE_COLOR', domain='CORNER')
+            obj.data.color_attributes.new(name='Col', type='FLOAT_COLOR', domain='CORNER')
 
             color = obj.active_material.diffuse_color
 
             for datum in obj.data.attributes.active_color.data:
                 datum.color = color
+            
+            obj.data.materials.clear()
 
     bpy.ops.export_scene.gltf(filepath=dst, check_existing=False, export_format='GLB',
                               export_image_format='NONE', export_texcoords=False, export_materials='NONE',
