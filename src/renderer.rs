@@ -134,10 +134,12 @@ pub fn try_add_animation(
             animation_map.insert(model, anims);
 
             return true;
+        } else {
+            return false;
         }
     }
 
-    false
+    true
 }
 
 impl Renderer {
@@ -222,8 +224,6 @@ impl Renderer {
 
         let mut animation_map = AnimationMap::new();
 
-        let mut direction_previews = Vec::new();
-
         for (coord, unit) in instances.iter_mut() {
             let tile = resource_man.registry.tiles.get(&unit.tile_id).unwrap();
 
@@ -247,7 +247,7 @@ impl Renderer {
                     .get(&resource_man.registry.data_ids.direction_color)
                     .unwrap_or(&Data::Color(colors::ORANGE))
                 {
-                    direction_previews.push((
+                    extra_instances.push((
                         InstanceData::default()
                             .with_color_offset(color.to_linear())
                             .with_world_matrix(world_matrix)
@@ -259,7 +259,6 @@ impl Renderer {
                                     * Matrix4::from_translation(vec3(0.0, 0.5, 0.0)),
                             ),
                         resource_man.registry.model_ids.cube1x1,
-                        (),
                     ))
                 }
             } else if let Some(Data::Id(inactive)) = tile
@@ -402,8 +401,7 @@ impl Renderer {
             .into_iter()
             .map(|(instance, id)| (instance, id, ()))
             .collect::<Vec<_>>();
-        game_instances.append(&mut extra_instances);
-        game_instances.append(&mut direction_previews);
+        game_instances = [mem::take(&mut extra_instances), game_instances].concat();
         game_instances.sort_by_key(|v| v.1);
 
         let r = self.inner_render(
