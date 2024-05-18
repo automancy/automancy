@@ -10,7 +10,6 @@ use std::{fs::File, mem};
 
 use color_eyre::config::HookBuilder;
 use env_logger::Env;
-use num::Zero;
 use once_cell::sync::Lazy;
 use ractor::Actor;
 use rfd::{MessageButtons, MessageDialog, MessageLevel};
@@ -159,6 +158,7 @@ fn write_msg<P: AsRef<Path>>(buffer: &mut impl Write, file_path: P) -> std::fmt:
 struct Automancy {
     state: GameState,
     window: Option<Arc<Window>>,
+    fps_limit: Option<i32>,
     closed: bool,
 }
 
@@ -302,6 +302,8 @@ impl ApplicationHandler for Automancy {
                     .gpu
                     .set_vsync(self.state.options.graphics.fps_limit == 0);
 
+                self.fps_limit = Some(self.state.options.graphics.fps_limit);
+
                 if self.state.options.graphics.fullscreen {
                     self.state
                         .renderer
@@ -348,14 +350,15 @@ impl ApplicationHandler for Automancy {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        if !self.state.options.graphics.fps_limit.is_zero() {
+        let fps_limit = self.fps_limit.unwrap_or(0);
+
+        if fps_limit != 0 {
             let frame_time;
 
-            if self.state.options.graphics.fps_limit >= 250 {
+            if fps_limit >= 250 {
                 frame_time = Duration::ZERO;
             } else {
-                frame_time =
-                    Duration::from_secs_f64(1.0 / self.state.options.graphics.fps_limit as f64);
+                frame_time = Duration::from_secs_f64(1.0 / fps_limit as f64);
             }
 
             if self.state.loop_store.frame_start.unwrap().elapsed() > frame_time {
@@ -516,6 +519,7 @@ fn main() -> anyhow::Result<()> {
     let mut automancy = Automancy {
         state,
         window: None,
+        fps_limit: None,
         closed: false,
     };
 
