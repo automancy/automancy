@@ -204,25 +204,31 @@ impl RawInstanceData {
             FIX_COORD
         };
         let model_matrix = instance.model_matrix;
-        let inverse_transpose = Matrix3::from_cols(
-            model_matrix.x_axis.truncate(),
-            model_matrix.y_axis.truncate(),
-            model_matrix.z_axis.truncate(),
-        )
-        .inverse()
-        .transpose();
 
-        let matrix_data = MatrixData {
-            model_matrix: model_matrix.to_cols_array_2d(),
-            normal_matrix: [
-                inverse_transpose.x_axis.extend(0.0).to_array(),
-                inverse_transpose.y_axis.extend(0.0).to_array(),
-                inverse_transpose.z_axis.extend(0.0).to_array(),
-            ],
-            world_matrix: world_matrix.to_cols_array_2d(),
-        };
+        if buffer.last().map(|v| (v.world_matrix, v.model_matrix))
+            != Some((
+                world_matrix.to_cols_array_2d(),
+                model_matrix.to_cols_array_2d(),
+            ))
+        {
+            let inverse_transpose = Matrix3::from_cols(
+                model_matrix.x_axis.truncate(),
+                model_matrix.y_axis.truncate(),
+                model_matrix.z_axis.truncate(),
+            )
+            .inverse()
+            .transpose();
 
-        if buffer.last() != Some(&matrix_data) {
+            let matrix_data = MatrixData {
+                model_matrix: model_matrix.to_cols_array_2d(),
+                world_matrix: world_matrix.to_cols_array_2d(),
+                normal_matrix: [
+                    inverse_transpose.x_axis.extend(0.0).to_array(),
+                    inverse_transpose.y_axis.extend(0.0).to_array(),
+                    inverse_transpose.z_axis.extend(0.0).to_array(),
+                ],
+            };
+
             buffer.push(matrix_data);
         }
         let index = buffer.len() - 1;

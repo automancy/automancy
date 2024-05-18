@@ -424,7 +424,7 @@ impl Renderer {
             screenshotting,
             gui,
             resource_man,
-            &game_instances,
+            game_instances,
             animation_map,
             world_matrix.to_cols_array_2d(),
         );
@@ -439,13 +439,13 @@ impl Renderer {
         screenshotting: bool,
         gui: &mut Gui,
         resource_man: Arc<ResourceManager>,
-        game_instances: &[(InstanceData, Id, ())],
+        game_instances: Vec<(InstanceData, Id, ())>,
         animation_map: AnimationMap,
         world_matrix: RawMat4,
     ) -> Result<(), SurfaceError> {
         let size = self.gpu.window.inner_size();
 
-        let (game_instances, game_draws, game_draw_count, game_matrix_data) =
+        let (game_instances, game_matrix_data, game_draws) =
             gpu::indirect_instance(&resource_man, game_instances, true, &animation_map);
 
         let output = self.gpu.surface.get_current_texture()?;
@@ -472,8 +472,11 @@ impl Renderer {
                 &mut self.render_resources.game_resources.instance_buffer,
                 bytemuck::cast_slice(game_instances.as_slice()),
             );
+
+            let (draws, count) = game_draws;
+
             let mut indirect_buffer = vec![];
-            game_draws
+            draws
                 .into_iter()
                 .flat_map(|v| v.1)
                 .for_each(|v| indirect_buffer.extend_from_slice(v.0.as_bytes()));
@@ -524,7 +527,7 @@ impl Renderer {
                 timestamp_writes: None,
             });
 
-            if game_draw_count > 0 {
+            if count > 0 {
                 self.gpu.queue.write_buffer(
                     &self.render_resources.game_resources.uniform_buffer,
                     0,
@@ -558,7 +561,7 @@ impl Renderer {
                 render_pass.multi_draw_indexed_indirect(
                     &self.render_resources.game_resources.indirect_buffer,
                     0,
-                    game_draw_count,
+                    count,
                 );
             }
         }

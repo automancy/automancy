@@ -816,7 +816,7 @@ pub fn init_gpu_resources(
 
 pub fn compile_instances<T: Clone + Send>(
     resource_man: &ResourceManager,
-    instances: &[(InstanceData, Id, T)],
+    instances: Vec<(InstanceData, Id, T)>,
     animation_map: &AnimationMap,
 ) -> (
     HashMap<Id, Vec<(usize, RawInstanceData, T)>>,
@@ -825,33 +825,27 @@ pub fn compile_instances<T: Clone + Send>(
     let mut raw_instances = HashMap::new();
     let mut matrix_data = vec![];
 
-    instances.binary_group_by_key(|v| v.1).for_each(|group| {
-        let id = group[0].1;
-
+    instances.into_iter().for_each(|(instance, id, extra)| {
         if let Some((models, ..)) = &resource_man.all_models.get(&id) {
-            let vec = raw_instances
-                .entry(id)
-                .or_insert_with(|| Vec::with_capacity(group.len()));
+            let vec = raw_instances.entry(id).or_insert_with(Vec::new);
 
-            for (instance, _, extra) in group.iter() {
-                for model in models.values() {
-                    let mut instance = *instance;
+            for model in models.values() {
+                let mut instance = instance;
 
-                    let mut matrix = model.matrix;
-                    if let Some(anim) = animation_map
-                        .get(&id)
-                        .and_then(|anim| anim.get(&model.index))
-                    {
-                        matrix *= *anim;
-                    }
-                    instance = instance.add_model_matrix(matrix);
-
-                    vec.push((
-                        model.index,
-                        RawInstanceData::from_instance(instance, &mut matrix_data),
-                        extra.clone(),
-                    ));
+                let mut matrix = model.matrix;
+                if let Some(anim) = animation_map
+                    .get(&id)
+                    .and_then(|anim| anim.get(&model.index))
+                {
+                    matrix *= *anim;
                 }
+                instance = instance.add_model_matrix(matrix);
+
+                vec.push((
+                    model.index,
+                    RawInstanceData::from_instance(instance, &mut matrix_data),
+                    extra.clone(),
+                ));
             }
         }
     });
@@ -889,20 +883,11 @@ fn collect_indirect<T: Clone + Send + Sync>(
     vec.push((command, instances[0].2.clone()));
 }
 
-pub fn indirect_instance<T: Clone + Send + Sync>(
+fn indirect<T: Clone + Send + Sync>(
     resource_man: &ResourceManager,
-    instances: &[(InstanceData, Id, T)],
     group: bool,
-    animation_map: &AnimationMap,
-) -> (
-    Vec<RawInstanceData>,
-    HashMap<Id, Vec<(DrawIndexedIndirectArgs, T)>>,
-    u32,
-    Vec<MatrixData>,
-) {
-    let (compiled_instances, matrix_data) =
-        compile_instances(resource_man, instances, animation_map);
-
+    compiled_instances: &HashMap<Id, Vec<(usize, RawInstanceData, T)>>,
+) -> (u32, HashMap<Id, Vec<(DrawIndexedIndirectArgs, T)>>) {
     let (_, draw_count, commands) = compiled_instances.iter().fold(
         (0, 0, HashMap::new()),
         |(mut base_instance_counter, mut draw_count, mut commands), (id, groups)| {
@@ -938,12 +923,30 @@ pub fn indirect_instance<T: Clone + Send + Sync>(
         },
     );
 
+    (draw_count, commands)
+}
+
+pub fn indirect_instance<T: Clone + Send + Sync>(
+    resource_man: &ResourceManager,
+    instances: Vec<(InstanceData, Id, T)>,
+    group: bool,
+    animation_map: &AnimationMap,
+) -> (
+    Vec<RawInstanceData>,
+    Vec<MatrixData>,
+    (HashMap<Id, Vec<(DrawIndexedIndirectArgs, T)>>, u32),
+) {
+    let (compiled_instances, matrix_data) =
+        compile_instances(resource_man, instances, animation_map);
+
+    let (draw_count, commands) = indirect(resource_man, group, &compiled_instances);
+
     let instances = compiled_instances
         .into_iter()
         .flat_map(|v| v.1.into_iter().map(|v| v.1))
         .collect::<Vec<RawInstanceData>>();
 
-    (instances, commands, draw_count, matrix_data)
+    (instances, matrix_data, (commands, draw_count))
 }
 
 pub fn create_or_write_buffer(

@@ -127,12 +127,12 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
         ): &mut YakuiRenderResources,
     ) {
         if let Some(mut instances) = instances.take() {
-            let gui_resources = gui_resources.as_mut().unwrap();
-
             instances.sort_by_key(|v| v.1);
 
-            let (instances, draws_result, _count, matrix_data) =
-                gpu::indirect_instance(resource_man, &instances, false, animation_map);
+            let (instances, matrix_data, draws_result) =
+                gpu::indirect_instance(resource_man, instances, false, animation_map);
+
+            let gui_resources = gui_resources.as_mut().unwrap();
 
             gpu::create_or_write_buffer(
                 device,
@@ -147,7 +147,7 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                 bytemuck::cast_slice(matrix_data.as_slice()),
             );
 
-            *draws = draws_result;
+            *draws = draws_result.0;
         }
 
         let mut clip = self.clip;
