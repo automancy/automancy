@@ -868,12 +868,12 @@ fn collect_indirect<T: Clone + Send + Sync>(
     draw_count: &mut u32,
     vec: &mut Vec<(DrawIndexedIndirectArgs, T)>,
     resource_man: &ResourceManager,
-    id: &Id,
+    model_id: &Id,
     instances: &[(usize, RawInstanceData, T)],
 ) {
     let size = instances.len() as u32;
 
-    let index_range = resource_man.all_index_ranges[id][&instances[0].0];
+    let index_range = resource_man.all_index_ranges[model_id][&instances[0].0];
 
     let command = DrawIndexedIndirectArgs {
         first_index: index_range.offset,

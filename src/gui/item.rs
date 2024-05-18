@@ -23,7 +23,7 @@ pub fn draw_item(
 
         rect = ui_game_object(
             InstanceData::default().with_world_matrix(math::view(dvec3(0.0, 0.0, 1.0)).as_mat4()),
-            resource_man.get_item_model(stack.item.model),
+            resource_man.item_model_or_missing(stack.item.model),
             vec2(size, size),
         )
         .into_inner();

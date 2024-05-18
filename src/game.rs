@@ -45,8 +45,7 @@ pub struct TransactionRecord {
 #[derive(Debug, Clone, Copy)]
 pub struct RenderUnit {
     pub instance: InstanceData,
-    pub tile_id: Id,
-    pub model: Id,
+    pub model_override: Option<Id>,
 }
 
 pub type TransactionRecords =
@@ -122,7 +121,7 @@ pub enum GameSystemMessage {
     /// get all the tiles needing to be rendered, and their info
     GetAllRenderUnits {
         culling_range: TileBounds,
-        reply: RpcReplyPort<HashMap<TileCoord, RenderUnit>>,
+        reply: RpcReplyPort<Vec<(TileCoord, Id, RenderUnit)>>,
     },
     GetTiles(
         Vec<TileCoord>,
@@ -215,29 +214,21 @@ impl Actor for GameSystem {
                             .tiles
                             .iter()
                             .filter(|(coord, _)| culling_range.is_in_bounds(***coord))
-                            .flat_map(|(coord, id)| {
-                                self.resource_man
-                                    .registry
-                                    .tiles
-                                    .get(id)
-                                    .map(|tile| self.resource_man.get_model(tile.model))
-                                    .map(|model| {
-                                        let p = HEX_GRID_LAYOUT.hex_to_world_pos((*coord).into());
+                            .map(|(coord, id)| {
+                                let p = HEX_GRID_LAYOUT.hex_to_world_pos((*coord).into());
 
-                                        (
-                                            *coord,
-                                            RenderUnit {
-                                                instance: InstanceData::default()
-                                                    .with_model_matrix(Matrix4::from_translation(
-                                                        p.extend(FAR as Float),
-                                                    )),
-                                                tile_id: *id,
-                                                model,
-                                            },
-                                        )
-                                    })
+                                (
+                                    *coord,
+                                    *id,
+                                    RenderUnit {
+                                        instance: InstanceData::default().with_model_matrix(
+                                            Matrix4::from_translation(p.extend(FAR as Float)),
+                                        ),
+                                        model_override: None,
+                                    },
+                                )
                             })
-                            .collect();
+                            .collect::<Vec<_>>();
 
                         reply.send(instances)?;
                     }
@@ -644,7 +635,7 @@ async fn insert_new_tile(
     game: ActorRef<GameSystemMessage>,
     state: &mut GameSystemState,
     coord: TileCoord,
-    tile: Id,
+    tile_id: Id,
     data: Option<DataMap>,
 ) -> Option<Option<(Id, Option<DataMap>)>> {
     let mut skip = false;
@@ -652,7 +643,7 @@ async fn insert_new_tile(
     {
         let lock = &mut state.map.info.lock().await;
 
-        try_category(&resource_man, tile, |item| {
+        try_category(&resource_man, tile_id, |item| {
             if let Data::Inventory(inventory) = lock
                 .data
                 .entry(resource_man.registry.data_ids.player_inventory)
@@ -673,11 +664,11 @@ async fn insert_new_tile(
 
     let old = remove_tile(&resource_man, state, coord).await;
 
-    if tile == resource_man.registry.none {
+    if tile_id == resource_man.registry.none {
         return Some(old);
     }
 
-    let tile_entity = new_tile(resource_man, game, coord, tile).await;
+    let tile_entity = new_tile(resource_man.clone(), game, coord, tile_id).await;
 
     if let Some(data) = data {
         tile_entity
@@ -686,7 +677,7 @@ async fn insert_new_tile(
     }
 
     state.tile_entities.insert(coord, tile_entity);
-    state.map.tiles.insert(coord, tile);
+    state.map.tiles.insert(coord, tile_id);
 
     Some(old)
 }

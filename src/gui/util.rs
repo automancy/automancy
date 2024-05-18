@@ -145,7 +145,7 @@ pub fn take_item_animation(state: &mut GameState, item: Item, dst_rect: Rect) {
                     ui_game_object(
                         InstanceData::default()
                             .with_world_matrix(math::view(dvec3(0.0, 0.0, 1.0)).as_mat4()),
-                        state.resource_man.get_item_model(item.model),
+                        state.resource_man.item_model_or_missing(item.model),
                         size,
                     );
                 });

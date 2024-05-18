@@ -109,8 +109,8 @@ fn research_selection(state: &mut GameState, game_data: &mut DataMap) {
             while let Some(idx) = visitor.next(&state.resource_man.registry.researches) {
                 let research = &state.resource_man.registry.researches[idx];
                 let icon = match research.icon_mode {
-                    IconMode::Item => state.resource_man.get_item_model(research.icon),
-                    IconMode::Tile => state.resource_man.get_model(research.icon),
+                    IconMode::Item => state.resource_man.item_model_or_missing(research.icon),
+                    IconMode::Tile => state.resource_man.tile_model_or_missing(research.icon),
                 };
 
                 if let Some(prev) = research.depends_on {
@@ -388,11 +388,13 @@ fn research_puzzle(state: &mut GameState, game_data: &mut DataMap) -> Option<Vec
                                                                     ))
                                                                     .as_mat4(),
                                                                 ),
-                                                            state.resource_man.get_item_model(
-                                                                state
-                                                                    .resource_man
-                                                                    .get_puzzle_model(*id),
-                                                            ),
+                                                            state
+                                                                .resource_man
+                                                                .item_model_or_missing(
+                                                                    state
+                                                                        .resource_man
+                                                                        .get_puzzle_model(*id),
+                                                                ),
                                                             vec2(
                                                                 PUZZLE_HEX_GRID_LAYOUT.hex_size.x,
                                                                 PUZZLE_HEX_GRID_LAYOUT.hex_size.y,
@@ -558,7 +560,7 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                                                             math::view(dvec3(0.0, 0.0, 1.0))
                                                                 .as_mat4(),
                                                         ),
-                                                        state.resource_man.get_item_model(
+                                                        state.resource_man.item_model_or_missing(
                                                             state.resource_man.registry.items[id]
                                                                 .model,
                                                         ),

@@ -7,13 +7,12 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use arboard::{Clipboard, ImageData};
-use hashbrown::HashMap;
+use hashbrown::{HashMap, HashSet};
 use image::{EncodableLayout, RgbaImage};
 use num::PrimInt;
 use ractor::ActorRef;
 use tokio::runtime::Runtime;
 use tokio::sync::{oneshot, Mutex};
-use wgpu::{util::DrawIndexedIndirectArgs, CommandBuffer, StoreOp};
 use wgpu::{
     BufferAddress, BufferDescriptor, BufferUsages, Color, CommandEncoderDescriptor,
     ImageCopyBuffer, ImageDataLayout, IndexFormat, LoadOp, Maintain, MapMode, Operations,
@@ -21,6 +20,7 @@ use wgpu::{
     SurfaceError, TextureDescriptor, TextureDimension, TextureUsages, TextureViewDescriptor,
     COPY_BUFFER_ALIGNMENT, COPY_BYTES_PER_ROW_ALIGNMENT,
 };
+use wgpu::{CommandBuffer, StoreOp};
 
 use automancy_defs::id::Id;
 use automancy_defs::math::{
@@ -40,12 +40,9 @@ use automancy_resources::ResourceManager;
 use yakui::Rect;
 use yakui_wgpu::SurfaceInfo;
 
-use crate::camera::Camera;
+use crate::{camera::Camera, game::RenderUnit, gui::YakuiRenderResources};
 use crate::{
-    game::{
-        GameSystemMessage, RenderUnit, TransactionRecord, TransactionRecords,
-        TRANSACTION_ANIMATION_SPEED,
-    },
+    game::{GameSystemMessage, TransactionRecord, TransactionRecords, TRANSACTION_ANIMATION_SPEED},
     gui::GameElementPaintRef,
 };
 use crate::{gpu, gui};
@@ -63,14 +60,20 @@ pub struct Renderer {
     pub render_resources: RenderResources,
     pub global_resources: Arc<GlobalResources>,
 
-    render_info_cache:
-        Arc<Mutex<Option<(HashMap<TileCoord, RenderUnit>, HashMap<TileCoord, DataMap>)>>>,
+    render_info_cache: Arc<
+        Mutex<
+            Option<(
+                Vec<(TileCoord, Id, RenderUnit)>,
+                HashMap<TileCoord, DataMap>,
+            )>,
+        >,
+    >,
     render_info_updating: Arc<AtomicBool>,
     transaction_records_cache: Arc<Mutex<TransactionRecords>>,
     transaction_records_updating: Arc<AtomicBool>,
 
     pub tile_tints: HashMap<TileCoord, Vec4>,
-    pub extra_instances: Vec<(InstanceData, Id)>,
+    pub extra_instances: Vec<(InstanceData, Id, ())>,
 
     pub take_item_animations: HashMap<Item, VecDeque<(Instant, Rect)>>,
 
@@ -195,7 +198,8 @@ impl Renderer {
             });
         }
 
-        let Some((mut instances, all_data)) = self.render_info_cache.blocking_lock().clone() else {
+        let Some((mut render_info, all_data)) = self.render_info_cache.blocking_lock().clone()
+        else {
             return Ok(());
         };
 
@@ -224,8 +228,8 @@ impl Renderer {
 
         let mut animation_map = AnimationMap::new();
 
-        for (coord, unit) in instances.iter_mut() {
-            let tile = resource_man.registry.tiles.get(&unit.tile_id).unwrap();
+        for (coord, id, unit) in render_info.iter_mut() {
+            let tile = resource_man.registry.tiles.get(id).unwrap();
 
             if let Some(theta) = all_data
                 .get(coord)
@@ -259,13 +263,14 @@ impl Renderer {
                                     * Matrix4::from_translation(vec3(0.0, 0.5, 0.0)),
                             ),
                         resource_man.registry.model_ids.cube1x1,
+                        (),
                     ))
                 }
             } else if let Some(Data::Id(inactive)) = tile
                 .data
                 .get(&resource_man.registry.data_ids.inactive_model)
             {
-                unit.model = resource_man.get_model(*inactive);
+                unit.model_override = Some(resource_man.tile_model_or_missing(*inactive));
             }
         }
 
@@ -282,6 +287,7 @@ impl Renderer {
                             HEX_GRID_LAYOUT.hex_to_world_pos(**link),
                         )),
                     resource_man.registry.model_ids.cube1x1,
+                    (),
                 ));
             }
 
@@ -295,6 +301,7 @@ impl Renderer {
                                 * Matrix4::from_scale(vec3(0.25, 0.25, 1.0)),
                         ),
                     resource_man.registry.items[id].model,
+                    (),
                 ))
             }
         }
@@ -328,80 +335,89 @@ impl Renderer {
                             )
                             .with_world_matrix(world_matrix)
                             .with_light_pos(camera_pos_float, None);
-                        let model = resource_man.get_item_model(stack.item.model);
+                        let model = resource_man.item_model_or_missing(stack.item.model);
 
-                        extra_instances.push((instance, model));
+                        extra_instances.push((instance, model, ()));
                     }
                 }
             }
         }
 
-        let mut game_instances = {
-            let none = resource_man
+        let game_instances = {
+            let none_model = resource_man
                 .registry
                 .tiles
                 .get(&resource_man.registry.none)
                 .unwrap()
                 .model;
 
-            for RenderUnit { model, .. } in instances.values() {
-                try_add_animation(&resource_man, start_instant, *model, &mut animation_map);
+            let mut map = HashMap::new();
+
+            let mut occupied = HashSet::new();
+
+            for (coord, id, unit) in render_info {
+                let model = resource_man
+                    .registry
+                    .tiles
+                    .get(&id)
+                    .map(|v| v.model)
+                    .unwrap_or(resource_man.registry.model_ids.missing);
+
+                occupied.insert(coord);
+
+                let model = unit.model_override.unwrap_or(model);
+
+                try_add_animation(&resource_man, start_instant, model, &mut animation_map);
+
+                map.entry(id)
+                    .or_insert_with(|| Vec::with_capacity(32))
+                    .push((unit.instance, model, coord))
             }
 
             for hex in culling_range.all_coords() {
                 let coord = TileCoord::from(hex);
+                if occupied.contains(&coord) {
+                    continue;
+                }
 
-                if !instances.contains_key(&coord) {
-                    let p = HEX_GRID_LAYOUT.hex_to_world_pos(*coord);
+                map.entry(resource_man.registry.none).or_default().push((
+                    InstanceData::default().with_model_matrix(Matrix4::from_translation(
+                        HEX_GRID_LAYOUT
+                            .hex_to_world_pos(*coord)
+                            .extend(FAR as Float),
+                    )),
+                    none_model,
+                    coord,
+                ));
+            }
 
-                    instances.insert(
-                        coord,
-                        RenderUnit {
-                            instance: InstanceData::default().with_model_matrix(
-                                Matrix4::from_translation(p.extend(FAR as Float)),
-                            ),
-                            tile_id: none,
-                            model: none,
-                        },
-                    );
+            for (_, units) in &mut map {
+                for unit in units {
+                    let mut instance = unit.0;
+
+                    if let Some(color) = tile_tints.get(&unit.2) {
+                        instance = instance.with_color_offset(color.to_array())
+                    }
+
+                    instance = instance
+                        .with_light_pos(camera_pos_float, None)
+                        .with_world_matrix(world_matrix);
+
+                    unit.0 = instance;
                 }
             }
 
-            for (coord, color) in tile_tints.into_iter() {
-                if let Some(RenderUnit { instance, .. }) = instances.get_mut(&coord) {
-                    *instance = instance.with_color_offset(color.to_array())
-                }
-            }
-
-            let mut map = HashMap::new();
-
-            for RenderUnit {
-                instance, model, ..
-            } in instances.into_values()
-            {
-                map.entry(model)
-                    .or_insert_with(|| Vec::with_capacity(32))
-                    .push((
-                        instance
-                            .with_light_pos(camera_pos_float, None)
-                            .with_world_matrix(world_matrix),
-                        model,
-                        (),
-                    ))
-            }
-
-            map.into_values().flatten().collect::<Vec<_>>()
+            map.into_values()
+                .flat_map(|v| v.into_iter().map(|v| (v.0, v.1, ())))
+                .collect::<Vec<_>>()
         };
 
-        for (_, model) in &extra_instances {
+        for (_, model, _) in &extra_instances {
             try_add_animation(&resource_man, start_instant, *model, &mut animation_map);
         }
 
-        let mut extra_instances = extra_instances
-            .into_iter()
-            .map(|(instance, id)| (instance, id, ()))
-            .collect::<Vec<_>>();
-        game_instances = [mem::take(&mut extra_instances), game_instances].concat();
+        let mut game_instances = [extra_instances, game_instances].concat();
+
         game_instances.sort_by_key(|v| v.1);
 
         let r = self.inner_render(
@@ -632,14 +648,14 @@ impl Renderer {
                 depth_load_op: None,
             };
 
-            let resources = &mut (
+            let resources: &mut YakuiRenderResources = &mut (
                 resource_man.clone(),
                 self.global_resources.clone(),
                 self.render_resources.gui_resources.take(),
                 surface.format,
                 animation_map,
-                Some(Vec::<(InstanceData, Id, usize)>::new()),
-                HashMap::<Id, Vec<(DrawIndexedIndirectArgs, usize)>>::new(),
+                Some(Default::default()),
+                Default::default(),
             );
 
             {

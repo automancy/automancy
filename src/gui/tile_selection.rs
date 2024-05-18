@@ -118,7 +118,7 @@ fn draw_tile_selection(
         let active = is_default_tile || has_item;
 
         let tile = state.resource_man.registry.tiles.get(id).unwrap();
-        let model = state.resource_man.get_model(tile.model);
+        let model = state.resource_man.tile_model_or_missing(tile.model);
 
         let hover_anim_active = use_state(|| false);
 
@@ -190,7 +190,7 @@ pub fn tile_selections(
                         centered_row(|| {
                             for id in &state.resource_man.ordered_categories {
                                 let category = &state.resource_man.registry.categories[id];
-                                let model = state.resource_man.get_model(category.icon);
+                                let model = state.resource_man.tile_model_or_missing(category.icon);
 
                                 let response = interactive(|| {
                                     ui_game_object(

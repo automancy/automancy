@@ -345,7 +345,7 @@ pub fn render_ui(
                                             cursor_pos.y as Float,
                                             FAR as Float,
                                         ))),
-                                    state.resource_man.get_model(tile_def.model),
+                                    state.resource_man.tile_model_or_missing(tile_def.model),
                                     state
                                         .gui
                                         .as_ref()
@@ -370,6 +370,7 @@ pub fn render_ui(
                                     cursor_pos.as_vec2(),
                                 )),
                             state.resource_man.registry.model_ids.cube1x1,
+                            (),
                         ));
                     }
 
@@ -397,6 +398,7 @@ pub fn render_ui(
                                             .hex_to_world_pos(*(state.camera.pointing_at + dir)),
                                     )),
                                 state.resource_man.registry.model_ids.cube1x1,
+                                (),
                             ));
                         }
                     }
@@ -454,6 +456,7 @@ pub fn render_ui(
                         HEX_GRID_LAYOUT.hex_to_world_pos(*state.camera.pointing_at),
                     )),
                 state.resource_man.registry.model_ids.cube1x1,
+                (),
             ));
         }
 

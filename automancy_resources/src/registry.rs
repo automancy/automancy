@@ -31,6 +31,7 @@ pub struct Registry {
     pub gui_ids: GuiIds,
     pub key_ids: KeyIds,
     pub err_ids: ErrorIds,
+    pub render_ids: RenderIds,
 }
 
 #[derive(Copy, Clone, IdReg)]
@@ -147,4 +148,12 @@ pub struct ErrorIds {
     pub invalid_map_data: Id,
     /// This error is displayed when the options cannot be written.
     pub unwritable_options: Id,
+}
+
+#[derive(Clone, Copy, IdReg)]
+pub struct RenderIds {
+    #[namespace(core)]
+    pub extra_instances: Id,
+    #[namespace(core)]
+    pub game_gui_element: Id,
 }

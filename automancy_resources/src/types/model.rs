@@ -27,7 +27,7 @@ pub struct ModelRaw {
 }
 
 impl ResourceManager {
-    pub fn get_model(&self, model: Id) -> Id {
+    pub fn tile_model_or_missing(&self, model: Id) -> Id {
         if self.all_index_ranges.contains_key(&model) {
             model
         } else {
@@ -35,7 +35,7 @@ impl ResourceManager {
         }
     }
 
-    pub fn get_item_model(&self, model: Id) -> Id {
+    pub fn item_model_or_missing(&self, model: Id) -> Id {
         if self.all_index_ranges.contains_key(&model) {
             model
         } else {
