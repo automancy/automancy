@@ -2,7 +2,7 @@ use std::ffi::OsStr;
 use std::fs::read_dir;
 use std::path::Path;
 
-use kira::sound::static_sound::{StaticSoundData, StaticSoundSettings};
+use kira::sound::static_sound::StaticSoundData;
 
 use automancy_defs::flexstr::ToSharedStr;
 use automancy_defs::log;
@@ -22,10 +22,7 @@ impl ResourceManager {
             {
                 log::info!("Loading audio at {file:?}");
 
-                if let Ok(audio) = StaticSoundData::from_file(
-                    &file,
-                    StaticSoundSettings::default().output_destination(&self.track),
-                ) {
+                if let Ok(audio) = StaticSoundData::from_file(&file) {
                     let name = file
                         .file_stem()
                         .ok_or_else(|| {

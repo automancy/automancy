@@ -292,8 +292,7 @@ impl ApplicationHandler for Automancy {
                 self.state
                     .audio_man
                     .main_track()
-                    .set_volume(self.state.options.audio.sfx_volume, Tween::default())
-                    .unwrap();
+                    .set_volume(self.state.options.audio.sfx_volume, Tween::default());
 
                 self.state
                     .renderer

@@ -513,7 +513,7 @@ impl Actor for GameSystem {
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         match message {
-            SupervisionEvent::ActorPanicked(dead_actor, error) => {
+            SupervisionEvent::ActorFailed(dead_actor, error) => {
                 log::error!(
                     "Tile entity {dead_actor:?} panicked, trying to remove. Error: {error}"
                 );
