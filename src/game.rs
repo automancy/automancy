@@ -121,7 +121,7 @@ pub enum GameSystemMessage {
     /// get all the tiles needing to be rendered, and their info
     GetAllRenderUnits {
         culling_range: TileBounds,
-        reply: RpcReplyPort<Vec<(TileCoord, Id, RenderUnit)>>,
+        reply: RpcReplyPort<HashMap<TileCoord, (Id, RenderUnit)>>,
     },
     GetTiles(
         Vec<TileCoord>,
@@ -219,16 +219,18 @@ impl Actor for GameSystem {
 
                                 (
                                     *coord,
-                                    *id,
-                                    RenderUnit {
-                                        instance: InstanceData::default().with_model_matrix(
-                                            Matrix4::from_translation(p.extend(FAR as Float)),
-                                        ),
-                                        model_override: None,
-                                    },
+                                    (
+                                        *id,
+                                        RenderUnit {
+                                            instance: InstanceData::default().with_model_matrix(
+                                                Matrix4::from_translation(p.extend(FAR as Float)),
+                                            ),
+                                            model_override: None,
+                                        },
+                                    ),
                                 )
                             })
-                            .collect::<Vec<_>>();
+                            .collect();
 
                         reply.send(instances)?;
                     }

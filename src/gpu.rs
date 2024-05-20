@@ -1,13 +1,15 @@
-use core::slice;
 use std::mem;
 use std::sync::Arc;
 
 use hashbrown::HashMap;
 use image::EncodableLayout;
-use wgpu::util::{DrawIndexedIndirectArgs, TextureDataOrder};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     InstanceFlags,
+};
+use wgpu::{
+    util::{DrawIndexedIndirectArgs, TextureDataOrder},
+    Face,
 };
 use wgpu::{AdapterInfo, Surface};
 use wgpu::{
@@ -30,7 +32,6 @@ use automancy_defs::id::Id;
 use automancy_defs::math::Matrix4;
 use automancy_defs::rendering::PostProcessingUBO;
 use automancy_defs::rendering::{GameUBO, InstanceData, MatrixData, RawInstanceData, Vertex};
-use automancy_defs::slice_group_by::GroupBy;
 use automancy_macros::OptionGetter;
 use automancy_resources::ResourceManager;
 
@@ -193,7 +194,7 @@ pub fn init_gpu_resources(
             targets: &[
                 Some(ColorTargetState {
                     format: config.format,
-                    blend: Some(BlendState::ALPHA_BLENDING),
+                    blend: Some(BlendState::PREMULTIPLIED_ALPHA_BLENDING),
                     write_mask: ColorWrites::ALL,
                 }),
                 Some(ColorTargetState {
@@ -211,7 +212,7 @@ pub fn init_gpu_resources(
         primitive: PrimitiveState {
             topology: PrimitiveTopology::TriangleList,
             front_face: FrontFace::Ccw,
-            cull_mode: None,
+            cull_mode: Some(Face::Back),
             ..Default::default()
         },
         depth_stencil: Some(DepthStencilState {
@@ -228,6 +229,54 @@ pub fn init_gpu_resources(
         },
         multiview: None,
     });
+
+    let extra_objects_resources = {
+        let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Extra Objects Uniform Buffer"),
+            contents: bytemuck::cast_slice(&[GameUBO::default()]),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+
+        const MATRIX_DATA_SIZE: usize = 4096;
+        let matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Extra Objects Matrix Data Buffer"),
+            contents: &Vec::from_iter(
+                (0..(mem::size_of::<MatrixData>() * MATRIX_DATA_SIZE)).map(|_| 0),
+            ),
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+        });
+
+        let bind_group = device.create_bind_group(&BindGroupDescriptor {
+            layout: &game_bind_group_layout,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: matrix_data_buffer.as_entire_binding(),
+                },
+            ],
+            label: Some("extra_objects_bind_group"),
+        });
+
+        ExtraObjectsResources {
+            instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
+                label: None,
+                contents: &[],
+                usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
+            }),
+            indirect_buffer: device.create_buffer_init(&BufferInitDescriptor {
+                label: None,
+                contents: &[],
+                usage: BufferUsages::INDIRECT | BufferUsages::COPY_DST,
+            }),
+            matrix_data_buffer,
+            uniform_buffer,
+            bind_group,
+        }
+    };
 
     let game_resources = {
         let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
@@ -701,7 +750,7 @@ pub fn init_gpu_resources(
             entry_point: "fs_main",
             targets: &[Some(ColorTargetState {
                 format: config.format,
-                blend: Some(BlendState::ALPHA_BLENDING),
+                blend: Some(BlendState::PREMULTIPLIED_ALPHA_BLENDING),
                 write_mask: ColorWrites::ALL,
             })],
         }),
@@ -733,7 +782,7 @@ pub fn init_gpu_resources(
             entry_point: "fs_main",
             targets: &[Some(ColorTargetState {
                 format: config.format,
-                blend: Some(BlendState::ALPHA_BLENDING),
+                blend: Some(BlendState::PREMULTIPLIED_ALPHA_BLENDING),
                 write_mask: ColorWrites::ALL,
             })],
         }),
@@ -772,6 +821,7 @@ pub fn init_gpu_resources(
     };
 
     let render = RenderResources {
+        extra_objects_resources,
         game_resources,
         gui_resources: Some(gui_resources),
         post_processing_resources,
@@ -814,110 +864,82 @@ pub fn init_gpu_resources(
     (shared, render, global)
 }
 
+type CompiledInstances<T> = Vec<(usize, RawInstanceData, T, Id)>;
+
 pub fn compile_instances<T: Clone + Send>(
     resource_man: &ResourceManager,
     instances: Vec<(InstanceData, Id, T)>,
     animation_map: &AnimationMap,
-) -> (
-    HashMap<Id, Vec<(usize, RawInstanceData, T)>>,
-    Vec<MatrixData>,
-) {
-    let mut raw_instances = HashMap::new();
+) -> (CompiledInstances<T>, Vec<MatrixData>) {
+    let mut vec = Vec::new();
     let mut matrix_data = vec![];
 
     instances.into_iter().for_each(|(instance, id, extra)| {
-        if let Some((models, ..)) = &resource_man.all_models.get(&id) {
-            let vec = raw_instances.entry(id).or_insert_with(Vec::new);
-
-            for model in models.values() {
+        if let Some((meshes, ..)) = &resource_man.all_models.get(&id) {
+            for mesh in meshes.iter().flatten() {
                 let mut instance = instance;
 
-                let mut matrix = model.matrix;
+                let mut matrix = mesh.matrix;
                 if let Some(anim) = animation_map
                     .get(&id)
-                    .and_then(|anim| anim.get(&model.index))
+                    .and_then(|anim| anim.get(&mesh.index))
                 {
                     matrix *= *anim;
                 }
                 instance = instance.add_model_matrix(matrix);
 
                 vec.push((
-                    model.index,
+                    mesh.index,
                     RawInstanceData::from_instance(instance, &mut matrix_data),
                     extra.clone(),
+                    id,
                 ));
             }
         }
     });
 
-    raw_instances
-        .values_mut()
-        .for_each(|v| v.sort_by_key(|v| v.0));
-
-    (raw_instances, matrix_data)
+    (vec, matrix_data)
 }
 
 fn collect_indirect<T: Clone + Send + Sync>(
+    resource_man: &ResourceManager,
     base_instance_counter: &mut u32,
     draw_count: &mut u32,
     vec: &mut Vec<(DrawIndexedIndirectArgs, T)>,
-    resource_man: &ResourceManager,
-    model_id: &Id,
-    instances: &[(usize, RawInstanceData, T)],
+    instance: (usize, RawInstanceData, T, Id),
 ) {
-    let size = instances.len() as u32;
+    let size = 1;
 
-    let index_range = resource_man.all_index_ranges[model_id][&instances[0].0];
+    let index_range = resource_man.all_index_ranges[&instance.3][&instance.0];
 
     let command = DrawIndexedIndirectArgs {
-        first_index: index_range.offset,
-        index_count: index_range.size,
+        first_index: index_range.pos,
+        index_count: index_range.count,
         first_instance: *base_instance_counter,
         instance_count: size,
-        base_vertex: 0,
+        base_vertex: index_range.base_vertex,
     };
 
     *base_instance_counter += size;
     *draw_count += 1;
 
-    vec.push((command, instances[0].2.clone()));
+    vec.push((command, instance.2));
 }
 
 fn indirect<T: Clone + Send + Sync>(
     resource_man: &ResourceManager,
-    group: bool,
-    compiled_instances: &HashMap<Id, Vec<(usize, RawInstanceData, T)>>,
-) -> (u32, HashMap<Id, Vec<(DrawIndexedIndirectArgs, T)>>) {
+    compiled_instances: &CompiledInstances<T>,
+) -> (u32, Vec<(DrawIndexedIndirectArgs, T)>) {
     let (_, draw_count, commands) = compiled_instances.iter().fold(
-        (0, 0, HashMap::new()),
-        |(mut base_instance_counter, mut draw_count, mut commands), (id, groups)| {
-            let vec = commands
-                .entry(*id)
-                .or_insert_with(|| Vec::with_capacity(groups.len()));
-
-            if group {
-                for instances in groups.binary_group_by_key(|v| v.0) {
-                    collect_indirect(
-                        &mut base_instance_counter,
-                        &mut draw_count,
-                        vec,
-                        resource_man,
-                        id,
-                        instances,
-                    )
-                }
-            } else {
-                for instances in groups.iter().map(slice::from_ref) {
-                    collect_indirect(
-                        &mut base_instance_counter,
-                        &mut draw_count,
-                        vec,
-                        resource_man,
-                        id,
-                        instances,
-                    )
-                }
-            }
+        (0, 0, Vec::new()),
+        |(mut base_instance_counter, mut draw_count, mut commands), instance| {
+            collect_indirect(
+                resource_man,
+                &mut base_instance_counter,
+                &mut draw_count,
+                &mut commands,
+                instance.clone(),
+            );
 
             (base_instance_counter, draw_count, commands)
         },
@@ -929,22 +951,18 @@ fn indirect<T: Clone + Send + Sync>(
 pub fn indirect_instance<T: Clone + Send + Sync>(
     resource_man: &ResourceManager,
     instances: Vec<(InstanceData, Id, T)>,
-    group: bool,
     animation_map: &AnimationMap,
 ) -> (
     Vec<RawInstanceData>,
     Vec<MatrixData>,
-    (HashMap<Id, Vec<(DrawIndexedIndirectArgs, T)>>, u32),
+    (Vec<(DrawIndexedIndirectArgs, T)>, u32),
 ) {
     let (compiled_instances, matrix_data) =
         compile_instances(resource_man, instances, animation_map);
 
-    let (draw_count, commands) = indirect(resource_man, group, &compiled_instances);
+    let (draw_count, commands) = indirect(resource_man, &compiled_instances);
 
-    let instances = compiled_instances
-        .into_iter()
-        .flat_map(|v| v.1.into_iter().map(|v| v.1))
-        .collect::<Vec<RawInstanceData>>();
+    let instances = compiled_instances.into_iter().map(|v| v.1).collect();
 
     (instances, matrix_data, (commands, draw_count))
 }
@@ -1033,7 +1051,7 @@ fn make_fxaa_bind_group(
     })
 }
 
-pub struct GameResources {
+pub struct ExtraObjectsResources {
     pub instance_buffer: Buffer,
     pub indirect_buffer: Buffer,
     pub uniform_buffer: Buffer,
@@ -1041,13 +1059,12 @@ pub struct GameResources {
     pub bind_group: BindGroup,
 }
 
-pub struct InWorldItemResources {
+pub struct GameResources {
     pub instance_buffer: Buffer,
     pub indirect_buffer: Buffer,
     pub uniform_buffer: Buffer,
     pub matrix_data_buffer: Buffer,
     pub bind_group: BindGroup,
-    pub pipeline: RenderPipeline,
 }
 
 pub struct GuiResources {
@@ -1063,7 +1080,9 @@ pub struct PostProcessingResources {
 }
 
 pub struct RenderResources {
+    pub extra_objects_resources: ExtraObjectsResources,
     pub game_resources: GameResources,
+
     pub gui_resources: Option<GuiResources>,
 
     pub post_processing_resources: PostProcessingResources,

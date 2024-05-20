@@ -19,7 +19,7 @@ use walkdir::WalkDir;
 
 use automancy_defs::flexstr::SharedStr;
 use automancy_defs::id::{id_static, Id, Interner};
-use automancy_defs::rendering::{Animation, Model};
+use automancy_defs::rendering::{Animation, Mesh};
 use automancy_defs::{id, log};
 
 use crate::error::ErrorManager;
@@ -114,7 +114,7 @@ pub struct ResourceManager {
     pub ordered_tiles: Vec<Id>,
     pub ordered_items: Vec<Id>,
     pub ordered_categories: Vec<Id>,
-    pub all_models: HashMap<Id, (HashMap<usize, Model>, Vec<Animation>)>,
+    pub all_models: HashMap<Id, (Vec<Option<Mesh>>, Vec<Animation>)>,
     pub all_index_ranges: HashMap<Id, HashMap<usize, IndexRange>>,
 }
 

@@ -126,11 +126,9 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
             draws,
         ): &mut YakuiRenderResources,
     ) {
-        if let Some(mut instances) = instances.take() {
-            instances.sort_by_key(|v| v.1);
-
+        if let Some(instances) = instances.take() {
             let (instances, matrix_data, draws_result) =
-                gpu::indirect_instance(resource_man, instances, false, animation_map);
+                gpu::indirect_instance(resource_man, instances, animation_map);
 
             let gui_resources = gui_resources.as_mut().unwrap();
 
@@ -377,10 +375,7 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                 render_pass
                     .set_index_buffer(global_resources.index_buffer.slice(..), IndexFormat::Uint16);
 
-                for (draw, ..) in draws[&self.props.model]
-                    .iter()
-                    .filter(|v| v.1 == self.props.index)
-                {
+                for (draw, ..) in draws.iter().filter(|v| v.1 == self.props.index) {
                     render_pass.draw_indexed(
                         draw.first_index..(draw.first_index + draw.index_count),
                         draw.base_vertex,

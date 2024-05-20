@@ -280,7 +280,7 @@ pub type YakuiRenderResources = (
     TextureFormat,
     AnimationMap,
     Option<Vec<(InstanceData, Id, usize)>>,
-    HashMap<Id, Vec<(DrawIndexedIndirectArgs, usize)>>,
+    Vec<(DrawIndexedIndirectArgs, usize)>,
 );
 
 pub fn render_ui(

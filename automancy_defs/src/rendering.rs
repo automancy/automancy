@@ -1,13 +1,16 @@
-use std::mem::size_of;
+use std::{f32::consts::PI, mem::size_of};
 
 use bytemuck::{Pod, Zeroable};
 
 use glam::{vec3, vec4};
-use gltf::animation::Interpolation;
-use gltf::scene::Transform;
+use gltf::{
+    animation::{util::ReadOutputs, Interpolation},
+    Document,
+};
+use gltf::{buffer::Data, scene::Transform};
 use wgpu::{vertex_attr_array, BufferAddress, VertexAttribute, VertexBufferLayout, VertexStepMode};
 
-use crate::math::{direction_to_angle, Float, Matrix3, Matrix4, Vec2, Vec3, Vec4};
+use crate::math::{direction_to_angle, Float, Matrix3, Matrix4, Quaternion, Vec2, Vec3, Vec4};
 
 pub const LINE_DEPTH: Float = 0.1;
 
@@ -296,8 +299,16 @@ impl Default for PostProcessingUBO {
 
 // model
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Animation {
+    pub target: usize,
+    pub interpolation: Interpolation,
+    pub inputs: Vec<Float>,
+    pub outputs: Vec<Matrix4>,
+}
+
 #[derive(Debug, Clone)]
-pub struct Model {
+pub struct Mesh {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u16>,
     pub name: String,
@@ -306,10 +317,132 @@ pub struct Model {
     pub transform: Transform,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Animation {
-    pub target: usize,
-    pub interpolation: Interpolation,
-    pub inputs: Vec<Float>,
-    pub outputs: Vec<Matrix4>,
+pub fn load_gltf_model(
+    document: Document,
+    buffers: Vec<Data>,
+) -> (Vec<Option<Mesh>>, Vec<Animation>) {
+    let mut meshes = Vec::new();
+    let mut animations = vec![];
+
+    for scene in document.scenes() {
+        for node in scene.nodes() {
+            let index = node.index();
+
+            if let Some(mesh) = node.mesh() {
+                let name = mesh.name().unwrap_or("").to_string();
+
+                let mut read_vertices = vec![];
+                let mut read_indices = vec![];
+
+                for primitive in mesh.primitives() {
+                    let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
+
+                    if let Some((positions, (normals, colors))) = reader
+                        .read_positions()
+                        .zip(reader.read_normals().zip(reader.read_colors(0)))
+                    {
+                        for (pos, (normal, color)) in
+                            positions.zip(normals.zip(colors.into_rgba_f32()))
+                        {
+                            read_vertices.push(Vertex { pos, normal, color })
+                        }
+                    }
+
+                    if let Some(indices) = reader.read_indices() {
+                        for index in indices.into_u32() {
+                            read_indices.push(index as u16)
+                        }
+                    }
+                }
+
+                let transform = node.transform();
+
+                meshes.resize(mesh.index() + 1, None);
+                meshes[mesh.index()] = Some(Mesh {
+                    vertices: read_vertices,
+                    indices: read_indices,
+                    name,
+                    index,
+                    matrix: Matrix4::from_rotation_z(PI)
+                        * Matrix4::from_cols_array_2d(&transform.clone().matrix()),
+                    transform,
+                });
+            }
+        }
+    }
+
+    for animation in document.animations() {
+        for channel in animation.channels() {
+            let reader = channel.reader(|buffer| Some(&buffers[buffer.index()]));
+
+            let target = channel.target().node().index();
+            let sampler = channel.sampler();
+            let interpolation = sampler.interpolation();
+            let mut read_inputs = vec![];
+            let mut read_outputs = vec![];
+
+            if let Some((inputs, outputs)) = reader.read_inputs().zip(reader.read_outputs()) {
+                match outputs {
+                    ReadOutputs::Translations(outputs) => {
+                        let transform = meshes[target]
+                            .as_ref()
+                            .unwrap()
+                            .transform
+                            .clone()
+                            .decomposed();
+                        let [ox, oy, oz] = transform.0;
+                        let [sx, sy, sz] = transform.2;
+
+                        for (input, [x, y, z]) in inputs.zip(outputs) {
+                            read_inputs.push(input);
+                            read_outputs.push(Matrix4::from_translation(vec3(
+                                (ox - x) / sx,
+                                (oy - y) / sy,
+                                (oz - z) / sz,
+                            )));
+                        }
+                    }
+                    ReadOutputs::Scales(outputs) => {
+                        let [sx, sy, sz] = meshes[target]
+                            .as_ref()
+                            .unwrap()
+                            .transform
+                            .clone()
+                            .decomposed()
+                            .2;
+
+                        for (input, [x, y, z]) in inputs.zip(outputs) {
+                            read_inputs.push(input);
+                            read_outputs.push(Matrix4::from_scale(vec3(x / sx, y / sy, z / sz)));
+                        }
+                    }
+                    ReadOutputs::Rotations(outputs) => {
+                        for (input, output) in inputs.zip(outputs.into_f32()) {
+                            let transform = meshes[target]
+                                .as_ref()
+                                .unwrap()
+                                .transform
+                                .clone()
+                                .decomposed();
+                            let rotate = Quaternion::from_array(transform.1);
+                            let output = Quaternion::from_array(output);
+
+                            read_inputs.push(input);
+                            read_outputs.push(Matrix4::from_quat(rotate.inverse() * output));
+                        }
+                    }
+                    _ => {}
+                }
+
+                animations.push(Animation {
+                    target,
+                    interpolation,
+                    inputs: read_inputs,
+                    outputs: read_outputs,
+                })
+            }
+        }
+    }
+
+    (meshes, animations)
 }
