@@ -364,7 +364,6 @@ pub fn render_ui(
                             InstanceData::default()
                                 .with_color_offset(colors::RED.to_linear())
                                 .with_light_pos(state.camera.get_pos().as_vec3(), None)
-                                .with_world_matrix(state.camera.get_matrix().as_mat4())
                                 .with_model_matrix(make_line(
                                     HEX_GRID_LAYOUT.hex_to_world_pos(*coord),
                                     cursor_pos.as_vec2(),
@@ -391,7 +390,6 @@ pub fn render_ui(
                                 InstanceData::default()
                                     .with_color_offset(colors::RED.to_linear())
                                     .with_light_pos(state.camera.get_pos().as_vec3(), None)
-                                    .with_world_matrix(state.camera.get_matrix().as_mat4())
                                     .with_model_matrix(make_line(
                                         HEX_GRID_LAYOUT.hex_to_world_pos(*state.camera.pointing_at),
                                         HEX_GRID_LAYOUT
@@ -450,7 +448,6 @@ pub fn render_ui(
                 InstanceData::default()
                     .with_color_offset(colors::LIGHT_BLUE.to_linear())
                     .with_light_pos(state.camera.get_pos().as_vec3(), None)
-                    .with_world_matrix(state.camera.get_matrix().as_mat4())
                     .with_model_matrix(make_line(
                         HEX_GRID_LAYOUT.hex_to_world_pos(*start),
                         HEX_GRID_LAYOUT.hex_to_world_pos(*state.camera.pointing_at),

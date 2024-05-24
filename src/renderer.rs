@@ -1,10 +1,10 @@
-use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::f32::consts::FRAC_PI_6;
 use std::mem;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
+use std::{borrow::Cow, time::Duration};
 
 use arboard::{Clipboard, ImageData};
 use hashbrown::HashMap;
@@ -22,17 +22,20 @@ use wgpu::{
 };
 use wgpu::{CommandBuffer, StoreOp};
 
-use automancy_defs::id::Id;
-use automancy_defs::math::{
-    direction_to_angle, lerp_coords_to_pixel, Float, Matrix4, FAR, HEX_GRID_LAYOUT, SQRT_3,
-};
-use automancy_defs::rendering::{make_line, GameUBO, InstanceData, LINE_DEPTH};
 use automancy_defs::slice_group_by::GroupBy;
 use automancy_defs::{colors, math};
 use automancy_defs::{coord::TileCoord, math::Vec4};
 use automancy_defs::{
-    glam::vec3,
-    rendering::{PostProcessingUBO, RawMat4},
+    glam::vec2,
+    rendering::{make_line, GameUBO, InstanceData, LINE_DEPTH},
+};
+use automancy_defs::{glam::vec3, rendering::PostProcessingUBO};
+use automancy_defs::{id::Id, math::get_screen_world_bounding_vec};
+use automancy_defs::{
+    math::{
+        direction_to_angle, lerp_coords_to_pixel, Float, Matrix4, FAR, HEX_GRID_LAYOUT, SQRT_3,
+    },
+    window,
 };
 use automancy_resources::data::item::Item;
 use automancy_resources::data::{Data, DataMap};
@@ -40,7 +43,9 @@ use automancy_resources::ResourceManager;
 use yakui::Rect;
 use yakui_wgpu::SurfaceInfo;
 
-use crate::{camera::Camera, game::RenderUnit, gui::YakuiRenderResources};
+use crate::{
+    camera::Camera, game::RenderUnit, gpu::IndirectInstanceDrawData, gui::YakuiRenderResources,
+};
 use crate::{
     game::{GameSystemMessage, TransactionRecord, TransactionRecords, TRANSACTION_ANIMATION_SPEED},
     gui::GameElementPaintRef,
@@ -53,6 +58,9 @@ use crate::{
     },
     gui::Gui,
 };
+
+const UPS: u64 = 30;
+const UPDATE_INTERVAL: Duration = Duration::from_nanos(1_000_000_000 / UPS);
 
 pub struct Renderer {
     pub gpu: Gpu,
@@ -76,6 +84,9 @@ pub struct Renderer {
     pub extra_instances: Vec<(InstanceData, Id, ())>,
 
     pub take_item_animations: HashMap<Item, VecDeque<(Instant, Rect)>>,
+
+    last_update: Option<Instant>,
+    last_game_data: Option<IndirectInstanceDrawData<()>>,
 
     screenshot_clipboard: Clipboard,
 }
@@ -102,6 +113,9 @@ impl Renderer {
             extra_instances: vec![],
 
             take_item_animations: Default::default(),
+
+            last_update: None,
+            last_game_data: None,
 
             screenshot_clipboard: Clipboard::new().unwrap(),
         }
@@ -165,6 +179,10 @@ impl Renderer {
             return Ok(());
         }
 
+        let mut animation_map = AnimationMap::new();
+        let camera_pos = camera.get_pos();
+        let camera_pos_float = camera_pos.as_vec3();
+        let camera_matrix = camera.get_matrix().as_mat4();
         let culling_range = camera.culling_range;
 
         if !self.render_info_updating.load(Ordering::Relaxed) {
@@ -198,115 +216,32 @@ impl Renderer {
             });
         }
 
-        let Some((mut render_info, all_data)) = self.render_info_cache.blocking_lock().clone()
-        else {
+        let render_info_lock = self.render_info_cache.blocking_lock();
+        let Some((render_info, all_data)) = render_info_lock.as_ref() else {
             return Ok(());
         };
 
-        if !self.transaction_records_updating.load(Ordering::Relaxed) {
-            let cache = self.transaction_records_cache.clone();
-            let updating = self.transaction_records_updating.clone();
-            let game = game.clone();
-
-            updating.store(true, Ordering::Relaxed);
-
-            tokio.spawn(async move {
-                let result = game
-                    .call(GameSystemMessage::GetRecordedTransactions, None)
-                    .await
-                    .unwrap()
-                    .unwrap();
-
-                *cache.lock().await = result;
-
-                updating.store(false, Ordering::Relaxed);
-            });
-        }
-
-        let camera_pos_float = camera.get_pos().as_vec3();
-        let world_matrix = camera.get_matrix().as_mat4();
-
-        let mut animation_map = AnimationMap::new();
-
-        for (coord, (id, unit)) in render_info.iter_mut() {
-            let tile = resource_man.registry.tiles.get(id).unwrap();
-
-            if let Some(theta) = all_data
-                .get(coord)
-                .and_then(|data| data.get(&resource_man.registry.data_ids.direction))
-                .and_then(|direction| {
-                    if let Data::Coord(target) = direction {
-                        math::tile_direction_to_angle(*target)
-                    } else {
-                        None
-                    }
-                })
-            {
-                unit.instance = unit
-                    .instance
-                    .add_model_matrix(Matrix4::from_rotation_z(theta.to_radians()));
-
-                if let Data::Color(color) = tile
-                    .data
-                    .get(&resource_man.registry.data_ids.direction_color)
-                    .unwrap_or(&Data::Color(colors::ORANGE))
-                {
-                    extra_instances.push((
-                        InstanceData::default()
-                            .with_color_offset(color.to_linear())
-                            .with_world_matrix(world_matrix)
-                            .with_light_pos(camera_pos_float, None)
-                            .with_model_matrix(
-                                unit.instance.get_model_matrix()
-                                    * Matrix4::from_rotation_z(FRAC_PI_6 * 5.0)
-                                    * Matrix4::from_scale(vec3(0.1, SQRT_3, LINE_DEPTH))
-                                    * Matrix4::from_translation(vec3(0.0, 0.5, 0.0)),
-                            ),
-                        resource_man.registry.model_ids.cube1x1,
-                        (),
-                    ))
-                }
-            } else if let Some(Data::Id(inactive)) = tile
-                .data
-                .get(&resource_man.registry.data_ids.inactive_model)
-            {
-                unit.model_override = Some(resource_man.tile_model_or_missing(*inactive));
-            }
-        }
-
-        for (coord, data) in all_data {
-            let world_coord = HEX_GRID_LAYOUT.hex_to_world_pos(*coord);
-            if let Some(Data::Coord(link)) = data.get(&resource_man.registry.data_ids.link) {
-                extra_instances.push((
-                    InstanceData::default()
-                        .with_color_offset(colors::RED.to_linear())
-                        .with_light_pos(camera_pos_float, None)
-                        .with_world_matrix(world_matrix)
-                        .with_model_matrix(make_line(
-                            world_coord,
-                            HEX_GRID_LAYOUT.hex_to_world_pos(**link),
-                        )),
-                    resource_man.registry.model_ids.cube1x1,
-                    (),
-                ));
-            }
-
-            if let Some(Data::Id(id)) = data.get(&resource_man.registry.data_ids.item) {
-                extra_instances.push((
-                    InstanceData::default()
-                        .with_light_pos(camera_pos_float, None)
-                        .with_world_matrix(world_matrix)
-                        .with_model_matrix(
-                            Matrix4::from_translation(world_coord.extend(0.1))
-                                * Matrix4::from_scale(vec3(0.25, 0.25, 1.0)),
-                        ),
-                    resource_man.registry.items[id].model,
-                    (),
-                ))
-            }
-        }
-
         {
+            if !self.transaction_records_updating.load(Ordering::Relaxed) {
+                let cache = self.transaction_records_cache.clone();
+                let updating = self.transaction_records_updating.clone();
+                let game = game.clone();
+
+                updating.store(true, Ordering::Relaxed);
+
+                tokio.spawn(async move {
+                    let result = game
+                        .call(GameSystemMessage::GetRecordedTransactions, None)
+                        .await
+                        .unwrap()
+                        .unwrap();
+
+                    *cache.lock().await = result;
+
+                    updating.store(false, Ordering::Relaxed);
+                });
+            }
+
             let transaction_records = self.transaction_records_cache.blocking_lock();
 
             let now = Instant::now();
@@ -333,7 +268,6 @@ impl Renderer {
                                 )) * Matrix4::from_rotation_z(theta)
                                     * Matrix4::from_scale(vec3(0.3, 0.3, 0.3)),
                             )
-                            .with_world_matrix(world_matrix)
                             .with_light_pos(camera_pos_float, None);
                         let model = resource_man.item_model_or_missing(stack.item.model);
 
@@ -343,80 +277,195 @@ impl Renderer {
             }
         }
 
-        for coord in culling_range.into_iter() {
-            if !render_info.contains_key(&coord) {
-                render_info.insert(
-                    coord,
-                    (
-                        resource_man.registry.none,
-                        RenderUnit {
-                            instance: InstanceData::default().with_model_matrix(
-                                Matrix4::from_translation(
-                                    HEX_GRID_LAYOUT
-                                        .hex_to_world_pos(*coord)
-                                        .extend(FAR as Float),
-                                ),
-                            ),
-                            model_override: None,
-                        },
-                    ),
-                );
+        for (coord, data) in all_data {
+            let world_coord = HEX_GRID_LAYOUT.hex_to_world_pos(**coord);
+            if let Some(Data::Coord(link)) = data.get(&resource_man.registry.data_ids.link) {
+                extra_instances.push((
+                    InstanceData::default()
+                        .with_color_offset(colors::RED.to_linear())
+                        .with_light_pos(camera_pos_float, None)
+                        .with_model_matrix(make_line(
+                            world_coord,
+                            HEX_GRID_LAYOUT.hex_to_world_pos(**link),
+                        )),
+                    resource_man.registry.model_ids.cube1x1,
+                    (),
+                ));
+            }
+
+            if let Some(Data::Id(id)) = data.get(&resource_man.registry.data_ids.item) {
+                extra_instances.push((
+                    InstanceData::default()
+                        .with_light_pos(camera_pos_float, None)
+                        .with_model_matrix(
+                            Matrix4::from_translation(world_coord.extend(0.1))
+                                * Matrix4::from_scale(vec3(0.25, 0.25, 1.0)),
+                        ),
+                    resource_man.registry.items[id].model,
+                    (),
+                ))
             }
         }
 
-        let game_instances = {
-            for (coord, (_, unit)) in &mut render_info.iter_mut() {
-                let mut instance = unit.instance;
+        for (coord, (id, unit)) in render_info {
+            let tile = resource_man.registry.tiles.get(id).unwrap();
 
-                if let Some(color) = tile_tints.get(coord) {
-                    instance = instance.with_color_offset(color.to_array())
+            if let Some(theta) = all_data
+                .get(coord)
+                .and_then(|data| data.get(&resource_man.registry.data_ids.direction))
+                .and_then(|direction| {
+                    if let Data::Coord(target) = direction {
+                        math::tile_direction_to_angle(*target)
+                    } else {
+                        None
+                    }
+                })
+            {
+                if let Data::Color(color) = tile
+                    .data
+                    .get(&resource_man.registry.data_ids.direction_color)
+                    .unwrap_or(&Data::Color(colors::ORANGE))
+                {
+                    extra_instances.push((
+                        InstanceData::default()
+                            .with_color_offset(color.to_linear())
+                            .with_light_pos(camera_pos_float, None)
+                            .with_model_matrix(
+                                unit.instance.get_model_matrix()
+                                    * Matrix4::from_rotation_z(theta.to_radians())
+                                    * Matrix4::from_rotation_z(FRAC_PI_6 * 5.0)
+                                    * Matrix4::from_scale(vec3(0.1, SQRT_3, LINE_DEPTH))
+                                    * Matrix4::from_translation(vec3(0.0, 0.5, 0.0)),
+                            ),
+                        resource_man.registry.model_ids.cube1x1,
+                        (),
+                    ))
+                }
+            }
+        }
+
+        let game_instances = if Instant::now()
+            .duration_since(*self.last_update.get_or_insert_with(Instant::now))
+            < UPDATE_INTERVAL
+        {
+            None
+        } else {
+            self.last_update = Some(Instant::now());
+
+            let mut render_info = render_info.clone();
+
+            let bound = get_screen_world_bounding_vec(
+                window::window_size_double(&self.gpu.window),
+                camera_pos,
+            )
+            .as_vec2()
+                + vec2(2.0, 2.0);
+
+            let center = camera_pos_float.truncate();
+
+            for coord in culling_range.into_iter() {
+                if !render_info.contains_key(&coord) {
+                    let pos = HEX_GRID_LAYOUT.hex_to_world_pos(*coord);
+
+                    let d = pos - center;
+                    if d.x <= bound.x && d.y <= bound.y {
+                        render_info.insert(
+                            coord,
+                            (
+                                resource_man.registry.none,
+                                RenderUnit {
+                                    instance: InstanceData::default().with_model_matrix(
+                                        Matrix4::from_translation(pos.extend(FAR as Float)),
+                                    ),
+                                    model_override: None,
+                                },
+                            ),
+                        );
+                    }
+                }
+            }
+
+            for (coord, (id, unit)) in render_info.iter_mut() {
+                let tile = resource_man.registry.tiles.get(id).unwrap();
+
+                if let Some(theta) = all_data
+                    .get(coord)
+                    .and_then(|data| data.get(&resource_man.registry.data_ids.direction))
+                    .and_then(|direction| {
+                        if let Data::Coord(target) = direction {
+                            math::tile_direction_to_angle(*target)
+                        } else {
+                            None
+                        }
+                    })
+                {
+                    unit.instance = unit
+                        .instance
+                        .add_model_matrix(Matrix4::from_rotation_z(theta.to_radians()));
+                } else if let Some(Data::Id(inactive)) = tile
+                    .data
+                    .get(&resource_man.registry.data_ids.inactive_model)
+                {
+                    unit.model_override = Some(resource_man.tile_model_or_missing(*inactive));
+                }
+            }
+
+            {
+                for (coord, (_, unit)) in &mut render_info.iter_mut() {
+                    let mut instance = unit.instance;
+
+                    if let Some(color) = tile_tints.get(coord) {
+                        instance = instance.with_color_offset(color.to_array())
+                    }
+
+                    instance = instance.with_light_pos(camera_pos_float, None);
+
+                    unit.instance = instance;
                 }
 
-                instance = instance
-                    .with_light_pos(camera_pos_float, None)
-                    .with_world_matrix(world_matrix);
+                let mut instances = Vec::new();
 
-                unit.instance = instance;
+                for (coord, (id, unit)) in render_info {
+                    let model = resource_man
+                        .registry
+                        .tiles
+                        .get(&id)
+                        .map(|v| v.model)
+                        .unwrap_or(resource_man.registry.model_ids.missing);
+
+                    let model = unit.model_override.unwrap_or(model);
+
+                    try_add_animation(&resource_man, start_instant, model, &mut animation_map);
+
+                    instances.push((
+                        unit.instance,
+                        model,
+                        HEX_GRID_LAYOUT.hex_to_world_pos(*coord),
+                    ))
+                }
+
+                let camera_pos = camera_pos_float.truncate();
+                instances.sort_by(|(.., a), (.., b)| {
+                    camera_pos
+                        .distance_squared(*a)
+                        .total_cmp(&camera_pos.distance_squared(*b))
+                });
+
+                Some(
+                    instances
+                        .into_iter()
+                        .rev()
+                        .map(|v| (v.0, v.1, ()))
+                        .collect::<Vec<_>>(),
+                )
             }
-
-            let mut instances = Vec::new();
-
-            for (coord, (id, unit)) in render_info {
-                let model = resource_man
-                    .registry
-                    .tiles
-                    .get(&id)
-                    .map(|v| v.model)
-                    .unwrap_or(resource_man.registry.model_ids.missing);
-
-                let model = unit.model_override.unwrap_or(model);
-
-                try_add_animation(&resource_man, start_instant, model, &mut animation_map);
-
-                instances.push((
-                    unit.instance,
-                    model,
-                    HEX_GRID_LAYOUT.hex_to_world_pos(*coord),
-                ))
-            }
-
-            let camera_pos = camera_pos_float.truncate();
-            instances.sort_by(|(.., a), (.., b)| {
-                camera_pos
-                    .distance_squared(*a)
-                    .total_cmp(&camera_pos.distance_squared(*b))
-            });
-
-            instances
-                .into_iter()
-                .rev()
-                .map(|v| (v.0, v.1, ()))
-                .collect::<Vec<_>>()
         };
 
         for (_, model, _) in &extra_instances {
             try_add_animation(&resource_man, start_instant, *model, &mut animation_map);
         }
+
+        drop(render_info_lock);
 
         let r = self.inner_render(
             screenshotting,
@@ -425,7 +474,7 @@ impl Renderer {
             game_instances,
             extra_instances,
             animation_map,
-            world_matrix.to_cols_array_2d(),
+            camera_matrix,
         );
 
         gui::reset_custom_paint_state();
@@ -438,17 +487,18 @@ impl Renderer {
         screenshotting: bool,
         gui: &mut Gui,
         resource_man: Arc<ResourceManager>,
-        game_instances: Vec<(InstanceData, Id, ())>,
+        game_instances: Option<Vec<(InstanceData, Id, ())>>,
         extra_instances: Vec<(InstanceData, Id, ())>,
         animation_map: AnimationMap,
-        world_matrix: RawMat4,
+        camera_matrix: Matrix4,
     ) -> Result<(), SurfaceError> {
         let size = self.gpu.window.inner_size();
 
-        let (game_instances, game_matrix_data, game_draws) =
-            gpu::indirect_instance(&resource_man, game_instances, &animation_map);
+        let mut game_data = game_instances.map(|game_instances| {
+            gpu::indirect_instance(&resource_man, game_instances, &animation_map)
+        });
 
-        let (extra_instances, extra_matrix_data, extra_draws) =
+        let extra_game_data =
             gpu::indirect_instance(&resource_man, extra_instances, &animation_map);
 
         let output = self.gpu.surface.get_current_texture()?;
@@ -469,6 +519,8 @@ impl Renderer {
             });
 
         {
+            let (extra_instances, extra_matrix_data, extra_draws) = &extra_game_data;
+
             gpu::create_or_write_buffer(
                 &self.gpu.device,
                 &self.gpu.queue,
@@ -479,11 +531,11 @@ impl Renderer {
                 bytemuck::cast_slice(extra_instances.as_slice()),
             );
 
-            let (draws, count) = extra_draws;
+            let (count, draws) = extra_draws;
 
             let mut indirect_buffer = vec![];
             draws
-                .into_iter()
+                .iter()
                 .for_each(|v| indirect_buffer.extend_from_slice(v.0.as_bytes()));
             gpu::create_or_write_buffer(
                 &self.gpu.device,
@@ -535,11 +587,11 @@ impl Renderer {
                 timestamp_writes: None,
             });
 
-            if count > 0 {
+            if *count > 0 {
                 self.gpu.queue.write_buffer(
                     &self.render_resources.extra_objects_resources.uniform_buffer,
                     0,
-                    bytemuck::cast_slice(&[GameUBO::default()]),
+                    bytemuck::cast_slice(&[GameUBO::new(camera_matrix)]),
                 );
                 self.gpu.queue.write_buffer(
                     &self
@@ -575,12 +627,17 @@ impl Renderer {
                         .extra_objects_resources
                         .indirect_buffer,
                     0,
-                    count,
+                    *count,
                 );
             }
         }
 
-        {
+        if let Some(game_data) = game_data.take().or(self.last_game_data.take()) {
+            self.last_game_data = Some(game_data);
+
+            let (game_instances, game_matrix_data, game_draws) =
+                self.last_game_data.as_ref().unwrap();
+
             gpu::create_or_write_buffer(
                 &self.gpu.device,
                 &self.gpu.queue,
@@ -588,11 +645,11 @@ impl Renderer {
                 bytemuck::cast_slice(game_instances.as_slice()),
             );
 
-            let (draws, count) = game_draws;
+            let (count, draws) = game_draws;
 
             let mut indirect_buffer = vec![];
             draws
-                .into_iter()
+                .iter()
                 .for_each(|v| indirect_buffer.extend_from_slice(v.0.as_bytes()));
             gpu::create_or_write_buffer(
                 &self.gpu.device,
@@ -641,11 +698,11 @@ impl Renderer {
                 timestamp_writes: None,
             });
 
-            if count > 0 {
+            if *count > 0 {
                 self.gpu.queue.write_buffer(
                     &self.render_resources.game_resources.uniform_buffer,
                     0,
-                    bytemuck::cast_slice(&[GameUBO::default()]),
+                    bytemuck::cast_slice(&[GameUBO::new(camera_matrix)]),
                 );
                 self.gpu.queue.write_buffer(
                     &self.render_resources.game_resources.matrix_data_buffer,
@@ -675,7 +732,7 @@ impl Renderer {
                 render_pass.multi_draw_indexed_indirect(
                     &self.render_resources.game_resources.indirect_buffer,
                     0,
-                    count,
+                    *count,
                 );
             }
         }
@@ -687,7 +744,9 @@ impl Renderer {
                     .post_processing_resources
                     .uniform_buffer,
                 0,
-                bytemuck::cast_slice(&[PostProcessingUBO { world_matrix }]),
+                bytemuck::cast_slice(&[PostProcessingUBO {
+                    camera_matrix: camera_matrix.to_cols_array_2d(),
+                }]),
             );
 
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {

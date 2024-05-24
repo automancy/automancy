@@ -172,15 +172,21 @@ pub fn normalized_to_world(
     p + camera_pos
 }
 
+pub fn get_screen_world_bounding_vec(size: (Double, Double), camera_pos: DVec3) -> DVec2 {
+    normalized_to_world(size, dvec2(1.0, -1.0), dvec3(0.0, 0.0, camera_pos.z))
+        .truncate()
+        .abs()
+}
+
 /// Gets the culling range from the camera's position
 pub fn get_culling_range(size: (Double, Double), camera_pos: DVec3) -> TileBounds {
-    let v = normalized_to_world(size, dvec2(1.0, -1.0), dvec3(0.0, 0.0, camera_pos.z)).abs();
+    let bound = get_screen_world_bounding_vec(size, camera_pos);
 
     TileBounds::new(
         HEX_GRID_LAYOUT
-            .world_pos_to_hex(vec2(camera_pos.x as Float, camera_pos.y as Float))
+            .world_pos_to_hex(camera_pos.truncate().as_vec2())
             .into(),
-        v.x.max(v.y) as u32,
+        bound.x.max(bound.y) as u32,
     )
 }
 

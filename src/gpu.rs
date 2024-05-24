@@ -926,10 +926,12 @@ fn collect_indirect<T: Clone + Send + Sync>(
     vec.push((command, instance.2));
 }
 
+pub type DrawData<T> = (u32, Vec<(DrawIndexedIndirectArgs, T)>);
+
 fn indirect<T: Clone + Send + Sync>(
     resource_man: &ResourceManager,
     compiled_instances: &CompiledInstances<T>,
-) -> (u32, Vec<(DrawIndexedIndirectArgs, T)>) {
+) -> DrawData<T> {
     let (_, draw_count, commands) = compiled_instances.iter().fold(
         (0, 0, Vec::new()),
         |(mut base_instance_counter, mut draw_count, mut commands), instance| {
@@ -948,15 +950,13 @@ fn indirect<T: Clone + Send + Sync>(
     (draw_count, commands)
 }
 
+pub type IndirectInstanceDrawData<T> = (Vec<RawInstanceData>, Vec<MatrixData>, DrawData<T>);
+
 pub fn indirect_instance<T: Clone + Send + Sync>(
     resource_man: &ResourceManager,
     instances: Vec<(InstanceData, Id, T)>,
     animation_map: &AnimationMap,
-) -> (
-    Vec<RawInstanceData>,
-    Vec<MatrixData>,
-    (Vec<(DrawIndexedIndirectArgs, T)>, u32),
-) {
+) -> IndirectInstanceDrawData<T> {
     let (compiled_instances, matrix_data) =
         compile_instances(resource_man, instances, animation_map);
 
@@ -964,7 +964,7 @@ pub fn indirect_instance<T: Clone + Send + Sync>(
 
     let instances = compiled_instances.into_iter().map(|v| v.1).collect();
 
-    (instances, matrix_data, (commands, draw_count))
+    (instances, matrix_data, (draw_count, commands))
 }
 
 pub fn create_or_write_buffer(

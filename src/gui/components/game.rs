@@ -145,7 +145,7 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                 bytemuck::cast_slice(matrix_data.as_slice()),
             );
 
-            *draws = draws_result.0;
+            *draws = draws_result.1;
         }
 
         let mut clip = self.clip;
@@ -264,7 +264,7 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
             let post_processing_uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
                 label: None,
                 contents: bytemuck::cast_slice(&[PostProcessingUBO {
-                    world_matrix: Matrix4::IDENTITY.to_cols_array_2d(),
+                    camera_matrix: Matrix4::IDENTITY.to_cols_array_2d(),
                 }]),
                 usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
             });

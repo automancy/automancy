@@ -184,7 +184,7 @@ pub struct MatrixData {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
+#[derive(Clone, Copy, Debug, Default, PartialOrd, PartialEq, Zeroable, Pod)]
 pub struct RawInstanceData {
     color_offset: VertexColor,
     alpha: Float,
@@ -273,26 +273,34 @@ pub static DEFAULT_LIGHT_COLOR: VertexColor = [1.0; 4];
 #[derive(Clone, Copy, Debug, Zeroable, Pod)]
 pub struct GameUBO {
     light_color: VertexColor,
+    camera_matrix: RawMat4,
+}
+
+impl GameUBO {
+    pub fn new(camera_matrix: Matrix4) -> Self {
+        Self {
+            light_color: DEFAULT_LIGHT_COLOR,
+            camera_matrix: camera_matrix.to_cols_array_2d(),
+        }
+    }
 }
 
 impl Default for GameUBO {
     fn default() -> Self {
-        Self {
-            light_color: DEFAULT_LIGHT_COLOR,
-        }
+        Self::new(Matrix4::IDENTITY)
     }
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Zeroable, Pod)]
 pub struct PostProcessingUBO {
-    pub world_matrix: RawMat4,
+    pub camera_matrix: RawMat4,
 }
 
 impl Default for PostProcessingUBO {
     fn default() -> Self {
         Self {
-            world_matrix: Matrix4::IDENTITY.to_cols_array_2d(),
+            camera_matrix: Matrix4::IDENTITY.to_cols_array_2d(),
         }
     }
 }
