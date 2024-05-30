@@ -59,7 +59,7 @@ use crate::{
     gui::Gui,
 };
 
-const UPS: u64 = 30;
+const UPS: u64 = 60;
 const UPDATE_INTERVAL: Duration = Duration::from_nanos(1_000_000_000 / UPS);
 
 pub struct Renderer {
