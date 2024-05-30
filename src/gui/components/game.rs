@@ -1,23 +1,25 @@
-use std::{
-    cell::{Cell, RefCell},
-    rc::Rc,
-    time::Instant,
-};
+use std::{cell::Cell, iter, time::Instant};
 
 use automancy_defs::{
     glam::vec3,
     id::Id,
     math::Matrix4,
-    rendering::{InstanceData, PostProcessingUBO},
+    rendering::{InstanceData, IntermediateUBO, PostProcessingUBO},
 };
+use crunch::{Item, Rotation};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
-    BindGroup, BindGroupDescriptor, BindGroupEntry, BindingResource, BufferUsages, Color, Extent3d,
-    IndexFormat, LoadOp, Operations, RenderPassColorAttachment, RenderPassDepthStencilAttachment,
-    RenderPassDescriptor, StoreOp, Texture, TextureDescriptor, TextureDimension, TextureUsages,
-    TextureViewDescriptor,
+    BindGroup, BindGroupDescriptor, BindGroupEntry, BindingResource, Buffer, BufferUsages, Color,
+    Extent3d, IndexFormat, LoadOp, Operations, RenderPassColorAttachment,
+    RenderPassDepthStencilAttachment, RenderPassDescriptor, StoreOp, TextureDescriptor,
+    TextureDimension, TextureUsages, TextureViewDescriptor,
 };
-use yakui::{paint::PaintCall, util::widget, widget::Widget, Rect, Response, Vec2};
+use yakui::{
+    paint::{CustomPaintCall, PaintCall},
+    util::widget,
+    widget::Widget,
+    Rect, Response, UVec2, Vec2,
+};
 use yakui_wgpu::CallbackTrait;
 
 use crate::{
@@ -73,12 +75,10 @@ impl GameElement {
 
 #[derive(Debug)]
 pub struct GameElementPaint {
-    repaint: bool,
     props: GameElement,
-    clip: Rect,
-    adjusted_matrix: Option<Matrix4>,
-
-    post_processing_texture: Option<Texture>,
+    last_packed_size: Option<UVec2>,
+    last_rect: Option<crunch::Rect>,
+    present_uniform: Option<Buffer>,
     present_bind_group: Option<BindGroup>,
 }
 
@@ -92,23 +92,19 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
             _surface_format,
             animation_map,
             instances,
-            _draws,
+            _packed_size,
+            _rects,
+            _present_texture,
         ): &mut YakuiRenderResources,
     ) {
-        let mut props = self.props;
+        let props = self.props;
         let start_instant = START_INSTANT.get().unwrap();
-        if try_add_animation(resource_man, start_instant, props.model, animation_map) {
-            self.repaint = true;
-        }
-
-        if let Some(m) = self.adjusted_matrix {
-            props.instance = props.instance.with_world_matrix(m);
-        }
+        try_add_animation(resource_man, start_instant, props.model, animation_map);
 
         instances
             .as_mut()
             .unwrap()
-            .push((props.instance, props.model, props.index));
+            .push((props.instance, props.model, (props.index, props.size)));
     }
 
     fn finish_prepare(
@@ -123,12 +119,34 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
             surface_format,
             animation_map,
             instances,
-            draws,
+            packed_size,
+            rects,
+            present_texture,
         ): &mut YakuiRenderResources,
     ) {
         if let Some(instances) = instances.take() {
-            let (instances, matrix_data, draws_result) =
+            let items = instances
+                .iter()
+                .map(|(.., (index, size))| {
+                    Item::new(
+                        *index,
+                        size.x.round() as usize * 2,
+                        size.y.round() as usize * 2,
+                        Rotation::None,
+                    )
+                })
+                .collect::<Vec<_>>();
+
+            let packed =
+                crunch::pack_into_po2(device.limits().max_texture_dimension_2d as usize, items)
+                    .expect("gui items exceed max texture size.");
+
+            let (instances, matrix_data, (draw_count, draws)) =
                 gpu::indirect_instance(resource_man, instances, animation_map);
+
+            if draw_count == 0 {
+                return;
+            }
 
             let gui_resources = gui_resources.as_mut().unwrap();
 
@@ -145,67 +163,23 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                 bytemuck::cast_slice(matrix_data.as_slice()),
             );
 
-            *draws = draws_result.1;
-        }
+            let size = UVec2::new(packed.w as u32, packed.h as u32);
+            *packed_size = Some(size);
 
-        let mut clip = self.clip;
-        if clip.pos().x < 0.0 || clip.pos().y < 0.0 || clip.size().x < 2.0 || clip.size().y < 2.0 {
-            return;
-        }
-        clip.set_size(clip.size() * 2.0);
+            rects.clear();
+            for item in packed.items.iter() {
+                if item.data >= rects.len() {
+                    rects.extend(iter::repeat(None).take(item.data - rects.len() + 1));
+                }
 
-        if self.post_processing_texture.is_none() {
-            self.post_processing_texture = Some(device.create_texture(&TextureDescriptor {
-                label: None,
-                size: Extent3d {
-                    width: clip.size().x as u32,
-                    height: clip.size().y as u32,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: TextureDimension::D2,
-                format: *surface_format,
-                usage: TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            }));
-        }
-
-        if self.present_bind_group.is_none() {
-            self.present_bind_group = Some(
-                device.create_bind_group(&BindGroupDescriptor {
-                    label: None,
-                    layout: &global_resources.intermediate_bind_group_layout,
-                    entries: &[
-                        BindGroupEntry {
-                            binding: 0,
-                            resource: BindingResource::TextureView(
-                                &self
-                                    .post_processing_texture
-                                    .as_ref()
-                                    .unwrap()
-                                    .create_view(&TextureViewDescriptor::default()),
-                            ),
-                        },
-                        BindGroupEntry {
-                            binding: 1,
-                            resource: BindingResource::Sampler(
-                                &global_resources.nonfiltering_sampler,
-                            ),
-                        },
-                    ],
-                }),
-            )
-        }
-
-        if self.repaint {
-            self.repaint = false;
+                rects[item.data] = Some(item.rect);
+            }
 
             let color_texture = device.create_texture(&TextureDescriptor {
                 label: None,
                 size: Extent3d {
-                    width: clip.size().x as u32,
-                    height: clip.size().y as u32,
+                    width: size.x,
+                    height: size.y,
                     depth_or_array_layers: 1,
                 },
                 mip_level_count: 1,
@@ -219,8 +193,8 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
             let depth_texture = device.create_texture(&TextureDescriptor {
                 label: None,
                 size: Extent3d {
-                    width: clip.size().x as u32,
-                    height: clip.size().y as u32,
+                    width: size.x,
+                    height: size.y,
                     depth_or_array_layers: 1,
                 },
                 mip_level_count: 1,
@@ -234,8 +208,8 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
             let model_texture = device.create_texture(&TextureDescriptor {
                 label: None,
                 size: Extent3d {
-                    width: clip.size().x as u32,
-                    height: clip.size().y as u32,
+                    width: size.x,
+                    height: size.y,
                     depth_or_array_layers: 1,
                 },
                 mip_level_count: 1,
@@ -249,8 +223,8 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
             let normal_texture = device.create_texture(&TextureDescriptor {
                 label: None,
                 size: Extent3d {
-                    width: clip.size().x as u32,
-                    height: clip.size().y as u32,
+                    width: size.x,
+                    height: size.y,
                     depth_or_array_layers: 1,
                 },
                 mip_level_count: 1,
@@ -265,6 +239,8 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                 label: None,
                 contents: bytemuck::cast_slice(&[PostProcessingUBO {
                     camera_matrix: Matrix4::IDENTITY.to_cols_array_2d(),
+                    flags: 0,
+                    ..Default::default()
                 }]),
                 usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
             });
@@ -326,7 +302,20 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                     label: None,
                 });
 
-            let gui_resources = gui_resources.as_ref().unwrap();
+            *present_texture = Some(device.create_texture(&TextureDescriptor {
+                label: None,
+                size: Extent3d {
+                    width: size.x,
+                    height: size.y,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: *surface_format,
+                usage: TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            }));
 
             {
                 let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
@@ -368,28 +357,43 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                     ..Default::default()
                 });
 
-                render_pass.set_pipeline(&global_resources.game_pipeline);
-                render_pass.set_bind_group(0, &gui_resources.bind_group, &[]);
-                render_pass.set_vertex_buffer(0, global_resources.vertex_buffer.slice(..));
-                render_pass.set_vertex_buffer(1, gui_resources.instance_buffer.slice(..));
-                render_pass
-                    .set_index_buffer(global_resources.index_buffer.slice(..), IndexFormat::Uint16);
-
-                for (draw, ..) in draws.iter().filter(|v| v.1 == self.props.index) {
-                    render_pass.draw_indexed(
-                        draw.first_index..(draw.first_index + draw.index_count),
-                        draw.base_vertex,
-                        draw.first_instance..(draw.first_instance + draw.instance_count),
+                {
+                    render_pass.set_pipeline(&global_resources.game_pipeline);
+                    render_pass.set_bind_group(0, &gui_resources.bind_group, &[]);
+                    render_pass.set_vertex_buffer(0, global_resources.vertex_buffer.slice(..));
+                    render_pass.set_vertex_buffer(1, gui_resources.instance_buffer.slice(..));
+                    render_pass.set_index_buffer(
+                        global_resources.index_buffer.slice(..),
+                        IndexFormat::Uint16,
                     );
+
+                    for (draw, (index, ..)) in draws.into_iter() {
+                        if let Some(rect) = rects[index] {
+                            render_pass.set_viewport(
+                                rect.x as f32,
+                                rect.y as f32,
+                                rect.w as f32,
+                                rect.h as f32,
+                                0.0,
+                                1.0,
+                            );
+
+                            render_pass.draw_indexed(
+                                draw.first_index..(draw.first_index + draw.index_count),
+                                draw.base_vertex,
+                                draw.first_instance..(draw.first_instance + draw.instance_count),
+                            );
+                        }
+                    }
                 }
             }
 
             {
-                let view = self
-                    .post_processing_texture
+                let view = present_texture
                     .as_ref()
                     .unwrap()
                     .create_view(&TextureViewDescriptor::default());
+
                 let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                     label: Some(&format!(
                         "UI Model Post Processing Render Pass {:?}",
@@ -414,6 +418,70 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                 render_pass.draw(0..3, 0..1);
             }
         }
+
+        if self.present_uniform.is_none() {
+            self.present_uniform = Some(device.create_buffer_init(&BufferInitDescriptor {
+                label: Some(&format!(
+                    "UI Model Present Uniform Buffer {:?}",
+                    self.props.model
+                )),
+                contents: bytemuck::cast_slice(&[IntermediateUBO {
+                    viewport_size: [0.0; 2],
+                    viewport_pos: [0.0; 2],
+                }]),
+                usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+            }));
+        }
+
+        if let Some((Some(rect), packed_size)) =
+            rects.get(self.props.index).cloned().zip(*packed_size)
+        {
+            if self.last_packed_size != Some(packed_size) || self.last_rect != Some(rect) {
+                self.last_packed_size = Some(packed_size);
+                self.last_rect = Some(rect);
+
+                queue.write_buffer(
+                    self.present_uniform.as_ref().unwrap(),
+                    0,
+                    bytemuck::cast_slice(&[IntermediateUBO {
+                        viewport_size: [
+                            rect.w as f32 / packed_size.x as f32,
+                            rect.h as f32 / packed_size.y as f32,
+                        ],
+                        viewport_pos: [
+                            rect.x as f32 / packed_size.x as f32,
+                            rect.y as f32 / packed_size.y as f32,
+                        ],
+                    }]),
+                );
+            }
+        }
+
+        self.present_bind_group = Some(
+            device.create_bind_group(&BindGroupDescriptor {
+                label: None,
+                layout: &global_resources.intermediate_bind_group_layout,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: BindingResource::TextureView(
+                            &present_texture
+                                .as_ref()
+                                .unwrap()
+                                .create_view(&TextureViewDescriptor::default()),
+                        ),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: BindingResource::Sampler(&global_resources.nonfiltering_sampler),
+                    },
+                    BindGroupEntry {
+                        binding: 2,
+                        resource: self.present_uniform.as_ref().unwrap().as_entire_binding(),
+                    },
+                ],
+            }),
+        );
     }
 
     fn paint<'a>(
@@ -428,55 +496,16 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
             _surface_format,
             _animation_map,
             _instances,
-            _draws,
+            _packed_size,
+            _rects,
+            _present_texture,
         ): &'a YakuiRenderResources,
     ) {
-        if let Some(present) = &self.present_bind_group {
+        if let Some(present_bind_group) = self.present_bind_group.as_ref() {
             render_pass.set_pipeline(&global_resources.multisampled_present_pipeline);
-            render_pass.set_bind_group(0, present, &[]);
+            render_pass.set_bind_group(0, present_bind_group, &[]);
             render_pass.draw(0..3, 0..1);
         }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct GameElementPaintRef {
-    inner: Rc<RefCell<GameElementPaint>>,
-}
-
-impl CallbackTrait<YakuiRenderResources> for GameElementPaintRef {
-    fn prepare(&mut self, custom_resources: &mut YakuiRenderResources) {
-        self.inner.borrow_mut().prepare(custom_resources);
-    }
-
-    fn finish_prepare(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        encoder: &mut wgpu::CommandEncoder,
-        custom_resources: &mut YakuiRenderResources,
-    ) {
-        self.inner
-            .borrow_mut()
-            .finish_prepare(device, queue, encoder, custom_resources);
-    }
-
-    fn paint<'a>(
-        &'a self,
-        render_pass: &mut wgpu::RenderPass<'a>,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        custom_resources: &'a YakuiRenderResources,
-    ) {
-        // SAFETY: the Rc will live as long as the wrapper does
-        unsafe {
-            self.inner.as_ptr().as_ref().unwrap().paint(
-                render_pass,
-                device,
-                queue,
-                custom_resources,
-            )
-        };
     }
 }
 
@@ -485,7 +514,7 @@ pub struct GameElementWidget {
     props: Cell<Option<GameElement>>,
     layout_rect: Cell<Option<Rect>>,
     clip: Cell<Rect>,
-    paint: RefCell<Option<GameElementPaintRef>>,
+    adjusted_matrix: Cell<Option<Matrix4>>,
 }
 
 impl Widget for GameElementWidget {
@@ -497,14 +526,11 @@ impl Widget for GameElementWidget {
             props: Cell::default(),
             layout_rect: Cell::default(),
             clip: Cell::new(Rect::ZERO),
-            paint: RefCell::default(),
+            adjusted_matrix: Cell::default(),
         }
     }
 
     fn update(&mut self, props: Self::Props<'_>) -> Self::Response {
-        if self.props.get() != props {
-            *self.paint.borrow_mut() = None;
-        }
         self.props.set(props);
 
         self.layout_rect.get()
@@ -518,10 +544,6 @@ impl Widget for GameElementWidget {
         ctx.layout.enable_clipping(ctx.dom);
 
         if let Some(layout_node) = ctx.layout.get(ctx.dom.current()) {
-            let last = self.layout_rect.get();
-            if last != Some(layout_node.rect) {
-                *self.paint.borrow_mut() = None;
-            }
             self.layout_rect.set(Some(layout_node.rect));
         }
 
@@ -533,34 +555,21 @@ impl Widget for GameElementWidget {
     }
 
     fn paint(&self, ctx: yakui::widget::PaintContext<'_>) {
-        let clip = ctx.paint.get_current_clip();
+        let paint_clip = ctx.paint.get_current_clip();
 
-        let mut r = self.paint.borrow_mut();
+        if let Some(clip) = paint_clip {
+            self.clip.set(clip);
+        }
 
-        let paint = r.get_or_insert_with(|| GameElementPaintRef {
-            inner: Rc::new(RefCell::new(GameElementPaint {
-                repaint: true,
-                props: self.props.get().unwrap(),
-                clip: Rect::ZERO,
-                adjusted_matrix: None,
-                post_processing_texture: None,
-                present_bind_group: None,
-            })),
-        });
+        let clip = self.clip.get();
+        let props = self.props.get().unwrap();
 
-        if let Some((props, mut rect)) = self.props.get().zip(self.layout_rect.get()) {
-            let own_clip = self.clip.get();
-
-            if own_clip.size().x > 0.0
-                && own_clip.size().y > 0.0
-                && (Some(own_clip) != clip || paint.inner.borrow_mut().repaint)
-            {
-                paint.inner.borrow_mut().repaint = true;
-
+        if let Some(mut rect) = self.layout_rect.get() {
+            if clip.size().x > 0.0 && clip.size().y > 0.0 {
                 rect.set_size(rect.size() * ctx.layout.scale_factor());
                 rect.set_pos(rect.pos() * ctx.layout.scale_factor());
 
-                let inside = own_clip.constrain(rect);
+                let inside = clip.constrain(rect);
                 if !inside.size().abs_diff_eq(Vec2::ZERO, 0.1) {
                     let sign =
                         (rect.max() - rect.size() / 2.0) - (inside.max() - inside.size() / 2.0);
@@ -571,30 +580,39 @@ impl Widget for GameElementWidget {
                     let dx = (sx - 1.0) * sign.x.signum();
                     let dy = (sy - 1.0) * sign.y.signum();
 
-                    let dx = (dx * own_clip.size().x).round() / own_clip.size().x;
-                    let dy = (dy * own_clip.size().y).round() / own_clip.size().y;
+                    let dx = (dx * clip.size().x).round() / clip.size().x;
+                    let dy = (dy * clip.size().y).round() / clip.size().y;
 
-                    paint.inner.borrow_mut().adjusted_matrix = Some(
+                    self.adjusted_matrix.set(Some(
                         Matrix4::from_translation(vec3(dx, dy, 0.0))
                             * props
                                 .instance
                                 .get_world_matrix()
                                 .unwrap_or(Matrix4::IDENTITY)
                             * Matrix4::from_scale(vec3(sx, sy, 1.0)),
-                    );
+                    ));
                 }
             }
         }
 
-        if let Some(clip) = clip {
-            self.clip.set(clip);
-            paint.inner.borrow_mut().clip = clip;
-        }
-
         if let Some(layer) = ctx.paint.layers_mut().current_mut() {
-            layer
-                .calls
-                .push((PaintCall::Custom(yakui_wgpu::cast(paint.clone())), clip));
+            let mut props = props;
+            if let Some(matrix) = self.adjusted_matrix.get() {
+                props.instance = props.instance.with_world_matrix(matrix);
+            }
+
+            let paint = Box::new(GameElementPaint {
+                props,
+                last_rect: None,
+                last_packed_size: None,
+                present_bind_group: None,
+                present_uniform: None,
+            });
+
+            layer.calls.push((
+                PaintCall::Custom(CustomPaintCall { callback: paint }),
+                paint_clip,
+            ));
         }
     }
 }

@@ -6,7 +6,7 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use std::{collections::BTreeMap, mem};
 use tokio::sync::oneshot;
-use wgpu::{util::DrawIndexedIndirectArgs, Device, Queue, TextureFormat};
+use wgpu::{Device, Queue, Texture, TextureFormat};
 use winit::{event_loop::ActiveEventLoop, window::Window};
 use yakui_wgpu::YakuiWgpu;
 use yakui_winit::YakuiWinit;
@@ -24,7 +24,7 @@ use automancy_resources::ResourceManager;
 use yakui::{
     font::{Font, Fonts},
     widgets::{Absolute, Layer},
-    Alignment, Dim2, Pivot, Yakui,
+    Alignment, Dim2, Pivot, UVec2, Yakui,
 };
 
 use crate::gpu::{AnimationMap, GlobalResources, GuiResources};
@@ -279,8 +279,10 @@ pub type YakuiRenderResources = (
     Option<GuiResources>,
     TextureFormat,
     AnimationMap,
-    Option<Vec<(InstanceData, Id, usize)>>,
-    Vec<(DrawIndexedIndirectArgs, usize)>,
+    Option<Vec<(InstanceData, Id, (usize, Vec2))>>,
+    Option<UVec2>,
+    Vec<Option<crunch::Rect>>,
+    Option<Texture>,
 );
 
 pub fn render_ui(

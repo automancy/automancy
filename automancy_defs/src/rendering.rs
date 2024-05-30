@@ -291,16 +291,38 @@ impl Default for GameUBO {
     }
 }
 
+pub const FLAG_SCREEN_EFFECT: u32 = 1;
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Zeroable, Pod)]
 pub struct PostProcessingUBO {
     pub camera_matrix: RawMat4,
+    pub flags: u32,
+    pub _p0: [f32; 3],
 }
 
 impl Default for PostProcessingUBO {
     fn default() -> Self {
         Self {
             camera_matrix: Matrix4::IDENTITY.to_cols_array_2d(),
+            flags: FLAG_SCREEN_EFFECT,
+            _p0: [0.0; 3],
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Zeroable, Pod)]
+pub struct IntermediateUBO {
+    pub viewport_size: [f32; 2],
+    pub viewport_pos: [f32; 2],
+}
+
+impl Default for IntermediateUBO {
+    fn default() -> Self {
+        Self {
+            viewport_size: [1.0, 1.0],
+            viewport_pos: [0.0, 0.0],
         }
     }
 }

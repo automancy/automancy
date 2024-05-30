@@ -48,7 +48,7 @@ use crate::{
 };
 use crate::{
     game::{GameSystemMessage, TransactionRecord, TransactionRecords, TRANSACTION_ANIMATION_SPEED},
-    gui::GameElementPaintRef,
+    gui::GameElementPaint,
 };
 use crate::{gpu, gui};
 use crate::{
@@ -746,6 +746,7 @@ impl Renderer {
                 0,
                 bytemuck::cast_slice(&[PostProcessingUBO {
                     camera_matrix: camera_matrix.to_cols_array_2d(),
+                    ..Default::default()
                 }]),
             );
 
@@ -830,7 +831,9 @@ impl Renderer {
                 self.render_resources.gui_resources.take(),
                 surface.format,
                 animation_map,
-                Some(Default::default()),
+                Some(Vec::new()),
+                Default::default(),
+                Default::default(),
                 Default::default(),
             );
 
@@ -842,7 +845,7 @@ impl Renderer {
                     ..Default::default()
                 });
 
-                custom_gui_commands = gui.renderer.paint_with::<GameElementPaintRef>(
+                custom_gui_commands = gui.renderer.paint_with::<GameElementPaint>(
                     &mut gui.yak,
                     &self.gpu.device,
                     &self.gpu.queue,
@@ -942,7 +945,7 @@ impl Renderer {
                 });
 
                 render_pass.set_pipeline(&self.global_resources.screenshot_pipeline);
-                render_pass.set_bind_group(0, self.shared_resources.present_bind_group(), &[]);
+                render_pass.set_bind_group(0, self.shared_resources.screenshot_bind_group(), &[]);
                 render_pass.draw(0..3, 0..1);
             }
 

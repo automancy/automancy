@@ -28,10 +28,10 @@ use wgpu::{
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
-use automancy_defs::id::Id;
 use automancy_defs::math::Matrix4;
 use automancy_defs::rendering::PostProcessingUBO;
 use automancy_defs::rendering::{GameUBO, InstanceData, MatrixData, RawInstanceData, Vertex};
+use automancy_defs::{id::Id, rendering::IntermediateUBO};
 use automancy_macros::OptionGetter;
 use automancy_resources::ResourceManager;
 
@@ -696,6 +696,16 @@ pub fn init_gpu_resources(
                     ty: BindingType::Sampler(SamplerBindingType::Filtering),
                     count: None,
                 },
+                BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: ShaderStages::VERTEX_FRAGMENT,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
             ],
         });
 
@@ -705,6 +715,11 @@ pub fn init_gpu_resources(
         push_constant_ranges: &[],
     });
 
+    let screenshot_uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
+        label: Some("Screenshot Uniform Buffer"),
+        contents: bytemuck::cast_slice(&[IntermediateUBO::default()]),
+        usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+    });
     let screenshot_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
         label: Some("Screenshot Render Pipeline"),
         layout: Some(&intermediate_pipeline_layout),
@@ -737,6 +752,11 @@ pub fn init_gpu_resources(
         multiview: None,
     });
 
+    let present_uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
+        label: Some("Present Uniform Buffer"),
+        contents: bytemuck::cast_slice(&[IntermediateUBO::default()]),
+        usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+    });
     let present_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
         label: Some("Present Pipeline"),
         layout: Some(&intermediate_pipeline_layout),
@@ -818,6 +838,7 @@ pub fn init_gpu_resources(
         first_combine_texture: None,
 
         present_bind_group: None,
+        screenshot_bind_group: None,
     };
 
     let render = RenderResources {
@@ -838,7 +859,9 @@ pub fn init_gpu_resources(
         game_pipeline,
 
         intermediate_bind_group_layout,
+        screenshot_uniform_buffer,
         screenshot_pipeline,
+        present_uniform_buffer,
         present_pipeline,
         multisampled_present_pipeline,
 
@@ -1099,7 +1122,9 @@ pub struct GlobalResources {
     pub game_pipeline: RenderPipeline,
 
     pub intermediate_bind_group_layout: BindGroupLayout,
+    pub screenshot_uniform_buffer: Buffer,
     pub screenshot_pipeline: RenderPipeline,
+    pub present_uniform_buffer: Buffer,
     pub present_pipeline: RenderPipeline,
     pub multisampled_present_pipeline: RenderPipeline,
 
@@ -1151,6 +1176,8 @@ pub struct SharedResources {
 
     #[getters(get)]
     present_bind_group: Option<BindGroup>,
+    #[getters(get)]
+    screenshot_bind_group: Option<BindGroup>,
 }
 
 impl SharedResources {
@@ -1365,8 +1392,34 @@ impl SharedResources {
                     binding: 1,
                     resource: BindingResource::Sampler(&global_resources.nonfiltering_sampler),
                 },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: global_resources.present_uniform_buffer.as_entire_binding(),
+                },
             ],
         }));
+        self.screenshot_bind_group = Some(
+            device.create_bind_group(&BindGroupDescriptor {
+                label: None,
+                layout: &global_resources.intermediate_bind_group_layout,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: BindingResource::TextureView(&self.first_combine_texture().1),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: BindingResource::Sampler(&global_resources.nonfiltering_sampler),
+                    },
+                    BindGroupEntry {
+                        binding: 2,
+                        resource: global_resources
+                            .screenshot_uniform_buffer
+                            .as_entire_binding(),
+                    },
+                ],
+            }),
+        );
     }
 }
 
