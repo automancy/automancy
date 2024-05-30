@@ -76,8 +76,6 @@ impl GameElement {
 #[derive(Debug)]
 pub struct GameElementPaint {
     props: GameElement,
-    last_packed_size: Option<UVec2>,
-    last_rect: Option<crunch::Rect>,
     present_uniform: Option<Buffer>,
     present_bind_group: Option<BindGroup>,
 }
@@ -436,25 +434,20 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
         if let Some((Some(rect), packed_size)) =
             rects.get(self.props.index).cloned().zip(*packed_size)
         {
-            if self.last_packed_size != Some(packed_size) || self.last_rect != Some(rect) {
-                self.last_packed_size = Some(packed_size);
-                self.last_rect = Some(rect);
-
-                queue.write_buffer(
-                    self.present_uniform.as_ref().unwrap(),
-                    0,
-                    bytemuck::cast_slice(&[IntermediateUBO {
-                        viewport_size: [
-                            rect.w as f32 / packed_size.x as f32,
-                            rect.h as f32 / packed_size.y as f32,
-                        ],
-                        viewport_pos: [
-                            rect.x as f32 / packed_size.x as f32,
-                            rect.y as f32 / packed_size.y as f32,
-                        ],
-                    }]),
-                );
-            }
+            queue.write_buffer(
+                self.present_uniform.as_ref().unwrap(),
+                0,
+                bytemuck::cast_slice(&[IntermediateUBO {
+                    viewport_size: [
+                        rect.w as f32 / packed_size.x as f32,
+                        rect.h as f32 / packed_size.y as f32,
+                    ],
+                    viewport_pos: [
+                        rect.x as f32 / packed_size.x as f32,
+                        rect.y as f32 / packed_size.y as f32,
+                    ],
+                }]),
+            );
         }
 
         self.present_bind_group = Some(
@@ -603,8 +596,6 @@ impl Widget for GameElementWidget {
 
             let paint = Box::new(GameElementPaint {
                 props,
-                last_rect: None,
-                last_packed_size: None,
                 present_bind_group: None,
                 present_uniform: None,
             });
