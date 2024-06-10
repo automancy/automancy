@@ -143,10 +143,10 @@ pub fn take_item_animation(state: &mut GameState, item: Item, dst_rect: Rect) {
             .show(|| {
                 Layer::new().show(|| {
                     ui_game_object(
-                        InstanceData::default()
-                            .with_world_matrix(math::view(dvec3(0.0, 0.0, 1.0)).as_mat4()),
+                        InstanceData::default(),
                         state.resource_man.item_model_or_missing(item.model),
                         size,
+                        Some(math::view(dvec3(0.0, 0.0, 1.0)).as_mat4()),
                     );
                 });
             });

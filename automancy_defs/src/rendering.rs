@@ -64,7 +64,6 @@ pub struct InstanceData {
     alpha: Float,
     light_pos: Vec4,
     model_matrix: Matrix4,
-    world_matrix: Option<Matrix4>,
 }
 
 impl Default for InstanceData {
@@ -74,7 +73,6 @@ impl Default for InstanceData {
             alpha: 1.0,
             light_pos: vec4(0.0, 0.0, 1.0, 1.0),
             model_matrix: Matrix4::IDENTITY,
-            world_matrix: None,
         }
     }
 }
@@ -140,46 +138,11 @@ impl InstanceData {
 
         self
     }
-
-    #[inline]
-    pub fn with_world_matrix(mut self, matrix: Matrix4) -> Self {
-        self.world_matrix = Some(matrix);
-
-        self
-    }
-
-    #[inline]
-    pub fn get_world_matrix(self) -> Option<Matrix4> {
-        self.world_matrix
-    }
-
-    #[inline]
-    pub fn add_world_matrix_right(mut self, matrix: Matrix4) -> Self {
-        if let Some(s) = self.world_matrix {
-            self.world_matrix = Some(s * matrix);
-        } else {
-            self.world_matrix = Some(matrix);
-        }
-
-        self
-    }
-
-    #[inline]
-    pub fn add_world_matrix_left(mut self, matrix: Matrix4) -> Self {
-        if let Some(s) = self.world_matrix {
-            self.world_matrix = Some(matrix * s);
-        } else {
-            self.world_matrix = Some(matrix);
-        }
-
-        self
-    }
 }
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialOrd, PartialEq, Zeroable, Pod)]
 pub struct MatrixData {
     model_matrix: RawMat4,
-    world_matrix: RawMat4,
     normal_matrix: [[Float; 4]; 3], // memory alignment issue, padded to 16 bytes
 }
 
@@ -201,19 +164,9 @@ static FIX_COORD: Matrix4 = Matrix4::from_cols(
 
 impl RawInstanceData {
     pub fn from_instance(instance: InstanceData, buffer: &mut Vec<MatrixData>) -> Self {
-        let world_matrix = if let Some(world_matrix) = instance.world_matrix {
-            FIX_COORD * world_matrix
-        } else {
-            FIX_COORD
-        };
         let model_matrix = instance.model_matrix;
 
-        if buffer.last().map(|v| (v.world_matrix, v.model_matrix))
-            != Some((
-                world_matrix.to_cols_array_2d(),
-                model_matrix.to_cols_array_2d(),
-            ))
-        {
+        if buffer.last().map(|v| v.model_matrix) != Some(model_matrix.to_cols_array_2d()) {
             let inverse_transpose = Matrix3::from_cols(
                 model_matrix.x_axis.truncate(),
                 model_matrix.y_axis.truncate(),
@@ -224,7 +177,6 @@ impl RawInstanceData {
 
             let matrix_data = MatrixData {
                 model_matrix: model_matrix.to_cols_array_2d(),
-                world_matrix: world_matrix.to_cols_array_2d(),
                 normal_matrix: [
                     inverse_transpose.x_axis.extend(0.0).to_array(),
                     inverse_transpose.y_axis.extend(0.0).to_array(),
@@ -273,14 +225,14 @@ pub static DEFAULT_LIGHT_COLOR: VertexColor = [1.0; 4];
 #[derive(Clone, Copy, Debug, Zeroable, Pod)]
 pub struct GameUBO {
     light_color: VertexColor,
-    camera_matrix: RawMat4,
+    world_matrix: RawMat4,
 }
 
 impl GameUBO {
-    pub fn new(camera_matrix: Matrix4) -> Self {
+    pub fn new(world_matrix: Matrix4) -> Self {
         Self {
             light_color: DEFAULT_LIGHT_COLOR,
-            camera_matrix: camera_matrix.to_cols_array_2d(),
+            world_matrix: (FIX_COORD * world_matrix).to_cols_array_2d(),
         }
     }
 }
@@ -296,7 +248,7 @@ pub const FLAG_SCREEN_EFFECT: u32 = 1;
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Zeroable, Pod)]
 pub struct PostProcessingUBO {
-    pub camera_matrix: RawMat4,
+    pub world_matrix: RawMat4,
     pub flags: u32,
     pub _p0: [f32; 3],
 }
@@ -304,7 +256,7 @@ pub struct PostProcessingUBO {
 impl Default for PostProcessingUBO {
     fn default() -> Self {
         Self {
-            camera_matrix: Matrix4::IDENTITY.to_cols_array_2d(),
+            world_matrix: Matrix4::IDENTITY.to_cols_array_2d(),
             flags: FLAG_SCREEN_EFFECT,
             _p0: [0.0; 3],
         }

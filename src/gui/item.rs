@@ -22,9 +22,10 @@ pub fn draw_item(
         prefix();
 
         rect = ui_game_object(
-            InstanceData::default().with_world_matrix(math::view(dvec3(0.0, 0.0, 1.0)).as_mat4()),
+            InstanceData::default(),
             resource_man.item_model_or_missing(stack.item.model),
             vec2(size, size),
+            Some(math::view(dvec3(0.0, 0.0, 1.0)).as_mat4()),
         )
         .into_inner();
 

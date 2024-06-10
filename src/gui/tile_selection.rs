@@ -137,11 +137,11 @@ fn draw_tile_selection(
             ui_game_object(
                 InstanceData::default()
                     .with_model_matrix(rotate)
-                    .with_world_matrix(projection)
                     .with_light_pos(vec3(0.0, 1.0, 8.0), None)
                     .with_color_offset(color_offset),
                 model,
                 vec2(size, size),
+                Some(projection),
             );
         });
 
@@ -195,11 +195,11 @@ pub fn tile_selections(
                                 let response = interactive(|| {
                                     ui_game_object(
                                         InstanceData::default()
-                                            .with_world_matrix(world_matrix)
                                             .with_model_matrix(model_matrix)
                                             .with_light_pos(vec3(0.0, 1.0, 8.0), None),
                                         model,
                                         vec2(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE),
+                                        Some(world_matrix),
                                     );
                                 });
 

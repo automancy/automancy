@@ -124,10 +124,10 @@ fn research_selection(state: &mut GameState, game_data: &mut DataMap) {
                         ui_game_object(
                             InstanceData::default()
                                 .with_model_matrix(research.icon_mode.model_matrix())
-                                .with_world_matrix(research.icon_mode.world_matrix())
                                 .with_light_pos(vec3(0.0, 1.0, 8.0), None),
                             icon,
                             vec2(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE),
+                            Some(research.icon_mode.world_matrix()),
                         );
 
                         label(&state.resource_man.research_str(&research.name));
@@ -381,13 +381,7 @@ fn research_puzzle(state: &mut GameState, game_data: &mut DataMap) -> Option<Vec
                                                     )
                                                     .show(|| {
                                                         ui_game_object(
-                                                            InstanceData::default()
-                                                                .with_world_matrix(
-                                                                    math::view(dvec3(
-                                                                        0.0, 0.0, 1.0,
-                                                                    ))
-                                                                    .as_mat4(),
-                                                                ),
+                                                            InstanceData::default(),
                                                             state
                                                                 .resource_man
                                                                 .item_model_or_missing(
@@ -398,6 +392,10 @@ fn research_puzzle(state: &mut GameState, game_data: &mut DataMap) -> Option<Vec
                                                             vec2(
                                                                 PUZZLE_HEX_GRID_LAYOUT.hex_size.x,
                                                                 PUZZLE_HEX_GRID_LAYOUT.hex_size.y,
+                                                            ),
+                                                            Some(
+                                                                math::view(dvec3(0.0, 0.0, 1.0))
+                                                                    .as_mat4(),
                                                             ),
                                                         );
                                                     });
@@ -529,15 +527,16 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                                         centered_row(|| {
                                             let reset = interactive(|| {
                                                 ui_game_object(
-                                                    InstanceData::default().with_world_matrix(
-                                                        math::view(dvec3(0.0, 0.0, 1.0)).as_mat4(),
-                                                    ),
+                                                    InstanceData::default(),
                                                     state
                                                         .resource_man
                                                         .registry
                                                         .model_ids
                                                         .puzzle_space,
                                                     vec2(SMALLISH_ICON_SIZE, SMALLISH_ICON_SIZE),
+                                                    Some(
+                                                        math::view(dvec3(0.0, 0.0, 1.0)).as_mat4(),
+                                                    ),
                                                 );
                                             });
 
@@ -556,10 +555,7 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                                             for id in ids {
                                                 let select = interactive(|| {
                                                     ui_game_object(
-                                                        InstanceData::default().with_world_matrix(
-                                                            math::view(dvec3(0.0, 0.0, 1.0))
-                                                                .as_mat4(),
-                                                        ),
+                                                        InstanceData::default(),
                                                         state.resource_man.item_model_or_missing(
                                                             state.resource_man.registry.items[id]
                                                                 .model,
@@ -567,6 +563,10 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                                                         vec2(
                                                             SMALLISH_ICON_SIZE,
                                                             SMALLISH_ICON_SIZE,
+                                                        ),
+                                                        Some(
+                                                            math::view(dvec3(0.0, 0.0, 1.0))
+                                                                .as_mat4(),
                                                         ),
                                                     );
                                                 });

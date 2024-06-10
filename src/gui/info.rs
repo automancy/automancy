@@ -113,10 +113,10 @@ fn tile_icon(state: &mut GameState, tile: Id) {
         ui_game_object(
             InstanceData::default()
                 .with_light_pos(vec3(0.0, 1.0, 8.0), None)
-                .with_world_matrix(IconMode::Tile.world_matrix())
                 .with_model_matrix(IconMode::Tile.model_matrix()),
             state.resource_man.tile_model_or_missing(tile_def.model),
             vec2(LARGE_ICON_SIZE, LARGE_ICON_SIZE),
+            Some(IconMode::Tile.world_matrix()),
         );
     });
 }

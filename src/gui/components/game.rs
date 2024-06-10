@@ -4,7 +4,7 @@ use automancy_defs::{
     glam::vec3,
     id::Id,
     math::Matrix4,
-    rendering::{InstanceData, IntermediateUBO, PostProcessingUBO},
+    rendering::{GameUBO, InstanceData, IntermediateUBO, PostProcessingUBO},
 };
 use crunch::{Item, Rotation};
 use wgpu::{
@@ -47,14 +47,25 @@ pub struct GameElement {
     model: Id,
     index: usize,
     size: Vec2,
+    world_matrix: Matrix4,
 }
 
-pub fn ui_game_object(instance: InstanceData, model: Id, size: Vec2) -> Response<Option<Rect>> {
-    GameElement::new(instance, model, size).show()
+pub fn ui_game_object(
+    instance: InstanceData,
+    model: Id,
+    size: Vec2,
+    world_matrix: Option<Matrix4>,
+) -> Response<Option<Rect>> {
+    GameElement::new(instance, model, size, world_matrix).show()
 }
 
 impl GameElement {
-    pub fn new(instance: InstanceData, model: Id, size: Vec2) -> Self {
+    pub fn new(
+        instance: InstanceData,
+        model: Id,
+        size: Vec2,
+        world_matrix: Option<Matrix4>,
+    ) -> Self {
         let index = INDEX_COUNTER.get();
 
         let result = Self {
@@ -62,6 +73,7 @@ impl GameElement {
             model,
             index,
             size,
+            world_matrix: world_matrix.unwrap_or(Matrix4::IDENTITY),
         };
         INDEX_COUNTER.set(index + 1);
 
@@ -161,6 +173,12 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                 bytemuck::cast_slice(matrix_data.as_slice()),
             );
 
+            queue.write_buffer(
+                &gui_resources.uniform_buffer,
+                0,
+                bytemuck::cast_slice(&[GameUBO::new(self.props.world_matrix)]),
+            );
+
             let size = UVec2::new(packed.w as u32, packed.h as u32);
             *packed_size = Some(size);
 
@@ -236,7 +254,7 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
             let post_processing_uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
                 label: None,
                 contents: bytemuck::cast_slice(&[PostProcessingUBO {
-                    camera_matrix: Matrix4::IDENTITY.to_cols_array_2d(),
+                    world_matrix: self.props.world_matrix.to_cols_array_2d(),
                     flags: 0,
                     ..Default::default()
                 }]),
@@ -578,10 +596,7 @@ impl Widget for GameElementWidget {
 
                     self.adjusted_matrix.set(Some(
                         Matrix4::from_translation(vec3(dx, dy, 0.0))
-                            * props
-                                .instance
-                                .get_world_matrix()
-                                .unwrap_or(Matrix4::IDENTITY)
+                            * props.instance.get_model_matrix()
                             * Matrix4::from_scale(vec3(sx, sy, 1.0)),
                     ));
                 }
@@ -591,7 +606,7 @@ impl Widget for GameElementWidget {
         if let Some(layer) = ctx.paint.layers_mut().current_mut() {
             let mut props = props;
             if let Some(matrix) = self.adjusted_matrix.get() {
-                props.instance = props.instance.with_world_matrix(matrix);
+                props.instance = props.instance.with_model_matrix(matrix);
             }
 
             let paint = Box::new(GameElementPaint {

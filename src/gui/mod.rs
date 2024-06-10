@@ -52,11 +52,13 @@ pub const SMALLISH_ICON_SIZE: Float = 36.0;
 pub const MEDIUM_ICON_SIZE: Float = 48.0;
 pub const LARGE_ICON_SIZE: Float = 96.0;
 
+pub type FontLoader = Lazy<Font, Box<dyn FnOnce() -> Font>>;
+
 pub struct Gui {
     pub renderer: YakuiWgpu<YakuiRenderResources>,
     pub yak: Yakui,
     pub window: YakuiWinit,
-    pub fonts: HashMap<String, Lazy<Font, Box<dyn FnOnce() -> Font>>>,
+    pub fonts: HashMap<String, FontLoader>,
     pub font_names: BTreeMap<String, String>,
 }
 
@@ -341,7 +343,6 @@ pub fn render_ui(
                                     InstanceData::default()
                                         .with_alpha(0.6)
                                         .with_light_pos(state.camera.get_pos().as_vec3(), None)
-                                        .with_world_matrix(state.camera.get_matrix().as_mat4())
                                         .with_model_matrix(Matrix4::from_translation(vec3(
                                             cursor_pos.x as Float,
                                             cursor_pos.y as Float,
@@ -356,6 +357,7 @@ pub fn render_ui(
                                         .layout_dom()
                                         .viewport()
                                         .size(),
+                                    Some(state.camera.get_matrix().as_mat4()),
                                 );
                             },
                         );
@@ -489,7 +491,6 @@ pub fn render_ui(
                     InstanceData::default()
                         .with_alpha(0.5)
                         .with_light_pos(state.camera.get_pos().as_vec3(), None)
-                        .with_world_matrix(state.camera.get_matrix().as_mat4())
                         .with_model_matrix(model_matrix),
                     state.resource_man.registry.tiles[id].model,
                     state
@@ -500,6 +501,7 @@ pub fn render_ui(
                         .layout_dom()
                         .viewport()
                         .size(),
+                    Some(state.camera.get_matrix().as_mat4()),
                 );
             });
         }

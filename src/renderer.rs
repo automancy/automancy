@@ -10,8 +10,6 @@ use arboard::{Clipboard, ImageData};
 use hashbrown::HashMap;
 use image::{EncodableLayout, RgbaImage};
 use num::PrimInt;
-use ractor::ActorRef;
-use tokio::runtime::Runtime;
 use tokio::sync::{oneshot, Mutex};
 use wgpu::{
     BufferAddress, BufferDescriptor, BufferUsages, Color, CommandEncoderDescriptor,
@@ -43,24 +41,26 @@ use automancy_resources::ResourceManager;
 use yakui::Rect;
 use yakui_wgpu::SurfaceInfo;
 
-use crate::{
-    camera::Camera, game::RenderUnit, gpu::IndirectInstanceDrawData, gui::YakuiRenderResources,
+use crate::gpu::{
+    AnimationMap, GlobalResources, Gpu, RenderResources, SharedResources, NORMAL_CLEAR,
+    SCREENSHOT_FORMAT,
 };
 use crate::{
     game::{GameSystemMessage, TransactionRecord, TransactionRecords, TRANSACTION_ANIMATION_SPEED},
     gui::GameElementPaint,
 };
-use crate::{gpu, gui};
 use crate::{
-    gpu::{
-        AnimationMap, GlobalResources, Gpu, RenderResources, SharedResources, NORMAL_CLEAR,
-        SCREENSHOT_FORMAT,
-    },
-    gui::Gui,
+    game::{RenderUnit, RenderUnits},
+    gpu::IndirectInstanceDrawData,
+    gui::YakuiRenderResources,
+    GameState,
 };
+use crate::{gpu, gui};
 
 const UPS: u64 = 60;
 const UPDATE_INTERVAL: Duration = Duration::from_nanos(1_000_000_000 / UPS);
+
+type RenderInfo = (RenderUnits, HashMap<TileCoord, DataMap>);
 
 pub struct Renderer {
     pub gpu: Gpu,
@@ -68,14 +68,7 @@ pub struct Renderer {
     pub render_resources: RenderResources,
     pub global_resources: Arc<GlobalResources>,
 
-    render_info_cache: Arc<
-        Mutex<
-            Option<(
-                HashMap<TileCoord, (Id, RenderUnit)>,
-                HashMap<TileCoord, DataMap>,
-            )>,
-        >,
-    >,
+    render_info_cache: Arc<Mutex<Option<RenderInfo>>>,
     render_info_updating: Arc<AtomicBool>,
     transaction_records_cache: Arc<Mutex<TransactionRecords>>,
     transaction_records_updating: Arc<AtomicBool>,
@@ -160,39 +153,33 @@ pub fn try_add_animation(
 }
 
 impl Renderer {
-    pub fn render(
-        &mut self,
-        start_instant: Instant,
-        resource_man: Arc<ResourceManager>,
-        tokio: &Runtime,
-        screenshotting: bool,
-        camera: &Camera,
-        gui: &mut Gui,
-        game: &ActorRef<GameSystemMessage>,
-    ) -> Result<(), SurfaceError> {
-        let tile_tints = mem::take(&mut self.tile_tints);
-        let mut extra_instances = mem::take(&mut self.extra_instances);
+    pub fn render(state: &mut GameState, screenshotting: bool) -> Result<(), SurfaceError> {
+        let Some(renderer) = state.renderer.as_mut() else {
+            return Ok(());
+        };
 
-        let size = self.gpu.window.inner_size();
+        let tile_tints = mem::take(&mut renderer.tile_tints);
+        let mut extra_instances = mem::take(&mut renderer.extra_instances);
+
+        let size = renderer.gpu.window.inner_size();
 
         if size.width == 0 || size.height == 0 {
             return Ok(());
         }
 
         let mut animation_map = AnimationMap::new();
-        let camera_pos = camera.get_pos();
+        let camera_pos = state.camera.get_pos();
         let camera_pos_float = camera_pos.as_vec3();
-        let camera_matrix = camera.get_matrix().as_mat4();
-        let culling_range = camera.culling_range;
+        let culling_range = state.camera.culling_range;
 
-        if !self.render_info_updating.load(Ordering::Relaxed) {
-            let cache = self.render_info_cache.clone();
-            let updating = self.render_info_updating.clone();
-            let game = game.clone();
+        if !renderer.render_info_updating.load(Ordering::Relaxed) {
+            let cache = renderer.render_info_cache.clone();
+            let updating = renderer.render_info_updating.clone();
+            let game = state.game.clone();
 
             updating.store(true, Ordering::Relaxed);
 
-            tokio.spawn(async move {
+            state.tokio.spawn(async move {
                 let all_data = game
                     .call(GameSystemMessage::GetAllData, None)
                     .await
@@ -216,20 +203,23 @@ impl Renderer {
             });
         }
 
-        let render_info_lock = self.render_info_cache.blocking_lock();
+        let render_info_lock = renderer.render_info_cache.blocking_lock();
         let Some((render_info, all_data)) = render_info_lock.as_ref() else {
             return Ok(());
         };
 
         {
-            if !self.transaction_records_updating.load(Ordering::Relaxed) {
-                let cache = self.transaction_records_cache.clone();
-                let updating = self.transaction_records_updating.clone();
-                let game = game.clone();
+            if !renderer
+                .transaction_records_updating
+                .load(Ordering::Relaxed)
+            {
+                let cache = renderer.transaction_records_cache.clone();
+                let updating = renderer.transaction_records_updating.clone();
+                let game = state.game.clone();
 
                 updating.store(true, Ordering::Relaxed);
 
-                tokio.spawn(async move {
+                state.tokio.spawn(async move {
                     let result = game
                         .call(GameSystemMessage::GetRecordedTransactions, None)
                         .await
@@ -242,7 +232,7 @@ impl Renderer {
                 });
             }
 
-            let transaction_records = self.transaction_records_cache.blocking_lock();
+            let transaction_records = renderer.transaction_records_cache.blocking_lock();
 
             let now = Instant::now();
 
@@ -269,7 +259,7 @@ impl Renderer {
                                     * Matrix4::from_scale(vec3(0.3, 0.3, 0.3)),
                             )
                             .with_light_pos(camera_pos_float, None);
-                        let model = resource_man.item_model_or_missing(stack.item.model);
+                        let model = state.resource_man.item_model_or_missing(stack.item.model);
 
                         extra_instances.push((instance, model, ()));
                     }
@@ -279,7 +269,7 @@ impl Renderer {
 
         for (coord, data) in all_data {
             let world_coord = HEX_GRID_LAYOUT.hex_to_world_pos(**coord);
-            if let Some(Data::Coord(link)) = data.get(&resource_man.registry.data_ids.link) {
+            if let Some(Data::Coord(link)) = data.get(&state.resource_man.registry.data_ids.link) {
                 extra_instances.push((
                     InstanceData::default()
                         .with_color_offset(colors::RED.to_linear())
@@ -288,12 +278,12 @@ impl Renderer {
                             world_coord,
                             HEX_GRID_LAYOUT.hex_to_world_pos(**link),
                         )),
-                    resource_man.registry.model_ids.cube1x1,
+                    state.resource_man.registry.model_ids.cube1x1,
                     (),
                 ));
             }
 
-            if let Some(Data::Id(id)) = data.get(&resource_man.registry.data_ids.item) {
+            if let Some(Data::Id(id)) = data.get(&state.resource_man.registry.data_ids.item) {
                 extra_instances.push((
                     InstanceData::default()
                         .with_light_pos(camera_pos_float, None)
@@ -301,18 +291,18 @@ impl Renderer {
                             Matrix4::from_translation(world_coord.extend(0.1))
                                 * Matrix4::from_scale(vec3(0.25, 0.25, 1.0)),
                         ),
-                    resource_man.registry.items[id].model,
+                    state.resource_man.registry.items[id].model,
                     (),
                 ))
             }
         }
 
         for (coord, (id, unit)) in render_info {
-            let tile = resource_man.registry.tiles.get(id).unwrap();
+            let tile = state.resource_man.registry.tiles.get(id).unwrap();
 
             if let Some(theta) = all_data
                 .get(coord)
-                .and_then(|data| data.get(&resource_man.registry.data_ids.direction))
+                .and_then(|data| data.get(&state.resource_man.registry.data_ids.direction))
                 .and_then(|direction| {
                     if let Data::Coord(target) = direction {
                         math::tile_direction_to_angle(*target)
@@ -323,7 +313,7 @@ impl Renderer {
             {
                 if let Data::Color(color) = tile
                     .data
-                    .get(&resource_man.registry.data_ids.direction_color)
+                    .get(&state.resource_man.registry.data_ids.direction_color)
                     .unwrap_or(&Data::Color(colors::ORANGE))
                 {
                     extra_instances.push((
@@ -337,7 +327,7 @@ impl Renderer {
                                     * Matrix4::from_scale(vec3(0.1, SQRT_3, LINE_DEPTH))
                                     * Matrix4::from_translation(vec3(0.0, 0.5, 0.0)),
                             ),
-                        resource_man.registry.model_ids.cube1x1,
+                        state.resource_man.registry.model_ids.cube1x1,
                         (),
                     ))
                 }
@@ -345,17 +335,17 @@ impl Renderer {
         }
 
         let game_instances = if Instant::now()
-            .duration_since(*self.last_update.get_or_insert_with(Instant::now))
+            .duration_since(*renderer.last_update.get_or_insert_with(Instant::now))
             < UPDATE_INTERVAL
         {
             None
         } else {
-            self.last_update = Some(Instant::now());
+            renderer.last_update = Some(Instant::now());
 
             let mut render_info = render_info.clone();
 
             let bound = get_screen_world_bounding_vec(
-                window::window_size_double(&self.gpu.window),
+                window::window_size_double(&renderer.gpu.window),
                 camera_pos,
             )
             .as_vec2()
@@ -372,7 +362,7 @@ impl Renderer {
                         render_info.insert(
                             coord,
                             (
-                                resource_man.registry.none,
+                                state.resource_man.registry.none,
                                 RenderUnit {
                                     instance: InstanceData::default().with_model_matrix(
                                         Matrix4::from_translation(pos.extend(FAR as Float)),
@@ -386,11 +376,11 @@ impl Renderer {
             }
 
             for (coord, (id, unit)) in render_info.iter_mut() {
-                let tile = resource_man.registry.tiles.get(id).unwrap();
+                let tile = state.resource_man.registry.tiles.get(id).unwrap();
 
                 if let Some(theta) = all_data
                     .get(coord)
-                    .and_then(|data| data.get(&resource_man.registry.data_ids.direction))
+                    .and_then(|data| data.get(&state.resource_man.registry.data_ids.direction))
                     .and_then(|direction| {
                         if let Data::Coord(target) = direction {
                             math::tile_direction_to_angle(*target)
@@ -404,9 +394,9 @@ impl Renderer {
                         .add_model_matrix(Matrix4::from_rotation_z(theta.to_radians()));
                 } else if let Some(Data::Id(inactive)) = tile
                     .data
-                    .get(&resource_man.registry.data_ids.inactive_model)
+                    .get(&state.resource_man.registry.data_ids.inactive_model)
                 {
-                    unit.model_override = Some(resource_man.tile_model_or_missing(*inactive));
+                    unit.model_override = Some(state.resource_man.tile_model_or_missing(*inactive));
                 }
             }
 
@@ -426,16 +416,22 @@ impl Renderer {
                 let mut instances = Vec::new();
 
                 for (coord, (id, unit)) in render_info {
-                    let model = resource_man
+                    let model = state
+                        .resource_man
                         .registry
                         .tiles
                         .get(&id)
                         .map(|v| v.model)
-                        .unwrap_or(resource_man.registry.model_ids.missing);
+                        .unwrap_or(state.resource_man.registry.model_ids.missing);
 
                     let model = unit.model_override.unwrap_or(model);
 
-                    try_add_animation(&resource_man, start_instant, model, &mut animation_map);
+                    try_add_animation(
+                        &state.resource_man,
+                        state.start_instant,
+                        model,
+                        &mut animation_map,
+                    );
 
                     instances.push((
                         unit.instance,
@@ -462,19 +458,22 @@ impl Renderer {
         };
 
         for (_, model, _) in &extra_instances {
-            try_add_animation(&resource_man, start_instant, *model, &mut animation_map);
+            try_add_animation(
+                &state.resource_man,
+                state.start_instant,
+                *model,
+                &mut animation_map,
+            );
         }
 
         drop(render_info_lock);
 
-        let r = self.inner_render(
+        let r = Renderer::inner_render(
+            state,
             screenshotting,
-            gui,
-            resource_man,
             game_instances,
             extra_instances,
             animation_map,
-            camera_matrix,
         );
 
         gui::reset_custom_paint_state();
@@ -483,25 +482,28 @@ impl Renderer {
     }
 
     fn inner_render(
-        &mut self,
+        state: &mut GameState,
         screenshotting: bool,
-        gui: &mut Gui,
-        resource_man: Arc<ResourceManager>,
         game_instances: Option<Vec<(InstanceData, Id, ())>>,
         extra_instances: Vec<(InstanceData, Id, ())>,
         animation_map: AnimationMap,
-        camera_matrix: Matrix4,
     ) -> Result<(), SurfaceError> {
-        let size = self.gpu.window.inner_size();
+        let Some(renderer) = state.renderer.as_mut() else {
+            return Ok(());
+        };
+
+        let camera_matrix = state.camera.get_matrix().as_mat4();
+
+        let size = renderer.gpu.window.inner_size();
 
         let mut game_data = game_instances.map(|game_instances| {
-            gpu::indirect_instance(&resource_man, game_instances, &animation_map)
+            gpu::indirect_instance(&state.resource_man, game_instances, &animation_map)
         });
 
         let extra_game_data =
-            gpu::indirect_instance(&resource_man, extra_instances, &animation_map);
+            gpu::indirect_instance(&state.resource_man, extra_instances, &animation_map);
 
-        let output = self.gpu.surface.get_current_texture()?;
+        let output = renderer.gpu.surface.get_current_texture()?;
 
         {
             let output_size = output.texture.size();
@@ -511,7 +513,7 @@ impl Renderer {
             }
         }
 
-        let mut encoder = self
+        let mut encoder = renderer
             .gpu
             .device
             .create_command_encoder(&CommandEncoderDescriptor {
@@ -522,9 +524,9 @@ impl Renderer {
             let (extra_instances, extra_matrix_data, extra_draws) = &extra_game_data;
 
             gpu::create_or_write_buffer(
-                &self.gpu.device,
-                &self.gpu.queue,
-                &mut self
+                &renderer.gpu.device,
+                &renderer.gpu.queue,
+                &mut renderer
                     .render_resources
                     .extra_objects_resources
                     .instance_buffer,
@@ -538,9 +540,9 @@ impl Renderer {
                 .iter()
                 .for_each(|v| indirect_buffer.extend_from_slice(v.0.as_bytes()));
             gpu::create_or_write_buffer(
-                &self.gpu.device,
-                &self.gpu.queue,
-                &mut self
+                &renderer.gpu.device,
+                &renderer.gpu.queue,
+                &mut renderer
                     .render_resources
                     .extra_objects_resources
                     .indirect_buffer,
@@ -551,7 +553,7 @@ impl Renderer {
                 label: Some("Extra Objects Render Pass"),
                 color_attachments: &[
                     Some(RenderPassColorAttachment {
-                        view: &self.shared_resources.game_texture().1,
+                        view: &renderer.shared_resources.game_texture().1,
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Clear(Color::BLACK),
@@ -559,7 +561,7 @@ impl Renderer {
                         },
                     }),
                     Some(RenderPassColorAttachment {
-                        view: &self.shared_resources.normal_texture().1,
+                        view: &renderer.shared_resources.normal_texture().1,
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Clear(NORMAL_CLEAR),
@@ -567,7 +569,7 @@ impl Renderer {
                         },
                     }),
                     Some(RenderPassColorAttachment {
-                        view: &self.shared_resources.model_texture().1,
+                        view: &renderer.shared_resources.model_texture().1,
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Clear(Color::TRANSPARENT),
@@ -576,7 +578,7 @@ impl Renderer {
                     }),
                 ],
                 depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                    view: &self.shared_resources.depth_texture().1,
+                    view: &renderer.shared_resources.depth_texture().1,
                     depth_ops: Some(Operations {
                         load: LoadOp::Clear(1.0),
                         store: StoreOp::Store,
@@ -588,13 +590,16 @@ impl Renderer {
             });
 
             if *count > 0 {
-                self.gpu.queue.write_buffer(
-                    &self.render_resources.extra_objects_resources.uniform_buffer,
+                renderer.gpu.queue.write_buffer(
+                    &renderer
+                        .render_resources
+                        .extra_objects_resources
+                        .uniform_buffer,
                     0,
                     bytemuck::cast_slice(&[GameUBO::new(camera_matrix)]),
                 );
-                self.gpu.queue.write_buffer(
-                    &self
+                renderer.gpu.queue.write_buffer(
+                    &renderer
                         .render_resources
                         .extra_objects_resources
                         .matrix_data_buffer,
@@ -602,27 +607,28 @@ impl Renderer {
                     bytemuck::cast_slice(extra_matrix_data.as_slice()),
                 );
 
-                render_pass.set_pipeline(&self.global_resources.game_pipeline);
+                render_pass.set_pipeline(&renderer.global_resources.game_pipeline);
                 render_pass.set_bind_group(
                     0,
-                    &self.render_resources.extra_objects_resources.bind_group,
+                    &renderer.render_resources.extra_objects_resources.bind_group,
                     &[],
                 );
-                render_pass.set_vertex_buffer(0, self.global_resources.vertex_buffer.slice(..));
+                render_pass.set_vertex_buffer(0, renderer.global_resources.vertex_buffer.slice(..));
                 render_pass.set_vertex_buffer(
                     1,
-                    self.render_resources
+                    renderer
+                        .render_resources
                         .extra_objects_resources
                         .instance_buffer
                         .slice(..),
                 );
                 render_pass.set_index_buffer(
-                    self.global_resources.index_buffer.slice(..),
+                    renderer.global_resources.index_buffer.slice(..),
                     IndexFormat::Uint16,
                 );
 
                 render_pass.multi_draw_indexed_indirect(
-                    &self
+                    &renderer
                         .render_resources
                         .extra_objects_resources
                         .indirect_buffer,
@@ -632,16 +638,16 @@ impl Renderer {
             }
         }
 
-        if let Some(game_data) = game_data.take().or(self.last_game_data.take()) {
-            self.last_game_data = Some(game_data);
+        if let Some(game_data) = game_data.take().or(renderer.last_game_data.take()) {
+            renderer.last_game_data = Some(game_data);
 
             let (game_instances, game_matrix_data, game_draws) =
-                self.last_game_data.as_ref().unwrap();
+                renderer.last_game_data.as_ref().unwrap();
 
             gpu::create_or_write_buffer(
-                &self.gpu.device,
-                &self.gpu.queue,
-                &mut self.render_resources.game_resources.instance_buffer,
+                &renderer.gpu.device,
+                &renderer.gpu.queue,
+                &mut renderer.render_resources.game_resources.instance_buffer,
                 bytemuck::cast_slice(game_instances.as_slice()),
             );
 
@@ -652,9 +658,9 @@ impl Renderer {
                 .iter()
                 .for_each(|v| indirect_buffer.extend_from_slice(v.0.as_bytes()));
             gpu::create_or_write_buffer(
-                &self.gpu.device,
-                &self.gpu.queue,
-                &mut self.render_resources.game_resources.indirect_buffer,
+                &renderer.gpu.device,
+                &renderer.gpu.queue,
+                &mut renderer.render_resources.game_resources.indirect_buffer,
                 indirect_buffer.as_slice(),
             );
 
@@ -662,7 +668,7 @@ impl Renderer {
                 label: Some("Game Render Pass"),
                 color_attachments: &[
                     Some(RenderPassColorAttachment {
-                        view: &self.shared_resources.game_texture().1,
+                        view: &renderer.shared_resources.game_texture().1,
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Load,
@@ -670,7 +676,7 @@ impl Renderer {
                         },
                     }),
                     Some(RenderPassColorAttachment {
-                        view: &self.shared_resources.normal_texture().1,
+                        view: &renderer.shared_resources.normal_texture().1,
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Load,
@@ -678,7 +684,7 @@ impl Renderer {
                         },
                     }),
                     Some(RenderPassColorAttachment {
-                        view: &self.shared_resources.model_texture().1,
+                        view: &renderer.shared_resources.model_texture().1,
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Load,
@@ -687,7 +693,7 @@ impl Renderer {
                     }),
                 ],
                 depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                    view: &self.shared_resources.depth_texture().1,
+                    view: &renderer.shared_resources.depth_texture().1,
                     depth_ops: Some(Operations {
                         load: LoadOp::Load,
                         store: StoreOp::Store,
@@ -699,38 +705,39 @@ impl Renderer {
             });
 
             if *count > 0 {
-                self.gpu.queue.write_buffer(
-                    &self.render_resources.game_resources.uniform_buffer,
+                renderer.gpu.queue.write_buffer(
+                    &renderer.render_resources.game_resources.uniform_buffer,
                     0,
                     bytemuck::cast_slice(&[GameUBO::new(camera_matrix)]),
                 );
-                self.gpu.queue.write_buffer(
-                    &self.render_resources.game_resources.matrix_data_buffer,
+                renderer.gpu.queue.write_buffer(
+                    &renderer.render_resources.game_resources.matrix_data_buffer,
                     0,
                     bytemuck::cast_slice(game_matrix_data.as_slice()),
                 );
 
-                render_pass.set_pipeline(&self.global_resources.game_pipeline);
+                render_pass.set_pipeline(&renderer.global_resources.game_pipeline);
                 render_pass.set_bind_group(
                     0,
-                    &self.render_resources.game_resources.bind_group,
+                    &renderer.render_resources.game_resources.bind_group,
                     &[],
                 );
-                render_pass.set_vertex_buffer(0, self.global_resources.vertex_buffer.slice(..));
+                render_pass.set_vertex_buffer(0, renderer.global_resources.vertex_buffer.slice(..));
                 render_pass.set_vertex_buffer(
                     1,
-                    self.render_resources
+                    renderer
+                        .render_resources
                         .game_resources
                         .instance_buffer
                         .slice(..),
                 );
                 render_pass.set_index_buffer(
-                    self.global_resources.index_buffer.slice(..),
+                    renderer.global_resources.index_buffer.slice(..),
                     IndexFormat::Uint16,
                 );
 
                 render_pass.multi_draw_indexed_indirect(
-                    &self.render_resources.game_resources.indirect_buffer,
+                    &renderer.render_resources.game_resources.indirect_buffer,
                     0,
                     *count,
                 );
@@ -738,14 +745,14 @@ impl Renderer {
         }
 
         {
-            self.gpu.queue.write_buffer(
-                &self
+            renderer.gpu.queue.write_buffer(
+                &renderer
                     .render_resources
                     .post_processing_resources
                     .uniform_buffer,
                 0,
                 bytemuck::cast_slice(&[PostProcessingUBO {
-                    camera_matrix: camera_matrix.to_cols_array_2d(),
+                    world_matrix: camera_matrix.to_cols_array_2d(),
                     ..Default::default()
                 }]),
             );
@@ -753,7 +760,7 @@ impl Renderer {
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Game Post Processing Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.shared_resources.game_post_processing_texture().1,
+                    view: &renderer.shared_resources.game_post_processing_texture().1,
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(Color::BLACK),
@@ -765,15 +772,15 @@ impl Renderer {
                 timestamp_writes: None,
             });
 
-            render_pass.set_pipeline(&self.global_resources.post_processing_pipeline);
+            render_pass.set_pipeline(&renderer.global_resources.post_processing_pipeline);
             render_pass.set_bind_group(
                 0,
-                self.shared_resources.game_post_processing_bind_group(),
+                renderer.shared_resources.game_post_processing_bind_group(),
                 &[],
             );
             render_pass.set_bind_group(
                 1,
-                &self
+                &renderer
                     .render_resources
                     .post_processing_resources
                     .bind_group_uniform,
@@ -786,7 +793,7 @@ impl Renderer {
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Game Antialiasing Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.shared_resources.game_antialiasing_texture().1,
+                    view: &renderer.shared_resources.game_antialiasing_texture().1,
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(Color::BLACK),
@@ -798,10 +805,10 @@ impl Renderer {
                 timestamp_writes: None,
             });
 
-            render_pass.set_pipeline(&self.global_resources.fxaa_pipeline);
+            render_pass.set_pipeline(&renderer.global_resources.fxaa_pipeline);
             render_pass.set_bind_group(
                 0,
-                self.shared_resources.game_antialiasing_bind_group(),
+                renderer.shared_resources.game_antialiasing_bind_group(),
                 &[],
             );
             render_pass.draw(0..3, 0..1);
@@ -810,11 +817,11 @@ impl Renderer {
         let custom_gui_commands: CommandBuffer;
         {
             let surface = SurfaceInfo {
-                format: self.gpu.config.format,
+                format: renderer.gpu.config.format,
                 sample_count: 4,
                 color_attachments: vec![Some(RenderPassColorAttachment {
-                    view: &self.shared_resources.gui_texture().1,
-                    resolve_target: Some(&self.shared_resources.gui_texture_resolve().1),
+                    view: &renderer.shared_resources.gui_texture().1,
+                    resolve_target: Some(&renderer.shared_resources.gui_texture_resolve().1),
                     ops: Operations {
                         load: LoadOp::Clear(Color::TRANSPARENT),
                         store: StoreOp::Store,
@@ -826,9 +833,9 @@ impl Renderer {
             };
 
             let resources: &mut YakuiRenderResources = &mut (
-                resource_man.clone(),
-                self.global_resources.clone(),
-                self.render_resources.gui_resources.take(),
+                state.resource_man.clone(),
+                renderer.global_resources.clone(),
+                renderer.render_resources.gui_resources.take(),
                 surface.format,
                 animation_map,
                 Some(Vec::new()),
@@ -845,24 +852,26 @@ impl Renderer {
                     ..Default::default()
                 });
 
+                let gui = state.gui.as_mut().unwrap();
+
                 custom_gui_commands = gui.renderer.paint_with::<GameElementPaint>(
                     &mut gui.yak,
-                    &self.gpu.device,
-                    &self.gpu.queue,
+                    &renderer.gpu.device,
+                    &renderer.gpu.queue,
                     &mut render_pass,
                     surface,
                     resources,
                 );
             }
 
-            self.render_resources.gui_resources = resources.2.take();
+            renderer.render_resources.gui_resources = resources.2.take();
         };
 
         {
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Combine Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.shared_resources.first_combine_texture().1,
+                    view: &renderer.shared_resources.first_combine_texture().1,
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(Color::BLACK),
@@ -874,8 +883,12 @@ impl Renderer {
                 timestamp_writes: None,
             });
 
-            render_pass.set_pipeline(&self.global_resources.combine_pipeline);
-            render_pass.set_bind_group(0, self.shared_resources.first_combine_bind_group(), &[]);
+            render_pass.set_pipeline(&renderer.global_resources.combine_pipeline);
+            render_pass.set_bind_group(
+                0,
+                renderer.shared_resources.first_combine_bind_group(),
+                &[],
+            );
             render_pass.draw(0..3, 0..1)
         }
 
@@ -899,8 +912,8 @@ impl Renderer {
                 timestamp_writes: None,
             });
 
-            render_pass.set_pipeline(&self.global_resources.present_pipeline);
-            render_pass.set_bind_group(0, self.shared_resources.present_bind_group(), &[]);
+            render_pass.set_pipeline(&renderer.global_resources.present_pipeline);
+            render_pass.set_bind_group(0, renderer.shared_resources.present_bind_group(), &[]);
             render_pass.draw(0..3, 0..1)
         }
 
@@ -914,7 +927,7 @@ impl Renderer {
         let padded_width = size_align(buffer_dim.width * block_size, COPY_BYTES_PER_ROW_ALIGNMENT);
 
         let screenshot_buffer = if screenshotting {
-            let intermediate_texture = self.gpu.device.create_texture(&TextureDescriptor {
+            let intermediate_texture = renderer.gpu.device.create_texture(&TextureDescriptor {
                 label: Some("Screenshot Intermediate Texture"),
                 size: texture_dim,
                 mip_level_count: 1,
@@ -944,12 +957,16 @@ impl Renderer {
                     timestamp_writes: None,
                 });
 
-                render_pass.set_pipeline(&self.global_resources.screenshot_pipeline);
-                render_pass.set_bind_group(0, self.shared_resources.screenshot_bind_group(), &[]);
+                render_pass.set_pipeline(&renderer.global_resources.screenshot_pipeline);
+                render_pass.set_bind_group(
+                    0,
+                    renderer.shared_resources.screenshot_bind_group(),
+                    &[],
+                );
                 render_pass.draw(0..3, 0..1);
             }
 
-            let buffer = self.gpu.device.create_buffer(&BufferDescriptor {
+            let buffer = renderer.gpu.device.create_buffer(&BufferDescriptor {
                 label: Some("Screenshot Buffer"),
                 size: size_align(
                     (padded_width * buffer_dim.height) as BufferAddress,
@@ -977,7 +994,8 @@ impl Renderer {
             None
         };
 
-        self.gpu
+        renderer
+            .gpu
             .queue
             .submit([custom_gui_commands, encoder.finish()]);
 
@@ -990,7 +1008,7 @@ impl Renderer {
                 slice.map_async(MapMode::Read, move |result| {
                     tx.send(result).unwrap();
                 });
-                self.gpu.device.poll(Maintain::Wait);
+                renderer.gpu.device.poll(Maintain::Wait);
                 rx.blocking_recv().unwrap().unwrap();
 
                 let texture_width = (texture_dim.width * block_size) as usize;
@@ -1005,7 +1023,8 @@ impl Renderer {
                 if let Some(image) =
                     RgbaImage::from_vec(texture_dim.width, texture_dim.height, result)
                 {
-                    self.screenshot_clipboard
+                    renderer
+                        .screenshot_clipboard
                         .set_image(ImageData {
                             width: image.width() as usize,
                             height: image.height() as usize,
@@ -1018,7 +1037,7 @@ impl Renderer {
             buffer.unmap();
         }
 
-        self.gpu.window.pre_present_notify();
+        renderer.gpu.window.pre_present_notify();
 
         output.present();
 

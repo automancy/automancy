@@ -35,6 +35,8 @@ pub const TAKE_ITEM_ANIMATION_SPEED: Duration = Duration::from_nanos(200_000_000
 
 pub type TickUnit = u16;
 
+pub type FlatTiles = Vec<(TileCoord, Id, Option<DataMap>)>;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TransactionRecord {
     pub stack: ItemStack,
@@ -50,6 +52,8 @@ pub struct RenderUnit {
 
 pub type TransactionRecords =
     HashMap<(TileCoord, TileCoord), VecDeque<(Instant, TransactionRecord)>>;
+
+pub type RenderUnits = HashMap<TileCoord, (Id, RenderUnit)>;
 
 #[derive(Debug)]
 pub struct GameSystemState {
@@ -97,8 +101,8 @@ pub enum GameSystemMessage {
         reply: Option<RpcReplyPort<PlaceTileResponse>>,
     },
     PlaceTiles {
-        tiles: Vec<(TileCoord, Id, Option<DataMap>)>,
-        reply: Option<RpcReplyPort<Vec<(TileCoord, Id, Option<DataMap>)>>>,
+        tiles: FlatTiles,
+        reply: Option<RpcReplyPort<FlatTiles>>,
         place_over: bool,
         record: bool,
     },
@@ -121,12 +125,9 @@ pub enum GameSystemMessage {
     /// get all the tiles needing to be rendered, and their info
     GetAllRenderUnits {
         culling_range: TileBounds,
-        reply: RpcReplyPort<HashMap<TileCoord, (Id, RenderUnit)>>,
+        reply: RpcReplyPort<RenderUnits>,
     },
-    GetTiles(
-        Vec<TileCoord>,
-        RpcReplyPort<Vec<(TileCoord, Id, Option<DataMap>)>>,
-    ),
+    GetTiles(Vec<TileCoord>, RpcReplyPort<FlatTiles>),
 
     GetRecordedTransactions(RpcReplyPort<TransactionRecords>),
     RecordTransaction(ItemStack, TileCoord, TileCoord),

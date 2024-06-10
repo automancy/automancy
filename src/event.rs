@@ -23,12 +23,17 @@ use automancy_resources::data::{Data, DataMap};
 use automancy_resources::kira::manager::AudioManager;
 use automancy_resources::ResourceManager;
 
-use crate::game::{GameSystemMessage, PlaceTileResponse};
 use crate::gui::{Screen, TextField};
 use crate::input::ActionType;
 use crate::map::{Map, MapInfo, MapInfoRaw, MAP_PATH};
 use crate::tile_entity::TileEntityMsg;
+use crate::{
+    game::{GameSystemMessage, PlaceTileResponse},
+    renderer::Renderer,
+};
 use crate::{gui, input, GameState};
+
+pub type TileEntityWithId = (Id, ActorRef<TileEntityMsg>);
 
 /// Refreshes the list of maps on the filesystem. Should be done every time the list of maps could have changed (on map creation/delete and on game load).
 pub fn refresh_maps(state: &mut GameState) {
@@ -67,9 +72,9 @@ pub struct EventLoopStorage {
     pub map_infos_cache: Vec<((MapInfoRaw, Option<SystemTime>), String)>,
     pub map_info: Option<(Arc<Mutex<MapInfo>>, String)>,
 
-    pub config_open_cache: Arc<Mutex<Option<(Id, ActorRef<TileEntityMsg>)>>>,
+    pub config_open_cache: Arc<Mutex<Option<TileEntityWithId>>>,
     pub config_open_updating: Arc<AtomicBool>,
-    pub pointing_cache: Arc<Mutex<Option<(Id, ActorRef<TileEntityMsg>)>>>,
+    pub pointing_cache: Arc<Mutex<Option<TileEntityWithId>>>,
     pub pointing_updating: Arc<AtomicBool>,
 }
 
@@ -186,15 +191,7 @@ fn render(
         }
 
         if !matches!(result, Ok(true)) {
-            match state.renderer.as_mut().unwrap().render(
-                state.start_instant,
-                state.resource_man.clone(),
-                &state.tokio,
-                screenshotting,
-                &state.camera,
-                state.gui.as_mut().unwrap(),
-                &state.game,
-            ) {
+            match Renderer::render(state, screenshotting) {
                 Ok(_) => {}
                 Err(SurfaceError::Lost) => {
                     let renderer = state.renderer.as_mut().unwrap();
@@ -223,7 +220,7 @@ fn render(
 async fn on_link_tile(
     resource_man: Arc<ResourceManager>,
     audio_man: &mut AudioManager,
-    pointing_cache: Arc<Mutex<Option<(Id, ActorRef<TileEntityMsg>)>>>,
+    pointing_cache: Arc<Mutex<Option<TileEntityWithId>>>,
     linking_tile: TileCoord,
 ) {
     let Some((tile, entity)) = pointing_cache.lock().await.clone() else {
