@@ -344,21 +344,24 @@ impl Renderer {
 
             let mut render_info = render_info.clone();
 
-            let bound = get_screen_world_bounding_vec(
+            let (bound_min, bound_max) = get_screen_world_bounding_vec(
                 window::window_size_double(&renderer.gpu.window),
                 camera_pos,
-            )
-            .as_vec2()
-                + vec2(2.0, 2.0);
-
-            let center = camera_pos_float.truncate();
+            );
+            let (bound_min, bound_max) = (
+                bound_min.as_vec2() - vec2(2.0, 2.0),
+                bound_max.as_vec2() + vec2(2.0, 2.0),
+            );
 
             for coord in culling_range.into_iter() {
                 if !render_info.contains_key(&coord) {
                     let pos = HEX_GRID_LAYOUT.hex_to_world_pos(*coord);
 
-                    let d = pos - center;
-                    if d.x <= bound.x && d.y <= bound.y {
+                    if pos.x > bound_min.x
+                        && pos.x < bound_max.x
+                        && pos.y > bound_min.y
+                        && pos.y < bound_max.y
+                    {
                         render_info.insert(
                             coord,
                             (
@@ -375,69 +378,72 @@ impl Renderer {
                 }
             }
 
-            for (coord, (id, unit)) in render_info.iter_mut() {
-                let tile = state.resource_man.registry.tiles.get(id).unwrap();
-
-                if let Some(theta) = all_data
-                    .get(coord)
-                    .and_then(|data| data.get(&state.resource_man.registry.data_ids.direction))
-                    .and_then(|direction| {
-                        if let Data::Coord(target) = direction {
-                            math::tile_direction_to_angle(*target)
-                        } else {
-                            None
-                        }
-                    })
-                {
-                    unit.instance = unit
-                        .instance
-                        .add_model_matrix(Matrix4::from_rotation_z(theta.to_radians()));
-                } else if let Some(Data::Id(inactive)) = tile
-                    .data
-                    .get(&state.resource_man.registry.data_ids.inactive_model)
-                {
-                    unit.model_override = Some(state.resource_man.tile_model_or_missing(*inactive));
-                }
-            }
-
             {
-                for (coord, (_, unit)) in &mut render_info.iter_mut() {
-                    let mut instance = unit.instance;
-
-                    if let Some(color) = tile_tints.get(coord) {
-                        instance = instance.with_color_offset(color.to_array())
-                    }
-
-                    instance = instance.with_light_pos(camera_pos_float, None);
-
-                    unit.instance = instance;
-                }
-
                 let mut instances = Vec::new();
 
-                for (coord, (id, unit)) in render_info {
-                    let model = state
-                        .resource_man
-                        .registry
-                        .tiles
-                        .get(&id)
-                        .map(|v| v.model)
-                        .unwrap_or(state.resource_man.registry.model_ids.missing);
+                for (coord, (id, mut unit)) in render_info {
+                    let pos = HEX_GRID_LAYOUT.hex_to_world_pos(*coord);
 
-                    let model = unit.model_override.unwrap_or(model);
+                    if pos.x > bound_min.x
+                        && pos.x < bound_max.x
+                        && pos.y > bound_min.y
+                        && pos.y < bound_max.y
+                    {
+                        {
+                            let tile = state.resource_man.registry.tiles.get(&id).unwrap();
 
-                    try_add_animation(
-                        &state.resource_man,
-                        state.start_instant,
-                        model,
-                        &mut animation_map,
-                    );
+                            if let Some(theta) = all_data
+                                .get(&coord)
+                                .and_then(|data| {
+                                    data.get(&state.resource_man.registry.data_ids.direction)
+                                })
+                                .and_then(|direction| {
+                                    if let Data::Coord(target) = direction {
+                                        math::tile_direction_to_angle(*target)
+                                    } else {
+                                        None
+                                    }
+                                })
+                            {
+                                unit.instance = unit
+                                    .instance
+                                    .add_model_matrix(Matrix4::from_rotation_z(theta.to_radians()));
+                            } else if let Some(Data::Id(inactive)) = tile
+                                .data
+                                .get(&state.resource_man.registry.data_ids.inactive_model)
+                            {
+                                unit.model_override =
+                                    Some(state.resource_man.tile_model_or_missing(*inactive));
+                            }
+                        }
 
-                    instances.push((
-                        unit.instance,
-                        model,
-                        HEX_GRID_LAYOUT.hex_to_world_pos(*coord),
-                    ))
+                        {
+                            if let Some(color) = tile_tints.get(&coord) {
+                                unit.instance = unit.instance.with_color_offset(color.to_array())
+                            }
+
+                            unit.instance = unit.instance.with_light_pos(camera_pos_float, None);
+                        }
+
+                        let model = state
+                            .resource_man
+                            .registry
+                            .tiles
+                            .get(&id)
+                            .map(|v| v.model)
+                            .unwrap_or(state.resource_man.registry.model_ids.missing);
+
+                        let model = unit.model_override.unwrap_or(model);
+
+                        try_add_animation(
+                            &state.resource_man,
+                            state.start_instant,
+                            model,
+                            &mut animation_map,
+                        );
+
+                        instances.push((unit.instance, model, pos))
+                    }
                 }
 
                 let camera_pos = camera_pos_float.truncate();
@@ -496,7 +502,7 @@ impl Renderer {
 
         let size = renderer.gpu.window.inner_size();
 
-        let mut game_data = game_instances.map(|game_instances| {
+        let game_data = game_instances.map(|game_instances| {
             gpu::indirect_instance(&state.resource_man, game_instances, &animation_map)
         });
 
@@ -521,33 +527,20 @@ impl Renderer {
             });
 
         {
-            let (extra_instances, extra_matrix_data, extra_draws) = &extra_game_data;
+            let (extra_instances, extra_matrix_data, extra_draws) = extra_game_data;
 
-            gpu::create_or_write_buffer(
+            gpu::update_instance_buffer(
                 &renderer.gpu.device,
                 &renderer.gpu.queue,
                 &mut renderer
                     .render_resources
                     .extra_objects_resources
                     .instance_buffer,
-                bytemuck::cast_slice(extra_instances.as_slice()),
+                &extra_instances,
+                &[],
             );
 
-            let (count, draws) = extra_draws;
-
-            let mut indirect_buffer = vec![];
-            draws
-                .iter()
-                .for_each(|v| indirect_buffer.extend_from_slice(v.0.as_bytes()));
-            gpu::create_or_write_buffer(
-                &renderer.gpu.device,
-                &renderer.gpu.queue,
-                &mut renderer
-                    .render_resources
-                    .extra_objects_resources
-                    .indirect_buffer,
-                indirect_buffer.as_slice(),
-            );
+            let draws = extra_draws;
 
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Extra Objects Render Pass"),
@@ -589,7 +582,7 @@ impl Renderer {
                 timestamp_writes: None,
             });
 
-            if *count > 0 {
+            if !draws.is_empty() {
                 renderer.gpu.queue.write_buffer(
                     &renderer
                         .render_resources
@@ -627,42 +620,36 @@ impl Renderer {
                     IndexFormat::Uint16,
                 );
 
-                render_pass.multi_draw_indexed_indirect(
-                    &renderer
-                        .render_resources
-                        .extra_objects_resources
-                        .indirect_buffer,
-                    0,
-                    *count,
-                );
+                for (idx, (draw, _)) in draws.iter().enumerate() {
+                    let idx = idx as u32;
+
+                    render_pass.draw_indexed(
+                        draw.first_index..(draw.first_index + draw.index_count),
+                        draw.base_vertex,
+                        idx..(idx + 1),
+                    );
+                }
             }
         }
 
-        if let Some(game_data) = game_data.take().or(renderer.last_game_data.take()) {
-            renderer.last_game_data = Some(game_data);
+        if let Some((game_instances, game_matrix_data, game_draws)) =
+            game_data.as_ref().or(renderer.last_game_data.as_ref())
+        {
+            let last_instances = renderer
+                .last_game_data
+                .as_ref()
+                .map(|v| v.0.as_slice())
+                .unwrap_or(&[]);
 
-            let (game_instances, game_matrix_data, game_draws) =
-                renderer.last_game_data.as_ref().unwrap();
-
-            gpu::create_or_write_buffer(
+            gpu::update_instance_buffer(
                 &renderer.gpu.device,
                 &renderer.gpu.queue,
                 &mut renderer.render_resources.game_resources.instance_buffer,
-                bytemuck::cast_slice(game_instances.as_slice()),
+                game_instances,
+                last_instances,
             );
 
-            let (count, draws) = game_draws;
-
-            let mut indirect_buffer = vec![];
-            draws
-                .iter()
-                .for_each(|v| indirect_buffer.extend_from_slice(v.0.as_bytes()));
-            gpu::create_or_write_buffer(
-                &renderer.gpu.device,
-                &renderer.gpu.queue,
-                &mut renderer.render_resources.game_resources.indirect_buffer,
-                indirect_buffer.as_slice(),
-            );
+            let draws = game_draws;
 
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Game Render Pass"),
@@ -704,7 +691,7 @@ impl Renderer {
                 timestamp_writes: None,
             });
 
-            if *count > 0 {
+            if !draws.is_empty() {
                 renderer.gpu.queue.write_buffer(
                     &renderer.render_resources.game_resources.uniform_buffer,
                     0,
@@ -736,11 +723,19 @@ impl Renderer {
                     IndexFormat::Uint16,
                 );
 
-                render_pass.multi_draw_indexed_indirect(
-                    &renderer.render_resources.game_resources.indirect_buffer,
-                    0,
-                    *count,
-                );
+                for (idx, (draw, _)) in draws.iter().enumerate() {
+                    let idx = idx as u32;
+
+                    render_pass.draw_indexed(
+                        draw.first_index..(draw.first_index + draw.index_count),
+                        draw.base_vertex,
+                        idx..(idx + 1),
+                    );
+                }
+            }
+
+            if game_data.is_some() {
+                renderer.last_game_data = game_data;
             }
         }
 

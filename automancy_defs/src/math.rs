@@ -172,21 +172,28 @@ pub fn normalized_to_world(
     p + camera_pos
 }
 
-pub fn get_screen_world_bounding_vec(size: (Double, Double), camera_pos: DVec3) -> DVec2 {
-    normalized_to_world(size, dvec2(1.0, -1.0), dvec3(0.0, 0.0, camera_pos.z))
-        .truncate()
-        .abs()
+pub fn get_screen_world_bounding_vec(size: (Double, Double), camera_pos: DVec3) -> (DVec2, DVec2) {
+    let a = normalized_to_world(size, dvec2(-1.0, -1.0), camera_pos).truncate();
+    let b = normalized_to_world(size, dvec2(-1.0, 1.0), camera_pos).truncate();
+    let c = normalized_to_world(size, dvec2(1.0, -1.0), camera_pos).truncate();
+    let d = normalized_to_world(size, dvec2(1.0, 1.0), camera_pos).truncate();
+
+    let min = a.min(b).min(c.min(d));
+    let max = a.max(b).max(c.max(d));
+
+    (min, max)
 }
 
 /// Gets the culling range from the camera's position
 pub fn get_culling_range(size: (Double, Double), camera_pos: DVec3) -> TileBounds {
-    let bound = get_screen_world_bounding_vec(size, camera_pos);
+    let (bound_min, bound_max) = get_screen_world_bounding_vec(size, camera_pos);
+    let bound_size = (bound_max - bound_min) / 2.0;
 
     TileBounds::new(
         HEX_GRID_LAYOUT
             .world_pos_to_hex(camera_pos.truncate().as_vec2())
             .into(),
-        bound.x.max(bound.y) as u32,
+        bound_size.x.max(bound_size.y) as u32,
     )
 }
 

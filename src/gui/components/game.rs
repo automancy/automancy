@@ -151,20 +151,21 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                 crunch::pack_into_po2(device.limits().max_texture_dimension_2d as usize, items)
                     .expect("gui items exceed max texture size.");
 
-            let (instances, matrix_data, (draw_count, draws)) =
+            let (instances, matrix_data, draws) =
                 gpu::indirect_instance(resource_man, instances, animation_map);
 
-            if draw_count == 0 {
+            if draws.is_empty() {
                 return;
             }
 
             let gui_resources = gui_resources.as_mut().unwrap();
 
-            gpu::create_or_write_buffer(
+            gpu::update_instance_buffer(
                 device,
                 queue,
                 &mut gui_resources.instance_buffer,
-                bytemuck::cast_slice(instances.as_slice()),
+                &instances,
+                &[],
             );
 
             queue.write_buffer(
@@ -383,8 +384,8 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                         IndexFormat::Uint16,
                     );
 
-                    for (draw, (index, ..)) in draws.into_iter() {
-                        if let Some(rect) = rects[index] {
+                    for (idx, (draw, (rect_index, ..))) in draws.into_iter().enumerate() {
+                        if let Some(rect) = rects[rect_index] {
                             render_pass.set_viewport(
                                 rect.x as f32,
                                 rect.y as f32,
@@ -394,10 +395,12 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                                 1.0,
                             );
 
+                            let idx = idx as u32;
+
                             render_pass.draw_indexed(
                                 draw.first_index..(draw.first_index + draw.index_count),
                                 draw.base_vertex,
-                                draw.first_instance..(draw.first_instance + draw.instance_count),
+                                idx..(idx + 1),
                             );
                         }
                     }

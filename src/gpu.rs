@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use hashbrown::HashMap;
 use image::EncodableLayout;
+use rayon::prelude::*;
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     InstanceFlags,
@@ -267,11 +268,6 @@ pub fn init_gpu_resources(
                 contents: &[],
                 usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
             }),
-            indirect_buffer: device.create_buffer_init(&BufferInitDescriptor {
-                label: None,
-                contents: &[],
-                usage: BufferUsages::INDIRECT | BufferUsages::COPY_DST,
-            }),
             matrix_data_buffer,
             uniform_buffer,
             bind_group,
@@ -314,11 +310,6 @@ pub fn init_gpu_resources(
                 label: None,
                 contents: &[],
                 usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
-            }),
-            indirect_buffer: device.create_buffer_init(&BufferInitDescriptor {
-                label: None,
-                contents: &[],
-                usage: BufferUsages::INDIRECT | BufferUsages::COPY_DST,
             }),
             matrix_data_buffer,
             uniform_buffer,
@@ -924,53 +915,29 @@ pub fn compile_instances<T: Clone + Send>(
     (vec, matrix_data)
 }
 
-fn collect_indirect<T: Clone + Send + Sync>(
-    resource_man: &ResourceManager,
-    base_instance_counter: &mut u32,
-    draw_count: &mut u32,
-    vec: &mut Vec<(DrawIndexedIndirectArgs, T)>,
-    instance: (usize, RawInstanceData, T, Id),
-) {
-    let size = 1;
-
-    let index_range = resource_man.all_index_ranges[&instance.3][&instance.0];
-
-    let command = DrawIndexedIndirectArgs {
-        first_index: index_range.pos,
-        index_count: index_range.count,
-        first_instance: *base_instance_counter,
-        instance_count: size,
-        base_vertex: index_range.base_vertex,
-    };
-
-    *base_instance_counter += size;
-    *draw_count += 1;
-
-    vec.push((command, instance.2));
-}
-
-pub type DrawData<T> = (u32, Vec<(DrawIndexedIndirectArgs, T)>);
+pub type DrawData<T> = Vec<(DrawIndexedIndirectArgs, T)>;
 
 fn indirect<T: Clone + Send + Sync>(
     resource_man: &ResourceManager,
     compiled_instances: &CompiledInstances<T>,
 ) -> DrawData<T> {
-    let (_, draw_count, commands) = compiled_instances.iter().fold(
-        (0, 0, Vec::new()),
-        |(mut base_instance_counter, mut draw_count, mut commands), instance| {
-            collect_indirect(
-                resource_man,
-                &mut base_instance_counter,
-                &mut draw_count,
-                &mut commands,
-                instance.clone(),
-            );
+    compiled_instances
+        .par_iter()
+        .map(|instance| {
+            let index_range = resource_man.all_index_ranges[&instance.3][&instance.0];
 
-            (base_instance_counter, draw_count, commands)
-        },
-    );
-
-    (draw_count, commands)
+            (
+                DrawIndexedIndirectArgs {
+                    first_index: index_range.pos,
+                    index_count: index_range.count,
+                    base_vertex: index_range.base_vertex,
+                    first_instance: 0,
+                    instance_count: 0,
+                },
+                instance.2.clone(),
+            )
+        })
+        .collect()
 }
 
 pub type IndirectInstanceDrawData<T> = (Vec<RawInstanceData>, Vec<MatrixData>, DrawData<T>);
@@ -983,29 +950,90 @@ pub fn indirect_instance<T: Clone + Send + Sync>(
     let (compiled_instances, matrix_data) =
         compile_instances(resource_man, instances, animation_map);
 
-    let (draw_count, commands) = indirect(resource_man, &compiled_instances);
+    let commands = indirect(resource_man, &compiled_instances);
 
     let instances = compiled_instances.into_iter().map(|v| v.1).collect();
 
-    (instances, matrix_data, (draw_count, commands))
+    (instances, matrix_data, commands)
 }
 
-pub fn create_or_write_buffer(
+pub fn update_instance_buffer(
     device: &Device,
     queue: &Queue,
     buffer: &mut Buffer,
-    contents: &[u8],
-) {
-    if buffer.size() < contents.len() as BufferAddress {
+    instances: &[RawInstanceData],
+    last_instances: &[RawInstanceData],
+) -> Option<usize> {
+    if (buffer.size() as usize) < mem::size_of_val(instances) {
         let usage = buffer.usage();
 
         *buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: None,
-            contents,
+            contents: bytemuck::cast_slice(instances),
             usage,
-        })
+        });
+
+        None
+    } else if instances.len() != last_instances.len() {
+        queue.write_buffer(buffer, 0, bytemuck::cast_slice(instances));
+
+        None
     } else {
-        queue.write_buffer(buffer, 0, contents);
+        let diff = instances
+            .iter()
+            .enumerate()
+            .map(|(idx, v)| {
+                if last_instances[idx] != *v {
+                    Some(*v)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
+        if diff.iter().all(|v| v.is_none()) {
+            return Some(0);
+        }
+
+        let mut grouped = vec![];
+
+        {
+            let mut idx = 0;
+            while idx < diff.len() {
+                let group = diff
+                    .iter()
+                    .skip(idx)
+                    .take_while(|v| v.is_some())
+                    .flatten()
+                    .cloned()
+                    .collect::<Vec<_>>();
+
+                if group.is_empty() {
+                    if let Some(v) = diff.iter().enumerate().skip(idx).find(|(_, v)| v.is_some()) {
+                        idx = v.0;
+                    } else {
+                        break;
+                    }
+                } else {
+                    let size = group.len();
+                    grouped.push((idx, group));
+
+                    idx += size;
+                }
+            }
+        }
+
+        let groups = grouped.len();
+
+        for (idx, group) in grouped {
+            queue.write_buffer(
+                buffer,
+                (idx * mem::size_of::<RawInstanceData>()) as BufferAddress,
+                bytemuck::cast_slice(group.as_slice()),
+            );
+        }
+
+        Some(groups)
     }
 }
 
@@ -1076,7 +1104,6 @@ fn make_fxaa_bind_group(
 
 pub struct ExtraObjectsResources {
     pub instance_buffer: Buffer,
-    pub indirect_buffer: Buffer,
     pub uniform_buffer: Buffer,
     pub matrix_data_buffer: Buffer,
     pub bind_group: BindGroup,
@@ -1084,7 +1111,6 @@ pub struct ExtraObjectsResources {
 
 pub struct GameResources {
     pub instance_buffer: Buffer,
-    pub indirect_buffer: Buffer,
     pub uniform_buffer: Buffer,
     pub matrix_data_buffer: Buffer,
     pub bind_group: BindGroup,
@@ -1493,8 +1519,7 @@ impl Gpu {
         let (device, queue) = adapter
             .request_device(
                 &DeviceDescriptor {
-                    required_features: Features::INDIRECT_FIRST_INSTANCE
-                        | Features::MULTI_DRAW_INDIRECT,
+                    required_features: Features::empty(),
                     // WebGL doesn't support all of wgpu's features, so if
                     // we're building for the web we'll have to disable some.
                     required_limits: if cfg!(target_arch = "wasm32") {
