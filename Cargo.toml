@@ -17,6 +17,7 @@ required-features = ["build-binary"]
 [profile.dev]
 opt-level = 0
 lto = "off"
+panic = "abort"
 
 [profile.dev.package."*"]
 opt-level = 0
@@ -24,6 +25,7 @@ opt-level = 0
 [profile.release]
 lto = "off"
 debug = true
+panic = "abort"
 
 [profile.release-bin]
 inherits = "release"
