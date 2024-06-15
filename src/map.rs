@@ -13,10 +13,10 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use zstd::{Decoder, Encoder};
 
+use automancy_defs::chrono::Local;
 use automancy_defs::coord::TileCoord;
 use automancy_defs::id::{Id, IdRaw, Interner};
 use automancy_defs::log;
-use automancy_resources::chrono::Local;
 use automancy_resources::data::{DataMap, DataMapRaw};
 use automancy_resources::ResourceManager;
 

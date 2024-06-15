@@ -1,10 +1,10 @@
 use crate::{LoadResourceError, ResourceManager, COULD_NOT_GET_FILE_STEM, FONT_EXT};
 use automancy_defs::log;
+use automancy_defs::ttf_parser::Face;
 use std::ffi::OsStr;
 use std::fs::{read_dir, File};
 use std::io::Read;
 use std::path::Path;
-use ttf_parser::Face;
 
 pub struct Font {
     pub name: String,

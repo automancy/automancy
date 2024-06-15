@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use automancy_defs::coord::{TileBounds, TileCoord, TileUnit};
 use automancy_defs::glam::IVec2;
+use automancy_defs::hex;
 use automancy_defs::hexx::{Hex, OffsetHexMode};
 use automancy_defs::id::{Id, IdRaw, Interner};
 use yakui::Color;

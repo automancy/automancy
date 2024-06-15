@@ -8,9 +8,12 @@ use ractor::ActorRef;
 use tokio::runtime::Runtime;
 use tokio::task::JoinHandle;
 
+use automancy_defs::kira::manager::AudioManager;
+
+use automancy_resources::types::font::Font;
 use automancy_resources::types::function::RhaiDataMap;
 use automancy_resources::ResourceManager;
-use automancy_resources::{kira::manager::AudioManager, types::font::Font};
+
 use yakui::ManagedTextureId;
 
 use crate::camera::Camera;

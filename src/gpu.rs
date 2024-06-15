@@ -6,7 +6,7 @@ use image::EncodableLayout;
 use rayon::prelude::*;
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
-    InstanceFlags,
+    InstanceFlags, PipelineCompilationOptions,
 };
 use wgpu::{
     util::{DrawIndexedIndirectArgs, TextureDataOrder},
@@ -49,8 +49,8 @@ pub const NORMAL_CLEAR: Color = Color {
 
 pub const DEPTH_FORMAT: TextureFormat = TextureFormat::Depth32Float;
 pub const SCREENSHOT_FORMAT: TextureFormat = TextureFormat::Rgba8UnormSrgb;
-pub const NORMAL_FORMAT: TextureFormat = TextureFormat::Rgba32Float;
-pub const MODEL_FORMAT: TextureFormat = TextureFormat::Rgba32Float;
+pub const NORMAL_FORMAT: TextureFormat = TextureFormat::Rgba16Float;
+pub const MODEL_FORMAT: TextureFormat = TextureFormat::Rgba16Float;
 
 pub type AnimationMap = HashMap<Id, HashMap<usize, Matrix4>>;
 
@@ -188,6 +188,7 @@ pub fn init_gpu_resources(
             module: &game_shader,
             entry_point: "vs_main",
             buffers: &[Vertex::desc(), RawInstanceData::desc()],
+            compilation_options: PipelineCompilationOptions::default(),
         },
         fragment: Some(FragmentState {
             module: &game_shader,
@@ -201,14 +202,15 @@ pub fn init_gpu_resources(
                 Some(ColorTargetState {
                     format: NORMAL_FORMAT,
                     blend: None,
-                    write_mask: ColorWrites::ALL,
+                    write_mask: ColorWrites::COLOR,
                 }),
                 Some(ColorTargetState {
                     format: MODEL_FORMAT,
                     blend: None,
-                    write_mask: ColorWrites::ALL,
+                    write_mask: ColorWrites::COLOR,
                 }),
             ],
+            compilation_options: PipelineCompilationOptions::default(),
         }),
         primitive: PrimitiveState {
             topology: PrimitiveTopology::TriangleList,
@@ -437,6 +439,7 @@ pub fn init_gpu_resources(
             module: &combine_shader,
             entry_point: "vs_main",
             buffers: &[],
+            compilation_options: PipelineCompilationOptions::default(),
         },
         fragment: Some(FragmentState {
             module: &combine_shader,
@@ -446,6 +449,7 @@ pub fn init_gpu_resources(
                 blend: None,
                 write_mask: ColorWrites::ALL,
             })],
+            compilation_options: PipelineCompilationOptions::default(),
         }),
         primitive: PrimitiveState {
             topology: PrimitiveTopology::TriangleList,
@@ -496,6 +500,7 @@ pub fn init_gpu_resources(
             module: &fxaa_shader,
             entry_point: "vs_main",
             buffers: &[],
+            compilation_options: PipelineCompilationOptions::default(),
         },
         fragment: Some(FragmentState {
             module: &fxaa_shader,
@@ -505,6 +510,7 @@ pub fn init_gpu_resources(
                 blend: None,
                 write_mask: ColorWrites::ALL,
             })],
+            compilation_options: PipelineCompilationOptions::default(),
         }),
         primitive: PrimitiveState {
             topology: PrimitiveTopology::TriangleList,
@@ -633,6 +639,7 @@ pub fn init_gpu_resources(
                 module: &post_processing_shader,
                 entry_point: "vs_main",
                 buffers: &[],
+                compilation_options: PipelineCompilationOptions::default(),
             },
             fragment: Some(FragmentState {
                 module: &post_processing_shader,
@@ -642,6 +649,7 @@ pub fn init_gpu_resources(
                     blend: None,
                     write_mask: ColorWrites::ALL,
                 })],
+                compilation_options: PipelineCompilationOptions::default(),
             }),
             primitive: PrimitiveState {
                 topology: PrimitiveTopology::TriangleList,
@@ -718,6 +726,7 @@ pub fn init_gpu_resources(
             module: &intermediate_shader,
             entry_point: "vs_main",
             buffers: &[],
+            compilation_options: PipelineCompilationOptions::default(),
         },
         fragment: Some(FragmentState {
             module: &intermediate_shader,
@@ -727,6 +736,7 @@ pub fn init_gpu_resources(
                 blend: None,
                 write_mask: ColorWrites::ALL,
             })],
+            compilation_options: PipelineCompilationOptions::default(),
         }),
         primitive: PrimitiveState {
             topology: PrimitiveTopology::TriangleList,
@@ -755,6 +765,7 @@ pub fn init_gpu_resources(
             module: &intermediate_shader,
             entry_point: "vs_main",
             buffers: &[],
+            compilation_options: PipelineCompilationOptions::default(),
         },
         fragment: Some(FragmentState {
             module: &intermediate_shader,
@@ -764,6 +775,7 @@ pub fn init_gpu_resources(
                 blend: Some(BlendState::PREMULTIPLIED_ALPHA_BLENDING),
                 write_mask: ColorWrites::ALL,
             })],
+            compilation_options: PipelineCompilationOptions::default(),
         }),
         primitive: PrimitiveState {
             topology: PrimitiveTopology::TriangleList,
@@ -787,6 +799,7 @@ pub fn init_gpu_resources(
             module: &intermediate_shader,
             entry_point: "vs_main",
             buffers: &[],
+            compilation_options: PipelineCompilationOptions::default(),
         },
         fragment: Some(FragmentState {
             module: &intermediate_shader,
@@ -796,6 +809,7 @@ pub fn init_gpu_resources(
                 blend: Some(BlendState::PREMULTIPLIED_ALPHA_BLENDING),
                 write_mask: ColorWrites::ALL,
             })],
+            compilation_options: PipelineCompilationOptions::default(),
         }),
         primitive: PrimitiveState {
             topology: PrimitiveTopology::TriangleList,

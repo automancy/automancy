@@ -17,10 +17,10 @@ use winit::{
 use automancy_defs::coord::TileCoord;
 use automancy_defs::hexx::Hex;
 use automancy_defs::id::Id;
+use automancy_defs::kira::manager::AudioManager;
 use automancy_defs::{log, math, window};
 use automancy_resources::data::item::Item;
 use automancy_resources::data::{Data, DataMap};
-use automancy_resources::kira::manager::AudioManager;
 use automancy_resources::ResourceManager;
 
 use crate::gui::{Screen, TextField};

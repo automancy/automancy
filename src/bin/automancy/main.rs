@@ -41,14 +41,12 @@ use automancy::{
 };
 use automancy::{GameState, LOGO};
 use automancy_defs::glam::uvec2;
+use automancy_defs::kira::manager::{AudioManager, AudioManagerSettings};
+use automancy_defs::kira::track::{TrackBuilder, TrackHandle};
+use automancy_defs::kira::tween::Tween;
 use automancy_defs::log;
 use automancy_defs::rendering::Vertex;
-use automancy_resources::kira::track::{TrackBuilder, TrackHandle};
-use automancy_resources::kira::tween::Tween;
-use automancy_resources::{
-    kira::manager::{AudioManager, AudioManagerSettings},
-    types::font::Font,
-};
+use automancy_resources::types::font::Font;
 use automancy_resources::{ResourceManager, RESOURCES_PATH, RESOURCE_MAN};
 use yakui::paint::Texture;
 

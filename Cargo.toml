@@ -50,7 +50,7 @@ automancy_macros = { path = "automancy_macros" }
 serde = { version = "1.0", features = ["derive"] }
 ron = "0.8.1"
 
-wgpu = { version = "0.19.0", features = ["trace"] }
+wgpu = { version = "0.20.1", features = ["trace"] }
 
 winit = { version = "0.30.0", features = ["serde"] }
 
