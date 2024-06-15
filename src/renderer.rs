@@ -349,8 +349,8 @@ impl Renderer {
                 camera_pos,
             );
             let (bound_min, bound_max) = (
-                bound_min.as_vec2() - vec2(2.0, 2.0),
-                bound_max.as_vec2() + vec2(2.0, 2.0),
+                bound_min.as_vec2() - vec2(3.0, 3.0),
+                bound_max.as_vec2() + vec2(3.0, 3.0),
             );
 
             for coord in culling_range.into_iter() {
