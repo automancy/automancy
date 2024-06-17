@@ -597,7 +597,7 @@ impl Widget for GameElementWidget {
                     let dy = (dy * clip.size().y).round() / clip.size().y;
 
                     self.adjusted_matrix.set(Some(
-                        Matrix4::from_translation(vec3(-dx, -dy, 0.0))
+                        Matrix4::from_translation(vec3(-dx, dy, 0.0))
                             * self.props.get().unwrap().instance.get_model_matrix()
                             * Matrix4::from_scale(vec3(sx, sy, 1.0)),
                     ));
