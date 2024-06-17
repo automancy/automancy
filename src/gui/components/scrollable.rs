@@ -272,7 +272,7 @@ pub fn scroll_vertical(max_height: Float, children: impl FnOnce()) {
         let mut res = None;
         constrained(Constraints::loose(vec2(f32::INFINITY, max_height)), || {
             res = Some(Scrollable::vertical().show(|| {
-                pad_x(0.0, SCROLL_SIZE).show(children);
+                pad_x(0.0, SCROLL_SIZE * 2.0).show(children);
             }));
         });
         let res = res.unwrap();
@@ -281,21 +281,19 @@ pub fn scroll_vertical(max_height: Float, children: impl FnOnce()) {
         let diff = res.canvas_size - res.size;
 
         if diff > 0.0 {
-            pad_x(SCROLL_SIZE, 0.0).show(|| {
-                Relative::new(Alignment::TOP_RIGHT, Pivot::TOP_RIGHT, Dim2::ZERO).show(|| {
-                    RoundRect::new(SCROLL_RADIUS, colors::WHITE).show_children(|| {
-                        pad_y(
-                            diff * ratio * res.pos_percentage,
-                            diff * ratio * (1.0 - res.pos_percentage),
-                        )
-                        .show(|| {
-                            let mut rect = RoundRect::colored_y(
-                                SCROLL_RADIUS,
-                                (colors::ORANGE, colors::ORANGE.adjust(1.0 + (1.0 - ratio))),
-                            );
-                            rect.min_size = vec2(SCROLL_SIZE, (res.size * ratio).floor());
-                            rect.show();
-                        });
+            Relative::new(Alignment::TOP_RIGHT, Pivot::TOP_RIGHT, Dim2::ZERO).show(|| {
+                RoundRect::new(SCROLL_RADIUS, colors::WHITE).show_children(|| {
+                    pad_y(
+                        diff * ratio * res.pos_percentage,
+                        diff * ratio * (1.0 - res.pos_percentage),
+                    )
+                    .show(|| {
+                        let mut rect = RoundRect::colored_y(
+                            SCROLL_RADIUS,
+                            (colors::ORANGE, colors::ORANGE.adjust(1.0 + (1.0 - ratio))),
+                        );
+                        rect.min_size = vec2(SCROLL_SIZE, (res.size * ratio).floor());
+                        rect.show();
                     });
                 });
             });
@@ -308,7 +306,7 @@ pub fn scroll_horizontal(max_width: Float, children: impl FnOnce()) {
         let mut res = None;
         constrained(Constraints::loose(vec2(max_width, f32::INFINITY)), || {
             res = Some(Scrollable::horizontal().show(|| {
-                pad_y(0.0, SCROLL_SIZE).show(children);
+                pad_y(0.0, SCROLL_SIZE * 2.0).show(children);
             }));
         });
         let res = res.unwrap();
@@ -317,21 +315,19 @@ pub fn scroll_horizontal(max_width: Float, children: impl FnOnce()) {
         let diff = res.canvas_size - res.size;
 
         if diff > 0.0 {
-            pad_y(SCROLL_SIZE, 0.0).show(|| {
-                Relative::new(Alignment::BOTTOM_LEFT, Pivot::BOTTOM_LEFT, Dim2::ZERO).show(|| {
-                    RoundRect::new(SCROLL_RADIUS, colors::WHITE).show_children(|| {
-                        pad_x(
-                            diff * ratio * res.pos_percentage,
-                            diff * ratio * (1.0 - res.pos_percentage),
-                        )
-                        .show(|| {
-                            let mut rect = RoundRect::colored_x(
-                                SCROLL_RADIUS,
-                                (colors::ORANGE, colors::ORANGE.adjust(1.0 + ratio)),
-                            );
-                            rect.min_size = vec2((res.size * ratio).floor(), SCROLL_SIZE);
-                            rect.show();
-                        });
+            Relative::new(Alignment::BOTTOM_LEFT, Pivot::BOTTOM_LEFT, Dim2::ZERO).show(|| {
+                RoundRect::new(SCROLL_RADIUS, colors::WHITE).show_children(|| {
+                    pad_x(
+                        diff * ratio * res.pos_percentage,
+                        diff * ratio * (1.0 - res.pos_percentage),
+                    )
+                    .show(|| {
+                        let mut rect = RoundRect::colored_x(
+                            SCROLL_RADIUS,
+                            (colors::ORANGE, colors::ORANGE.adjust(1.0 + ratio)),
+                        );
+                        rect.min_size = vec2((res.size * ratio).floor(), SCROLL_SIZE);
+                        rect.show();
                     });
                 });
             });
