@@ -575,10 +575,9 @@ impl Widget for GameElementWidget {
             self.clip.set(clip);
         }
 
-        let clip = self.clip.get();
-        let props = self.props.get().unwrap();
-
         if let Some(mut rect) = self.layout_rect.get() {
+            let clip = self.clip.get();
+
             if clip.size().x > 0.0 && clip.size().y > 0.0 {
                 rect.set_size(rect.size() * ctx.layout.scale_factor());
                 rect.set_pos(rect.pos() * ctx.layout.scale_factor());
@@ -598,8 +597,8 @@ impl Widget for GameElementWidget {
                     let dy = (dy * clip.size().y).round() / clip.size().y;
 
                     self.adjusted_matrix.set(Some(
-                        Matrix4::from_translation(vec3(dx, dy, 0.0))
-                            * props.instance.get_model_matrix()
+                        Matrix4::from_translation(vec3(-dx, -dy, 0.0))
+                            * self.props.get().unwrap().instance.get_model_matrix()
                             * Matrix4::from_scale(vec3(sx, sy, 1.0)),
                     ));
                 }
@@ -607,7 +606,7 @@ impl Widget for GameElementWidget {
         }
 
         if let Some(layer) = ctx.paint.layers_mut().current_mut() {
-            let mut props = props;
+            let mut props = self.props.get().unwrap();
             if let Some(matrix) = self.adjusted_matrix.get() {
                 props.instance = props.instance.with_model_matrix(matrix);
             }
