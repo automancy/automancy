@@ -23,7 +23,9 @@ use yakui::{
 use yakui_wgpu::CallbackTrait;
 
 use crate::{
-    gpu::{self, DEPTH_FORMAT, MODEL_FORMAT, NORMAL_CLEAR, NORMAL_FORMAT},
+    gpu::{
+        self, IndirectInstanceDrawData, DEPTH_FORMAT, MODEL_FORMAT, NORMAL_CLEAR, NORMAL_FORMAT,
+    },
     gui::YakuiRenderResources,
     renderer::try_add_animation,
 };
@@ -151,10 +153,14 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                 crunch::pack_into_po2(device.limits().max_texture_dimension_2d as usize, items)
                     .expect("gui items exceed max texture size.");
 
-            let (instances, matrix_data, draws) =
-                gpu::indirect_instance(resource_man, instances, animation_map);
+            let IndirectInstanceDrawData {
+                opaques,
+                non_opaques,
+                matrix_data,
+                draw_data,
+            } = gpu::indirect_instance(resource_man, instances, animation_map, false);
 
-            if draws.is_empty() {
+            if draw_data.opaques.is_empty() && draw_data.non_opaques.is_empty() {
                 return;
             }
 
@@ -163,9 +169,14 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
             gpu::update_instance_buffer(
                 device,
                 queue,
-                &mut gui_resources.instance_buffer,
-                &instances,
-                &[],
+                &mut gui_resources.opaques_instance_buffer,
+                &opaques,
+            );
+            gpu::update_instance_buffer(
+                device,
+                queue,
+                &mut gui_resources.non_opaques_instance_buffer,
+                &non_opaques,
             );
 
             queue.write_buffer(
@@ -378,13 +389,14 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                     render_pass.set_pipeline(&global_resources.game_pipeline);
                     render_pass.set_bind_group(0, &gui_resources.bind_group, &[]);
                     render_pass.set_vertex_buffer(0, global_resources.vertex_buffer.slice(..));
-                    render_pass.set_vertex_buffer(1, gui_resources.instance_buffer.slice(..));
                     render_pass.set_index_buffer(
                         global_resources.index_buffer.slice(..),
                         IndexFormat::Uint16,
                     );
 
-                    for (idx, (draw, (rect_index, ..))) in draws.into_iter().enumerate() {
+                    render_pass
+                        .set_vertex_buffer(1, gui_resources.opaques_instance_buffer.slice(..));
+                    for (draw, (rect_index, ..)) in draw_data.opaques.into_iter() {
                         if let Some(rect) = rects[rect_index] {
                             render_pass.set_viewport(
                                 rect.x as f32,
@@ -395,12 +407,31 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                                 1.0,
                             );
 
-                            let idx = idx as u32;
+                            render_pass.draw_indexed(
+                                draw.first_index..(draw.first_index + draw.index_count),
+                                draw.base_vertex,
+                                draw.first_instance..(draw.first_instance + draw.instance_count),
+                            );
+                        }
+                    }
+
+                    render_pass
+                        .set_vertex_buffer(1, gui_resources.non_opaques_instance_buffer.slice(..));
+                    for (draw, (rect_index, ..)) in draw_data.non_opaques.into_iter() {
+                        if let Some(rect) = rects[rect_index] {
+                            render_pass.set_viewport(
+                                rect.x as f32,
+                                rect.y as f32,
+                                rect.w as f32,
+                                rect.h as f32,
+                                0.0,
+                                1.0,
+                            );
 
                             render_pass.draw_indexed(
                                 draw.first_index..(draw.first_index + draw.index_count),
                                 draw.base_vertex,
-                                idx..(idx + 1),
+                                draw.first_instance..(draw.first_instance + draw.instance_count),
                             );
                         }
                     }

@@ -291,10 +291,13 @@ pub struct Animation {
 
 #[derive(Debug, Clone)]
 pub struct Mesh {
+    pub index: usize,
+
+    pub opaque: bool,
+    pub name: String,
+
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u16>,
-    pub name: String,
-    pub index: usize,
     pub matrix: Matrix4,
     pub transform: Transform,
 }
@@ -341,10 +344,14 @@ pub fn load_gltf_model(
 
                 meshes.resize(mesh.index() + 1, None);
                 meshes[mesh.index()] = Some(Mesh {
+                    index,
+
+                    name,
+                    opaque: read_vertices.iter().all(|v| v.color[3] >= 1.0),
+
                     vertices: read_vertices,
                     indices: read_indices,
-                    name,
-                    index,
+
                     matrix: Matrix4::from_rotation_z(PI)
                         * Matrix4::from_cols_array_2d(&transform.clone().matrix()),
                     transform,

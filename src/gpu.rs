@@ -1,9 +1,9 @@
+use core::slice;
 use std::mem;
 use std::sync::Arc;
 
 use hashbrown::HashMap;
 use image::EncodableLayout;
-use rayon::prelude::*;
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     InstanceFlags, PipelineCompilationOptions,
@@ -16,15 +16,15 @@ use wgpu::{AdapterInfo, Surface};
 use wgpu::{
     AddressMode, Backends, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout,
     BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType, BlendState,
-    Buffer, BufferAddress, BufferBindingType, BufferUsages, Color, ColorTargetState, ColorWrites,
-    CompareFunction, DepthStencilState, Device, DeviceDescriptor, Extent3d, Features, FilterMode,
-    FragmentState, FrontFace, Instance, InstanceDescriptor, Limits, MultisampleState,
-    PipelineLayoutDescriptor, PowerPreference, PresentMode, PrimitiveState, PrimitiveTopology,
-    Queue, RenderPipeline, RenderPipelineDescriptor, RequestAdapterOptions, Sampler,
-    SamplerBindingType, SamplerDescriptor, ShaderModule, ShaderModuleDescriptor, ShaderSource,
-    ShaderStages, SurfaceConfiguration, Texture, TextureDescriptor, TextureDimension,
-    TextureFormat, TextureSampleType, TextureUsages, TextureView, TextureViewDescriptor,
-    TextureViewDimension, VertexState,
+    Buffer, BufferBindingType, BufferUsages, Color, ColorTargetState, ColorWrites, CompareFunction,
+    DepthStencilState, Device, DeviceDescriptor, Extent3d, Features, FilterMode, FragmentState,
+    FrontFace, Instance, InstanceDescriptor, Limits, MultisampleState, PipelineLayoutDescriptor,
+    PowerPreference, PresentMode, PrimitiveState, PrimitiveTopology, Queue, RenderPipeline,
+    RenderPipelineDescriptor, RequestAdapterOptions, Sampler, SamplerBindingType,
+    SamplerDescriptor, ShaderModule, ShaderModuleDescriptor, ShaderSource, ShaderStages,
+    SurfaceConfiguration, Texture, TextureDescriptor, TextureDimension, TextureFormat,
+    TextureSampleType, TextureUsages, TextureView, TextureViewDescriptor, TextureViewDimension,
+    VertexState,
 };
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
@@ -32,6 +32,7 @@ use winit::window::Window;
 use automancy_defs::math::Matrix4;
 use automancy_defs::rendering::PostProcessingUBO;
 use automancy_defs::rendering::{GameUBO, InstanceData, MatrixData, RawInstanceData, Vertex};
+use automancy_defs::slice_group_by::GroupBy;
 use automancy_defs::{id::Id, rendering::IntermediateUBO};
 use automancy_macros::OptionGetter;
 use automancy_resources::ResourceManager;
@@ -265,7 +266,12 @@ pub fn init_gpu_resources(
         });
 
         ExtraObjectsResources {
-            instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
+            opaques_instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
+                label: None,
+                contents: &[],
+                usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
+            }),
+            non_opaques_instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
                 label: None,
                 contents: &[],
                 usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
@@ -308,7 +314,12 @@ pub fn init_gpu_resources(
         });
 
         GameResources {
-            instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
+            opaques_instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
+                label: None,
+                contents: &[],
+                usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
+            }),
+            non_opaques_instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
                 label: None,
                 contents: &[],
                 usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
@@ -377,7 +388,12 @@ pub fn init_gpu_resources(
         });
 
         GuiResources {
-            instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
+            opaques_instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
+                label: None,
+                contents: &[],
+                usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
+            }),
+            non_opaques_instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
                 label: None,
                 contents: &[],
                 usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
@@ -892,15 +908,20 @@ pub fn init_gpu_resources(
     (shared, render, global)
 }
 
-type CompiledInstances<T> = Vec<(usize, RawInstanceData, T, Id)>;
+pub struct CompiledInstances<T> {
+    pub opaques: Vec<((Id, usize), RawInstanceData, T)>,
+    pub non_opaques: Vec<((Id, usize), RawInstanceData, T)>,
+}
 
 pub fn compile_instances<T: Clone + Send>(
     resource_man: &ResourceManager,
     instances: Vec<(InstanceData, Id, T)>,
     animation_map: &AnimationMap,
 ) -> (CompiledInstances<T>, Vec<MatrixData>) {
-    let mut vec = Vec::new();
     let mut matrix_data = vec![];
+
+    let mut opaques = HashMap::new();
+    let mut non_opaques = HashMap::new();
 
     instances.into_iter().for_each(|(instance, id, extra)| {
         if let Some((meshes, ..)) = &resource_man.all_models.get(&id) {
@@ -916,59 +937,136 @@ pub fn compile_instances<T: Clone + Send>(
                 }
                 instance = instance.add_model_matrix(matrix);
 
-                vec.push((
-                    mesh.index,
+                if mesh.opaque {
+                    &mut opaques
+                } else {
+                    &mut non_opaques
+                }
+                .entry((id, mesh.index))
+                .or_insert_with(Vec::new)
+                .push((
                     RawInstanceData::from_instance(instance, &mut matrix_data),
                     extra.clone(),
-                    id,
                 ));
             }
         }
     });
 
-    (vec, matrix_data)
+    let mut opaques = opaques
+        .into_iter()
+        .flat_map(|(key, vec)| vec.into_iter().map(move |v| (key, v.0, v.1)))
+        .collect::<Vec<_>>();
+    opaques.sort_by_key(|v| v.0);
+
+    let non_opaques = non_opaques
+        .into_iter()
+        .flat_map(|(key, vec)| vec.into_iter().map(move |v| (key, v.0, v.1)))
+        .collect::<Vec<_>>();
+
+    (
+        CompiledInstances {
+            opaques,
+            non_opaques,
+        },
+        matrix_data,
+    )
 }
 
-pub type DrawData<T> = Vec<(DrawIndexedIndirectArgs, T)>;
+pub struct DrawData<T> {
+    pub opaques: Vec<(DrawIndexedIndirectArgs, T)>,
+    pub non_opaques: Vec<(DrawIndexedIndirectArgs, T)>,
+}
 
-fn indirect<T: Clone + Send + Sync>(
+fn draw_data<T: Clone + Send + Sync>(
     resource_man: &ResourceManager,
     compiled_instances: &CompiledInstances<T>,
+    grouped: bool,
 ) -> DrawData<T> {
-    compiled_instances
-        .par_iter()
-        .map(|instance| {
-            let index_range = resource_man.all_index_ranges[&instance.3][&instance.0];
+    fn collect<'a, T: Clone + Send + Sync + 'a>(
+        resource_man: &ResourceManager,
+        instances: impl Iterator<Item = &'a [((Id, usize), RawInstanceData, T)]>,
+    ) -> Vec<(DrawIndexedIndirectArgs, T)> {
+        let mut counter = 0;
 
-            (
-                DrawIndexedIndirectArgs {
-                    first_index: index_range.pos,
-                    index_count: index_range.count,
-                    base_vertex: index_range.base_vertex,
-                    first_instance: 0,
-                    instance_count: 0,
-                },
-                instance.2.clone(),
-            )
-        })
-        .collect()
+        instances
+            .map(|instances| {
+                let size = instances.len() as u32;
+                let range = &resource_man.all_index_ranges[&instances[0].0 .0][&instances[0].0 .1];
+
+                let r = (
+                    DrawIndexedIndirectArgs {
+                        first_index: range.pos,
+                        index_count: range.count,
+                        base_vertex: range.base_vertex,
+                        first_instance: counter,
+                        instance_count: size,
+                    },
+                    instances[0].2.clone(),
+                );
+
+                counter += size;
+
+                r
+            })
+            .collect()
+    }
+
+    let opaques = if grouped {
+        collect(
+            resource_man,
+            compiled_instances.opaques.binary_group_by_key(|v| v.0),
+        )
+    } else {
+        collect(
+            resource_man,
+            compiled_instances.opaques.iter().map(slice::from_ref),
+        )
+    };
+
+    DrawData {
+        opaques,
+        non_opaques: collect(
+            resource_man,
+            compiled_instances.non_opaques.iter().map(slice::from_ref),
+        ),
+    }
 }
 
-pub type IndirectInstanceDrawData<T> = (Vec<RawInstanceData>, Vec<MatrixData>, DrawData<T>);
+pub struct IndirectInstanceDrawData<T> {
+    pub opaques: Vec<RawInstanceData>,
+    pub non_opaques: Vec<RawInstanceData>,
+    pub matrix_data: Vec<MatrixData>,
+    pub draw_data: DrawData<T>,
+}
 
 pub fn indirect_instance<T: Clone + Send + Sync>(
     resource_man: &ResourceManager,
     instances: Vec<(InstanceData, Id, T)>,
     animation_map: &AnimationMap,
+    grouped: bool,
 ) -> IndirectInstanceDrawData<T> {
     let (compiled_instances, matrix_data) =
         compile_instances(resource_man, instances, animation_map);
 
-    let commands = indirect(resource_man, &compiled_instances);
+    let draw_data = draw_data(resource_man, &compiled_instances, grouped);
 
-    let instances = compiled_instances.into_iter().map(|v| v.1).collect();
+    let opaques = compiled_instances
+        .opaques
+        .into_iter()
+        .map(|v| v.1)
+        .collect();
+    let non_opaques = compiled_instances
+        .non_opaques
+        .into_iter()
+        .map(|v| v.1)
+        .collect();
 
-    (instances, matrix_data, commands)
+    IndirectInstanceDrawData {
+        opaques,
+        non_opaques,
+        matrix_data,
+        draw_data,
+    }
 }
 
 pub fn update_instance_buffer(
@@ -976,9 +1074,8 @@ pub fn update_instance_buffer(
     queue: &Queue,
     buffer: &mut Buffer,
     instances: &[RawInstanceData],
-    last_instances: &[RawInstanceData],
-) -> Option<usize> {
-    if (buffer.size() as usize) < mem::size_of_val(instances) {
+) {
+    if (buffer.size() as usize) < std::mem::size_of_val(instances) {
         let usage = buffer.usage();
 
         *buffer = device.create_buffer_init(&BufferInitDescriptor {
@@ -986,68 +1083,8 @@ pub fn update_instance_buffer(
             contents: bytemuck::cast_slice(instances),
             usage,
         });
-
-        None
-    } else if instances.len() != last_instances.len() {
-        queue.write_buffer(buffer, 0, bytemuck::cast_slice(instances));
-
-        None
     } else {
-        let diff = instances
-            .iter()
-            .enumerate()
-            .map(|(idx, v)| {
-                if last_instances[idx] != *v {
-                    Some(*v)
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
-
-        if diff.iter().all(|v| v.is_none()) {
-            return Some(0);
-        }
-
-        let mut grouped = vec![];
-
-        {
-            let mut idx = 0;
-            while idx < diff.len() {
-                let group = diff
-                    .iter()
-                    .skip(idx)
-                    .take_while(|v| v.is_some())
-                    .flatten()
-                    .cloned()
-                    .collect::<Vec<_>>();
-
-                if group.is_empty() {
-                    if let Some(v) = diff.iter().enumerate().skip(idx).find(|(_, v)| v.is_some()) {
-                        idx = v.0;
-                    } else {
-                        break;
-                    }
-                } else {
-                    let size = group.len();
-                    grouped.push((idx, group));
-
-                    idx += size;
-                }
-            }
-        }
-
-        let groups = grouped.len();
-
-        for (idx, group) in grouped {
-            queue.write_buffer(
-                buffer,
-                (idx * mem::size_of::<RawInstanceData>()) as BufferAddress,
-                bytemuck::cast_slice(group.as_slice()),
-            );
-        }
-
-        Some(groups)
+        queue.write_buffer(buffer, 0, bytemuck::cast_slice(instances));
     }
 }
 
@@ -1117,21 +1154,24 @@ fn make_fxaa_bind_group(
 }
 
 pub struct ExtraObjectsResources {
-    pub instance_buffer: Buffer,
+    pub opaques_instance_buffer: Buffer,
+    pub non_opaques_instance_buffer: Buffer,
     pub uniform_buffer: Buffer,
     pub matrix_data_buffer: Buffer,
     pub bind_group: BindGroup,
 }
 
 pub struct GameResources {
-    pub instance_buffer: Buffer,
+    pub opaques_instance_buffer: Buffer,
+    pub non_opaques_instance_buffer: Buffer,
     pub uniform_buffer: Buffer,
     pub matrix_data_buffer: Buffer,
     pub bind_group: BindGroup,
 }
 
 pub struct GuiResources {
-    pub instance_buffer: Buffer,
+    pub opaques_instance_buffer: Buffer,
+    pub non_opaques_instance_buffer: Buffer,
     pub uniform_buffer: Buffer,
     pub matrix_data_buffer: Buffer,
     pub bind_group: BindGroup,
@@ -1533,7 +1573,7 @@ impl Gpu {
         let (device, queue) = adapter
             .request_device(
                 &DeviceDescriptor {
-                    required_features: Features::empty(),
+                    required_features: Features::INDIRECT_FIRST_INSTANCE,
                     // WebGL doesn't support all of wgpu's features, so if
                     // we're building for the web we'll have to disable some.
                     required_limits: if cfg!(target_arch = "wasm32") {

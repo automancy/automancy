@@ -503,11 +503,11 @@ impl Renderer {
         let size = renderer.gpu.window.inner_size();
 
         let game_data = game_instances.map(|game_instances| {
-            gpu::indirect_instance(&state.resource_man, game_instances, &animation_map)
+            gpu::indirect_instance(&state.resource_man, game_instances, &animation_map, true)
         });
 
         let extra_game_data =
-            gpu::indirect_instance(&state.resource_man, extra_instances, &animation_map);
+            gpu::indirect_instance(&state.resource_man, extra_instances, &animation_map, true);
 
         let output = renderer.gpu.surface.get_current_texture()?;
 
@@ -527,7 +527,12 @@ impl Renderer {
             });
 
         {
-            let (extra_instances, extra_matrix_data, extra_draws) = extra_game_data;
+            let IndirectInstanceDrawData {
+                opaques,
+                non_opaques,
+                matrix_data,
+                draw_data,
+            } = extra_game_data;
 
             gpu::update_instance_buffer(
                 &renderer.gpu.device,
@@ -535,12 +540,18 @@ impl Renderer {
                 &mut renderer
                     .render_resources
                     .extra_objects_resources
-                    .instance_buffer,
-                &extra_instances,
-                &[],
+                    .opaques_instance_buffer,
+                &opaques,
             );
-
-            let draws = extra_draws;
+            gpu::update_instance_buffer(
+                &renderer.gpu.device,
+                &renderer.gpu.queue,
+                &mut renderer
+                    .render_resources
+                    .extra_objects_resources
+                    .non_opaques_instance_buffer,
+                &non_opaques,
+            );
 
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Extra Objects Render Pass"),
@@ -582,7 +593,7 @@ impl Renderer {
                 timestamp_writes: None,
             });
 
-            if !draws.is_empty() {
+            if !(draw_data.opaques.is_empty() && draw_data.non_opaques.is_empty()) {
                 renderer.gpu.queue.write_buffer(
                     &renderer
                         .render_resources
@@ -597,7 +608,7 @@ impl Renderer {
                         .extra_objects_resources
                         .matrix_data_buffer,
                     0,
-                    bytemuck::cast_slice(extra_matrix_data.as_slice()),
+                    bytemuck::cast_slice(matrix_data.as_slice()),
                 );
 
                 render_pass.set_pipeline(&renderer.global_resources.game_pipeline);
@@ -607,49 +618,70 @@ impl Renderer {
                     &[],
                 );
                 render_pass.set_vertex_buffer(0, renderer.global_resources.vertex_buffer.slice(..));
-                render_pass.set_vertex_buffer(
-                    1,
-                    renderer
-                        .render_resources
-                        .extra_objects_resources
-                        .instance_buffer
-                        .slice(..),
-                );
                 render_pass.set_index_buffer(
                     renderer.global_resources.index_buffer.slice(..),
                     IndexFormat::Uint16,
                 );
 
-                for (idx, (draw, _)) in draws.iter().enumerate() {
-                    let idx = idx as u32;
-
+                render_pass.set_vertex_buffer(
+                    1,
+                    renderer
+                        .render_resources
+                        .extra_objects_resources
+                        .opaques_instance_buffer
+                        .slice(..),
+                );
+                for (draw, _) in draw_data.opaques.iter() {
                     render_pass.draw_indexed(
                         draw.first_index..(draw.first_index + draw.index_count),
                         draw.base_vertex,
-                        idx..(idx + 1),
+                        draw.first_instance..(draw.first_instance + draw.instance_count),
+                    );
+                }
+
+                render_pass.set_vertex_buffer(
+                    1,
+                    renderer
+                        .render_resources
+                        .extra_objects_resources
+                        .non_opaques_instance_buffer
+                        .slice(..),
+                );
+                for (draw, _) in draw_data.non_opaques.iter() {
+                    render_pass.draw_indexed(
+                        draw.first_index..(draw.first_index + draw.index_count),
+                        draw.base_vertex,
+                        draw.first_instance..(draw.first_instance + draw.instance_count),
                     );
                 }
             }
         }
 
-        if let Some((game_instances, game_matrix_data, game_draws)) =
-            game_data.as_ref().or(renderer.last_game_data.as_ref())
+        if let Some(IndirectInstanceDrawData {
+            opaques,
+            non_opaques,
+            matrix_data,
+            draw_data,
+        }) = game_data.as_ref().or(renderer.last_game_data.as_ref())
         {
-            let last_instances = renderer
-                .last_game_data
-                .as_ref()
-                .map(|v| v.0.as_slice())
-                .unwrap_or(&[]);
-
             gpu::update_instance_buffer(
                 &renderer.gpu.device,
                 &renderer.gpu.queue,
-                &mut renderer.render_resources.game_resources.instance_buffer,
-                game_instances,
-                last_instances,
+                &mut renderer
+                    .render_resources
+                    .game_resources
+                    .opaques_instance_buffer,
+                opaques,
             );
-
-            let draws = game_draws;
+            gpu::update_instance_buffer(
+                &renderer.gpu.device,
+                &renderer.gpu.queue,
+                &mut renderer
+                    .render_resources
+                    .game_resources
+                    .non_opaques_instance_buffer,
+                non_opaques,
+            );
 
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Game Render Pass"),
@@ -691,7 +723,7 @@ impl Renderer {
                 timestamp_writes: None,
             });
 
-            if !draws.is_empty() {
+            if !(draw_data.opaques.is_empty() && draw_data.non_opaques.is_empty()) {
                 renderer.gpu.queue.write_buffer(
                     &renderer.render_resources.game_resources.uniform_buffer,
                     0,
@@ -700,7 +732,7 @@ impl Renderer {
                 renderer.gpu.queue.write_buffer(
                     &renderer.render_resources.game_resources.matrix_data_buffer,
                     0,
-                    bytemuck::cast_slice(game_matrix_data.as_slice()),
+                    bytemuck::cast_slice(matrix_data.as_slice()),
                 );
 
                 render_pass.set_pipeline(&renderer.global_resources.game_pipeline);
@@ -710,26 +742,40 @@ impl Renderer {
                     &[],
                 );
                 render_pass.set_vertex_buffer(0, renderer.global_resources.vertex_buffer.slice(..));
-                render_pass.set_vertex_buffer(
-                    1,
-                    renderer
-                        .render_resources
-                        .game_resources
-                        .instance_buffer
-                        .slice(..),
-                );
                 render_pass.set_index_buffer(
                     renderer.global_resources.index_buffer.slice(..),
                     IndexFormat::Uint16,
                 );
 
-                for (idx, (draw, _)) in draws.iter().enumerate() {
-                    let idx = idx as u32;
-
+                render_pass.set_vertex_buffer(
+                    1,
+                    renderer
+                        .render_resources
+                        .game_resources
+                        .opaques_instance_buffer
+                        .slice(..),
+                );
+                for (draw, _) in draw_data.opaques.iter() {
                     render_pass.draw_indexed(
                         draw.first_index..(draw.first_index + draw.index_count),
                         draw.base_vertex,
-                        idx..(idx + 1),
+                        draw.first_instance..(draw.first_instance + draw.instance_count),
+                    );
+                }
+
+                render_pass.set_vertex_buffer(
+                    1,
+                    renderer
+                        .render_resources
+                        .game_resources
+                        .non_opaques_instance_buffer
+                        .slice(..),
+                );
+                for (draw, _) in draw_data.non_opaques.iter() {
+                    render_pass.draw_indexed(
+                        draw.first_index..(draw.first_index + draw.index_count),
+                        draw.base_vertex,
+                        draw.first_instance..(draw.first_instance + draw.instance_count),
                     );
                 }
             }

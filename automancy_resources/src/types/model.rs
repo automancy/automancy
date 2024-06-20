@@ -27,7 +27,7 @@ pub struct ModelRaw {
 
 impl ResourceManager {
     pub fn tile_model_or_missing(&self, model: Id) -> Id {
-        if self.all_index_ranges.contains_key(&model) {
+        if self.all_models.contains_key(&model) {
             model
         } else {
             self.registry.model_ids.missing
@@ -35,7 +35,7 @@ impl ResourceManager {
     }
 
     pub fn item_model_or_missing(&self, model: Id) -> Id {
-        if self.all_index_ranges.contains_key(&model) {
+        if self.all_models.contains_key(&model) {
             model
         } else {
             self.registry.model_ids.items_missing
@@ -76,7 +76,6 @@ impl ResourceManager {
     }
 
     pub fn compile_models(&mut self) -> (Vec<Vertex>, Vec<u16>) {
-        // indices vertices
         let mut vertices = vec![];
         let mut indices = HashMap::new();
 
@@ -97,28 +96,29 @@ impl ResourceManager {
 
         let mut offset_count = 0;
 
-        let all_index_ranges = indices.iter().map(|(id, indices)| {
-            let ranges = indices
-                .iter()
-                .map(|(index, v, base_vertex)| {
-                    let size = v.len() as u32;
+        self.all_index_ranges = indices
+            .iter()
+            .map(|(id, indices)| {
+                let ranges = indices
+                    .iter()
+                    .map(|(index, v, base_vertex)| {
+                        let size = v.len() as u32;
 
-                    let range = IndexRange {
-                        pos: offset_count,
-                        count: size,
-                        base_vertex: *base_vertex,
-                    };
+                        let range = IndexRange {
+                            pos: offset_count,
+                            count: size,
+                            base_vertex: *base_vertex,
+                        };
 
-                    offset_count += size;
+                        offset_count += size;
 
-                    (*index, range)
-                })
-                .collect::<HashMap<_, _>>();
+                        (*index, range)
+                    })
+                    .collect::<HashMap<_, _>>();
 
-            (*id, ranges)
-        });
-
-        self.all_index_ranges = HashMap::from_iter(all_index_ranges);
+                (*id, ranges)
+            })
+            .collect::<HashMap<_, _>>();
 
         let indices = indices
             .into_iter()
