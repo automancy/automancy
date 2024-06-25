@@ -5,7 +5,7 @@ use std::sync::Arc;
 use hashbrown::HashMap;
 use image::EncodableLayout;
 use wgpu::{
-    util::{BufferInitDescriptor, DeviceExt},
+    util::{backend_bits_from_env, power_preference_from_env, BufferInitDescriptor, DeviceExt},
     InstanceFlags, PipelineCompilationOptions,
 };
 use wgpu::{
@@ -38,8 +38,6 @@ use automancy_macros::OptionGetter;
 use automancy_resources::ResourceManager;
 
 use crate::SSAO_NOISE_MAP;
-
-pub const GPU_BACKENDS: Backends = Backends::all();
 
 pub const NORMAL_CLEAR: Color = Color {
     r: 0.0,
@@ -1553,9 +1551,8 @@ impl Gpu {
         // The instance is a handle to our GPU
         // Backends::all => Vulkan + Metal + DX12 + Browser WebGPU
         let instance = Instance::new(InstanceDescriptor {
-            backends: GPU_BACKENDS,
-            flags: InstanceFlags::default()
-                .union(InstanceFlags::ALLOW_UNDERLYING_NONCOMPLIANT_ADAPTER),
+            backends: backend_bits_from_env().unwrap_or(Backends::all()),
+            flags: InstanceFlags::default(),
             ..Default::default()
         });
 
@@ -1563,7 +1560,8 @@ impl Gpu {
 
         let adapter = instance
             .request_adapter(&RequestAdapterOptions {
-                power_preference: PowerPreference::HighPerformance,
+                power_preference: power_preference_from_env()
+                    .unwrap_or(PowerPreference::HighPerformance),
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
             })
@@ -1573,7 +1571,7 @@ impl Gpu {
         let (device, queue) = adapter
             .request_device(
                 &DeviceDescriptor {
-                    required_features: Features::INDIRECT_FIRST_INSTANCE,
+                    required_features: Features::empty(),
                     // WebGL doesn't support all of wgpu's features, so if
                     // we're building for the web we'll have to disable some.
                     required_limits: if cfg!(target_arch = "wasm32") {
