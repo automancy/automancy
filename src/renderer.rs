@@ -75,6 +75,7 @@ pub struct Renderer {
 
     pub tile_tints: HashMap<TileCoord, Vec4>,
     pub extra_instances: Vec<(InstanceData, Id, ())>,
+    pub overlay_instances: Vec<(InstanceData, Id, ())>,
 
     pub take_item_animations: HashMap<Item, VecDeque<(Instant, Rect)>>,
 
@@ -104,6 +105,7 @@ impl Renderer {
 
             tile_tints: Default::default(),
             extra_instances: vec![],
+            overlay_instances: vec![],
 
             take_item_animations: Default::default(),
 
@@ -160,6 +162,7 @@ impl Renderer {
 
         let tile_tints = mem::take(&mut renderer.tile_tints);
         let mut extra_instances = mem::take(&mut renderer.extra_instances);
+        let overlay_instances = mem::take(&mut renderer.overlay_instances);
 
         let size = renderer.gpu.window.inner_size();
 
@@ -472,6 +475,15 @@ impl Renderer {
             );
         }
 
+        for (_, model, _) in &overlay_instances {
+            try_add_animation(
+                &state.resource_man,
+                state.start_instant,
+                *model,
+                &mut animation_map,
+            );
+        }
+
         drop(render_info_lock);
 
         let r = Renderer::inner_render(
@@ -479,6 +491,7 @@ impl Renderer {
             screenshotting,
             game_instances,
             extra_instances,
+            overlay_instances,
             animation_map,
         );
 
@@ -492,6 +505,7 @@ impl Renderer {
         screenshotting: bool,
         game_instances: Option<Vec<(InstanceData, Id, ())>>,
         extra_instances: Vec<(InstanceData, Id, ())>,
+        overlay_instances: Vec<(InstanceData, Id, ())>,
         animation_map: AnimationMap,
     ) -> Result<(), SurfaceError> {
         let Some(renderer) = state.renderer.as_mut() else {
@@ -508,6 +522,9 @@ impl Renderer {
 
         let extra_game_data =
             gpu::indirect_instance(&state.resource_man, extra_instances, &animation_map, true);
+
+        let overlay_game_data =
+            gpu::indirect_instance(&state.resource_man, overlay_instances, &animation_map, true);
 
         let output = renderer.gpu.surface.get_current_texture()?;
 
@@ -782,6 +799,140 @@ impl Renderer {
 
             if game_data.is_some() {
                 renderer.last_game_data = game_data;
+            }
+        }
+
+        {
+            let IndirectInstanceDrawData {
+                opaques,
+                non_opaques,
+                matrix_data,
+                draw_data,
+            } = overlay_game_data;
+
+            gpu::update_instance_buffer(
+                &renderer.gpu.device,
+                &renderer.gpu.queue,
+                &mut renderer
+                    .render_resources
+                    .overlay_objects_resources
+                    .opaques_instance_buffer,
+                &opaques,
+            );
+            gpu::update_instance_buffer(
+                &renderer.gpu.device,
+                &renderer.gpu.queue,
+                &mut renderer
+                    .render_resources
+                    .overlay_objects_resources
+                    .non_opaques_instance_buffer,
+                &non_opaques,
+            );
+
+            let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some("Overlay Objects Render Pass"),
+                color_attachments: &[
+                    Some(RenderPassColorAttachment {
+                        view: &renderer.shared_resources.game_texture().1,
+                        resolve_target: None,
+                        ops: Operations {
+                            load: LoadOp::Load,
+                            store: StoreOp::Store,
+                        },
+                    }),
+                    Some(RenderPassColorAttachment {
+                        view: &renderer.shared_resources.normal_texture().1,
+                        resolve_target: None,
+                        ops: Operations {
+                            load: LoadOp::Load,
+                            store: StoreOp::Store,
+                        },
+                    }),
+                    Some(RenderPassColorAttachment {
+                        view: &renderer.shared_resources.model_texture().1,
+                        resolve_target: None,
+                        ops: Operations {
+                            load: LoadOp::Load,
+                            store: StoreOp::Store,
+                        },
+                    }),
+                ],
+                depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
+                    view: &renderer.shared_resources.overlay_depth_texture().1,
+                    depth_ops: Some(Operations {
+                        load: LoadOp::Clear(1.0),
+                        store: StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                occlusion_query_set: None,
+                timestamp_writes: None,
+            });
+
+            if !(draw_data.opaques.is_empty() && draw_data.non_opaques.is_empty()) {
+                renderer.gpu.queue.write_buffer(
+                    &renderer
+                        .render_resources
+                        .overlay_objects_resources
+                        .uniform_buffer,
+                    0,
+                    bytemuck::cast_slice(&[GameUBO::new(camera_matrix)]),
+                );
+                renderer.gpu.queue.write_buffer(
+                    &renderer
+                        .render_resources
+                        .overlay_objects_resources
+                        .matrix_data_buffer,
+                    0,
+                    bytemuck::cast_slice(matrix_data.as_slice()),
+                );
+
+                render_pass.set_pipeline(&renderer.global_resources.game_pipeline);
+                render_pass.set_bind_group(
+                    0,
+                    &renderer
+                        .render_resources
+                        .overlay_objects_resources
+                        .bind_group,
+                    &[],
+                );
+                render_pass.set_vertex_buffer(0, renderer.global_resources.vertex_buffer.slice(..));
+                render_pass.set_index_buffer(
+                    renderer.global_resources.index_buffer.slice(..),
+                    IndexFormat::Uint16,
+                );
+
+                render_pass.set_vertex_buffer(
+                    1,
+                    renderer
+                        .render_resources
+                        .overlay_objects_resources
+                        .opaques_instance_buffer
+                        .slice(..),
+                );
+                for (draw, _) in draw_data.opaques.iter() {
+                    render_pass.draw_indexed(
+                        draw.first_index..(draw.first_index + draw.index_count),
+                        draw.base_vertex,
+                        draw.first_instance..(draw.first_instance + draw.instance_count),
+                    );
+                }
+
+                render_pass.set_vertex_buffer(
+                    1,
+                    renderer
+                        .render_resources
+                        .overlay_objects_resources
+                        .non_opaques_instance_buffer
+                        .slice(..),
+                );
+                for (draw, _) in draw_data.non_opaques.iter() {
+                    render_pass.draw_indexed(
+                        draw.first_index..(draw.first_index + draw.index_count),
+                        draw.base_vertex,
+                        draw.first_instance..(draw.first_instance + draw.instance_count),
+                    );
+                }
             }
         }
 

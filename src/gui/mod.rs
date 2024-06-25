@@ -11,7 +11,7 @@ use winit::{event_loop::ActiveEventLoop, window::Window};
 use yakui_wgpu::YakuiWgpu;
 use yakui_winit::YakuiWinit;
 
-use automancy_defs::glam::{dvec2, vec3};
+use automancy_defs::glam::vec3;
 use automancy_defs::id::Id;
 use automancy_defs::math::Vec2;
 use automancy_defs::math::{Float, Matrix4, FAR, HEX_GRID_LAYOUT};
@@ -23,8 +23,7 @@ use automancy_resources::data::DataMap;
 use automancy_resources::ResourceManager;
 use yakui::{
     font::{Font, Fonts},
-    widgets::{Absolute, Layer},
-    Alignment, Dim2, Pivot, UVec2, Yakui,
+    UVec2, Yakui,
 };
 
 use crate::gpu::{AnimationMap, GlobalResources, GuiResources};
@@ -330,37 +329,24 @@ pub fn render_ui(
                         state.input_handler.main_pos,
                         state.camera.get_pos(),
                     );
-                    let cursor_pos = dvec2(cursor_pos.x, cursor_pos.y);
 
                     if let Some(tile_def) = state
                         .gui_state
                         .selected_tile_id
                         .and_then(|id| state.resource_man.registry.tiles.get(&id))
                     {
-                        Absolute::new(Alignment::TOP_LEFT, Pivot::TOP_LEFT, Dim2::ZERO).show(
-                            || {
-                                ui_game_object(
-                                    InstanceData::default()
-                                        .with_alpha(0.6)
-                                        .with_light_pos(state.camera.get_pos().as_vec3(), None)
-                                        .with_model_matrix(Matrix4::from_translation(vec3(
-                                            cursor_pos.x as Float,
-                                            cursor_pos.y as Float,
-                                            FAR as Float,
-                                        ))),
-                                    state.resource_man.tile_model_or_missing(tile_def.model),
-                                    state
-                                        .gui
-                                        .as_ref()
-                                        .unwrap()
-                                        .yak
-                                        .layout_dom()
-                                        .viewport()
-                                        .size(),
-                                    Some(state.camera.get_matrix().as_mat4()),
-                                );
-                            },
-                        );
+                        state.renderer.as_mut().unwrap().overlay_instances.push((
+                            InstanceData::default()
+                                .with_alpha(0.6)
+                                .with_light_pos(state.camera.get_pos().as_vec3(), None)
+                                .with_model_matrix(Matrix4::from_translation(vec3(
+                                    cursor_pos.x as Float,
+                                    cursor_pos.y as Float,
+                                    FAR as Float,
+                                ))),
+                            state.resource_man.tile_model_or_missing(tile_def.model),
+                            (),
+                        ))
                     }
 
                     if let Some(coord) = state.gui_state.linking_tile {
@@ -370,7 +356,7 @@ pub fn render_ui(
                                 .with_light_pos(state.camera.get_pos().as_vec3(), None)
                                 .with_model_matrix(make_line(
                                     HEX_GRID_LAYOUT.hex_to_world_pos(*coord),
-                                    cursor_pos.as_vec2(),
+                                    cursor_pos.truncate().as_vec2(),
                                 )),
                             state.resource_man.registry.model_ids.cube1x1,
                             (),
@@ -486,24 +472,16 @@ pub fn render_ui(
                 model_matrix *= rotate;
             }
 
-            Layer::new().show(|| {
-                ui_game_object(
-                    InstanceData::default()
-                        .with_alpha(0.5)
-                        .with_light_pos(state.camera.get_pos().as_vec3(), None)
-                        .with_model_matrix(model_matrix),
-                    state.resource_man.registry.tiles[id].model,
-                    state
-                        .gui
-                        .as_ref()
-                        .unwrap()
-                        .yak
-                        .layout_dom()
-                        .viewport()
-                        .size(),
-                    Some(state.camera.get_matrix().as_mat4()),
-                );
-            });
+            state.renderer.as_mut().unwrap().overlay_instances.push((
+                InstanceData::default()
+                    .with_alpha(0.5)
+                    .with_light_pos(state.camera.get_pos().as_vec3(), None)
+                    .with_model_matrix(model_matrix),
+                state
+                    .resource_man
+                    .tile_model_or_missing(state.resource_man.registry.tiles[id].model),
+                (),
+            ));
         }
     }
 

@@ -280,6 +280,54 @@ pub fn init_gpu_resources(
         }
     };
 
+    let overlay_objects_resources = {
+        let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Overlay Objects Uniform Buffer"),
+            contents: bytemuck::cast_slice(&[GameUBO::default()]),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+
+        const MATRIX_DATA_SIZE: usize = 1024;
+        let matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Overlay Objects Matrix Data Buffer"),
+            contents: &Vec::from_iter(
+                (0..(mem::size_of::<MatrixData>() * MATRIX_DATA_SIZE)).map(|_| 0),
+            ),
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+        });
+
+        let bind_group = device.create_bind_group(&BindGroupDescriptor {
+            layout: &game_bind_group_layout,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: matrix_data_buffer.as_entire_binding(),
+                },
+            ],
+            label: Some("overlay_objects_bind_group"),
+        });
+
+        ExtraObjectsResources {
+            opaques_instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
+                label: None,
+                contents: &[],
+                usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
+            }),
+            non_opaques_instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
+                label: None,
+                contents: &[],
+                usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
+            }),
+            matrix_data_buffer,
+            uniform_buffer,
+            bind_group,
+        }
+    };
+
     let game_resources = {
         let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Game Uniform Buffer"),
@@ -853,6 +901,8 @@ pub fn init_gpu_resources(
         game_antialiasing_bind_group: None,
         game_antialiasing_texture: None,
 
+        overlay_depth_texture: None,
+
         first_combine_bind_group: None,
         first_combine_texture: None,
 
@@ -862,6 +912,7 @@ pub fn init_gpu_resources(
 
     let render = RenderResources {
         extra_objects_resources,
+        overlay_objects_resources,
         game_resources,
         gui_resources: Some(gui_resources),
         post_processing_resources,
@@ -1182,6 +1233,7 @@ pub struct PostProcessingResources {
 
 pub struct RenderResources {
     pub extra_objects_resources: ExtraObjectsResources,
+    pub overlay_objects_resources: ExtraObjectsResources,
     pub game_resources: GameResources,
 
     pub gui_resources: Option<GuiResources>,
@@ -1246,6 +1298,9 @@ pub struct SharedResources {
     game_antialiasing_bind_group: Option<BindGroup>,
     #[getters(get)]
     game_antialiasing_texture: Option<(Texture, TextureView)>,
+
+    #[getters(get)]
+    overlay_depth_texture: Option<(Texture, TextureView)>,
 
     #[getters(get)]
     first_combine_bind_group: Option<BindGroup>,
@@ -1427,6 +1482,20 @@ impl SharedResources {
                 sample_count: 1,
                 dimension: TextureDimension::D2,
                 format: config.format,
+                usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            },
+        ));
+
+        self.overlay_depth_texture = Some(create_texture_and_view(
+            device,
+            &TextureDescriptor {
+                label: None,
+                size: extent,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: DEPTH_FORMAT,
                 usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
                 view_formats: &[],
             },

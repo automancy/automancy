@@ -602,10 +602,6 @@ impl Widget for GameElementWidget {
     fn paint(&self, ctx: yakui::widget::PaintContext<'_>) {
         let paint_clip = ctx.paint.get_current_clip();
 
-        if let Some(clip) = paint_clip {
-            self.clip.set(clip);
-        }
-
         if let Some(mut rect) = self.layout_rect.get() {
             let clip = self.clip.get();
 
@@ -634,6 +630,10 @@ impl Widget for GameElementWidget {
                     ));
                 }
             }
+        }
+
+        if let Some(clip) = paint_clip {
+            self.clip.set(clip);
         }
 
         if let Some(layer) = ctx.paint.layers_mut().current_mut() {

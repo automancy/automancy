@@ -1,6 +1,6 @@
 use automancy_defs::colors;
 use ron::ser::PrettyConfig;
-use yakui::{column, divider, use_state, Vec2};
+use yakui::{column, divider, use_state, widgets::Layer, Vec2};
 
 use crate::GameState;
 
@@ -28,43 +28,45 @@ pub fn debugger(state: &GameState) {
 
     let pos_state = use_state(|| Vec2::ZERO);
 
-    let mut pos = pos_state.get();
-    movable(&mut pos, || {
-        window(
-            resource_man
-                .gui_str(&resource_man.registry.gui_ids.debug_menu)
-                .to_string(),
-            || {
-                column(|| {
-                    label(&format!("FPS: {fps:.1}"));
-                    label(&format!(
-                        "WGPU: {}",
-                        ron::ser::to_string_pretty(
-                            &state.renderer.as_ref().unwrap().gpu.adapter_info,
-                            PrettyConfig::default()
-                        )
-                        .unwrap_or("could not format wgpu info".to_string())
-                    ));
+    Layer::new().show(|| {
+        let mut pos = pos_state.get();
+        movable(&mut pos, || {
+            window(
+                resource_man
+                    .gui_str(&resource_man.registry.gui_ids.debug_menu)
+                    .to_string(),
+                || {
+                    column(|| {
+                        label(&format!("FPS: {fps:.1}"));
+                        label(&format!(
+                            "WGPU: {}",
+                            ron::ser::to_string_pretty(
+                                &state.renderer.as_ref().unwrap().gpu.adapter_info,
+                                PrettyConfig::default()
+                            )
+                            .unwrap_or("could not format wgpu info".to_string())
+                        ));
 
-                    divider(colors::INACTIVE, DIVIER_SIZE, DIVIER_SIZE);
+                        divider(colors::INACTIVE, DIVIER_SIZE, DIVIER_SIZE);
 
-                    label(&format!("ResourceMan: Tiles={reg_tiles} Items={reg_items} Tags={tags} Functions={functions} Scripts={scripts} Audio={audio} Meshes={meshes}"));
+                        label(&format!("ResourceMan: Tiles={reg_tiles} Items={reg_items} Tags={tags} Functions={functions} Scripts={scripts} Audio={audio} Meshes={meshes}"));
 
-                    divider(colors::INACTIVE, DIVIER_SIZE, DIVIER_SIZE);
+                        divider(colors::INACTIVE, DIVIER_SIZE, DIVIER_SIZE);
 
-                    label(&format!("Map \"{map_name}\"",));
-                    label(&format!("Save Time: {:?}", &map_info.save_time));
-                    label(&format!(
-                        "Info: {}",
-                        &ron::ser::to_string_pretty(
-                            &map_info.data.to_raw(&state.resource_man.interner),
-                            PrettyConfig::default(),
-                        )
-                        .unwrap_or("could not format map info".to_string()),
-                    ));
-                });
-            },
-        );
+                        label(&format!("Map \"{map_name}\"",));
+                        label(&format!("Save Time: {:?}", &map_info.save_time));
+                        label(&format!(
+                            "Info: {}",
+                            &ron::ser::to_string_pretty(
+                                &map_info.data.to_raw(&state.resource_man.interner),
+                                PrettyConfig::default(),
+                            )
+                            .unwrap_or("could not format map info".to_string()),
+                        ));
+                    });
+                }
+            );
+        });
+        pos_state.set(pos);
     });
-    pos_state.set(pos);
 }
