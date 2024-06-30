@@ -5,9 +5,9 @@ use ractor::ActorRef;
 
 use automancy_defs::{colors, coord::TileCoord};
 use automancy_defs::{glam::vec2, id::Id};
-use automancy_resources::data::{inventory::Inventory, stack::ItemAmount};
+use automancy_resources::data::inventory::Inventory;
 use automancy_resources::data::{Data, DataMap};
-use automancy_resources::{data::stack::ItemStack, types::function::TileConfigUnit};
+use automancy_resources::{data::stack::ItemStack, rhai_ui::RhaiUiUnit};
 use yakui::{
     column, constrained, row,
     widgets::{Layer, List},
@@ -149,36 +149,6 @@ fn config_linking(state: &mut GameState, config_open: TileCoord) {
     });
 }
 
-fn config_amount(
-    state: &GameState,
-    data: &DataMap,
-    id: Id,
-    label_id: Id,
-    max_amount: ItemAmount,
-    tile_entity: ActorRef<TileEntityMsg>,
-) {
-    let Data::Amount(current_amount) = data.get(&id).cloned().unwrap_or(Data::Amount(0)) else {
-        return;
-    };
-
-    let mut new_amount = current_amount;
-
-    row(|| {
-        label(&state.resource_man.gui_str(&label_id));
-
-        label(&new_amount.to_string());
-    });
-    // TODO numerical input
-
-    slider(&mut new_amount, 0..=max_amount, Some(128));
-
-    if new_amount != current_amount {
-        tile_entity
-            .send_message(TileEntityMsg::SetDataValue(id, Data::Amount(new_amount)))
-            .unwrap();
-    }
-}
-
 fn takeable_items(
     state: &mut GameState,
     game_data: &mut DataMap,
@@ -310,6 +280,47 @@ fn draw_script_info(state: &mut GameState, data: &mut DataMap) {
     });
 }
 
+fn rhai_ui(
+    state: &mut GameState,
+    tile_entity: ActorRef<TileEntityMsg>,
+    data: &mut DataMap,
+    ui: Vec<RhaiUiUnit>,
+) {
+    for ui in ui {
+        match ui {
+            RhaiUiUnit::Label { id } => {
+                label(&state.resource_man.gui_str(&id));
+            }
+            RhaiUiUnit::LabelAmount { amount } => {
+                label(&amount.to_string());
+            }
+            RhaiUiUnit::SliderAmount { id, max } => {
+                let Data::Amount(current_amount) =
+                    data.get(&id).cloned().unwrap_or(Data::Amount(0))
+                else {
+                    continue;
+                };
+
+                let mut new_amount = current_amount;
+
+                // TODO numerical input
+                slider(&mut new_amount, 0..=max, Some(128));
+
+                if new_amount != current_amount {
+                    tile_entity
+                        .send_message(TileEntityMsg::SetDataValue(id, Data::Amount(new_amount)))
+                        .unwrap();
+                }
+            }
+            RhaiUiUnit::Row { e } => {
+                centered_row(|| {
+                    rhai_ui(state, tile_entity.clone(), data, e);
+                });
+            }
+        }
+    }
+}
+
 /// Draws the tile configuration menu.
 pub fn tile_config_ui(state: &mut GameState, game_data: &mut DataMap) {
     Layer::new().show(|| {
@@ -393,47 +404,9 @@ pub fn tile_config_ui(state: &mut GameState, game_data: &mut DataMap) {
                             }
 
                             if let Some(ui) = tile_config_ui {
-                                for ui in ui {
-                                    column(|| match ui {
-                                        TileConfigUnit::Amount {
-                                            id,
-                                            label_id,
-                                            max_amount,
-                                        } => {
-                                            config_amount(
-                                                state,
-                                                &data,
-                                                id,
-                                                label_id,
-                                                max_amount,
-                                                tile_entity.clone(),
-                                            );
-                                        }
-                                        TileConfigUnit::SelectableId { id, label_id, list } => {
-                                            let (ids, names): (Vec<_>, Vec<_>) =
-                                                list.into_iter().unzip();
-
-                                            row(|| {
-                                                label(
-                                                    state.resource_man.gui_str(&label_id).as_str(),
-                                                );
-                                            });
-
-                                            config_selectable_id(
-                                                state,
-                                                &data,
-                                                id,
-                                                state.resource_man.registry.gui_ids.search_tip,
-                                                &ids,
-                                                &names,
-                                                tile_entity.clone(),
-                                                &|_state, _id, name| {
-                                                    label(name);
-                                                },
-                                            );
-                                        }
-                                    });
-                                }
+                                column(|| {
+                                    rhai_ui(state, tile_entity.clone(), &mut data, ui);
+                                });
                             }
 
                             if let Some(Data::VecId(scripts)) = tile_info

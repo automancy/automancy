@@ -33,11 +33,12 @@ pub mod registry;
 
 pub mod types;
 
-mod rhai_coord;
-mod rhai_data;
-mod rhai_functions;
-mod rhai_resources;
-mod rhai_tile;
+pub mod rhai_coord;
+pub mod rhai_data;
+pub mod rhai_functions;
+pub mod rhai_resources;
+pub mod rhai_tile;
+pub mod rhai_ui;
 
 static COULD_NOT_GET_FILE_STEM: &str = "could not get file stem";
 
@@ -67,7 +68,7 @@ pub fn format_time(time: SystemTime, fmt: &str) -> String {
     time.format(fmt).to_string()
 }
 
-pub fn load_recursively(path: &Path, extension: &OsStr) -> Vec<PathBuf> {
+pub(crate) fn load_recursively(path: &Path, extension: &OsStr) -> Vec<PathBuf> {
     WalkDir::new(path)
         .follow_links(false)
         .into_iter()
@@ -137,6 +138,7 @@ impl ResourceManager {
         rhai_data::register_data_stuff(&mut engine);
         rhai_resources::register_resources(&mut engine);
         rhai_tile::register_tile_stuff(&mut engine);
+        rhai_ui::register_ui_stuff(&mut engine);
 
         let data_ids = DataIds::new(&mut interner);
         let model_ids = ModelIds::new(&mut interner);

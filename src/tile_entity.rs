@@ -10,11 +10,11 @@ use automancy_defs::id::Id;
 use automancy_resources::types::function::{ResultType, RhaiDataMap, TransactionResultType};
 use automancy_resources::{
     data::stack::{ItemAmount, ItemStack},
-    types::function::TileConfigUnit,
+    rhai_ui::RhaiUiUnit,
 };
 use automancy_resources::{
     data::{Data, DataMap},
-    types::function::TileConfigUnitTag,
+    rhai_ui::parse_rhai_ui,
 };
 use automancy_resources::{rhai_call_options, rhai_log_err, ResourceManager};
 
@@ -83,7 +83,7 @@ pub enum TileEntityMsg {
     GetData(RpcReplyPort<DataMap>),
     GetDataValue(Id, RpcReplyPort<Option<Data>>),
     GetDataWithCoord(RpcReplyPort<(TileCoord, DataMap)>),
-    GetTileConfigUi(RpcReplyPort<Option<Vec<TileConfigUnit>>>),
+    GetTileConfigUi(RpcReplyPort<Option<Vec<RhaiUiUnit>>>),
 }
 
 impl TileEntity {
@@ -501,7 +501,7 @@ impl Actor for TileEntity {
                     .get(&self.id)
                     .ok_or(Box::new(TileEntityError::NonExistent(self.coord)))?;
 
-                if let Some((ast, default_scope, _)) = tile
+                if let Some((ast, default_scope, function_id)) = tile
                     .function
                     .as_ref()
                     .and_then(|v| self.resource_man.functions.get(v))
@@ -529,89 +529,13 @@ impl Actor for TileEntity {
                     match result {
                         Ok(result) => {
                             if let Some(result) = result.try_cast::<rhai::Array>() {
-                                let mut r = vec![];
-
-                                for ui in result
-                                    .into_iter()
-                                    .flat_map(|v: Dynamic| v.try_cast::<rhai::Array>())
-                                {
-                                    let Some(tag) = ui
-                                        .first()
-                                        .and_then(|v| v.clone().try_cast::<TileConfigUnitTag>())
-                                    else {
-                                        continue;
-                                    };
-
-                                    match tag {
-                                        TileConfigUnitTag::Amount => {
-                                            let Some(id) =
-                                                ui.get(1).and_then(|v| v.clone().try_cast::<Id>())
-                                            else {
-                                                continue;
-                                            };
-                                            let Some(label_id) =
-                                                ui.get(2).and_then(|v| v.clone().try_cast::<Id>())
-                                            else {
-                                                continue;
-                                            };
-                                            let Some(max_amount) = ui
-                                                .get(3)
-                                                .and_then(|v| v.clone().try_cast::<ItemAmount>())
-                                            else {
-                                                continue;
-                                            };
-
-                                            r.push(TileConfigUnit::Amount {
-                                                id,
-                                                label_id,
-                                                max_amount,
-                                            });
-                                        }
-                                        TileConfigUnitTag::SelectableId => {
-                                            let Some(id) =
-                                                ui.get(1).and_then(|v| v.clone().try_cast::<Id>())
-                                            else {
-                                                continue;
-                                            };
-                                            let Some(label_id) =
-                                                ui.get(2).and_then(|v| v.clone().try_cast::<Id>())
-                                            else {
-                                                continue;
-                                            };
-                                            let Some(list) = ui
-                                                .get(3)
-                                                .and_then(|v| v.clone().try_cast::<rhai::Array>())
-                                            else {
-                                                continue;
-                                            };
-
-                                            let list = list
-                                                .into_iter()
-                                                .flat_map(|v| v.try_cast::<rhai::Array>())
-                                                .flat_map(|v| {
-                                                    v.first()
-                                                        .and_then(|v| v.clone().try_cast::<Id>())
-                                                        .zip(v.get(1).and_then(|v| {
-                                                            v.clone().into_string().ok()
-                                                        }))
-                                                })
-                                                .collect::<Vec<_>>();
-
-                                            r.push(TileConfigUnit::SelectableId {
-                                                id,
-                                                label_id,
-                                                list,
-                                            });
-                                        }
-                                    }
-                                }
-
-                                reply.send(Some(r))?;
+                                reply.send(Some(parse_rhai_ui(function_id, result)))?;
                             } else {
                                 reply.send(None)?;
                             }
                         }
-                        Err(_) => {
+                        Err(err) => {
+                            rhai_log_err(function_id, &err);
                             reply.send(None)?;
                         }
                     }
