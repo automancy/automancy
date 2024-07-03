@@ -1,14 +1,63 @@
-use crate::{LoadResourceError, ResourceManager, COULD_NOT_GET_FILE_STEM, FONT_EXT};
-use automancy_defs::log;
-use automancy_defs::ttf_parser::Face;
+use crate::{LoadResourceError, ResourceManager, FONT_EXT};
+
+use automancy_defs::{
+    log,
+    ttf_parser::{
+        name::Names,
+        name_id::{FAMILY, TYPOGRAPHIC_FAMILY},
+        Face, Language,
+    },
+};
+
 use std::ffi::OsStr;
 use std::fs::{read_dir, File};
 use std::io::Read;
 use std::path::Path;
+use std::sync::Arc;
 
 pub struct Font {
     pub name: String,
-    pub data: Vec<u8>,
+    pub data: Arc<Vec<u8>>,
+}
+
+fn collect_families(name_id: u16, names: &Names) -> Vec<(String, Language)> {
+    let mut families = Vec::new();
+    for name in names.into_iter() {
+        if name.name_id == name_id {
+            if let Some(family) = name.to_string() {
+                families.push((family, name.language()));
+            }
+        }
+    }
+
+    families
+}
+
+fn parse_name(names: Names) -> Option<String> {
+    let mut families = collect_families(TYPOGRAPHIC_FAMILY, &names);
+
+    // We have to fallback to Family Name when no Typographic Family Name was set.
+    if families.is_empty() {
+        families = collect_families(FAMILY, &names);
+    }
+
+    // Make English US the first one.
+    if families.len() > 1 {
+        if let Some(index) = families
+            .iter()
+            .position(|f| f.1 == Language::English_UnitedStates)
+        {
+            if index != 0 {
+                families.swap(0, index);
+            }
+        }
+    }
+
+    if families.is_empty() {
+        return None;
+    }
+
+    families.into_iter().next().map(|v| v.0)
 }
 
 impl ResourceManager {
@@ -25,38 +74,14 @@ impl ResourceManager {
 
                 let mut data: Vec<u8> = Vec::new();
                 File::open(&file)?.read_to_end(&mut data)?;
+                let data = Arc::new(data);
 
-                let file_stem = file
-                    .file_stem()
-                    .ok_or_else(|| {
-                        LoadResourceError::InvalidFileError(file.clone(), COULD_NOT_GET_FILE_STEM)
-                    })? // TODO deupe these
-                    .to_str()
-                    .ok_or_else(|| LoadResourceError::OsStringError(file.clone()))?
-                    .to_string();
+                let name = parse_name(Face::parse(&data, 0)?.names())
+                    .ok_or_else(|| LoadResourceError::CouldNotGetFontName(file.clone()))?;
 
-                let file_name = file
-                    .file_name()
-                    .ok_or_else(|| {
-                        LoadResourceError::InvalidFileError(file.clone(), COULD_NOT_GET_FILE_STEM)
-                    })?
-                    .to_str()
-                    .ok_or_else(|| LoadResourceError::OsStringError(file.clone()))?
-                    .to_string();
+                log::info!("Loaded font '{name}'!");
 
-                let name = Face::parse(&data, 0)?
-                    .tables()
-                    .name
-                    .expect("Failed to get name table (likely malformed font file)")
-                    .names
-                    .into_iter()
-                    .filter_map(|n| n.to_string())
-                    .find(|n| n.to_lowercase()[..2] == file_stem.to_lowercase()[..2])
-                    .unwrap_or(file_stem);
-
-                log::info!("Loaded font {name} with key {file_name}!");
-
-                self.fonts.insert(file_name, Font { name, data });
+                self.fonts.insert(name.clone(), Font { name, data });
             }
         }
 

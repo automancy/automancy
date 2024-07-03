@@ -1,16 +1,16 @@
 #![windows_subsystem = "windows"]
 
+use std::fmt::Write;
+use std::fs::File;
 use std::panic::PanicInfo;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use std::{collections::BTreeMap, fmt::Write};
 use std::{env, fs, panic};
-use std::{fs::File, mem};
 
 use color_eyre::config::HookBuilder;
+use cosmic_text::fontdb::Source;
 use env_logger::Env;
-use once_cell::sync::Lazy;
 use ractor::Actor;
 use rfd::{MessageButtons, MessageDialog, MessageLevel};
 use tokio::runtime::Runtime;
@@ -27,8 +27,6 @@ use winit::{
     window::{Fullscreen, Icon},
 };
 
-use automancy::event::{on_event, EventLoopStorage};
-use automancy::gpu::{init_gpu_resources, Gpu};
 use automancy::gui::GuiState;
 use automancy::input::InputHandler;
 use automancy::map::MAIN_MENU;
@@ -36,8 +34,16 @@ use automancy::options::Options;
 use automancy::renderer::Renderer;
 use automancy::{camera::Camera, gui::Gui};
 use automancy::{
+    event::{on_event, EventLoopStorage},
+    SYMBOLS_FONT_KEY,
+};
+use automancy::{
     game::{load_map, GameSystem, GameSystemMessage, TICK_INTERVAL},
     gui::init_custom_paint_state,
+};
+use automancy::{
+    gpu::{init_gpu_resources, Gpu},
+    SYMBOLS_FONT,
 };
 use automancy::{GameState, LOGO};
 use automancy_defs::glam::uvec2;
@@ -46,19 +52,11 @@ use automancy_defs::kira::track::{TrackBuilder, TrackHandle};
 use automancy_defs::kira::tween::Tween;
 use automancy_defs::log;
 use automancy_defs::rendering::Vertex;
-use automancy_resources::types::font::Font;
 use automancy_resources::{ResourceManager, RESOURCES_PATH, RESOURCE_MAN};
 use yakui::paint::Texture;
 
 /// Initialize the Resource Manager system, and loads all the resources in all namespaces.
-fn load_resources(
-    track: TrackHandle,
-) -> (
-    Arc<ResourceManager>,
-    Vec<Vertex>,
-    Vec<u16>,
-    BTreeMap<String, Font>,
-) {
+fn load_resources(track: TrackHandle) -> (Arc<ResourceManager>, Vec<Vertex>, Vec<u16>) {
     let mut resource_man = ResourceManager::new(track);
 
     fs::read_dir(RESOURCES_PATH)
@@ -105,13 +103,9 @@ fn load_resources(
     resource_man.ordered_categories();
 
     let (vertices, indices) = resource_man.compile_models();
-    let fonts = mem::take(&mut resource_man.fonts);
 
-    (Arc::new(resource_man), vertices, indices, fonts)
+    (Arc::new(resource_man), vertices, indices)
 }
-
-static SYMBOLS_FONT: &[u8] = include_bytes!("../../assets/SymbolsNerdFontMono-Regular.ttf");
-static SYMBOLS_FONT_KEY: &str = "SYMBOLS_FONT";
 
 /// Gets the game icon.
 fn get_icon() -> Icon {
@@ -158,6 +152,64 @@ struct Automancy {
     window: Option<Arc<Window>>,
     fps_limit: Option<i32>,
     closed: bool,
+}
+
+impl Automancy {
+    fn try_sync_options(&mut self) {
+        if !self.state.options.synced {
+            let font = self
+                .state
+                .options
+                .gui
+                .font
+                .as_ref()
+                .and_then(|name| self.state.resource_man.fonts.get(name.as_str()))
+                .or_else(|| self.state.resource_man.fonts.values().next())
+                .expect("no font loaded!");
+
+            self.state.gui.as_mut().unwrap().set_font(
+                SYMBOLS_FONT_KEY,
+                &font.name,
+                Source::Binary(font.data.clone()),
+            );
+
+            self.state
+                .audio_man
+                .main_track()
+                .set_volume(self.state.options.audio.sfx_volume, Tween::default());
+
+            self.state
+                .renderer
+                .as_mut()
+                .unwrap()
+                .gpu
+                .set_vsync(self.state.options.graphics.fps_limit == 0);
+
+            self.fps_limit = Some(self.state.options.graphics.fps_limit);
+
+            if self.state.options.graphics.fullscreen {
+                self.state
+                    .renderer
+                    .as_ref()
+                    .unwrap()
+                    .gpu
+                    .window
+                    .set_fullscreen(Some(Fullscreen::Borderless(None)));
+            } else {
+                self.state
+                    .renderer
+                    .as_ref()
+                    .unwrap()
+                    .gpu
+                    .window
+                    .set_fullscreen(None);
+            }
+
+            self.state.options.synced = true;
+
+            log::info!("Synced options!");
+        }
+    }
 }
 
 impl ApplicationHandler for Automancy {
@@ -211,32 +263,16 @@ impl ApplicationHandler for Automancy {
             &renderer.gpu.window,
         );
 
-        gui.font_names = self
-            .state
-            .fonts_init
-            .as_ref()
-            .unwrap()
-            .iter()
-            .map(|(k, v)| (k.clone(), v.name.clone()))
-            .collect();
-
         gui.fonts.insert(
             SYMBOLS_FONT_KEY.to_string(),
-            Lazy::new(Box::new(|| {
-                yakui::font::Font::from_bytes(SYMBOLS_FONT, yakui::font::FontSettings::default())
-                    .unwrap()
-            })),
+            cosmic_text::fontdb::Source::Binary(Arc::from(&SYMBOLS_FONT)),
         );
-        for (name, font) in self.state.fonts_init.take().unwrap().into_iter() {
+        for (name, font) in self.state.resource_man.fonts.iter() {
             gui.fonts.insert(
-                name,
-                Lazy::new(Box::new(move || {
-                    yakui::font::Font::from_bytes(font.data, yakui::font::FontSettings::default())
-                        .unwrap()
-                })),
+                name.clone(),
+                cosmic_text::fontdb::Source::Binary(font.data.clone()),
             );
         }
-        gui.set_font(SYMBOLS_FONT_KEY, &self.state.options.gui.font);
         log::info!("Gui setup.");
 
         let logo = image::load_from_memory(LOGO).unwrap();
@@ -249,6 +285,8 @@ impl ApplicationHandler for Automancy {
         self.state.logo = Some(logo);
         self.state.gui = Some(gui);
         self.state.renderer = Some(renderer);
+
+        self.try_sync_options();
     }
 
     fn window_event(
@@ -260,7 +298,7 @@ impl ApplicationHandler for Automancy {
         if !self.closed {
             let consumed = {
                 let gui = self.state.gui.as_mut().unwrap();
-                gui.window.handle_event(&mut gui.yak, &event)
+                gui.window.handle_window_event(&mut gui.yak, &event)
             };
 
             if consumed {
@@ -280,47 +318,7 @@ impl ApplicationHandler for Automancy {
                 }
             }
 
-            if !self.state.options.synced {
-                self.state
-                    .gui
-                    .as_mut()
-                    .unwrap()
-                    .set_font(SYMBOLS_FONT_KEY, &self.state.options.gui.font);
-
-                self.state
-                    .audio_man
-                    .main_track()
-                    .set_volume(self.state.options.audio.sfx_volume, Tween::default());
-
-                self.state
-                    .renderer
-                    .as_mut()
-                    .unwrap()
-                    .gpu
-                    .set_vsync(self.state.options.graphics.fps_limit == 0);
-
-                self.fps_limit = Some(self.state.options.graphics.fps_limit);
-
-                if self.state.options.graphics.fullscreen {
-                    self.state
-                        .renderer
-                        .as_ref()
-                        .unwrap()
-                        .gpu
-                        .window
-                        .set_fullscreen(Some(Fullscreen::Borderless(None)));
-                } else {
-                    self.state
-                        .renderer
-                        .as_ref()
-                        .unwrap()
-                        .gpu
-                        .window
-                        .set_fullscreen(None);
-                }
-
-                self.state.options.synced = true;
-            }
+            self.try_sync_options();
         }
     }
 
@@ -445,7 +443,7 @@ fn main() -> anyhow::Result<()> {
             builder
         })?;
 
-        let (resource_man, vertices, indices, fonts) = load_resources(track);
+        let (resource_man, vertices, indices) = load_resources(track);
         RESOURCE_MAN.write().unwrap().replace(resource_man.clone());
         log::info!("Loaded resources.");
 
@@ -498,7 +496,6 @@ fn main() -> anyhow::Result<()> {
 
             vertices_init: Some(vertices),
             indices_init: Some(indices),
-            fonts_init: Some(fonts),
         }
     };
 

@@ -54,7 +54,11 @@ pub fn searchable_id(
     draw: &'static impl Fn(&mut GameState, &Id, &str),
     state: &mut GameState,
 ) {
-    textbox(state.gui_state.text_field.get(field), &hint_text);
+    textbox(
+        state.gui_state.text_field.get(field),
+        None,
+        Some(&hint_text),
+    );
 
     scroll_vertical(200.0, || {
         column(|| {

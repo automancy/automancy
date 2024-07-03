@@ -1,13 +1,13 @@
 use automancy_defs::colors;
 use ron::ser::PrettyConfig;
-use yakui::{column, divider, use_state, widgets::Layer, Vec2};
+use yakui::{column, divider, widgets::Layer};
 
 use crate::GameState;
 
 use super::{label, movable, window, DIVIER_SIZE};
 
 /// Draws the debug menu (F3).
-pub fn debugger(state: &GameState) {
+pub fn debugger(state: &mut GameState) {
     let resource_man = &*state.resource_man;
 
     let fps = 1.0 / state.loop_store.elapsed.as_secs_f64();
@@ -26,10 +26,8 @@ pub fn debugger(state: &GameState) {
 
     let map_info = state.tokio.block_on(info.lock()).clone();
 
-    let pos_state = use_state(|| Vec2::ZERO);
-
     Layer::new().show(|| {
-        let mut pos = pos_state.get();
+        let mut pos = state.gui_state.player_ui_position;
         movable(&mut pos, || {
             window(
                 resource_man
@@ -67,6 +65,6 @@ pub fn debugger(state: &GameState) {
                 }
             );
         });
-        pos_state.set(pos);
+        state.gui_state.player_ui_position = pos;
     });
 }

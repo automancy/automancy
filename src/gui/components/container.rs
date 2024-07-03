@@ -13,11 +13,13 @@ use yakui::widget::{LayoutContext, PaintContext, Widget};
 use yakui::Response;
 
 use crate::gui::{
+    heading,
     shapes::RoundedRectLerpedColor,
     util::{clamp_percentage_to_viewport, pad_y},
+    ROUNDED_MEDIUM,
 };
 
-use super::{centered_row, layout::centered_column, text::heading, PADDING_LARGE, PADDING_MEDIUM};
+use super::{centered_row, layout::centered_column, PADDING_LARGE, PADDING_MEDIUM};
 
 /**
 Changes the flow behavior a widget tree, allowing it to break out of any layouts, and be positioned in relation to the screen instead.
@@ -207,9 +209,7 @@ pub fn group(children: impl FnOnce()) {
 }
 
 pub fn window_box(title: String, children: impl FnOnce()) {
-    const RADIUS: f32 = 8.0;
-
-    RoundRect::new(RADIUS, colors::BACKGROUND_1).show_children(|| {
+    RoundRect::new(ROUNDED_MEDIUM, colors::BACKGROUND_1).show_children(|| {
         Pad::all(PADDING_LARGE).show(|| {
             centered_column(|| {
                 pad_y(0.0, PADDING_MEDIUM).show(|| {

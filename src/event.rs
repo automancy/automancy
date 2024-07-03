@@ -469,6 +469,7 @@ pub fn on_event(
                 }
             } else if state.input_handler.alternate_pressed {
                 state.gui_state.config_open_at = Some(state.camera.pointing_at);
+                state.gui_state.text_field.get(TextField::Filter).clear();
             }
         }
 

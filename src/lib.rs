@@ -1,5 +1,5 @@
+use std::sync::Arc;
 use std::time::Instant;
-use std::{collections::BTreeMap, sync::Arc};
 
 use automancy_defs::rendering::Vertex;
 use gui::{Gui, GuiState};
@@ -10,7 +10,6 @@ use tokio::task::JoinHandle;
 
 use automancy_defs::kira::manager::AudioManager;
 
-use automancy_resources::types::font::Font;
 use automancy_resources::types::function::RhaiDataMap;
 use automancy_resources::ResourceManager;
 
@@ -26,6 +25,9 @@ use crate::renderer::Renderer;
 pub static VERSION: &str = env!("CARGO_PKG_VERSION");
 pub static LOGO: &[u8] = include_bytes!("assets/logo.png");
 pub static SSAO_NOISE_MAP: &[u8] = include_bytes!("assets/noise_map.png");
+
+pub static SYMBOLS_FONT: &[u8] = include_bytes!("assets/SymbolsNerdFont-Regular.ttf");
+pub static SYMBOLS_FONT_KEY: &str = "Symbols Nerd Font Mono";
 
 pub mod camera;
 pub mod event;
@@ -63,5 +65,4 @@ pub struct GameState {
 
     pub vertices_init: Option<Vec<Vertex>>,
     pub indices_init: Option<Vec<u16>>,
-    pub fonts_init: Option<BTreeMap<String, Font>>,
 }

@@ -1,30 +1,27 @@
+use cosmic_text::fontdb::Source;
 use enum_map::{enum_map, Enum, EnumMap};
 use fuzzy_matcher::skim::SkimMatcherV2;
 use hashbrown::{HashMap, HashSet};
-use once_cell::sync::Lazy;
 use std::fmt::Debug;
+use std::mem;
 use std::sync::Arc;
-use std::{collections::BTreeMap, mem};
 use tokio::sync::oneshot;
 use wgpu::{Device, Queue, Texture, TextureFormat};
 use winit::{event_loop::ActiveEventLoop, window::Window};
 use yakui_wgpu::YakuiWgpu;
 use yakui_winit::YakuiWinit;
 
-use automancy_defs::glam::vec3;
 use automancy_defs::id::Id;
 use automancy_defs::math::Vec2;
 use automancy_defs::math::{Float, Matrix4, FAR, HEX_GRID_LAYOUT};
 use automancy_defs::rendering::{make_line, InstanceData};
 use automancy_defs::{colors, math, window};
 use automancy_defs::{coord::TileCoord, glam::vec2};
+use automancy_defs::{glam::vec3, log};
 use automancy_resources::data::Data;
 use automancy_resources::data::DataMap;
 use automancy_resources::ResourceManager;
-use yakui::{
-    font::{Font, Fonts},
-    UVec2, Yakui,
-};
+use yakui::{font::Fonts, UVec2, Yakui};
 
 use crate::gpu::{AnimationMap, GlobalResources, GuiResources};
 use crate::input::ActionType;
@@ -51,38 +48,42 @@ pub const SMALLISH_ICON_SIZE: Float = 36.0;
 pub const MEDIUM_ICON_SIZE: Float = 48.0;
 pub const LARGE_ICON_SIZE: Float = 96.0;
 
-pub type FontLoader = Lazy<Font, Box<dyn FnOnce() -> Font>>;
+pub const ROUNDED_MEDIUM: f32 = 6.0;
 
 pub struct Gui {
     pub renderer: YakuiWgpu<YakuiRenderResources>,
     pub yak: Yakui,
     pub window: YakuiWinit,
-    pub fonts: HashMap<String, FontLoader>,
-    pub font_names: BTreeMap<String, String>,
+    pub fonts: HashMap<String, Source>,
 }
 
 impl Gui {
-    pub fn set_font(&mut self, symbols_font: &str, font: &str) {
+    pub fn set_font(&mut self, symbols_font: &str, font: &str, font_source: Source) {
         let fonts = self.yak.dom().get_global_or_init(Fonts::default);
 
-        fonts.add(
-            (*self.fonts.get(symbols_font).unwrap()).clone(),
-            Some("symbols"),
-        );
-        fonts.add((*self.fonts.get(font).unwrap()).clone(), Some("default"));
+        log::info!("Setting font to {font}");
+
+        fonts.load_font_source(font_source);
+
+        fonts.set_sans_serif_family(font);
+        fonts.set_serif_family(font);
+        fonts.set_monospace_family(font);
+        fonts.set_cursive_family(font);
+        fonts.set_fantasy_family(font);
+
+        fonts.load_font_source(self.fonts.get(symbols_font).unwrap().clone());
     }
 
     pub fn new(device: &Device, queue: &Queue, window: &Window) -> Self {
-        let renderer = yakui_wgpu::YakuiWgpu::new(device, queue);
+        let mut yak = Yakui::new();
+        let renderer = yakui_wgpu::YakuiWgpu::new(&mut yak, device, queue);
         let window = yakui_winit::YakuiWinit::new(window);
-        let yak = Yakui::new();
 
         Self {
             renderer,
             yak,
             window,
             fonts: Default::default(),
-            font_names: BTreeMap::new(),
         }
     }
 }
@@ -121,6 +122,7 @@ pub struct GuiState {
 
     pub tile_config_ui_position: Vec2,
     pub player_ui_position: Vec2,
+    pub debugger_ui_position: Vec2,
 
     pub force_show_puzzle: bool,
     pub selected_research: Option<Id>,
@@ -153,6 +155,7 @@ impl Default for GuiState {
 
             tile_config_ui_position: vec2(0.1, 0.1), // TODO make default pos screen center?
             player_ui_position: vec2(0.1, 0.1),
+            debugger_ui_position: vec2(0.1, 0.1),
 
             force_show_puzzle: false,
             selected_research: Default::default(),

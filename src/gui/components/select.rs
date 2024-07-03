@@ -1,12 +1,12 @@
 use automancy_defs::colors;
 use yakui::{
     colored_circle, column, use_state,
-    widgets::{Circle, Layer, Pad},
+    widgets::{ButtonResponse, Circle, Layer, Pad},
     Alignment, Dim2, Pivot, Response,
 };
 
 use super::{
-    button::{button, ButtonResponse},
+    button,
     container::RoundRect,
     interactive::{interactive, InteractiveResponse},
     layout::centered_row,

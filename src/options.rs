@@ -127,17 +127,9 @@ impl Default for GraphicsOptions {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct GuiOptions {
-    pub font: String,
-}
-
-impl Default for GuiOptions {
-    fn default() -> Self {
-        Self {
-            font: "iosevka-extended.ttf".to_string(),
-        }
-    }
+    pub font: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]

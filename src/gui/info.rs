@@ -18,9 +18,9 @@ use crate::tile_entity::TileEntityMsg;
 use crate::GameState;
 
 use super::{
-    centered_column, colored_label, group, item::draw_item, label, stretch_column, ui_game_object,
-    util::pad_y, window, Text, LABEL_SIZE, LARGE_ICON_SIZE, PADDING_LARGE, PADDING_MEDIUM,
-    PADDING_SMALL, SMALL_ICON_SIZE, SMALL_SIZE,
+    centered_column, colored_label, colored_sized_text, group, item::draw_item, label,
+    stretch_column, ui_game_object, util::pad_y, window, LARGE_ICON_SIZE, PADDING_LARGE,
+    PADDING_MEDIUM, PADDING_SMALL, SMALL_ICON_SIZE, SMALL_SIZE,
 };
 
 fn input_hint(state: &mut GameState) {
@@ -39,15 +39,9 @@ fn input_hint(state: &mut GameState) {
                     .and_then(|v| v.name)
                 {
                     if let Some(name) = state.resource_man.translates.keys.get(&name) {
-                        Text::new(LABEL_SIZE, colors::BLACK, name, false).show();
+                        label(name);
                     } else {
-                        Text::new(
-                            LABEL_SIZE,
-                            colors::BLACK,
-                            &state.resource_man.translates.unnamed,
-                            false,
-                        )
-                        .show();
+                        label(&state.resource_man.translates.unnamed);
                     }
                 }
 
@@ -100,7 +94,7 @@ fn input_hint(state: &mut GameState) {
                     .collect::<Vec<_>>()
                     .join(" + ");
 
-                Text::new(SMALL_SIZE, colors::GRAY, &hint_text, false).show();
+                colored_sized_text(&hint_text, colors::GRAY, SMALL_SIZE).show();
             });
         });
     }

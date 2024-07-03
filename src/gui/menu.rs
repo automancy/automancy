@@ -170,9 +170,8 @@ pub fn map_menu(state: &mut GameState) {
                                         let renaming =
                                             state.gui_state.text_field.get(TextField::MapRenaming);
 
-                                        let text = textbox(renaming, "");
-
-                                        if text.lost_focus || text.activated {
+                                        let res = textbox(renaming, None, None);
+                                        if res.lost_focus || res.activated {
                                             state.gui_state.renaming_map = None;
 
                                             let s = mem::take(renaming)
@@ -404,11 +403,9 @@ pub fn options_menu(state: &mut GameState) {
                                     label("Font:");
 
                                     state.options.gui.font = selection_box(
-                                        state.gui.as_ref().unwrap().font_names.keys().cloned(),
+                                        state.resource_man.fonts.keys().cloned().map(Some),
                                         state.options.gui.font.clone(),
-                                        &|font| {
-                                            state.gui.as_ref().unwrap().font_names[font].to_string()
-                                        },
+                                        &|font| font.clone().unwrap_or_default(),
                                     );
                                 });
                             })),

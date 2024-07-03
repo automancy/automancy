@@ -46,8 +46,10 @@ static COULD_NOT_GET_FILE_STEM: &str = "could not get file stem";
 pub enum LoadResourceError {
     #[error("the file {0} is invalid: {1}")]
     InvalidFileError(PathBuf, &'static str),
-    #[error("could not convert OsString to String")]
+    #[error("could not convert OsString to String of path {0}")]
     OsStringError(PathBuf),
+    #[error("could not get font name from {0}")]
+    CouldNotGetFontName(PathBuf),
 }
 
 pub static RESOURCE_MAN: RwLock<Option<Arc<ResourceManager>>> = RwLock::new(None);

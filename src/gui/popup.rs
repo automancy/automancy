@@ -104,9 +104,7 @@ pub fn map_create_popup(state: &mut GameState) {
                 centered_row(|| {
                     label("Name:"); //TODO add this to translation
 
-                    if let Some(new_name) = textbox(name, "Name your world here").text.take() {
-                        *name = new_name;
-                    }
+                    textbox(name, None, Some("Name your world here..."));
                 });
 
                 if button(

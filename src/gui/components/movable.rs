@@ -123,11 +123,9 @@ impl Widget for MovableWidget {
                     self.dragging_start.set(Some(position));
 
                     EventResponse::Sink
-                } else if !down {
+                } else {
                     self.dragging_start.set(None);
 
-                    EventResponse::Bubble
-                } else {
                     EventResponse::Bubble
                 }
             }

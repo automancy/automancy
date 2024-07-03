@@ -1,16 +1,15 @@
 use std::cell::Cell;
 
 use automancy_defs::colors;
-use yakui::{constrained, widgets::Layer, Constraints, Vec2};
+use yakui::{
+    constrained,
+    widgets::{Layer, Text},
+    Constraints, Vec2,
+};
 
 use crate::GameState;
 
-use super::{
-    hover::hover_tip,
-    interactive::interactive,
-    symbol,
-    text::{label_text, Text},
-};
+use super::{hover::hover_tip, interactive::interactive, symbol, text::label_text};
 
 thread_local! {
     static HOVER_TIP: Cell<Option<Text>> = Cell::default();
