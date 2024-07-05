@@ -6,23 +6,28 @@ use arraydeque::{ArrayDeque, Wrapping};
 use hashbrown::HashMap;
 use ractor::rpc::CallResult;
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort, SupervisionEvent};
-use rayon::prelude::*;
+
+use automancy_defs::id::Id;
+use automancy_defs::{
+    coord::{TileBounds, TileCoord},
+    stack::ItemStack,
+};
+
+use automancy_defs::math::{Matrix4, FAR, HEX_GRID_LAYOUT};
+use automancy_defs::rendering::InstanceData;
+use automancy_resources::data::{Data, DataMap};
+use automancy_resources::types::function::OnFailAction;
+use automancy_resources::ResourceManager;
 use tokio::sync::Mutex;
 
-use automancy_defs::coord::{TileBounds, TileCoord};
-use automancy_defs::id::Id;
-use automancy_defs::log;
-use automancy_defs::math::{Float, Matrix4, FAR, HEX_GRID_LAYOUT};
-use automancy_defs::rendering::InstanceData;
-use automancy_resources::data::stack::ItemStack;
-use automancy_resources::data::{Data, DataMap};
-use automancy_resources::ResourceManager;
-
-use crate::game::GameSystemMessage::*;
-use crate::map::{Map, MapInfo, TileEntities};
+use crate::tile_entity::TileEntityError;
 use crate::tile_entity::{TileEntity, TileEntityMsg};
 use crate::util::actor::multi_call_iter;
-use crate::{event::EventLoopStorage, tile_entity::TileEntityError};
+use crate::{game::GameSystemMessage::*, map::MAIN_MENU};
+use crate::{
+    map::{Map, MapInfo, TileEntities},
+    GameState,
+};
 
 /// Game ticks per second
 pub const TPS: u64 = 30;
@@ -32,6 +37,8 @@ pub const MAX_ALLOWED_TICK_INTERVAL: Duration = TICK_INTERVAL.saturating_mul(5);
 pub const TRANSACTION_ANIMATION_SPEED: Duration = Duration::from_nanos(800_000_000);
 pub const TRANSACTION_MIN_INTERVAL: Duration = Duration::from_nanos(250_000_000);
 pub const TAKE_ITEM_ANIMATION_SPEED: Duration = Duration::from_nanos(200_000_000);
+
+const UNDO_CACHE_SIZE: usize = 256;
 
 pub type TickUnit = u16;
 
@@ -55,7 +62,7 @@ pub type TransactionRecords =
 
 pub type RenderUnits = HashMap<TileCoord, (Id, RenderUnit)>;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct GameSystemState {
     /// a count of all the ticks that have happened
     tick_count: TickUnit,
@@ -65,23 +72,64 @@ pub struct GameSystemState {
     /// the tile entities
     tile_entities: TileEntities,
     /// the map
-    map: Map,
+    map: Option<Map>,
 
     /// what to do to undo the last UNDO_CACHE_SIZE user events
-    undo_steps: ArrayDeque<Vec<GameSystemMessage>, 16, Wrapping>,
+    undo_steps: ArrayDeque<Vec<GameSystemMessage>, UNDO_CACHE_SIZE, Wrapping>,
     /// records transactions to be drawn
     transaction_records: TransactionRecords,
 }
 
-pub async fn load_map(
-    game: &ActorRef<GameSystemMessage>,
-    loop_store: &mut EventLoopStorage,
-    map_name: String,
-) -> anyhow::Result<()> {
-    game.send_message(LoadMap(map_name))?;
-    loop_store.map_info = Some(game.call(GetMapInfoAndName, None).await?.unwrap());
+pub static COULD_NOT_LOAD_ANYTHING: &str = "??? main menu is corrupted and couldn't be emptied!";
 
-    Ok(())
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GameLoadResult {
+    Loaded,
+    LoadedMainMenu,
+    Failed,
+}
+
+pub fn load_map(state: &mut GameState, map_name: String, already_tried: bool) -> GameLoadResult {
+    if already_tried && map_name == MAIN_MENU {
+        state.tokio.block_on(
+            Map::new_empty(MAIN_MENU.to_string())
+                .save(&state.resource_man.interner, &HashMap::new()),
+        );
+    }
+
+    let success = match state.tokio.block_on(
+        state
+            .game
+            .call(|reply| LoadMap(map_name.clone(), reply), None),
+    ) {
+        Ok(v) => v.unwrap(),
+        Err(_) => false,
+    };
+
+    if success {
+        state.loop_store.map_info = state
+            .tokio
+            .block_on(state.game.call(GetMapInfoAndName, None))
+            .unwrap()
+            .unwrap();
+
+        if map_name == MAIN_MENU {
+            GameLoadResult::LoadedMainMenu
+        } else {
+            GameLoadResult::Loaded
+        }
+    } else if already_tried {
+        GameLoadResult::Failed
+    } else {
+        load_map(state, MAIN_MENU.to_string(), map_name == MAIN_MENU)
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum PlaceTileResponse {
+    Placed,
+    Removed,
+    Ignored,
 }
 
 /// Represents a message the game receives
@@ -91,7 +139,12 @@ pub enum GameSystemMessage {
     Tick,
     StopTicking,
     /// send a message to a tile entity
-    ForwardMsgToTile(TileCoord, TileEntityMsg),
+    ForwardMsgToTile {
+        source: TileCoord,
+        to: TileCoord,
+        msg: TileEntityMsg,
+        on_fail: OnFailAction,
+    },
     /// place a tile at the given position
     PlaceTile {
         coord: TileCoord,
@@ -110,11 +163,11 @@ pub enum GameSystemMessage {
     Undo,
 
     /// load a map
-    LoadMap(String),
+    LoadMap(String, RpcReplyPort<bool>),
     /// save the map
     SaveMap(RpcReplyPort<()>),
 
-    GetMapInfoAndName(RpcReplyPort<(Arc<Mutex<MapInfo>>, String)>),
+    GetMapInfoAndName(RpcReplyPort<Option<(Arc<Mutex<MapInfo>>, String)>>),
 
     /// get the tile at the given position
     GetTile(TileCoord, RpcReplyPort<Option<Id>>),
@@ -131,13 +184,6 @@ pub enum GameSystemMessage {
 
     GetRecordedTransactions(RpcReplyPort<TransactionRecords>),
     RecordTransaction(ItemStack, TileCoord, TileCoord),
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum PlaceTileResponse {
-    Placed,
-    Removed,
-    Ignored,
 }
 
 pub struct GameSystem {
@@ -165,7 +211,7 @@ impl Actor for GameSystem {
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         match message {
-            LoadMap(name) => {
+            LoadMap(name, reply) => {
                 for tile_entity in state.tile_entities.values() {
                     tile_entity
                         .stop_and_wait(Some("Loading new map".to_string()), None)
@@ -173,27 +219,48 @@ impl Actor for GameSystem {
                         .unwrap();
                 }
 
-                let (map, tile_entities) =
-                    Map::load(myself.clone(), self.resource_man.clone(), &name).await;
-
-                state.map = map;
-                state.tile_entities = tile_entities;
                 state.transaction_records.clear();
                 state.undo_steps.clear();
+                state.tile_entities.clear();
+                state.map = None;
+                state.tile_entities.clear();
+
+                let (map, tile_entities) =
+                    match Map::load(myself.clone(), self.resource_man.clone(), &name).await {
+                        Ok(v) => v,
+                        Err(abort) => {
+                            if abort {
+                                reply.send(false)?;
+                                return Ok(());
+                            } else {
+                                (Map::new_empty(name.clone()), HashMap::new())
+                            }
+                        }
+                    };
+
+                state.map = Some(map);
+                state.tile_entities = tile_entities;
 
                 log::info!("Successfully loaded map {name}!");
+                reply.send(true)?;
+
                 return Ok(());
             }
             SaveMap(reply) => {
-                state
-                    .map
-                    .save(&self.resource_man.interner, &state.tile_entities)
-                    .await;
-                log::info!("Saved map {}", state.map.map_name.clone());
+                if let Some(map) = &state.map {
+                    map.save(&self.resource_man.interner, &state.tile_entities)
+                        .await;
+
+                    log::info!("Saved map {}", map.map_name.clone());
+                }
                 reply.send(())?;
             }
             GetMapInfoAndName(reply) => {
-                reply.send((state.map.info.clone(), state.map.map_name.clone()))?;
+                if let Some(map) = &state.map {
+                    reply.send(Some((map.info.clone(), map.map_name.clone())))?;
+                } else {
+                    reply.send(None)?;
+                }
 
                 return Ok(());
             }
@@ -201,6 +268,10 @@ impl Actor for GameSystem {
                 if state.stopped {
                     return Ok(());
                 }
+
+                let Some(map) = state.map.as_mut() else {
+                    return Ok(());
+                };
 
                 match rest {
                     Tick => {
@@ -210,8 +281,7 @@ impl Actor for GameSystem {
                         culling_range,
                         reply,
                     } => {
-                        let instances = state
-                            .map
+                        let instances = map
                             .tiles
                             .iter()
                             .filter(|(coord, _)| culling_range.is_in_bounds(***coord))
@@ -224,7 +294,7 @@ impl Actor for GameSystem {
                                         *id,
                                         RenderUnit {
                                             instance: InstanceData::default().with_model_matrix(
-                                                Matrix4::from_translation(p.extend(FAR as Float)),
+                                                Matrix4::from_translation(p.extend(FAR)),
                                             ),
                                             model_override: None,
                                         },
@@ -242,7 +312,7 @@ impl Actor for GameSystem {
                         record,
                         reply,
                     } => {
-                        if let Some(old_id) = state.map.tiles.get(&coord) {
+                        if let Some(old_id) = map.tiles.get(&coord) {
                             if *old_id == id {
                                 if let Some(reply) = reply {
                                     reply.send(PlaceTileResponse::Ignored)?;
@@ -252,8 +322,7 @@ impl Actor for GameSystem {
                             }
                         }
 
-                        if id == self.resource_man.registry.none
-                            && !state.map.tiles.contains_key(&coord)
+                        if id == self.resource_man.registry.none && !map.tiles.contains_key(&coord)
                         {
                             if let Some(reply) = reply {
                                 reply.send(PlaceTileResponse::Ignored)?;
@@ -265,7 +334,8 @@ impl Actor for GameSystem {
                         let place_result = insert_new_tile(
                             self.resource_man.clone(),
                             myself.clone(),
-                            state,
+                            map,
+                            &mut state.tile_entities,
                             coord,
                             id,
                             data,
@@ -303,14 +373,44 @@ impl Actor for GameSystem {
                         }
                     }
                     GetTile(coord, reply) => {
-                        reply.send(state.map.tiles.get(&coord).cloned())?;
+                        reply.send(map.tiles.get(&coord).cloned())?;
                     }
                     GetTileEntity(coord, reply) => {
                         reply.send(state.tile_entities.get(&coord).cloned())?;
                     }
-                    ForwardMsgToTile(coord, msg) => {
-                        if let Some(tile_entity) = state.tile_entities.get(&coord) {
+                    ForwardMsgToTile {
+                        source,
+                        to,
+                        msg,
+                        on_fail,
+                    } => {
+                        if let Some(tile_entity) = state.tile_entities.get(&to) {
                             tile_entity.send_message(msg)?;
+                        } else {
+                            match on_fail {
+                                OnFailAction::None => {}
+                                OnFailAction::RemoveTile => {
+                                    remove_tile(
+                                        &self.resource_man,
+                                        map,
+                                        &mut state.tile_entities,
+                                        source,
+                                    )
+                                    .await;
+                                }
+                                OnFailAction::RemoveAllData => {
+                                    if let Some(entity) = state.tile_entities.get(&source) {
+                                        entity.send_message(TileEntityMsg::SetData(
+                                            DataMap::default(),
+                                        ))?;
+                                    }
+                                }
+                                OnFailAction::RemoveData(id) => {
+                                    if let Some(entity) = state.tile_entities.get(&source) {
+                                        entity.send_message(TileEntityMsg::RemoveData(id))?;
+                                    }
+                                }
+                            }
                         }
                     }
                     StopTicking => {
@@ -366,12 +466,11 @@ impl Actor for GameSystem {
                         reply.send(all_data)?;
                     }
                     RecordTransaction(stack, source_coord, coord) => {
-                        if let Some((source_id, id)) = state
-                            .map
+                        if let Some((source_id, id)) = map
                             .tiles
                             .get(&source_coord)
                             .cloned()
-                            .zip(state.map.tiles.get(&coord).cloned())
+                            .zip(map.tiles.get(&coord).cloned())
                         {
                             let record = TransactionRecord {
                                 stack,
@@ -403,7 +502,7 @@ impl Actor for GameSystem {
 
                         for (id, coord) in coords
                             .into_iter()
-                            .flat_map(|coord| state.map.tiles.get(&coord).zip(Some(coord)))
+                            .flat_map(|coord| map.tiles.get(&coord).zip(Some(coord)))
                         {
                             if let Some(entity) = state.tile_entities.get(&coord) {
                                 if let Ok(CallResult::Success(mut data)) =
@@ -430,11 +529,12 @@ impl Actor for GameSystem {
                         let mut old = vec![];
 
                         for (coord, id, data) in tiles {
-                            if place_over || state.map.tiles.get(&coord).is_none() {
+                            if place_over || map.tiles.get(&coord).is_none() {
                                 if let Some(Some((old_id, old_data))) = insert_new_tile(
                                     self.resource_man.clone(),
                                     myself.clone(),
-                                    state,
+                                    map,
+                                    &mut state.tile_entities,
                                     coord,
                                     id,
                                     data,
@@ -474,7 +574,14 @@ impl Actor for GameSystem {
                         let mut removed = Vec::new();
 
                         for coord in tiles {
-                            if let Some(old) = remove_tile(&self.resource_man, state, coord).await {
+                            if let Some(old) = remove_tile(
+                                &self.resource_man,
+                                map,
+                                &mut state.tile_entities,
+                                coord,
+                            )
+                            .await
+                            {
                                 removed.push((coord, old));
                             }
                         }
@@ -485,7 +592,8 @@ impl Actor for GameSystem {
                             insert_new_tile(
                                 self.resource_man.clone(),
                                 myself.clone(),
-                                state,
+                                map,
+                                &mut state.tile_entities,
                                 new_coord,
                                 id,
                                 data,
@@ -524,7 +632,15 @@ impl Actor for GameSystem {
                 if let Ok(tile_error) = error.downcast::<Box<TileEntityError>>() {
                     match **tile_error {
                         TileEntityError::NonExistent(coord) => {
-                            remove_tile(&self.resource_man, state, coord).await;
+                            if let Some(map) = state.map.as_mut() {
+                                remove_tile(
+                                    &self.resource_man,
+                                    map,
+                                    &mut state.tile_entities,
+                                    coord,
+                                )
+                                .await;
+                            }
                         }
                     }
                 }
@@ -592,17 +708,13 @@ pub async fn new_tile(
 /// Stops a tile and removes it from the game
 async fn remove_tile(
     resource_man: &ResourceManager,
-    state: &mut GameSystemState,
+    map: &mut Map,
+    tile_entities: &mut TileEntities,
     coord: TileCoord,
 ) -> Option<(Id, Option<DataMap>)> {
-    if let Some((tile, tile_entity)) = state
-        .map
-        .tiles
-        .remove(&coord)
-        .zip(state.tile_entities.remove(&coord))
-    {
+    if let Some((tile, tile_entity)) = map.tiles.remove(&coord).zip(tile_entities.remove(&coord)) {
         {
-            let lock = &mut state.map.info.lock().await;
+            let lock = &mut map.info.lock().await;
 
             try_category(resource_man, tile, |item| {
                 if let Data::Inventory(inventory) = lock
@@ -636,7 +748,8 @@ async fn remove_tile(
 async fn insert_new_tile(
     resource_man: Arc<ResourceManager>,
     game: ActorRef<GameSystemMessage>,
-    state: &mut GameSystemState,
+    map: &mut Map,
+    tile_entities: &mut TileEntities,
     coord: TileCoord,
     tile_id: Id,
     data: Option<DataMap>,
@@ -644,7 +757,7 @@ async fn insert_new_tile(
     let mut skip = false;
 
     {
-        let lock = &mut state.map.info.lock().await;
+        let lock = &mut map.info.lock().await;
 
         try_category(&resource_man, tile_id, |item| {
             if let Data::Inventory(inventory) = lock
@@ -665,7 +778,7 @@ async fn insert_new_tile(
         return None;
     }
 
-    let old = remove_tile(&resource_man, state, coord).await;
+    let old = remove_tile(&resource_man, map, tile_entities, coord).await;
 
     if tile_id == resource_man.registry.none {
         return Some(old);
@@ -679,14 +792,14 @@ async fn insert_new_tile(
             .ok()?;
     }
 
-    state.tile_entities.insert(coord, tile_entity);
-    state.map.tiles.insert(coord, tile_id);
+    tile_entities.insert(coord, tile_entity);
+    map.tiles.insert(coord, tile_id);
 
     Some(old)
 }
 
 fn inner_tick(state: &mut GameSystemState) {
-    state.tile_entities.par_iter().for_each(|(_, tile_entity)| {
+    state.tile_entities.iter().for_each(|(_, tile_entity)| {
         if let Err(e) = tile_entity.send_message(TileEntityMsg::Tick {
             tick_count: state.tick_count,
         }) {
@@ -734,19 +847,4 @@ pub fn copy_auxiliary_data(resource_man: &ResourceManager, data: &mut DataMap) -
     }
 
     copied
-}
-
-impl Default for GameSystemState {
-    fn default() -> Self {
-        Self {
-            tick_count: 0,
-            stopped: false,
-
-            map: Map::new_empty("".to_string()),
-            tile_entities: Default::default(),
-
-            undo_steps: Default::default(),
-            transaction_records: Default::default(),
-        }
-    }
 }

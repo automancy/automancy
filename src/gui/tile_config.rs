@@ -3,19 +3,21 @@ use std::time::Instant;
 use ractor::rpc::CallResult;
 use ractor::ActorRef;
 
-use automancy_defs::{colors, coord::TileCoord};
+use automancy_defs::{colors, coord::TileCoord, stack::ItemStack};
 use automancy_defs::{glam::vec2, id::Id};
-use automancy_resources::data::inventory::Inventory;
-use automancy_resources::data::{Data, DataMap};
-use automancy_resources::{data::stack::ItemStack, rhai_ui::RhaiUiUnit};
+use automancy_resources::rhai_ui::RhaiUiUnit;
+use automancy_resources::{
+    data::{Data, DataMap},
+    inventory::Inventory,
+};
 use yakui::{
     column, constrained, row,
     widgets::{Layer, List},
     Constraints,
 };
 
-use crate::tile_entity::TileEntityMsg;
 use crate::GameState;
+use crate::{gui::centered_column, tile_entity::TileEntityMsg};
 
 use super::{
     button, centered_row, info_tip, interactive,
@@ -67,17 +69,15 @@ fn config_direction(state: &GameState, data: &DataMap, tile_entity: ActorRef<Til
 
     centered_row(|| {
         label(
-            state
+            &state
                 .resource_man
-                .gui_str(&state.resource_man.registry.gui_ids.tile_config_direction)
-                .as_str(),
+                .gui_str(&state.resource_man.registry.gui_ids.tile_config_direction),
         );
 
         info_tip(
-            state
+            &state
                 .resource_man
-                .gui_str(&state.resource_man.registry.gui_ids.direction_tip)
-                .as_str(),
+                .gui_str(&state.resource_man.registry.gui_ids.direction_tip),
         );
     });
 
@@ -165,22 +165,22 @@ fn takeable_items(
     let mut dirty = false;
 
     for (id, amount) in buffer.clone().into_inner() {
-        let item = *state.resource_man.registry.items.get(&id).unwrap();
-
         let mut rect = None;
 
         let interact = interactive(|| {
             rect = draw_item(
                 &state.resource_man,
                 || {},
-                ItemStack { item, amount },
+                ItemStack { id, amount },
                 MEDIUM_ICON_SIZE,
                 true,
             );
         });
 
         if interact.clicked {
-            if let Some(amount) = buffer.take(id, amount) {
+            let amount = buffer.take(id, amount);
+
+            if amount > 0 {
                 dirty = true;
                 inventory.add(id, amount);
 
@@ -190,7 +190,7 @@ fn takeable_items(
                         .as_mut()
                         .unwrap()
                         .take_item_animations
-                        .entry(item)
+                        .entry(id)
                         .or_default()
                         .push_back((Instant::now(), rect));
                 }
@@ -284,39 +284,45 @@ fn rhai_ui(
     state: &mut GameState,
     tile_entity: ActorRef<TileEntityMsg>,
     data: &mut DataMap,
-    ui: Vec<RhaiUiUnit>,
+    ui: RhaiUiUnit,
 ) {
-    for ui in ui {
-        match ui {
-            RhaiUiUnit::Label { id } => {
-                label(&state.resource_man.gui_str(&id));
+    match ui {
+        RhaiUiUnit::Label { id } => {
+            label(&state.resource_man.gui_str(&id));
+        }
+        RhaiUiUnit::LabelAmount { amount } => {
+            label(&amount.to_string());
+        }
+        RhaiUiUnit::SliderAmount { id, max } => {
+            let Data::Amount(current_amount) = data.get(&id).cloned().unwrap_or(Data::Amount(0))
+            else {
+                return;
+            };
+
+            let mut new_amount = current_amount;
+
+            // TODO numerical input
+            slider(&mut new_amount, 0..=max, Some(128));
+
+            if new_amount != current_amount {
+                tile_entity
+                    .send_message(TileEntityMsg::SetDataValue(id, Data::Amount(new_amount)))
+                    .unwrap();
             }
-            RhaiUiUnit::LabelAmount { amount } => {
-                label(&amount.to_string());
-            }
-            RhaiUiUnit::SliderAmount { id, max } => {
-                let Data::Amount(current_amount) =
-                    data.get(&id).cloned().unwrap_or(Data::Amount(0))
-                else {
-                    continue;
-                };
-
-                let mut new_amount = current_amount;
-
-                // TODO numerical input
-                slider(&mut new_amount, 0..=max, Some(128));
-
-                if new_amount != current_amount {
-                    tile_entity
-                        .send_message(TileEntityMsg::SetDataValue(id, Data::Amount(new_amount)))
-                        .unwrap();
+        }
+        RhaiUiUnit::Row { e } => {
+            centered_row(|| {
+                for ui in e {
+                    rhai_ui(state, tile_entity.clone(), data, ui);
                 }
-            }
-            RhaiUiUnit::Row { e } => {
-                centered_row(|| {
-                    rhai_ui(state, tile_entity.clone(), data, e);
-                });
-            }
+            });
+        }
+        RhaiUiUnit::Col { e } => {
+            centered_column(|| {
+                for ui in e {
+                    rhai_ui(state, tile_entity.clone(), data, ui);
+                }
+            });
         }
     }
 }
@@ -415,30 +421,18 @@ pub fn tile_config_ui(state: &mut GameState, game_data: &mut DataMap) {
                             {
                                 column(|| {
                                     centered_row(|| {
-                                        label(
-                                            state
-                                                .resource_man
-                                                .gui_str(
-                                                    &state
-                                                        .resource_man
-                                                        .registry
-                                                        .gui_ids
-                                                        .tile_config_script,
-                                                )
-                                                .as_str(),
-                                        );
+                                        label(&state.resource_man.gui_str(
+                                            &state.resource_man.registry.gui_ids.tile_config_script,
+                                        ));
 
                                         info_tip(
-                                            state
-                                                .resource_man
-                                                .gui_str(
-                                                    &state
-                                                        .resource_man
-                                                        .registry
-                                                        .gui_ids
-                                                        .tile_config_script_info,
-                                                )
-                                                .as_str(),
+                                            &state.resource_man.gui_str(
+                                                &state
+                                                    .resource_man
+                                                    .registry
+                                                    .gui_ids
+                                                    .tile_config_script_info,
+                                            ),
                                         );
                                     });
 
@@ -497,16 +491,13 @@ pub fn tile_config_ui(state: &mut GameState, game_data: &mut DataMap) {
                                 column(|| {
                                     row(|| {
                                         label(
-                                            state
-                                                .resource_man
-                                                .gui_str(
-                                                    &state
-                                                        .resource_man
-                                                        .registry
-                                                        .gui_ids
-                                                        .tile_config_item_type,
-                                                )
-                                                .as_str(),
+                                            &state.resource_man.gui_str(
+                                                &state
+                                                    .resource_man
+                                                    .registry
+                                                    .gui_ids
+                                                    .tile_config_item_type,
+                                            ),
                                         );
 
                                         let current_id = data
@@ -514,16 +505,11 @@ pub fn tile_config_ui(state: &mut GameState, game_data: &mut DataMap) {
                                             .cloned()
                                             .and_then(Data::into_id);
 
-                                        if let Some(stack) = current_id
-                                            .and_then(|id| {
-                                                state.resource_man.registry.items.get(&id).cloned()
-                                            })
-                                            .map(|item| ItemStack { item, amount: 0 })
-                                        {
+                                        if let Some(id) = current_id {
                                             draw_item(
                                                 &state.resource_man,
                                                 || {},
-                                                stack,
+                                                ItemStack { id, amount: 0 },
                                                 SMALL_ICON_SIZE,
                                                 true,
                                             );
@@ -546,10 +532,7 @@ pub fn tile_config_ui(state: &mut GameState, game_data: &mut DataMap) {
                                             draw_item(
                                                 &state.resource_man,
                                                 || {},
-                                                ItemStack {
-                                                    item: state.resource_man.registry.items[id],
-                                                    amount: 0,
-                                                },
+                                                ItemStack { id: *id, amount: 0 },
                                                 SMALL_ICON_SIZE,
                                                 true,
                                             );

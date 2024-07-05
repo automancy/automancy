@@ -1,13 +1,52 @@
-use std::fmt::{self, Display, Formatter};
-use std::hash::Hash;
+use std::ops::Deref;
+use std::sync::Arc;
+use std::{fmt::Display, hash::Hash};
 
 use bytemuck::{Pod, Zeroable};
-use flexstr::SharedStr;
-use rhai::INT;
-use serde::de::{Error, Visitor};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 use string_interner::backend::StringBackend;
 use string_interner::{StringInterner, Symbol};
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct SharedStr(Arc<str>);
+
+impl Display for SharedStr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl Default for SharedStr {
+    fn default() -> Self {
+        Self(Arc::from(""))
+    }
+}
+
+impl AsRef<str> for SharedStr {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<&str> for SharedStr {
+    fn from(value: &str) -> Self {
+        SharedStr(Arc::from(value))
+    }
+}
+
+impl From<String> for SharedStr {
+    fn from(value: String) -> Self {
+        SharedStr(Arc::from(value))
+    }
+}
+
+impl Deref for SharedStr {
+    type Target = Arc<str>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 pub type Interner = StringInterner<StringBackend<Id>>;
 
@@ -16,23 +55,14 @@ pub type Interner = StringInterner<StringBackend<Id>>;
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Zeroable, Pod, Serialize, Deserialize,
 )]
 #[serde(transparent)]
-pub struct Id(u64);
+pub struct Id(u32);
 
-impl From<Id> for INT {
-    fn from(value: Id) -> Self {
-        value.0 as INT
-    }
-}
-
-impl From<INT> for Id {
-    fn from(value: INT) -> Self {
-        Self(value as u64)
-    }
-}
+unsafe impl Send for Id {}
+unsafe impl Sync for Id {}
 
 impl Symbol for Id {
     fn try_from_usize(index: usize) -> Option<Self> {
-        Some(Self(index as u64))
+        Some(Self(index as u32))
     }
 
     fn to_usize(self) -> usize {
@@ -40,75 +70,66 @@ impl Symbol for Id {
     }
 }
 
-pub fn id(a: &str, b: &str) -> IdRaw {
-    IdRaw(SharedStr::from_ref(a), SharedStr::from_ref(b))
+impl Id {
+    pub const NO_NAMEPSACE: Option<&'static str> = None;
+
+    pub fn parse(
+        id: &str,
+        interner: &mut Interner,
+        fallback_namespace: Option<impl AsRef<str>>,
+    ) -> Option<Id> {
+        IdRaw::parse(id, fallback_namespace).map(|id| id.to_id(interner))
+    }
+
+    pub fn try_parse(id: &str, interner: &Interner) -> Option<Id> {
+        IdRaw::try_parse(id).and_then(|id| id.try_to_id(interner))
+    }
 }
 
-pub const fn id_static(a: &'static str, b: &'static str) -> IdRaw {
-    IdRaw(SharedStr::from_static(a), SharedStr::from_static(b))
-}
-
-#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct IdRaw(SharedStr, SharedStr);
-
-pub static NONE: IdRaw = id_static("automancy", "none");
+#[derive(Debug, Clone)]
+pub struct IdRaw(SharedStr);
 
 impl Display for IdRaw {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.write_fmt(format_args!("{}:{}", self.0, self.1))
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl Deref for IdRaw {
+    type Target = SharedStr;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl AsRef<str> for IdRaw {
+    fn as_ref(&self) -> &str {
+        self
     }
 }
 
 impl IdRaw {
     pub fn to_id(&self, interner: &mut Interner) -> Id {
-        interner.get_or_intern(self.to_string())
+        interner.get_or_intern(self)
     }
 
-    pub fn parse(s: &str) -> IdRaw {
-        s.split_once(':')
-            .map(|(a, b)| id(a, b))
-            .unwrap_or_else(|| id("automancy", s))
-    }
-}
-
-impl Serialize for IdRaw {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(&self.to_string())
-    }
-}
-
-struct IdRawVisitor;
-
-impl<'de> Visitor<'de> for IdRawVisitor {
-    type Value = IdRaw;
-
-    fn expecting(&self, formatter: &mut Formatter) -> fmt::Result {
-        formatter.write_str("an Id structured as namespace:name")
+    pub fn try_to_id(&self, interner: &Interner) -> Option<Id> {
+        interner.get(self)
     }
 
-    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-    where
-        E: Error,
-    {
-        Ok(IdRaw::parse(v))
+    pub fn new(a: &str, b: &str) -> Self {
+        assert!(!a.is_empty());
+        assert!(!b.is_empty());
+
+        IdRaw(SharedStr::from(format!("{a}:{b}")))
     }
 
-    fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
-    where
-        E: Error,
-    {
-        Ok(IdRaw::parse(&v))
+    pub fn try_parse(s: &str) -> Option<Self> {
+        s.split_once(':').map(|(a, b)| Self::new(a, b))
     }
-}
 
-impl<'de> Deserialize<'de> for IdRaw {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        deserializer.deserialize_str(IdRawVisitor)
+    pub fn parse(s: &str, fallback_namespace: Option<impl AsRef<str>>) -> Option<Self> {
+        Self::try_parse(s).or_else(|| fallback_namespace.map(|v| Self::new(v.as_ref(), s)))
     }
 }

@@ -5,9 +5,10 @@ use automancy_defs::{
     glam::{vec2, vec3},
     id::Id,
     rendering::InstanceData,
+    stack::ItemStack,
 };
 use automancy_resources::data::Data;
-use automancy_resources::{data::stack::ItemStack, types::IconMode};
+use automancy_resources::types::IconMode;
 use winit::keyboard::{Key, NamedKey};
 use yakui::{
     widgets::{Absolute, Layer, Pad},
@@ -100,15 +101,13 @@ fn input_hint(state: &mut GameState) {
     }
 }
 
-fn tile_icon(state: &mut GameState, tile: Id) {
-    let tile_def = &state.resource_man.registry.tiles[&tile];
-
+fn tile_icon(state: &mut GameState, id: Id) {
     pad_y(0.0, PADDING_MEDIUM).show(|| {
         ui_game_object(
             InstanceData::default()
                 .with_light_pos(vec3(0.0, 1.0, 8.0), None)
                 .with_model_matrix(IconMode::Tile.model_matrix()),
-            state.resource_man.tile_model_or_missing(tile_def.model),
+            state.resource_man.tile_model_or_missing(id),
             vec2(LARGE_ICON_SIZE, LARGE_ICON_SIZE),
             Some(IconMode::Tile.world_matrix()),
         );
@@ -171,13 +170,11 @@ pub fn info_ui(state: &mut GameState) {
                             data.get(&state.resource_man.registry.data_ids.buffer)
                         {
                             for (id, amount) in inventory.iter() {
-                                let item = state.resource_man.registry.items.get(id).unwrap();
-
                                 draw_item(
                                     &state.resource_man,
                                     || {},
                                     ItemStack {
-                                        item: *item,
+                                        id: *id,
                                         amount: *amount,
                                     },
                                     SMALL_ICON_SIZE,

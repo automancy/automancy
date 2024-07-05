@@ -63,6 +63,7 @@ impl Widget for HoverWidget {
         }
 
         if let Some(pos) = ctx.input.get_mouse_position(ctx.layout) {
+            let pos = pos + Vec2::new(10.0, 0.0);
             self.pos.set(clamp_percentage_to_viewport(
                 size,
                 pos / ctx.layout.viewport().size(),

@@ -1,7 +1,6 @@
 use std::{cell::Cell, fmt::Debug, ops::RangeInclusive};
 
 use automancy_defs::colors;
-use num::Num;
 use yakui::{
     colored_box, colored_circle, draggable,
     util::widget,
@@ -9,7 +8,7 @@ use yakui::{
     Color, Constraints, Rect, Response, Vec2,
 };
 
-use crate::util::round::Round;
+use crate::util::num::NumTrait;
 
 const TRACK_COLOR: Color = colors::BACKGROUND_2;
 const KNOB_COLOR: Color = colors::ORANGE;
@@ -28,7 +27,7 @@ pub struct Slider<T: Copy> {
     pub step: Option<T>,
 }
 
-impl<T: 'static + Num + Debug + Round + Copy> Slider<T> {
+impl<T: NumTrait> Slider<T> {
     pub fn new(value: T, min: T, max: T) -> Self {
         Slider {
             value,
@@ -55,7 +54,7 @@ pub struct SliderWidget<T: Copy> {
     rect: Cell<Option<Rect>>,
 }
 
-impl<T: 'static + Num + Debug + Round + Copy> Widget for SliderWidget<T> {
+impl<T: NumTrait> Widget for SliderWidget<T> {
     type Props<'a> = Slider<T>;
     type Response = SliderResponse<T>;
 
@@ -145,7 +144,7 @@ impl<T: 'static + Num + Debug + Round + Copy> Widget for SliderWidget<T> {
     }
 }
 
-fn round_to_step<T: Num + Round + Copy>(value: T, step: T) -> T {
+fn round_to_step<T: NumTrait>(value: T, step: T) -> T {
     if step == T::zero() {
         value
     } else {
@@ -153,11 +152,7 @@ fn round_to_step<T: Num + Round + Copy>(value: T, step: T) -> T {
     }
 }
 
-pub fn slider<T: 'static + Num + Debug + Round + Copy>(
-    value: &mut T,
-    range: RangeInclusive<T>,
-    step: Option<T>,
-) {
+pub fn slider<T: NumTrait>(value: &mut T, range: RangeInclusive<T>, step: Option<T>) {
     let mut slider = Slider::new(*value, *range.start(), *range.end());
     slider.step = step;
 

@@ -6,6 +6,7 @@ use automancy_resources::ResourceManager;
 
 pub mod actor;
 pub mod discord;
+pub mod num;
 pub mod round;
 
 pub fn is_research_unlocked(

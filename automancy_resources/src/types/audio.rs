@@ -2,9 +2,7 @@ use std::ffi::OsStr;
 use std::fs::read_dir;
 use std::path::Path;
 
-use automancy_defs::flexstr::ToSharedStr;
 use automancy_defs::kira::sound::static_sound::StaticSoundData;
-use automancy_defs::log;
 
 use crate::{LoadResourceError, ResourceManager, AUDIO_EXT, COULD_NOT_GET_FILE_STEM};
 
@@ -33,7 +31,7 @@ impl ResourceManager {
                         .to_str()
                         .ok_or_else(|| LoadResourceError::OsStringError(file.clone()))?;
 
-                    self.audio.insert(name.to_shared_str(), audio);
+                    self.audio.insert(name.into(), audio);
 
                     log::info!("Registered audio with name {name}");
                 }

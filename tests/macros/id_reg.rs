@@ -4,11 +4,11 @@ use automancy_macros::IdReg;
 #[derive(IdReg)]
 pub struct Foo {
     pub a: Id,
-    #[namespace(core)]
+    #[namespace("core")]
     pub b: Id,
-    #[name(ccccccccccc)]
+    #[name("ccccccccccc")]
     pub c: Id,
-    #[namespace(deez)]
+    #[namespace("deez")]
     #[name("deez/nuts")]
     pub d: Id,
 }

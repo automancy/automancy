@@ -1,13 +1,16 @@
 use automancy_defs::colors::BLACK;
 use yakui::{
     style::TextStyle,
-    widgets::{Pad, Text, TextResponse},
-    Color, Response,
+    widgets::{ConstrainedBox, Pad, Text, TextResponse},
+    Color, Constraints, Response, Vec2,
 };
 
 use crate::SYMBOLS_FONT_KEY;
 
-use super::{HEADING_SIZE, LABEL_SIZE, PADDING_MEDIUM, PADDING_SMALL, SMALL_SIZE};
+use super::{
+    centered_column, centered_row, HEADING_SIZE, LABEL_SIZE, PADDING_MEDIUM, PADDING_SMALL,
+    SMALL_SIZE,
+};
 
 pub fn colored_sized_text(text: &str, color: Color, font_size: f32) -> Text {
     let mut text = Text::with_style(
@@ -70,5 +73,15 @@ pub fn symbol_text(symbol: &str, color: Color) -> Text {
 }
 
 pub fn symbol(symbol: &str, color: Color) {
-    symbol_text(symbol, color).show();
+    ConstrainedBox::new(Constraints::tight(Vec2::new(
+        LABEL_SIZE + PADDING_SMALL * 2.0,
+        LABEL_SIZE + PADDING_SMALL * 2.0,
+    )))
+    .show(|| {
+        centered_row(|| {
+            centered_column(|| {
+                symbol_text(symbol, color).show();
+            });
+        });
+    });
 }

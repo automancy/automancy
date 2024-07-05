@@ -2,57 +2,59 @@ use std::ffi::OsStr;
 use std::fs::read_to_string;
 use std::path::Path;
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
-use automancy_defs::id::{Id, IdRaw};
-use automancy_defs::log;
+use automancy_defs::id::Id;
 
 use crate::{load_recursively, ResourceManager, RON_EXT};
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct CategoryRaw {
-    pub id: IdRaw,
-    pub ord: i64,
-    pub icon: IdRaw,
-    pub item: Option<IdRaw>,
-}
-
-#[derive(Debug, Clone)]
-pub struct Category {
+#[derive(Debug, Clone, Copy)]
+pub struct CategoryDef {
     pub id: Id,
-    pub ord: i64,
+    pub ord: i32,
     pub icon: Id,
     pub item: Option<Id>,
 }
 
+#[derive(Debug, Deserialize)]
+struct Raw {
+    pub id: String,
+    pub ord: i32,
+    pub icon: String,
+    pub item: Option<String>,
+}
+
 impl ResourceManager {
-    fn load_category(&mut self, file: &Path) -> anyhow::Result<()> {
+    fn load_category(&mut self, file: &Path, namespace: &str) -> anyhow::Result<()> {
         log::info!("Loading tag at: {file:?}");
 
-        let category: CategoryRaw = ron::from_str(&read_to_string(file)?)?;
+        let v = ron::from_str::<Raw>(&read_to_string(file)?)?;
 
-        let id = category.id.to_id(&mut self.interner);
-        let ord = category.ord;
-        let icon = category.icon.to_id(&mut self.interner);
-        let item = category.item.map(|v| v.to_id(&mut self.interner));
+        let id = Id::parse(&v.id, &mut self.interner, Some(namespace)).unwrap();
+        let ord = v.ord;
+        let icon = Id::parse(&v.icon, &mut self.interner, Some(namespace)).unwrap();
+        let item = v
+            .item
+            .map(|v| Id::parse(&v, &mut self.interner, Some(namespace)).unwrap());
 
-        let tag = Category {
+        self.registry.categories.insert(
             id,
-            ord,
-            icon,
-            item,
-        };
-
-        self.registry.categories.insert(id, tag);
+            CategoryDef {
+                id,
+                ord,
+                icon,
+                item,
+            },
+        );
 
         Ok(())
     }
 
-    pub fn load_categories(&mut self, dir: &Path) -> anyhow::Result<()> {
+    pub fn load_categories(&mut self, dir: &Path, namespace: &str) -> anyhow::Result<()> {
         let categories = dir.join("categories");
 
         for file in load_recursively(&categories, OsStr::new(RON_EXT)) {
-            self.load_category(&file)?;
+            self.load_category(&file, namespace)?;
         }
 
         Ok(())

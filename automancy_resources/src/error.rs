@@ -1,7 +1,6 @@
 use std::sync::{Arc, RwLock};
 
 use automancy_defs::id::Id;
-use automancy_defs::log;
 
 use crate::{format, ResourceManager};
 
@@ -16,7 +15,7 @@ pub type GameError = (Id, Vec<String>);
 /// Gets the ID of an error along with its arguments and converts it into a human-readable string.
 pub fn error_to_string((id, args): &GameError, resource_man: &ResourceManager) -> String {
     format(
-        resource_man.translates.error[id].as_str(),
+        &resource_man.translates.error[id],
         args.iter()
             .map(String::as_str)
             .collect::<Vec<_>>()
@@ -35,20 +34,20 @@ impl ErrorManager {
         log::error!("ERR: {}", error_to_key(&error, resource_man));
         self.queue
             .write()
-            .expect("Could not write error")
+            .expect("could not write error")
             .push(error);
     }
 
     /// Removes the top error off of the stack and returns it or None if the queue is empty.
     pub fn pop(&self) -> Option<GameError> {
-        self.queue.write().expect("Could not write error").pop()
+        self.queue.write().expect("could not write error").pop()
     }
 
     /// Copies the top error of the queue and returns it, or None if the queue is empty.
     pub fn peek(&self) -> Option<GameError> {
         self.queue
             .read()
-            .expect("Could not read error")
+            .expect("could not read error")
             .last()
             .cloned()
     }

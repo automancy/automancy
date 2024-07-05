@@ -1,11 +1,11 @@
 use rhai::INT;
 
-use crate::data::item::Item;
+use crate::id::Id;
 
 pub type ItemAmount = INT;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct ItemStack {
-    pub item: Item,
+    pub id: Id,
     pub amount: ItemAmount,
 }

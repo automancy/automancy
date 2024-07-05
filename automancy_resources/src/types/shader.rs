@@ -2,9 +2,6 @@ use std::ffi::OsStr;
 use std::fs::{read_dir, read_to_string};
 use std::path::Path;
 
-use automancy_defs::flexstr::ToSharedStr;
-use automancy_defs::log;
-
 use crate::{LoadResourceError, ResourceManager, COULD_NOT_GET_FILE_STEM, SHADER_EXT};
 
 impl ResourceManager {
@@ -19,20 +16,17 @@ impl ResourceManager {
             {
                 log::info!("Loading shader at {file:?}");
 
+                let name = file
+                    .file_stem()
+                    .ok_or_else(|| {
+                        LoadResourceError::InvalidFileError(file.clone(), COULD_NOT_GET_FILE_STEM)
+                    })?
+                    .to_str()
+                    .ok_or_else(|| LoadResourceError::OsStringError(file.clone()))?
+                    .into();
+
                 if let Ok(shader) = read_to_string(&file) {
-                    self.shaders.insert(
-                        file.file_stem()
-                            .ok_or_else(|| {
-                                LoadResourceError::InvalidFileError(
-                                    file.clone(),
-                                    COULD_NOT_GET_FILE_STEM,
-                                )
-                            })?
-                            .to_str()
-                            .ok_or_else(|| LoadResourceError::OsStringError(file.clone()))?
-                            .to_shared_str(),
-                        shader,
-                    );
+                    self.shaders.insert(name, shader.into());
                 }
             }
         }

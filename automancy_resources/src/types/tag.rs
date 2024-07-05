@@ -2,28 +2,22 @@ use std::ffi::OsStr;
 use std::fs::read_to_string;
 use std::path::Path;
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
-use automancy_defs::id::{Id, IdRaw};
-use automancy_defs::log;
+use automancy_defs::{id::Id, parse_ids};
+
 use hashbrown::HashSet;
 
 use crate::registry::Registry;
 use crate::{load_recursively, ResourceManager, RON_EXT};
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct TagRaw {
-    pub id: IdRaw,
-    pub entries: Vec<IdRaw>,
-}
-
 #[derive(Debug, Clone)]
-pub struct Tag {
+pub struct TagDef {
     pub id: Id,
     pub entries: HashSet<Id>,
 }
 
-impl Tag {
+impl TagDef {
     pub fn of(&self, registry: &Registry, id: Id) -> bool {
         if self.id == registry.any {
             true
@@ -33,33 +27,36 @@ impl Tag {
     }
 }
 
+#[derive(Debug, Deserialize)]
+struct Raw {
+    pub id: String,
+    pub entries: Vec<String>,
+}
+
 impl ResourceManager {
-    fn load_tag(&mut self, file: &Path) -> anyhow::Result<()> {
+    fn load_tag(&mut self, file: &Path, namespace: &str) -> anyhow::Result<()> {
         log::info!("Loading tag at: {file:?}");
 
-        let tag: TagRaw = ron::from_str(&read_to_string(file)?)?;
+        let v = ron::from_str::<Raw>(&read_to_string(file)?)?;
 
-        let id = tag.id.to_id(&mut self.interner);
+        let id = Id::parse(&v.id, &mut self.interner, Some(namespace)).unwrap();
 
-        let tag = Tag {
+        self.registry.tags.insert(
             id,
-            entries: tag
-                .entries
-                .into_iter()
-                .map(|id| id.to_id(&mut self.interner))
-                .collect(),
-        };
-
-        self.registry.tags.insert(id, tag);
+            TagDef {
+                id,
+                entries: parse_ids(v.entries.into_iter(), &mut self.interner, Some(namespace)),
+            },
+        );
 
         Ok(())
     }
 
-    pub fn load_tags(&mut self, dir: &Path) -> anyhow::Result<()> {
+    pub fn load_tags(&mut self, dir: &Path, namespace: &str) -> anyhow::Result<()> {
         let tags = dir.join("tags");
 
         for file in load_recursively(&tags, OsStr::new(RON_EXT)) {
-            self.load_tag(&file)?;
+            self.load_tag(&file, namespace)?;
         }
 
         Ok(())

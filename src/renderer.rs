@@ -9,7 +9,6 @@ use std::{borrow::Cow, time::Duration};
 use arboard::{Clipboard, ImageData};
 use hashbrown::HashMap;
 use image::{EncodableLayout, RgbaImage};
-use num::PrimInt;
 use tokio::sync::{oneshot, Mutex};
 use wgpu::{
     BufferAddress, BufferDescriptor, BufferUsages, Color, CommandEncoderDescriptor,
@@ -35,7 +34,6 @@ use automancy_defs::{
     },
     window,
 };
-use automancy_resources::data::item::Item;
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::ResourceManager;
 use yakui::Rect;
@@ -77,7 +75,7 @@ pub struct Renderer {
     pub extra_instances: Vec<(InstanceData, Id, ())>,
     pub overlay_instances: Vec<(InstanceData, Id, ())>,
 
-    pub take_item_animations: HashMap<Item, VecDeque<(Instant, Rect)>>,
+    pub take_item_animations: HashMap<Id, VecDeque<(Instant, Rect)>>,
 
     last_update: Option<Instant>,
     last_game_data: Option<IndirectInstanceDrawData<()>>,
@@ -262,7 +260,7 @@ impl Renderer {
                                     * Matrix4::from_scale(vec3(0.3, 0.3, 0.3)),
                             )
                             .with_light_pos(camera_pos_float, None);
-                        let model = state.resource_man.item_model_or_missing(stack.item.model);
+                        let model = state.resource_man.item_model_or_missing(stack.id);
 
                         extra_instances.push((instance, model, ()));
                     }
@@ -280,6 +278,7 @@ impl Renderer {
                         .with_model_matrix(make_line(
                             world_coord,
                             HEX_GRID_LAYOUT.hex_to_world_pos(**link),
+                            LINE_DEPTH,
                         )),
                     state.resource_man.registry.model_ids.cube1x1,
                     (),
@@ -294,7 +293,7 @@ impl Renderer {
                             Matrix4::from_translation(world_coord.extend(0.1))
                                 * Matrix4::from_scale(vec3(0.25, 0.25, 1.0)),
                         ),
-                    state.resource_man.registry.items[id].model,
+                    state.resource_man.item_model_or_missing(*id),
                     (),
                 ))
             }
@@ -371,7 +370,7 @@ impl Renderer {
                                 state.resource_man.registry.none,
                                 RenderUnit {
                                     instance: InstanceData::default().with_model_matrix(
-                                        Matrix4::from_translation(pos.extend(FAR as Float)),
+                                        Matrix4::from_translation(pos.extend(FAR)),
                                     ),
                                     model_override: None,
                                 },
@@ -428,13 +427,7 @@ impl Renderer {
                             unit.instance = unit.instance.with_light_pos(camera_pos_float, None);
                         }
 
-                        let model = state
-                            .resource_man
-                            .registry
-                            .tiles
-                            .get(&id)
-                            .map(|v| v.model)
-                            .unwrap_or(state.resource_man.registry.model_ids.missing);
+                        let model = state.resource_man.tile_model_or_missing(id);
 
                         let model = unit.model_override.unwrap_or(model);
 
@@ -1109,8 +1102,8 @@ impl Renderer {
             render_pass.draw(0..3, 0..1)
         }
 
-        fn size_align<T: PrimInt>(size: T, alignment: T) -> T {
-            ((size + alignment - T::one()) / alignment) * alignment
+        fn size_align(size: u32, alignment: u32) -> u32 {
+            ((size + alignment - 1) / alignment) * alignment
         }
 
         let block_size = output.texture.format().block_copy_size(None).unwrap();
@@ -1161,9 +1154,9 @@ impl Renderer {
             let buffer = renderer.gpu.device.create_buffer(&BufferDescriptor {
                 label: Some("Screenshot Buffer"),
                 size: size_align(
-                    (padded_width * buffer_dim.height) as BufferAddress,
-                    COPY_BUFFER_ALIGNMENT,
-                ),
+                    padded_width * buffer_dim.height,
+                    COPY_BUFFER_ALIGNMENT as u32,
+                ) as BufferAddress,
                 usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             });

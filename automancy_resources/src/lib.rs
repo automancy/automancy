@@ -7,27 +7,33 @@ use std::sync::{Arc, RwLock};
 use std::time::SystemTime;
 
 use hashbrown::HashMap;
-use registry::{KeyIds, RenderIds};
 use rhai::{CallFnOptions, Dynamic, Engine, Scope, AST};
 use thiserror::Error;
+use types::item::ItemDef;
 use walkdir::WalkDir;
 
-use automancy_defs::chrono::{DateTime, Local};
-use automancy_defs::flexstr::SharedStr;
-use automancy_defs::id::{id_static, Id, Interner};
 use automancy_defs::kira::sound::static_sound::StaticSoundData;
 use automancy_defs::kira::track::TrackHandle;
+use automancy_defs::log;
 use automancy_defs::rendering::{Animation, Mesh};
-use automancy_defs::{id, log};
+use automancy_defs::{
+    chrono::{DateTime, Local},
+    id::SharedStr,
+};
+use automancy_defs::{
+    id::{Id, IdRaw, Interner},
+    stack::ItemStack,
+};
 
 use crate::error::ErrorManager;
-use crate::registry::{DataIds, ErrorIds, GuiIds, ModelIds, Registry};
+use crate::registry::{DataIds, ErrorIds, GuiIds, KeyIds, ModelIds, Registry};
 use crate::types::font::Font;
 use crate::types::model::IndexRange;
-use crate::types::translate::Translate;
+use crate::types::translate::TranslateDef;
 
 pub mod data;
 pub mod error;
+pub mod inventory;
 
 pub mod registry;
 
@@ -35,10 +41,10 @@ pub mod types;
 
 pub mod rhai_coord;
 pub mod rhai_data;
-pub mod rhai_functions;
 pub mod rhai_resources;
 pub mod rhai_tile;
 pub mod rhai_ui;
+pub mod rhai_utils;
 
 static COULD_NOT_GET_FILE_STEM: &str = "could not get file stem";
 
@@ -80,14 +86,14 @@ pub(crate) fn load_recursively(path: &Path, extension: &OsStr) -> Vec<PathBuf> {
         .collect()
 }
 
-pub const RESOURCES_PATH: &str = "resources";
+pub static RESOURCES_PATH: &str = "resources";
 
-pub const FONT_EXT: [&str; 2] = ["ttf", "otf"];
-pub const RON_EXT: &str = "ron";
-pub const AUDIO_EXT: &str = "ogg";
-pub const FUNCTION_EXT: &str = "rhai";
-pub const SHADER_EXT: &str = "wgsl";
-pub const IMAGE_EXT: &str = "png";
+pub static FONT_EXT: [&str; 2] = ["ttf", "otf"];
+pub static RON_EXT: &str = "ron";
+pub static AUDIO_EXT: &str = "ogg";
+pub static FUNCTION_EXT: &str = "rhai";
+pub static SHADER_EXT: &str = "wgsl";
+pub static IMAGE_EXT: &str = "png";
 
 /// TODO set of extensions
 
@@ -106,9 +112,9 @@ pub struct ResourceManager {
 
     pub registry: Registry,
 
-    pub translates: Translate,
-    pub audio: HashMap<SharedStr, StaticSoundData>,
-    pub shaders: HashMap<SharedStr, String>,
+    pub translates: TranslateDef,
+    pub audio: HashMap<String, StaticSoundData>,
+    pub shaders: HashMap<String, SharedStr>,
     pub functions: HashMap<Id, (AST, Scope<'static>, String)>,
     pub fonts: BTreeMap<String, Font>, // yes this does need to be a BTreeMap
 
@@ -128,14 +134,14 @@ impl Debug for ResourceManager {
 impl ResourceManager {
     pub fn new(track: TrackHandle) -> Self {
         let mut interner = Interner::new();
-        let none = id::NONE.to_id(&mut interner);
-        let any = id_static("automancy", "#any").to_id(&mut interner);
+        let none = IdRaw::new("core", "none").to_id(&mut interner);
+        let any = IdRaw::new("core", "#any").to_id(&mut interner);
 
         let mut engine = Engine::new();
         engine.set_max_expr_depths(0, 0);
         engine.set_fast_operators(false);
 
-        rhai_functions::register_functions(&mut engine);
+        rhai_utils::register_functions(&mut engine);
         rhai_coord::register_coord_stuff(&mut engine);
         rhai_data::register_data_stuff(&mut engine);
         rhai_resources::register_resources(&mut engine);
@@ -147,7 +153,6 @@ impl ResourceManager {
         let gui_ids = GuiIds::new(&mut interner);
         let key_ids = KeyIds::new(&mut interner);
         let err_ids = ErrorIds::new(&mut interner);
-        let render_ids = RenderIds::new(&mut interner);
 
         Self {
             interner,
@@ -173,7 +178,6 @@ impl ResourceManager {
                 gui_ids,
                 err_ids,
                 key_ids,
-                render_ids,
             },
 
             translates: Default::default(),
@@ -189,88 +193,6 @@ impl ResourceManager {
             all_models: Default::default(),
         }
     }
-
-    pub fn item_name(&self, id: &Id) -> SharedStr {
-        match self.translates.items.get(id) {
-            Some(name) => name.clone(),
-            None => self.translates.unnamed.clone(),
-        }
-    }
-
-    pub fn try_item_name(&self, id: Option<&Id>) -> SharedStr {
-        if let Some(id) = id {
-            self.item_name(id)
-        } else {
-            self.translates.none.clone()
-        }
-    }
-
-    pub fn script_name(&self, id: &Id) -> SharedStr {
-        match self.translates.scripts.get(id) {
-            Some(name) => name.clone(),
-            None => self.translates.unnamed.clone(),
-        }
-    }
-
-    pub fn try_script_name(&self, id: Option<&Id>) -> SharedStr {
-        if let Some(id) = id {
-            self.item_name(id)
-        } else {
-            self.translates.none.clone()
-        }
-    }
-
-    pub fn tile_name(&self, id: &Id) -> SharedStr {
-        match self.translates.tiles.get(id) {
-            Some(name) => name.clone(),
-            None => self.translates.unnamed.clone(),
-        }
-    }
-
-    pub fn try_tile_name(&self, id: Option<&Id>) -> SharedStr {
-        if let Some(id) = id {
-            self.tile_name(id)
-        } else {
-            self.translates.none.clone()
-        }
-    }
-
-    pub fn category_name(&self, id: &Id) -> SharedStr {
-        match self.translates.categories.get(id) {
-            Some(name) => name.clone(),
-            None => self.translates.unnamed.clone(),
-        }
-    }
-
-    pub fn try_category_name(&self, id: Option<&Id>) -> SharedStr {
-        if let Some(id) = id {
-            self.category_name(id)
-        } else {
-            self.translates.none.clone()
-        }
-    }
-
-    pub fn gui_str(&self, id: &Id) -> SharedStr {
-        match self.translates.gui.get(id) {
-            Some(name) => name.clone(),
-            None => self.translates.unnamed.clone(),
-        }
-    }
-
-    pub fn research_str(&self, id: &Id) -> SharedStr {
-        match self.translates.research.get(id) {
-            Some(name) => name.clone(),
-            None => self.translates.unnamed.clone(),
-        }
-    }
-
-    pub fn try_research_str(&self, id: Option<&Id>) -> SharedStr {
-        if let Some(id) = id {
-            self.research_str(id)
-        } else {
-            self.translates.none.clone()
-        }
-    }
 }
 
 pub fn rhai_call_options(state: &mut Dynamic) -> CallFnOptions {
@@ -280,11 +202,61 @@ pub fn rhai_call_options(state: &mut Dynamic) -> CallFnOptions {
         .bind_this_ptr(state)
 }
 
-pub fn rhai_log_err(function_id: &str, err: &rhai::EvalAltResult) {
+pub fn rhai_log_err(called_func: &str, function_id: &str, err: &rhai::EvalAltResult) {
     match err {
-        rhai::EvalAltResult::ErrorFunctionNotFound(..) => {}
+        rhai::EvalAltResult::ErrorFunctionNotFound(name, ..) => {
+            if name != called_func {
+                log::error!("In {function_id}: {err}");
+            }
+        }
         _ => {
             log::error!("In {function_id}: {err}");
         }
     }
 }
+
+pub fn item_match(resource_man: &ResourceManager, id: Id, other: Id) -> bool {
+    if let Some(tag) = resource_man.registry.tags.get(&other) {
+        return tag.of(&resource_man.registry, id);
+    }
+
+    if id == other {
+        return true;
+    }
+
+    false
+}
+
+pub fn item_matches(
+    resource_man: &ResourceManager,
+    id: Id,
+    mut others: impl Iterator<Item = ItemDef>,
+) -> Option<ItemDef> {
+    others.find(|&other| item_match(resource_man, id, other.id))
+}
+
+pub fn item_stack_matches(
+    resource_man: &ResourceManager,
+    id: Id,
+    mut others: impl Iterator<Item = ItemStack>,
+) -> Option<ItemStack> {
+    others.find(|&other| item_match(resource_man, id, other.id))
+}
+
+/*
+pub fn item_match_str(resource_man: &ResourceManager, id: Id, other: &str) -> bool {
+    if let Some(other) = resource_man.interner.get(other) {
+        item_match(resource_man, id, other)
+    } else {
+        false
+    }
+}
+
+pub fn rhai_item_match_str(id: Id, other: ImmutableString) -> bool {
+    item_match_str(
+        RESOURCE_MAN.read().unwrap().as_ref().unwrap(),
+        id,
+        other.as_str(),
+    )
+}
+ */

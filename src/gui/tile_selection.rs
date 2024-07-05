@@ -117,8 +117,7 @@ fn draw_tile_selection(
 
         let active = is_default_tile || has_item;
 
-        let tile = state.resource_man.registry.tiles.get(id).unwrap();
-        let model = state.resource_man.tile_model_or_missing(tile.model);
+        let model = state.resource_man.tile_model_or_missing(*id);
 
         let hover_anim_active = use_state(|| false);
 
@@ -265,16 +264,13 @@ pub fn tile_selections(
                             .and_then(|id| state.resource_man.registry.categories[&id].item)
                         {
                             label(&format(
-                                state
-                                    .resource_man
-                                    .gui_str(
-                                        &state
-                                            .resource_man
-                                            .registry
-                                            .gui_ids
-                                            .lbl_cannot_place_missing_item,
-                                    )
-                                    .as_str(),
+                                &state.resource_man.gui_str(
+                                    &state
+                                        .resource_man
+                                        .registry
+                                        .gui_ids
+                                        .lbl_cannot_place_missing_item,
+                                ),
                                 &[&state.resource_man.item_name(&item)],
                             ));
                         };

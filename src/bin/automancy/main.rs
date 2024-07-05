@@ -50,7 +50,7 @@ use automancy_defs::glam::uvec2;
 use automancy_defs::kira::manager::{AudioManager, AudioManagerSettings};
 use automancy_defs::kira::track::{TrackBuilder, TrackHandle};
 use automancy_defs::kira::tween::Tween;
-use automancy_defs::log;
+
 use automancy_defs::rendering::Vertex;
 use automancy_resources::{ResourceManager, RESOURCES_PATH, RESOURCE_MAN};
 use yakui::paint::Texture;
@@ -63,39 +63,64 @@ fn load_resources(track: TrackHandle) -> (Arc<ResourceManager>, Vec<Vertex>, Vec
         .expect("The resources folder doesn't exist- this is very wrong")
         .flatten()
         .map(|v| v.path())
+        .filter(|v| v.is_dir())
         .for_each(|dir| {
-            let namespace = dir.file_name().unwrap().to_str().unwrap();
+            let namespace = dir.file_name().unwrap().to_str().unwrap().trim();
             log::info!("Loading namespace {namespace}...");
 
             resource_man
-                .load_models(&dir)
+                .load_models(&dir, namespace)
                 .expect("Error loading models");
+
             resource_man.load_audio(&dir).expect("Error loading audio");
-            resource_man.load_tiles(&dir).expect("Error loading tiles");
-            resource_man.load_items(&dir).expect("Error loading items");
-            resource_man.load_tags(&dir).expect("Error loading tags");
+
             resource_man
-                .load_categories(&dir)
+                .load_tiles(&dir, namespace)
+                .expect("Error loading tiles");
+
+            resource_man
+                .load_items(&dir, namespace)
+                .expect("Error loading items");
+
+            resource_man
+                .load_tags(&dir, namespace)
+                .expect("Error loading tags");
+            resource_man
+                .load_categories(&dir, namespace)
                 .expect("Error loading categories");
+
             resource_man
-                .load_scripts(&dir)
+                .load_scripts(&dir, namespace)
                 .expect("Error loading scripts");
+
             resource_man
-                .load_translates(&dir)
+                .load_translates(&dir, namespace)
                 .expect("Error loading translates");
+
             resource_man
                 .load_shaders(&dir)
                 .expect("Error loading shaders");
+
             resource_man.load_fonts(&dir).expect("Error loading fonts");
+
             resource_man
-                .load_functions(&dir)
+                .load_functions(&dir, namespace)
                 .expect("Error loading functions");
+
             resource_man
-                .load_researches(&dir)
+                .load_researches(&dir, namespace)
                 .expect("Error loading researches");
 
             log::info!("Loaded namespace {namespace}.");
         });
+
+    resource_man
+        .engine
+        .definitions()
+        .with_headers(true)
+        .include_standard_packages(false)
+        .write_to_dir("rhai")
+        .unwrap();
 
     resource_man.compile_researches();
     resource_man.ordered_tiles();
@@ -368,7 +393,7 @@ impl ApplicationHandler for Automancy {
 }
 
 fn main() -> anyhow::Result<()> {
-    env::set_var("RUST_BACKTRACE", "1");
+    env::set_var("RUST_BACKTRACE", "full");
 
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
@@ -500,14 +525,7 @@ fn main() -> anyhow::Result<()> {
     };
 
     // load the main menu
-    state
-        .tokio
-        .block_on(load_map(
-            &state.game,
-            &mut state.loop_store,
-            MAIN_MENU.to_string(),
-        ))
-        .unwrap();
+    load_map(&mut state, MAIN_MENU.to_string(), false);
     state.loop_store.frame_start = Some(Instant::now());
 
     let mut automancy = Automancy {

@@ -2,34 +2,22 @@ use std::ffi::OsStr;
 use std::fs::read_to_string;
 use std::path::Path;
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
-use automancy_defs::graph::visit::IntoNodeReferences;
-use automancy_defs::id::{Id, IdRaw};
-use automancy_defs::log;
+use automancy_defs::{
+    graph::visit::IntoNodeReferences,
+    parse_ids,
+    stack::{ItemAmount, ItemStack},
+};
+use automancy_defs::{id::Id, parse_item_stacks};
 
-use crate::data::stack::{ItemAmount, ItemStack};
 use crate::data::DataMapRaw;
 use crate::types::function::RhaiDataMap;
 use crate::types::IconMode;
-use crate::{load_recursively, ResourceError, ResourceManager, RON_EXT};
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct ResearchRaw {
-    id: IdRaw,
-    icon: IdRaw,
-    icon_mode: IconMode,
-    unlocks: Vec<IdRaw>,
-    depends_on: Option<IdRaw>,
-    name: IdRaw,
-    description: IdRaw,
-    completed_description: IdRaw,
-    required_items: Option<Vec<(IdRaw, ItemAmount)>>,
-    attached_puzzle: Option<(IdRaw, DataMapRaw)>,
-}
+use crate::{load_recursively, ResourceManager, RON_EXT};
 
 #[derive(Debug, Clone)]
-pub struct Research {
+pub struct ResearchDef {
     pub id: Id,
     pub icon: Id,
     pub icon_mode: IconMode,
@@ -42,50 +30,62 @@ pub struct Research {
     pub attached_puzzle: Option<(Id, RhaiDataMap)>,
 }
 
+#[derive(Debug, Deserialize)]
+struct Raw {
+    id: String,
+    icon: String,
+    icon_mode: IconMode,
+    unlocks: Vec<String>,
+    depends_on: Option<String>,
+    name: String,
+    description: String,
+    completed_description: String,
+    required_items: Option<Vec<(String, ItemAmount)>>,
+    attached_puzzle: Option<(String, DataMapRaw)>,
+}
+
 impl ResourceManager {
-    fn load_research(&mut self, file: &Path) -> anyhow::Result<()> {
+    fn load_research(&mut self, file: &Path, namespace: &str) -> anyhow::Result<()> {
         log::info!("Loading research entry at: {file:?}");
 
-        let research: ResearchRaw = ron::from_str(&read_to_string(file)?)?;
+        let v = ron::from_str::<Raw>(&read_to_string(file)?)?;
 
-        let id = research.id.to_id(&mut self.interner);
-        let unlocks = research
-            .unlocks
-            .into_iter()
-            .map(|id| id.to_id(&mut self.interner))
-            .collect();
-        let icon = research.icon.to_id(&mut self.interner);
-        let depends_on = research.depends_on.map(|id| id.to_id(&mut self.interner));
-        let name = research.name.to_id(&mut self.interner);
-        let description = research.description.to_id(&mut self.interner);
-        let completed_description = research.completed_description.to_id(&mut self.interner);
-        let required_items = match research.required_items.map(|v| {
-            v.into_iter()
-                .map(|(id, amount)| {
-                    Ok(ItemStack {
-                        item: *self
-                            .registry
-                            .items
-                            .get(&id.to_id(&mut self.interner))
-                            .ok_or(ResourceError::ItemNotFound)?,
-                        amount,
-                    })
-                })
-                .collect::<Result<Vec<_>, _>>()
-        }) {
-            Some(Err(e)) => return Err(e),
-            Some(Ok(v)) => Some(v),
-            _ => None,
-        };
-        let attached_puzzle = research.attached_puzzle.map(|(id, data)| {
+        let id = Id::parse(&v.id, &mut self.interner, Some(namespace)).unwrap();
+
+        let unlocks = parse_ids(v.unlocks.into_iter(), &mut self.interner, Some(namespace));
+
+        let icon = Id::parse(&v.icon, &mut self.interner, Some(namespace)).unwrap();
+
+        let depends_on = v
+            .depends_on
+            .map(|v| Id::parse(&v, &mut self.interner, Some(namespace)).unwrap());
+
+        let name = Id::parse(&v.name, &mut self.interner, Some(namespace)).unwrap();
+
+        let description = Id::parse(&v.description, &mut self.interner, Some(namespace)).unwrap();
+
+        let completed_description = Id::parse(
+            &v.completed_description,
+            &mut self.interner,
+            Some(namespace),
+        )
+        .unwrap();
+
+        let required_items = v
+            .required_items
+            .map(|v| parse_item_stacks(v.into_iter(), &mut self.interner, Some(namespace)));
+
+        let attached_puzzle = v.attached_puzzle.map(|(id, data)| {
             (
-                id.to_id(&mut self.interner),
-                RhaiDataMap::from_data_map(data.intern_to_data(&mut self.interner)),
+                Id::parse(&id, &mut self.interner, Some(namespace)).unwrap(),
+                RhaiDataMap::from_data_map(
+                    data.intern_to_data(&mut self.interner, Some(namespace)),
+                ),
             )
         });
-        let icon_mode = research.icon_mode;
+        let icon_mode = v.icon_mode;
 
-        let index = self.registry.researches.add_node(Research {
+        let index = self.registry.researches.add_node(ResearchDef {
             id,
             unlocks,
             depends_on,
@@ -97,6 +97,7 @@ impl ResourceManager {
             attached_puzzle,
             icon_mode,
         });
+
         self.registry.researches_id_map.insert(id, index);
 
         for unlock in &self.registry.researches.node_weight(index).unwrap().unlocks {
@@ -117,24 +118,24 @@ impl ResourceManager {
         Ok(())
     }
 
-    pub fn load_researches(&mut self, dir: &Path) -> anyhow::Result<()> {
+    pub fn load_researches(&mut self, dir: &Path, namespace: &str) -> anyhow::Result<()> {
         let items = dir.join("researches");
 
         for file in load_recursively(&items, OsStr::new(RON_EXT)) {
-            self.load_research(&file)?;
+            self.load_research(&file, namespace)?;
         }
 
         Ok(())
     }
 
-    pub fn get_research(&self, id: Id) -> Option<&Research> {
+    pub fn get_research(&self, id: Id) -> Option<&ResearchDef> {
         self.registry
             .researches_id_map
             .get(&id)
             .and_then(|i| self.registry.researches.node_weight(*i))
     }
 
-    pub fn get_research_by_unlock(&self, id: Id) -> Option<&Research> {
+    pub fn get_research_by_unlock(&self, id: Id) -> Option<&ResearchDef> {
         self.registry
             .researches_unlock_map
             .get(&id)

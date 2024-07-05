@@ -11,13 +11,13 @@ use winit::{event_loop::ActiveEventLoop, window::Window};
 use yakui_wgpu::YakuiWgpu;
 use yakui_winit::YakuiWinit;
 
-use automancy_defs::id::Id;
 use automancy_defs::math::Vec2;
 use automancy_defs::math::{Float, Matrix4, FAR, HEX_GRID_LAYOUT};
 use automancy_defs::rendering::{make_line, InstanceData};
 use automancy_defs::{colors, math, window};
 use automancy_defs::{coord::TileCoord, glam::vec2};
 use automancy_defs::{glam::vec3, log};
+use automancy_defs::{id::Id, rendering::LINE_DEPTH};
 use automancy_resources::data::Data;
 use automancy_resources::data::DataMap;
 use automancy_resources::ResourceManager;
@@ -333,11 +333,7 @@ pub fn render_ui(
                         state.camera.get_pos(),
                     );
 
-                    if let Some(tile_def) = state
-                        .gui_state
-                        .selected_tile_id
-                        .and_then(|id| state.resource_man.registry.tiles.get(&id))
-                    {
+                    if let Some(id) = state.gui_state.selected_tile_id {
                         state.renderer.as_mut().unwrap().overlay_instances.push((
                             InstanceData::default()
                                 .with_alpha(0.6)
@@ -345,21 +341,22 @@ pub fn render_ui(
                                 .with_model_matrix(Matrix4::from_translation(vec3(
                                     cursor_pos.x as Float,
                                     cursor_pos.y as Float,
-                                    FAR as Float,
+                                    FAR,
                                 ))),
-                            state.resource_man.tile_model_or_missing(tile_def.model),
+                            state.resource_man.tile_model_or_missing(id),
                             (),
                         ))
                     }
 
                     if let Some(coord) = state.gui_state.linking_tile {
-                        state.renderer.as_mut().unwrap().extra_instances.push((
+                        state.renderer.as_mut().unwrap().overlay_instances.push((
                             InstanceData::default()
                                 .with_color_offset(colors::RED.to_linear())
                                 .with_light_pos(state.camera.get_pos().as_vec3(), None)
                                 .with_model_matrix(make_line(
                                     HEX_GRID_LAYOUT.hex_to_world_pos(*coord),
                                     cursor_pos.truncate().as_vec2(),
+                                    FAR,
                                 )),
                             state.resource_man.registry.model_ids.cube1x1,
                             (),
@@ -387,6 +384,7 @@ pub fn render_ui(
                                         HEX_GRID_LAYOUT.hex_to_world_pos(*state.camera.pointing_at),
                                         HEX_GRID_LAYOUT
                                             .hex_to_world_pos(*(state.camera.pointing_at + dir)),
+                                        LINE_DEPTH,
                                     )),
                                 state.resource_man.registry.model_ids.cube1x1,
                                 (),
@@ -437,13 +435,14 @@ pub fn render_ui(
 
     if let Some(start) = state.gui_state.paste_from {
         if start != state.camera.pointing_at {
-            state.renderer.as_mut().unwrap().extra_instances.push((
+            state.renderer.as_mut().unwrap().overlay_instances.push((
                 InstanceData::default()
                     .with_color_offset(colors::LIGHT_BLUE.to_linear())
                     .with_light_pos(state.camera.get_pos().as_vec3(), None)
                     .with_model_matrix(make_line(
                         HEX_GRID_LAYOUT.hex_to_world_pos(*start),
                         HEX_GRID_LAYOUT.hex_to_world_pos(*state.camera.pointing_at),
+                        FAR,
                     )),
                 state.resource_man.registry.model_ids.cube1x1,
                 (),
@@ -456,7 +455,7 @@ pub fn render_ui(
             let coord = *coord + diff;
             let p = HEX_GRID_LAYOUT.hex_to_world_pos(*coord);
 
-            let mut model_matrix = Matrix4::from_translation(vec3(p.x, p.y, FAR as Float));
+            let mut model_matrix = Matrix4::from_translation(vec3(p.x, p.y, FAR));
 
             if let Some(data) = data {
                 let rotate = Matrix4::from_rotation_z(
@@ -480,9 +479,7 @@ pub fn render_ui(
                     .with_alpha(0.5)
                     .with_light_pos(state.camera.get_pos().as_vec3(), None)
                     .with_model_matrix(model_matrix),
-                state
-                    .resource_man
-                    .tile_model_or_missing(state.resource_man.registry.tiles[id].model),
+                state.resource_man.tile_model_or_missing(*id),
                 (),
             ));
         }

@@ -1,8 +1,7 @@
 use std::mem;
 
-use rhai::Dynamic;
+use rhai::{Array, Dynamic};
 
-use automancy_defs::graph::visit::Topo;
 use automancy_defs::hexx::{HexLayout, HexOrientation};
 use automancy_defs::id::Id;
 use automancy_defs::math;
@@ -12,7 +11,7 @@ use automancy_defs::{
     glam::{dvec3, vec3, Vec2},
 };
 use automancy_defs::{coord::TileCoord, glam::vec2};
-use automancy_resources::data::stack::ItemStack;
+use automancy_defs::{graph::visit::Topo, stack::ItemStack};
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::types::function::RhaiDataMap;
 use automancy_resources::types::IconMode;
@@ -50,10 +49,9 @@ fn hex_to_board_pixels(coord: TileCoord) -> Vec2 {
 
 fn player_inventory(state: &mut GameState, game_data: &mut DataMap) {
     heading(
-        state
+        &state
             .resource_man
-            .gui_str(&state.resource_man.registry.gui_ids.player_inventory_title)
-            .as_str(),
+            .gui_str(&state.resource_man.registry.gui_ids.player_inventory_title),
     );
 
     let Some(Data::Inventory(inventory)) =
@@ -68,25 +66,23 @@ fn player_inventory(state: &mut GameState, game_data: &mut DataMap) {
                 let amount = *amount;
 
                 if amount != 0 {
-                    if let Some(item) = state.resource_man.registry.items.get(id).cloned() {
-                        let rect = draw_item(
-                            &state.resource_man,
-                            || {},
-                            ItemStack { item, amount },
-                            MEDIUM_ICON_SIZE,
-                            true,
-                        );
+                    let rect = draw_item(
+                        &state.resource_man,
+                        || {},
+                        ItemStack { id: *id, amount },
+                        MEDIUM_ICON_SIZE,
+                        true,
+                    );
 
-                        if let Some(rect) = rect {
-                            take_item_animation(
-                                state,
-                                item,
-                                Rect::from_pos_size(
-                                    rect.pos(),
-                                    vec2(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE),
-                                ),
-                            );
-                        }
+                    if let Some(rect) = rect {
+                        take_item_animation(
+                            state,
+                            *id,
+                            Rect::from_pos_size(
+                                rect.pos(),
+                                vec2(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE),
+                            ),
+                        );
                     }
                 }
             }
@@ -96,10 +92,9 @@ fn player_inventory(state: &mut GameState, game_data: &mut DataMap) {
 
 fn research_selection(state: &mut GameState, game_data: &mut DataMap) {
     heading(
-        state
+        &state
             .resource_man
-            .gui_str(&state.resource_man.registry.gui_ids.research_menu_title)
-            .as_str(),
+            .gui_str(&state.resource_man.registry.gui_ids.research_menu_title),
     );
 
     let mut visitor = Topo::new(&state.resource_man.registry.researches);
@@ -208,7 +203,7 @@ fn current_research(state: &mut GameState, game_data: &mut DataMap) {
                         game_data.get_mut(&state.resource_man.registry.data_ids.player_inventory)
                     {
                         for stack in stacks {
-                            inventory.take(stack.item.id, stack.amount);
+                            inventory.take(stack.id, stack.amount);
                         }
                     }
 
@@ -284,7 +279,7 @@ fn research_puzzle(state: &mut GameState, game_data: &mut DataMap) -> Option<Vec
             );
 
             if let Err(err) = result {
-                rhai_log_err(function_id, &err)
+                rhai_log_err("pre_setup", function_id, &err)
             }
 
             (rhai_state.take().cast::<RhaiDataMap>(), true)
@@ -320,14 +315,14 @@ fn research_puzzle(state: &mut GameState, game_data: &mut DataMap) -> Option<Vec
                         }
                     }
                 }
-                Err(err) => rhai_log_err(function_id, &err),
+                Err(err) => rhai_log_err("evaluate", function_id, &err),
             }
         }
 
         if let Some(selected) = state.gui_state.selected_research_puzzle_tile {
             let mut rhai_state = Dynamic::from(mem::take(&mut puzzle_state.0));
 
-            let result = state.resource_man.engine.call_fn_with_options::<Dynamic>(
+            let result = state.resource_man.engine.call_fn_with_options::<Array>(
                 rhai_call_options(&mut rhai_state),
                 &mut scope,
                 ast,
@@ -339,17 +334,21 @@ fn research_puzzle(state: &mut GameState, game_data: &mut DataMap) -> Option<Vec
 
             match result {
                 Ok(result) => {
-                    if let Some(vec) = result.try_cast::<Vec<Id>>() {
-                        if !vec.is_empty() {
-                            state.gui_state.research_puzzle_selections = Some((selected, vec));
-                        }
-                    } else {
-                        state.gui_state.research_puzzle_selections = None;
+                    let vec = result
+                        .into_iter()
+                        .map(Dynamic::cast::<Id>)
+                        .collect::<Vec<_>>();
+
+                    if !vec.is_empty() {
+                        state.gui_state.research_puzzle_selections = Some((selected, vec));
                     }
 
                     state.gui_state.selected_research_puzzle_tile = None;
                 }
-                Err(err) => rhai_log_err(function_id, &err),
+                Err(err) => {
+                    rhai_log_err("selection_at_coord", function_id, &err);
+                    state.gui_state.research_puzzle_selections = None;
+                }
             }
         }
 
@@ -556,10 +555,9 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                                                 let select = interactive(|| {
                                                     ui_game_object(
                                                         InstanceData::default(),
-                                                        state.resource_man.item_model_or_missing(
-                                                            state.resource_man.registry.items[id]
-                                                                .model,
-                                                        ),
+                                                        state
+                                                            .resource_man
+                                                            .item_model_or_missing(*id),
                                                         vec2(
                                                             SMALLISH_ICON_SIZE,
                                                             SMALLISH_ICON_SIZE,

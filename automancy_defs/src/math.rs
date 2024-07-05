@@ -17,7 +17,7 @@ pub const HEX_GRID_LAYOUT: HexLayout = HexLayout {
 
 pub const SQRT_3: Float = 1.732_050_8;
 
-pub const FAR: Double = 0.0;
+pub const FAR: Float = 0.0;
 
 pub type Float = f32;
 

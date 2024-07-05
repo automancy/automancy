@@ -3,20 +3,17 @@ use std::sync::Arc;
 
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort};
 use rand::{thread_rng, RngCore};
-use rhai::{Dynamic, Scope, INT};
+use rhai::{Dynamic, Scope};
 
-use automancy_defs::coord::TileCoord;
 use automancy_defs::id::Id;
-use automancy_resources::types::function::{ResultType, RhaiDataMap, TransactionResultType};
-use automancy_resources::{
-    data::stack::{ItemAmount, ItemStack},
-    rhai_ui::RhaiUiUnit,
-};
-use automancy_resources::{
-    data::{Data, DataMap},
-    rhai_ui::parse_rhai_ui,
+use automancy_defs::{coord::TileCoord, stack::ItemStack};
+use automancy_resources::data::{Data, DataMap};
+use automancy_resources::rhai_ui::RhaiUiUnit;
+use automancy_resources::types::function::{
+    OnFailAction, RhaiDataMap, TileResult, TileTransactionResult,
 };
 use automancy_resources::{rhai_call_options, rhai_log_err, ResourceManager};
+use thiserror::Error;
 
 use crate::game::{GameSystemMessage, TickUnit};
 use crate::tile_entity::TileEntityMsg::*;
@@ -83,32 +80,26 @@ pub enum TileEntityMsg {
     GetData(RpcReplyPort<DataMap>),
     GetDataValue(Id, RpcReplyPort<Option<Data>>),
     GetDataWithCoord(RpcReplyPort<(TileCoord, DataMap)>),
-    GetTileConfigUi(RpcReplyPort<Option<Vec<RhaiUiUnit>>>),
+    GetTileConfigUi(RpcReplyPort<Option<RhaiUiUnit>>),
 }
 
 impl TileEntity {
     fn handle_rhai_transaction_result(
         &self,
         state: &mut TileEntityState,
-        stack: ItemStack,
-        source_coord: TileCoord,
-        source_id: Id,
-        root_coord: TileCoord,
-        root_id: Id,
-        result: rhai::Array,
+        result: TileTransactionResult,
     ) -> Option<GameSystemMessage> {
-        if result.is_empty() {
-            return None;
-        }
-
-        let ty: TransactionResultType = result[0].clone().cast();
-
-        match ty {
-            TransactionResultType::PassOn => {
-                let coord: TileCoord = result[1].clone().cast();
-
+        match result {
+            TileTransactionResult::PassOn {
+                coord,
+                stack,
+                source_coord,
+                root_coord,
+                root_id,
+            } => {
                 send_to_tile(
                     state,
+                    self.coord,
                     coord,
                     Transaction {
                         stack,
@@ -118,6 +109,7 @@ impl TileEntity {
                         root_coord,
                         hidden: false,
                     },
+                    OnFailAction::None,
                 );
 
                 Some(GameSystemMessage::RecordTransaction(
@@ -126,11 +118,17 @@ impl TileEntity {
                     self.coord,
                 ))
             }
-            TransactionResultType::Proxy => {
-                let coord: TileCoord = result[1].clone().cast();
-
+            TileTransactionResult::Proxy {
+                coord,
+                stack,
+                source_coord,
+                source_id,
+                root_coord,
+                root_id,
+            } => {
                 send_to_tile(
                     state,
+                    self.coord,
                     coord,
                     Transaction {
                         stack,
@@ -140,28 +138,28 @@ impl TileEntity {
                         root_coord,
                         hidden: false,
                     },
+                    OnFailAction::None,
                 );
 
                 Some(GameSystemMessage::RecordTransaction(
                     stack, self.coord, coord,
                 ))
             }
-            TransactionResultType::Consume => {
-                let consumed: ItemAmount = result[1].clone().cast();
-
+            TileTransactionResult::Consume {
+                consumed,
+                source_coord,
+                root_coord,
+            } => {
                 send_to_tile(
                     state,
+                    self.coord,
                     root_coord,
-                    TransactionResult {
-                        result: ItemStack {
-                            item: stack.item,
-                            amount: consumed,
-                        },
-                    },
+                    TransactionResult { result: consumed },
+                    OnFailAction::None,
                 );
 
                 Some(GameSystemMessage::RecordTransaction(
-                    stack,
+                    consumed,
                     source_coord,
                     self.coord,
                 ))
@@ -169,27 +167,18 @@ impl TileEntity {
         }
     }
 
-    fn handle_rhai_result(&self, state: &mut TileEntityState, result: rhai::Array) {
-        if result.is_empty() {
-            return;
-        }
-
-        let ty: ResultType = result[0].clone().cast();
-
-        match ty {
-            ResultType::MakeTransaction => {
-                let coord: TileCoord = result[1].clone().cast();
-                let source_id: Id = result[2].clone().cast::<INT>().into();
-                let source_coord: TileCoord = result[3].clone().cast();
-
-                let stacks: Vec<ItemStack> = result[4]
-                    .clone()
-                    .try_cast()
-                    .unwrap_or_else(|| result[4].clone().into_typed_array().unwrap());
-
+    fn handle_rhai_result(&self, state: &mut TileEntityState, result: TileResult) {
+        match result {
+            TileResult::MakeTransaction {
+                coord,
+                source_id,
+                source_coord,
+                stacks,
+            } => {
                 for stack in stacks {
                     send_to_tile(
                         state,
+                        source_coord,
                         coord,
                         Transaction {
                             stack,
@@ -199,21 +188,25 @@ impl TileEntity {
                             root_id: source_id,
                             hidden: false,
                         },
+                        OnFailAction::None,
                     );
                 }
             }
-            ResultType::MakeExtractRequest => {
-                let coord: TileCoord = result[1].clone().cast();
-                let requested_from_id: Id = result[2].clone().cast::<INT>().into();
-                let requested_from_coord: TileCoord = result[3].clone().cast();
-
+            TileResult::MakeExtractRequest {
+                coord,
+                requested_from_id,
+                requested_from_coord,
+                on_fail_action,
+            } => {
                 send_to_tile(
                     state,
+                    requested_from_coord,
                     coord,
                     ExtractRequest {
                         requested_from_id,
                         requested_from_coord,
                     },
+                    on_fail_action,
                 );
             }
         }
@@ -249,11 +242,11 @@ impl TileEntity {
                 "handle_transaction",
                 (rhai::Map::from([
                     ("coord".into(), Dynamic::from(self.coord)),
-                    ("id".into(), Dynamic::from_int(self.id.into())),
+                    ("id".into(), Dynamic::from(self.id)),
                     ("source_coord".into(), Dynamic::from(source_coord)),
-                    ("source_id".into(), Dynamic::from_int(source_id.into())),
+                    ("source_id".into(), Dynamic::from(source_id)),
                     ("root_coord".into(), Dynamic::from(root_coord)),
-                    ("root_id".into(), Dynamic::from_int(root_id.into())),
+                    ("root_id".into(), Dynamic::from(root_id)),
                     ("random".into(), Dynamic::from_int(random())),
                     ("stack".into(), Dynamic::from(stack)),
                 ]),),
@@ -263,19 +256,11 @@ impl TileEntity {
 
             match result {
                 Ok(result) => {
-                    if let Some(result) = result.try_cast::<rhai::Array>() {
-                        return self.handle_rhai_transaction_result(
-                            state,
-                            stack,
-                            source_coord,
-                            source_id,
-                            root_coord,
-                            root_id,
-                            result,
-                        );
+                    if let Some(result) = result.try_cast::<TileTransactionResult>() {
+                        return self.handle_rhai_transaction_result(state, result);
                     }
                 }
-                Err(err) => rhai_log_err(function_id, &err),
+                Err(err) => rhai_log_err("handle_transaction", function_id, &err),
             }
         }
 
@@ -283,9 +268,9 @@ impl TileEntity {
     }
 }
 
-#[derive(thiserror::Error, Debug)]
+#[derive(Error, Debug)]
 pub enum TileEntityError {
-    #[error("the tile id is no longer existent")]
+    #[error("the tile id at {0} is no longer existent")]
     NonExistent(TileCoord),
 }
 
@@ -339,7 +324,7 @@ impl Actor for TileEntity {
                         "handle_tick",
                         (rhai::Map::from([
                             ("coord".into(), Dynamic::from(self.coord)),
-                            ("id".into(), Dynamic::from_int(self.id.into())),
+                            ("id".into(), Dynamic::from(self.id)),
                             ("random".into(), Dynamic::from_int(random())),
                         ]),),
                     );
@@ -348,12 +333,12 @@ impl Actor for TileEntity {
 
                     match result {
                         Ok(result) => {
-                            if let Some(result) = result.try_cast::<rhai::Array>() {
+                            if let Some(result) = result.try_cast::<TileResult>() {
                                 self.handle_rhai_result(state, result);
                             }
                         }
                         Err(err) => {
-                            rhai_log_err(function_id, &err);
+                            rhai_log_err("handle_tick", function_id, &err);
                         }
                     }
                 }
@@ -401,7 +386,7 @@ impl Actor for TileEntity {
                         "handle_transaction_result",
                         (rhai::Map::from([
                             ("coord".into(), Dynamic::from(self.coord)),
-                            ("id".into(), Dynamic::from_int(self.id.into())),
+                            ("id".into(), Dynamic::from(self.id)),
                             ("random".into(), Dynamic::from_int(random())),
                             ("transferred".into(), Dynamic::from(result)),
                         ]),),
@@ -412,7 +397,7 @@ impl Actor for TileEntity {
                     match result {
                         Ok(_) => {}
                         Err(err) => {
-                            rhai_log_err(function_id, &err);
+                            rhai_log_err("handle_transaction_result", function_id, &err);
                         }
                     }
                 }
@@ -468,16 +453,13 @@ impl Actor for TileEntity {
                         "handle_extract_request",
                         (rhai::Map::from([
                             ("coord".into(), Dynamic::from(self.coord)),
-                            ("id".into(), Dynamic::from_int(self.id.into())),
+                            ("id".into(), Dynamic::from(self.id)),
                             ("random".into(), Dynamic::from_int(random())),
                             (
                                 "requested_from_coord".into(),
                                 Dynamic::from(requested_from_coord),
                             ),
-                            (
-                                "requested_from_id".into(),
-                                Dynamic::from_int(requested_from_id.into()),
-                            ),
+                            ("requested_from_id".into(), Dynamic::from(requested_from_id)),
                         ]),),
                     );
 
@@ -485,11 +467,11 @@ impl Actor for TileEntity {
 
                     match result {
                         Ok(result) => {
-                            if let Some(result) = result.try_cast::<rhai::Array>() {
+                            if let Some(result) = result.try_cast::<TileResult>() {
                                 self.handle_rhai_result(state, result);
                             }
                         }
-                        Err(err) => rhai_log_err(function_id, &err),
+                        Err(err) => rhai_log_err("handle_extract_request", function_id, &err),
                     }
                 }
             }
@@ -513,14 +495,14 @@ impl Actor for TileEntity {
                     let data = mem::take(&mut state.data);
                     let mut rhai_state = Dynamic::from(data);
 
-                    let result = self.resource_man.engine.call_fn_with_options::<Dynamic>(
+                    let result = self.resource_man.engine.call_fn_with_options::<RhaiUiUnit>(
                         rhai_call_options(&mut rhai_state),
                         scope,
                         ast,
                         "tile_config",
                         (rhai::Map::from([
                             ("coord".into(), Dynamic::from(self.coord)),
-                            ("id".into(), Dynamic::from_int(self.id.into())),
+                            ("id".into(), Dynamic::from(self.id)),
                         ]),),
                     );
 
@@ -528,14 +510,10 @@ impl Actor for TileEntity {
 
                     match result {
                         Ok(result) => {
-                            if let Some(result) = result.try_cast::<rhai::Array>() {
-                                reply.send(Some(parse_rhai_ui(function_id, result)))?;
-                            } else {
-                                reply.send(None)?;
-                            }
+                            reply.send(Some(result))?;
                         }
                         Err(err) => {
-                            rhai_log_err(function_id, &err);
+                            rhai_log_err("tile_config", function_id, &err);
                             reply.send(None)?;
                         }
                     }
@@ -547,11 +525,21 @@ impl Actor for TileEntity {
     }
 }
 
-fn send_to_tile(state: &mut TileEntityState, coord: TileCoord, message: TileEntityMsg) {
+fn send_to_tile(
+    state: &mut TileEntityState,
+    source: TileCoord,
+    to: TileCoord,
+    msg: TileEntityMsg,
+    on_fail: OnFailAction,
+) {
     match state
         .game
-        .send_message(GameSystemMessage::ForwardMsgToTile(coord, message))
-    {
+        .send_message(GameSystemMessage::ForwardMsgToTile {
+            source,
+            to,
+            msg,
+            on_fail,
+        }) {
         Ok(_) => {}
         Err(_) => {
             state.data = Default::default();

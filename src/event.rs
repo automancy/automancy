@@ -19,9 +19,11 @@ use automancy_defs::hexx::Hex;
 use automancy_defs::id::Id;
 use automancy_defs::kira::manager::AudioManager;
 use automancy_defs::{log, math, window};
-use automancy_resources::data::item::Item;
-use automancy_resources::data::{Data, DataMap};
 use automancy_resources::ResourceManager;
+use automancy_resources::{
+    data::{Data, DataMap},
+    types::item::ItemDef,
+};
 
 use crate::gui::{Screen, TextField};
 use crate::input::ActionType;
@@ -44,7 +46,11 @@ pub fn refresh_maps(state: &mut GameState) {
         .flatten()
         .map(|f| f.file_name().to_str().unwrap().to_string())
         .filter(|f| !f.starts_with('.'))
-        .flat_map(|map| Map::read_info(&state.resource_man, &map).zip(Some(map)))
+        .flat_map(|map| {
+            Map::read_info(&state.resource_man, &map)
+                .ok()
+                .zip(Some(map))
+        })
         .collect::<Vec<_>>();
 
     state
@@ -63,7 +69,7 @@ pub fn refresh_maps(state: &mut GameState) {
 #[derive(Debug, Default)]
 pub struct EventLoopStorage {
     /// tag searching cache
-    pub tag_cache: HashMap<Id, Arc<Vec<Item>>>,
+    pub tag_cache: HashMap<Id, Arc<Vec<ItemDef>>>,
     /// the last frame's starting time
     pub frame_start: Option<Instant>,
     /// the elapsed time between each frame

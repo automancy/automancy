@@ -15,12 +15,12 @@ use crate::math::{direction_to_angle, Float, Matrix3, Matrix4, Quaternion, Vec2,
 pub const LINE_DEPTH: Float = 0.1;
 
 /// Produces a line shape.
-pub fn make_line(a: Vec2, b: Vec2) -> Matrix4 {
+pub fn make_line(a: Vec2, b: Vec2, z: Float) -> Matrix4 {
     let mid = a.lerp(b, 0.5);
     let d = a.distance(b);
     let theta = direction_to_angle(b - a);
 
-    Matrix4::from_translation(vec3(mid.x, mid.y, 0.1))
+    Matrix4::from_translation(vec3(mid.x, mid.y, z))
         * Matrix4::from_rotation_z(theta)
         * Matrix4::from_scale(vec3(d.max(0.001), 0.1, LINE_DEPTH))
 }

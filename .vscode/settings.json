@@ -1,6 +1,5 @@
 {
   "rust-analyzer.linkedProjects": ["./Cargo.toml"],
-  "rust-analyzer.showUnlinkedFileNotification": false,
 
   "rust-analyzer.imports.granularity.group": "crate",
   "rust-analyzer.imports.granularity.enforce": true,

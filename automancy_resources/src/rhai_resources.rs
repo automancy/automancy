@@ -1,9 +1,9 @@
 use crate::RESOURCE_MAN;
 use automancy_defs::id::Id;
-use rhai::{Dynamic, Engine, INT};
+use rhai::{Dynamic, Engine};
 
 pub(crate) fn register_resources(engine: &mut Engine) {
-    engine.register_fn("as_script", |id: INT| {
+    engine.register_fn("as_script", |id: Id| {
         match RESOURCE_MAN
             .read()
             .unwrap()
@@ -11,14 +11,14 @@ pub(crate) fn register_resources(engine: &mut Engine) {
             .unwrap()
             .registry
             .scripts
-            .get(&Id::from(id))
+            .get(&id)
             .cloned()
         {
             Some(v) => Dynamic::from(v),
             None => Dynamic::UNIT,
         }
     });
-    engine.register_fn("as_tile", |id: INT| {
+    engine.register_fn("as_tile", |id: Id| {
         match RESOURCE_MAN
             .read()
             .unwrap()
@@ -26,14 +26,14 @@ pub(crate) fn register_resources(engine: &mut Engine) {
             .unwrap()
             .registry
             .tiles
-            .get(&Id::from(id))
+            .get(&id)
             .cloned()
         {
             Some(v) => Dynamic::from(v),
             None => Dynamic::UNIT,
         }
     });
-    engine.register_fn("as_item", |id: INT| {
+    engine.register_fn("as_item", |id: Id| {
         match RESOURCE_MAN
             .read()
             .unwrap()
@@ -41,14 +41,14 @@ pub(crate) fn register_resources(engine: &mut Engine) {
             .unwrap()
             .registry
             .items
-            .get(&Id::from(id))
+            .get(&id)
             .cloned()
         {
             Some(v) => Dynamic::from(v),
             None => Dynamic::UNIT,
         }
     });
-    engine.register_fn("as_tag", |id: INT| {
+    engine.register_fn("as_tag", |id: Id| {
         match RESOURCE_MAN
             .read()
             .unwrap()
@@ -56,7 +56,7 @@ pub(crate) fn register_resources(engine: &mut Engine) {
             .unwrap()
             .registry
             .tags
-            .get(&Id::from(id))
+            .get(&id)
             .cloned()
         {
             Some(v) => Dynamic::from(v),

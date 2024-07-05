@@ -4,22 +4,21 @@ use automancy_defs::id::Id;
 use automancy_macros::IdReg;
 use hashbrown::HashMap;
 
-use crate::data::item::Item;
-use crate::types::category::Category;
-use crate::types::research::Research;
-use crate::types::script::Script;
-use crate::types::tag::Tag;
+use crate::types::research::ResearchDef;
+use crate::types::script::ScriptDef;
+use crate::types::tag::TagDef;
 use crate::types::tile::TileDef;
+use crate::types::{category::CategoryDef, item::ItemDef};
 
 /// Represents the resource registry.
 #[derive(Clone)]
 pub struct Registry {
     pub tiles: HashMap<Id, TileDef>,
-    pub scripts: HashMap<Id, Script>,
-    pub tags: HashMap<Id, Tag>,
-    pub categories: HashMap<Id, Category>,
-    pub items: HashMap<Id, Item>,
-    pub researches: StableDiGraph<Research, ()>,
+    pub scripts: HashMap<Id, ScriptDef>,
+    pub tags: HashMap<Id, TagDef>,
+    pub categories: HashMap<Id, CategoryDef>,
+    pub items: HashMap<Id, ItemDef>,
+    pub researches: StableDiGraph<ResearchDef, ()>,
     pub researches_id_map: HashMap<Id, NodeIndex>,
     pub researches_unlock_map: HashMap<Id, NodeIndex>,
 
@@ -31,7 +30,6 @@ pub struct Registry {
     pub gui_ids: GuiIds,
     pub key_ids: KeyIds,
     pub err_ids: ErrorIds,
-    pub render_ids: RenderIds,
 }
 
 #[derive(Copy, Clone, IdReg)]
@@ -63,13 +61,13 @@ pub struct DataIds {
 
 #[derive(Copy, Clone, IdReg)]
 pub struct ModelIds {
-    #[namespace(core)]
+    #[namespace("core")]
     pub missing: Id,
-    #[namespace(core)]
+    #[namespace("core")]
     pub items_missing: Id,
-    #[namespace(core)]
+    #[namespace("core")]
     pub cube1x1: Id,
-    #[namespace(core)]
+    #[namespace("core")]
     pub puzzle_space: Id,
 }
 
@@ -97,7 +95,6 @@ pub struct GuiIds {
     pub tile_config_script_info: Id,
     pub tile_config_script: Id,
     pub tile_config_item_type: Id,
-    pub tile_config_capacity: Id,
     pub tile_config_direction: Id,
 
     pub lbl_maps_loaded: Id,
@@ -145,15 +142,9 @@ pub struct KeyIds {
 #[derive(Clone, Copy, IdReg)]
 pub struct ErrorIds {
     /// This error is displayed when the map cannot be read.
+    #[namespace("core")]
     pub invalid_map_data: Id,
     /// This error is displayed when the options cannot be written.
+    #[namespace("core")]
     pub unwritable_options: Id,
-}
-
-#[derive(Clone, Copy, IdReg)]
-pub struct RenderIds {
-    #[namespace(core)]
-    pub extra_instances: Id,
-    #[namespace(core)]
-    pub game_gui_element: Id,
 }

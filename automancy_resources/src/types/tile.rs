@@ -2,21 +2,12 @@ use std::ffi::OsStr;
 use std::fs::read_to_string;
 use std::path::Path;
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
-use automancy_defs::id::{Id, IdRaw};
-use automancy_defs::log;
+use automancy_defs::id::Id;
 
 use crate::data::{DataMap, DataMapRaw};
 use crate::{load_recursively, ResourceManager, RON_EXT};
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct TileDefRaw {
-    pub id: IdRaw,
-    pub function: Option<IdRaw>,
-    pub model: IdRaw,
-    pub data: DataMapRaw,
-}
 
 #[derive(Debug, Clone)]
 pub struct TileDef {
@@ -25,16 +16,27 @@ pub struct TileDef {
     pub data: DataMap,
 }
 
+#[derive(Debug, Deserialize)]
+struct Raw {
+    pub id: String,
+    pub function: Option<String>,
+    pub model: String,
+    pub data: DataMapRaw,
+}
+
 impl ResourceManager {
-    fn load_tile(&mut self, file: &Path) -> anyhow::Result<()> {
+    fn load_tile(&mut self, file: &Path, namespace: &str) -> anyhow::Result<()> {
         log::info!("Loading tile at {file:?}");
 
-        let tile: TileDefRaw = ron::from_str(&read_to_string(file)?)?;
+        let v = ron::from_str::<Raw>(&read_to_string(file)?)?;
 
-        let id = tile.id.to_id(&mut self.interner);
-        let function = tile.function.map(|v| v.to_id(&mut self.interner));
-        let data = tile.data.intern_to_data(&mut self.interner);
-        let model = tile.model.to_id(&mut self.interner);
+        let id = Id::parse(&v.id, &mut self.interner, Some(namespace)).unwrap();
+        let function = v
+            .function
+            .map(|v| Id::parse(&v, &mut self.interner, Some(namespace)).unwrap());
+        let model = Id::parse(&v.model, &mut self.interner, Some(namespace)).unwrap();
+
+        let data = v.data.intern_to_data(&mut self.interner, Some(namespace));
 
         self.registry.tiles.insert(
             id,
@@ -48,11 +50,11 @@ impl ResourceManager {
         Ok(())
     }
 
-    pub fn load_tiles(&mut self, dir: &Path) -> anyhow::Result<()> {
+    pub fn load_tiles(&mut self, dir: &Path, namespace: &str) -> anyhow::Result<()> {
         let tiles = dir.join("tiles");
 
         for file in load_recursively(&tiles, OsStr::new(RON_EXT)) {
-            self.load_tile(&file)?;
+            self.load_tile(&file, namespace)?;
         }
 
         Ok(())

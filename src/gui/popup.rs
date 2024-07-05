@@ -1,12 +1,10 @@
 use std::fs;
 
-use automancy_defs::log;
-
-use crate::event::refresh_maps;
-use crate::game::load_map;
+use crate::game::{load_map, COULD_NOT_LOAD_ANYTHING};
 use crate::gui::{PopupState, Screen, TextField};
 use crate::map::Map;
 use crate::GameState;
+use crate::{event::refresh_maps, game::GameLoadResult};
 
 use super::{button, centered_column, centered_row, label, textbox, window};
 
@@ -19,17 +17,15 @@ pub fn invalid_name_popup(state: &mut GameState) {
         || {
             centered_column(|| {
                 label(
-                    state
+                    &state
                         .resource_man
-                        .gui_str(&state.resource_man.registry.gui_ids.lbl_pick_another_name)
-                        .as_str(),
+                        .gui_str(&state.resource_man.registry.gui_ids.lbl_pick_another_name),
                 );
 
                 if button(
-                    state
+                    &state
                         .resource_man
-                        .gui_str(&state.resource_man.registry.gui_ids.btn_confirm)
-                        .as_str(),
+                        .gui_str(&state.resource_man.registry.gui_ids.btn_confirm),
                 )
                 .clicked
                 {
@@ -51,17 +47,15 @@ pub fn map_delete_popup(state: &mut GameState, map_name: &str) {
         || {
             centered_column(|| {
                 label(
-                    state
+                    &state
                         .resource_man
-                        .gui_str(&state.resource_man.registry.gui_ids.lbl_delete_map_confirm)
-                        .as_str(),
+                        .gui_str(&state.resource_man.registry.gui_ids.lbl_delete_map_confirm),
                 );
 
                 if button(
-                    state
+                    &state
                         .resource_man
-                        .gui_str(&state.resource_man.registry.gui_ids.btn_confirm)
-                        .as_str(),
+                        .gui_str(&state.resource_man.registry.gui_ids.btn_confirm),
                 )
                 .clicked
                 {
@@ -72,10 +66,9 @@ pub fn map_delete_popup(state: &mut GameState, map_name: &str) {
                 }
 
                 if button(
-                    state
+                    &state
                         .resource_man
-                        .gui_str(&state.resource_man.registry.gui_ids.btn_cancel)
-                        .as_str(),
+                        .gui_str(&state.resource_man.registry.gui_ids.btn_cancel),
                 )
                 .clicked
                 {
@@ -116,21 +109,26 @@ pub fn map_create_popup(state: &mut GameState) {
                 {
                     let name = Map::sanitize_name(name.clone());
 
-                    state
-                        .tokio
-                        .block_on(load_map(&state.game, &mut state.loop_store, name))
-                        .unwrap();
-
                     state.gui_state.text_field.get(TextField::MapName).clear();
                     state.gui_state.popup = PopupState::None;
-                    state.gui_state.switch_screen(Screen::Ingame);
+
+                    match load_map(state, name, false) {
+                        GameLoadResult::Loaded => {
+                            state.gui_state.switch_screen(Screen::Ingame);
+                        }
+                        GameLoadResult::LoadedMainMenu => {
+                            state.gui_state.switch_screen(Screen::MainMenu);
+                        }
+                        GameLoadResult::Failed => {
+                            panic!("{}", COULD_NOT_LOAD_ANYTHING)
+                        }
+                    }
                 }
 
                 if button(
-                    state
+                    &state
                         .resource_man
-                        .gui_str(&state.resource_man.registry.gui_ids.btn_cancel)
-                        .as_str(),
+                        .gui_str(&state.resource_man.registry.gui_ids.btn_cancel),
                 )
                 .clicked
                 {

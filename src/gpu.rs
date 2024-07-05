@@ -63,27 +63,27 @@ pub fn init_gpu_resources(
 ) -> (SharedResources, RenderResources, GlobalResources) {
     let game_shader = device.create_shader_module(ShaderModuleDescriptor {
         label: Some("Game Shader"),
-        source: ShaderSource::Wgsl(resource_man.shaders["game"].as_str().into()),
+        source: ShaderSource::Wgsl(resource_man.shaders["game"].to_string().into()),
     });
 
     let combine_shader = device.create_shader_module(ShaderModuleDescriptor {
         label: Some("Combine Shader"),
-        source: ShaderSource::Wgsl(resource_man.shaders["combine"].as_str().into()),
+        source: ShaderSource::Wgsl(resource_man.shaders["combine"].to_string().into()),
     });
 
     let fxaa_shader = device.create_shader_module(ShaderModuleDescriptor {
         label: Some("FXAA Shader"),
-        source: ShaderSource::Wgsl(resource_man.shaders["fxaa"].as_str().into()),
+        source: ShaderSource::Wgsl(resource_man.shaders["fxaa"].to_string().into()),
     });
 
     let post_processing_shader = device.create_shader_module(ShaderModuleDescriptor {
         label: Some("Post Processing Shader"),
-        source: ShaderSource::Wgsl(resource_man.shaders["post_processing"].as_str().into()),
+        source: ShaderSource::Wgsl(resource_man.shaders["post_processing"].to_string().into()),
     });
 
     let intermediate_shader = device.create_shader_module(ShaderModuleDescriptor {
         label: Some("Intermediate Shader"),
-        source: ShaderSource::Wgsl(resource_man.shaders["intermediate"].as_str().into()),
+        source: ShaderSource::Wgsl(resource_man.shaders["intermediate"].to_string().into()),
     });
 
     let vertex_buffer = device.create_buffer_init(&BufferInitDescriptor {

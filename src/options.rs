@@ -5,13 +5,12 @@ use std::{
 use std::{io::Write, mem};
 
 use automancy_resources::ResourceManager;
-use enum_ordinalize::Ordinalize;
 use hashbrown::HashMap;
 use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
 use winit::keyboard::Key;
 
-use automancy_defs::log;
+
 use automancy_defs::math::Double;
 
 use crate::input::{get_default_keymap, KeyAction};
@@ -101,7 +100,7 @@ impl Options {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Ordinalize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AAType {
     None,
     FXAA,

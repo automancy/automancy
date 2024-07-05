@@ -5,18 +5,16 @@ use std::sync::Arc;
 use std::time::SystemTime;
 use std::{fs, path::PathBuf};
 
-use hashbrown::{HashMap, HashSet};
-use lazy_static::lazy_static;
+use hashbrown::HashMap;
 use ractor::ActorRef;
 use ron::error::SpannedResult;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use zstd::{Decoder, Encoder};
 
-use automancy_defs::chrono::Local;
 use automancy_defs::coord::TileCoord;
-use automancy_defs::id::{Id, IdRaw, Interner};
-use automancy_defs::log;
+use automancy_defs::id::{Id, Interner};
+
 use automancy_resources::data::{DataMap, DataMapRaw};
 use automancy_resources::ResourceManager;
 
@@ -24,11 +22,11 @@ use crate::game;
 use crate::game::GameSystemMessage;
 use crate::tile_entity::TileEntityMsg;
 
-pub const MAP_PATH: &str = "map";
-pub const MAP_EXT: &str = ".zst";
-pub const INFO_EXT: &str = ".ron";
+pub static MAP_PATH: &str = "map";
+pub static MAP_EXT: &str = ".zst";
+pub static INFO_EXT: &str = ".ron";
 
-pub const MAIN_MENU: &str = ".main_menu";
+pub static MAIN_MENU: &str = ".main_menu";
 
 const MAP_BUFFER_SIZE: usize = 256 * 1024;
 
@@ -48,7 +46,7 @@ pub struct MapInfo {
 pub struct MapInfoRaw {
     /// The number of saved tiles.
     #[serde(default)]
-    pub tile_count: u64,
+    pub tile_count: u32,
     #[serde(default)]
     pub data: DataMapRaw,
 }
@@ -68,7 +66,7 @@ pub struct Map {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MapRaw {
     pub tiles: Vec<(TileCoord, Id, DataMapRaw)>,
-    pub tile_map: HashMap<Id, IdRaw>,
+    pub tile_map: HashMap<Id, String>,
 }
 
 impl Map {
@@ -99,10 +97,10 @@ impl Map {
     pub fn read_info(
         resource_man: &ResourceManager,
         map_name: &str,
-    ) -> Option<(MapInfoRaw, Option<SystemTime>)> {
+    ) -> Result<(MapInfoRaw, Option<SystemTime>), bool> {
         let path = Self::info(map_name);
 
-        let file = File::open(path).ok()?;
+        let file = File::open(path).map_err(|_| false)?;
         let time = file
             .metadata()
             .and_then(|v| v.modified().or(v.accessed()))
@@ -113,54 +111,45 @@ impl Map {
         let decoded: SpannedResult<MapInfoRaw> = ron::de::from_reader(reader);
 
         match decoded {
-            Ok(v) => Some((v, time)),
+            Ok(v) => Ok((v, time)),
             Err(e) => {
-                log::error!("Serde: {e:?}");
-
-                let err_map_name = format!(
-                    "{}-ERR-{}",
-                    map_name,
-                    Local::now().format("%y-%m-%d-%H:%M:%S")
-                );
+                log::error!("Error loading map {map_name}, in reading info: serde: {e:?}");
 
                 resource_man.error_man.push(
                     (
                         resource_man.registry.err_ids.invalid_map_data,
-                        vec![map_name.to_string(), err_map_name],
+                        vec![map_name.to_string()],
                     ),
                     resource_man,
                 );
 
-                None
+                Err(true)
             }
         }
     }
 
-    pub fn read_map(resource_man: &ResourceManager, map_name: &str) -> Option<MapRaw> {
+    pub fn read_map(resource_man: &ResourceManager, map_name: &str) -> Result<MapRaw, bool> {
         let path = Self::map(map_name);
 
-        let file = File::open(path).ok()?;
+        let file = File::open(path).map_err(|_| false)?;
         let decoder = Decoder::new(file).unwrap();
 
         let decoded: SpannedResult<MapRaw> = ron::de::from_reader(decoder);
 
         match decoded {
-            Ok(v) => Some(v),
+            Ok(v) => Ok(v),
             Err(e) => {
-                log::error!("Serde: {e:?}");
-
-                let err_map_name =
-                    format!("{}-ERR-{}", map_name, Local::now().format("%y%m%d%H%M%S"));
+                log::error!("Error loading map {map_name}, in reading map: serde: {e:?}");
 
                 resource_man.error_man.push(
                     (
                         resource_man.registry.err_ids.invalid_map_data,
-                        vec![map_name.to_string(), err_map_name],
+                        vec![map_name.to_string()],
                     ),
                     resource_man,
                 );
 
-                None
+                Err(true)
             }
         }
     }
@@ -170,14 +159,10 @@ impl Map {
         game: ActorRef<GameSystemMessage>,
         resource_man: Arc<ResourceManager>,
         map_name: &str,
-    ) -> (Self, TileEntities) {
-        let Some((info, save_time)) = Map::read_info(&resource_man, map_name) else {
-            return (Map::new_empty(map_name.to_string()), Default::default());
-        };
+    ) -> Result<(Self, TileEntities), bool> {
+        let (info, save_time) = Map::read_info(&resource_man, map_name)?;
 
-        let Some(map) = Map::read_map(&resource_man, map_name) else {
-            return (Map::new_empty(map_name.to_string()), Default::default());
-        };
+        let map = Map::read_map(&resource_man, map_name)?;
 
         let mut tiles = HashMap::new();
         let mut tile_entities = HashMap::new();
@@ -186,7 +171,7 @@ impl Map {
             if let Some(id) = map
                 .tile_map
                 .get(&id)
-                .and_then(|id| resource_man.interner.get(id.to_string()))
+                .and_then(|id| resource_man.interner.get(id))
             {
                 let tile_entity =
                     game::new_tile(resource_man.clone(), game.clone(), coord, id).await;
@@ -203,7 +188,7 @@ impl Map {
             }
         }
 
-        (
+        Ok((
             Self {
                 map_name: map_name.to_string(),
                 tiles,
@@ -213,7 +198,7 @@ impl Map {
                 })),
             },
             tile_entities,
-        )
+        ))
     }
 
     /// Saves a map to disk.
@@ -241,7 +226,7 @@ impl Map {
                 if !map_raw.tile_map.contains_key(id) {
                     map_raw
                         .tile_map
-                        .insert(*id, IdRaw::parse(interner.resolve(*id).unwrap()));
+                        .insert(*id, interner.resolve(*id).unwrap().to_string());
                 }
 
                 let data = tile_entity
@@ -259,7 +244,7 @@ impl Map {
             &mut info_writer,
             &MapInfoRaw {
                 data: self.info.lock().await.data.to_raw(interner),
-                tile_count: self.tiles.len() as u64,
+                tile_count: self.tiles.len() as u32,
             },
         )
         .unwrap();
@@ -286,10 +271,7 @@ impl Map {
     }
 }
 
-lazy_static! {
-    static ref WIN_ILLEGAL_NAMES: HashSet<&'static str> = HashSet::from([
-        "CON", "PRN", "AUX", "CLOCK$", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6",
-        "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8",
-        "LPT9",
-    ]);
-}
+static WIN_ILLEGAL_NAMES: &[&str] = &[
+    "CON", "PRN", "AUX", "CLOCK$", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7",
+    "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+];

@@ -9,7 +9,8 @@ edition = "2021"
 proc-macro = true
 
 [dependencies]
-automancy_defs = { workspace = true }
+automancy_defs = { path = "../automancy_defs" }
 
-syn = "2.0.66"
-proc-macro2 = "1.0.85"
+syn = "2.0.68"
+proc-macro2 = "1.0.86"
+quote = "1.0.36"

@@ -1,13 +1,8 @@
-use proc_macro::TokenStream;
-
-use crate::parse_meta;
-
-const NAMESPACE: &str = "namespace";
-const NAME: &str = "name";
-
-fn e(field: &str, namespace: &str, name: &str) -> String {
-    format!("{field}: automancy_defs::id::id_static(\"{namespace}\", \"{name}\").to_id(interner),")
-}
+use crate::parse_literal;
+use proc_macro2::TokenStream;
+use proc_macro2::{Literal, Span};
+use quote::quote;
+use syn::Ident;
 
 /// # Examples
 ///
@@ -18,10 +13,10 @@ fn e(field: &str, namespace: &str, name: &str) -> String {
 /// #[derive(IdReg)]
 /// pub struct FooIds {
 ///     id_foo: Id,
-///     #[namespace(core)]
+///     #[namespace("core")]
 ///     id_bar: Id,
 ///     #[namespace("meowzer/")]
-///     #[name(zoo)]
+///     #[name("zoo")]
 ///     id_zoo: Id,
 /// }
 /// ```
@@ -35,7 +30,10 @@ fn e(field: &str, namespace: &str, name: &str) -> String {
 /// pub struct Bar();
 /// ```
 pub fn derive_id_reg(item: TokenStream) -> TokenStream {
-    let ast: syn::DeriveInput = syn::parse(item).unwrap();
+    let ast: syn::DeriveInput = syn::parse2(item).unwrap();
+
+    let namespace_lit = Ident::new("namespace", Span::call_site());
+    let name_lit = Ident::new("name", Span::call_site());
 
     let mut names = vec![];
     let mut namespaces = vec![];
@@ -48,30 +46,30 @@ pub fn derive_id_reg(item: TokenStream) -> TokenStream {
                     let attrs @ [a, b] = [iter.next(), iter.next()];
 
                     let [a_ident, b_ident] =
-                        attrs.map(|v| v.and_then(|v| v.path().get_ident().map(|v| v.to_string())));
+                        attrs.map(|v| v.and_then(|v| v.path().get_ident().cloned()));
 
-                    let name = field.ident.clone().unwrap().to_string();
+                    let name = field.ident.clone().unwrap();
 
-                    namespaces.push(if Some(NAMESPACE) == a_ident.as_deref() {
+                    namespaces.push(if Some(&namespace_lit) == a_ident.as_ref() {
                         (
                             name.clone(),
-                            parse_meta(a.unwrap()).into_iter().next().unwrap(),
+                            parse_literal(a.unwrap()).into_iter().next().unwrap(),
                         )
-                    } else if Some(NAMESPACE) == b_ident.as_deref() {
+                    } else if Some(&namespace_lit) == b_ident.as_ref() {
                         (
                             name.clone(),
-                            parse_meta(b.unwrap()).into_iter().next().unwrap(),
+                            parse_literal(b.unwrap()).into_iter().next().unwrap(),
                         )
                     } else {
-                        (name.clone(), "automancy".to_string())
+                        (name.clone(), Literal::string("automancy"))
                     });
 
-                    names.push(if Some(NAME) == a_ident.as_deref() {
-                        parse_meta(a.unwrap()).into_iter().next().unwrap()
-                    } else if Some(NAME) == b_ident.as_deref() {
-                        parse_meta(b.unwrap()).into_iter().next().unwrap()
+                    names.push(if Some(&name_lit) == a_ident.as_ref() {
+                        parse_literal(a.unwrap()).into_iter().next().unwrap()
+                    } else if Some(&name_lit) == b_ident.as_ref() {
+                        parse_literal(b.unwrap()).into_iter().next().unwrap()
                     } else {
-                        name
+                        Literal::string(&name.to_string())
                     });
                 }
             }
@@ -85,21 +83,20 @@ pub fn derive_id_reg(item: TokenStream) -> TokenStream {
     let items = namespaces
         .into_iter()
         .zip(names)
-        .map(|((field, namespace), name)| e(&field, &namespace, &name))
-        .collect::<Vec<_>>()
-        .join("\n");
+        .flat_map(|((field, namespace), name)| {
+            quote! {
+                #field: automancy_defs::id::IdRaw::new(#namespace, #name).to_id(interner),
+            }
+        })
+        .collect::<TokenStream>();
 
-    format!(
-        "
-        impl {name} {{
-            pub fn new(interner: &mut automancy_defs::id::Interner) -> Self {{
-                Self {{
-                    {items}
-                }}
-            }}
-        }}
-        "
-    )
-    .parse()
-    .unwrap()
+    quote! {
+        impl #name {
+            pub fn new(interner: &mut automancy_defs::id::Interner) -> Self {
+                Self {
+                    #items
+                }
+            }
+        }
+    }
 }

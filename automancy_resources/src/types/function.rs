@@ -4,23 +4,63 @@ use std::path::Path;
 
 use rhai::{Dynamic, ImmutableString, Scope};
 
-use automancy_defs::id::{Id, IdRaw};
-use automancy_defs::log;
+use automancy_defs::{
+    coord::TileCoord,
+    id::{Id, IdRaw},
+    stack::ItemStack,
+};
 
-use crate::data::{Data, DataMap};
-use crate::{load_recursively, ResourceManager, FUNCTION_EXT};
+use crate::{
+    data::{Data, DataMap},
+    load_recursively, ResourceManager, FUNCTION_EXT,
+};
 
-#[derive(Debug, Clone, Copy)]
-pub enum ResultType {
-    MakeTransaction,
-    MakeExtractRequest,
+#[derive(Debug, Clone)]
+pub enum TileResult {
+    MakeTransaction {
+        coord: TileCoord,
+        source_id: Id,
+        source_coord: TileCoord,
+        stacks: Vec<ItemStack>,
+    },
+    MakeExtractRequest {
+        coord: TileCoord,
+        requested_from_id: Id,
+        requested_from_coord: TileCoord,
+        on_fail_action: OnFailAction,
+    },
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum TransactionResultType {
-    PassOn,
-    Proxy,
-    Consume,
+pub enum TileTransactionResult {
+    PassOn {
+        coord: TileCoord,
+        stack: ItemStack,
+        source_coord: TileCoord,
+        root_coord: TileCoord,
+        root_id: Id,
+    },
+    Proxy {
+        coord: TileCoord,
+        stack: ItemStack,
+        source_coord: TileCoord,
+        source_id: Id,
+        root_coord: TileCoord,
+        root_id: Id,
+    },
+    Consume {
+        consumed: ItemStack,
+        source_coord: TileCoord,
+        root_coord: TileCoord,
+    },
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum OnFailAction {
+    None,
+    RemoveTile,
+    RemoveAllData,
+    RemoveData(Id),
 }
 
 #[derive(Default, Debug, Clone)]
@@ -29,24 +69,24 @@ pub struct RhaiDataMap(BTreeMap<Id, Data>);
 impl RhaiDataMap {
     pub fn rhai_get(&mut self, id: Id) -> Dynamic {
         if let Some(v) = self.get(id).cloned() {
-            v.rhai_value()
+            v.into_dynamic()
         } else {
             Dynamic::UNIT
         }
     }
 
-    pub fn rhai_set(&mut self, id: Id, v: Dynamic) {
-        if let Some(v) = Data::from_rhai(v) {
-            self.set(id, v);
+    pub fn rhai_set(&mut self, id: Id, data: Dynamic) {
+        if let Some(data) = Data::from_dynamic(data) {
+            self.set(id, data);
         }
     }
 
-    pub fn rhai_get_or_new_inventory(&mut self, id: Id) -> Dynamic {
+    pub fn get_or_new_inventory(&mut self, id: Id) -> Dynamic {
         self.0
             .entry(id)
             .or_insert_with(|| Data::Inventory(Default::default()))
             .clone()
-            .rhai_value()
+            .into_dynamic()
     }
 
     pub fn get(&self, id: Id) -> Option<&Data> {
@@ -75,7 +115,7 @@ impl RhaiDataMap {
 }
 
 impl ResourceManager {
-    pub fn load_functions(&mut self, dir: &Path) -> anyhow::Result<()> {
+    pub fn load_functions(&mut self, dir: &Path, namespace: &str) -> anyhow::Result<()> {
         let functions = dir.join("functions");
 
         for file in load_recursively(&functions, OsStr::new(FUNCTION_EXT)) {
@@ -84,28 +124,35 @@ impl ResourceManager {
             let mut scope = Scope::new();
             let ast = self.engine.compile_file(file)?;
 
-            let str_id =
+            let raw_id =
                 self.engine
                     .call_fn::<ImmutableString>(&mut scope, &ast, "function_id", ())?;
-            let str_id = IdRaw::parse(&str_id).to_string();
-            let id = self.interner.get_or_intern(&str_id);
+            let raw_id = IdRaw::parse(&raw_id, Some(namespace)).unwrap();
+            let str_id = raw_id.to_string();
+
+            let id = raw_id.to_id(&mut self.interner);
 
             let id_deps = self
                 .engine
-                .call_fn::<Dynamic>(&mut scope, &ast, "id_deps", ())?;
+                .call_fn::<rhai::Array>(&mut scope, &ast, "id_deps", ())?;
 
-            if let Some(id_deps) = id_deps.try_cast::<rhai::Array>() {
-                id_deps.into_iter().for_each(|v| {
-                    let v = v.cast::<rhai::Array>();
+            for id_dep in id_deps.into_iter() {
+                let v = id_dep.cast::<rhai::Array>();
 
-                    let id =
-                        IdRaw::parse(v[0].clone().cast::<ImmutableString>().as_str()).to_string();
-                    let key = v[1].clone().cast::<ImmutableString>();
+                let id = IdRaw::parse(
+                    v[0].clone().cast::<ImmutableString>().as_str(),
+                    Some(namespace),
+                )
+                .unwrap();
 
-                    log::info!("Adding {key} -> {id} into scope of function {str_id}");
+                let key = v[1].clone().cast::<ImmutableString>();
 
-                    scope.push_constant(key.as_str(), self.interner.get_or_intern(&id));
-                });
+                log::info!("Adding {key} -> {id} into scope of function {str_id}",);
+
+                scope.push_constant(
+                    key.as_str(),
+                    Id::parse(&id, &mut self.interner, Some(namespace)).unwrap(),
+                );
             }
 
             log::info!("Registered function with id {str_id} ({id:?})");

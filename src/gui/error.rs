@@ -25,10 +25,9 @@ pub fn error_popup(state: &mut GameState) {
                         spacer(1);
 
                         if button(
-                            state
+                            &state
                                 .resource_man
-                                .gui_str(&state.resource_man.registry.gui_ids.btn_confirm)
-                                .as_str(),
+                                .gui_str(&state.resource_man.registry.gui_ids.btn_confirm),
                         )
                         .clicked
                         {

@@ -1,7 +1,6 @@
 use std::time::Instant;
 
 use automancy_defs::{glam::dvec3, id::Id, math, rendering::InstanceData};
-use automancy_resources::data::item::Item;
 use fuzzy_matcher::FuzzyMatcher;
 use hashbrown::HashMap;
 use yakui::{
@@ -95,7 +94,7 @@ pub fn searchable_id(
     });
 }
 
-pub fn take_item_animation(state: &mut GameState, item: Item, dst_rect: Rect) {
+pub fn take_item_animation(state: &mut GameState, id: Id, dst_rect: Rect) {
     let now = Instant::now();
 
     let mut to_remove = HashMap::new();
@@ -130,7 +129,7 @@ pub fn take_item_animation(state: &mut GameState, item: Item, dst_rect: Rect) {
         .as_ref()
         .unwrap()
         .take_item_animations
-        .get(&item)
+        .get(&id)
     {
         for (instant, src_rect) in animations {
             let d = now.duration_since(*instant).as_secs_f32()
@@ -148,7 +147,7 @@ pub fn take_item_animation(state: &mut GameState, item: Item, dst_rect: Rect) {
                 Layer::new().show(|| {
                     ui_game_object(
                         InstanceData::default(),
-                        state.resource_man.item_model_or_missing(item.model),
+                        state.resource_man.item_model_or_missing(id),
                         size,
                         Some(math::view(dvec3(0.0, 0.0, 1.0)).as_mat4()),
                     );

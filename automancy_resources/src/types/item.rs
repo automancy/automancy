@@ -3,46 +3,55 @@ use std::fs::read_to_string;
 use std::path::Path;
 use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
-use automancy_defs::id::{Id, IdRaw};
-use automancy_defs::log;
+use automancy_defs::id::Id;
+
 use hashbrown::HashMap;
 
-use crate::data::item::{item_match, Item};
-use crate::{load_recursively, ResourceManager, RON_EXT};
+use crate::{item_match, load_recursively, ResourceManager, RON_EXT};
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct ItemRaw {
-    id: IdRaw,
-    model: IdRaw,
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
+pub struct ItemDef {
+    pub id: Id,
+    pub model: Id,
+}
+
+#[derive(Debug, Deserialize)]
+struct Raw {
+    id: String,
+    model: String,
 }
 
 impl ResourceManager {
-    fn load_item(&mut self, file: &Path) -> anyhow::Result<()> {
+    fn load_item(&mut self, file: &Path, namespace: &str) -> anyhow::Result<()> {
         log::info!("Loading item at: {file:?}");
 
-        let item: ItemRaw = ron::from_str(&read_to_string(file)?)?;
+        let v = ron::from_str::<Raw>(&read_to_string(file)?)?;
 
-        let id = item.id.to_id(&mut self.interner);
-        let model = item.model.to_id(&mut self.interner);
+        let id = Id::parse(&v.id, &mut self.interner, Some(namespace)).unwrap();
+        let model = Id::parse(&v.model, &mut self.interner, Some(namespace)).unwrap();
 
-        self.registry.items.insert(id, Item { id, model });
+        self.registry.items.insert(id, ItemDef { id, model });
 
         Ok(())
     }
 
-    pub fn load_items(&mut self, dir: &Path) -> anyhow::Result<()> {
+    pub fn load_items(&mut self, dir: &Path, namespace: &str) -> anyhow::Result<()> {
         let items = dir.join("items");
 
         for file in load_recursively(&items, OsStr::new(RON_EXT)) {
-            self.load_item(&file)?;
+            self.load_item(&file, namespace)?;
         }
 
         Ok(())
     }
 
-    pub fn get_items(&self, id: Id, tag_cache: &mut HashMap<Id, Arc<Vec<Item>>>) -> Arc<Vec<Item>> {
+    pub fn get_items(
+        &self,
+        id: Id,
+        tag_cache: &mut HashMap<Id, Arc<Vec<ItemDef>>>,
+    ) -> Arc<Vec<ItemDef>> {
         if let Some(item) = self.registry.items.get(&id) {
             Arc::new(vec![*item])
         } else {
