@@ -56,8 +56,10 @@ def main():
         for v in bm.verts:
             v.select = True
 
-        bmesh.ops.translate(bm, vec=(-1.0, -1.0, 0.0), space=bpy.context.object.matrix_world, verts=bm.verts)
-        bpy.ops.mesh.remove_doubles(threshold=0.05)
+        bmesh.ops.translate(bm, verts=bm.verts, vec=(-1.0, -1.0, 0.0), space=bpy.context.object.matrix_world)
+        bmesh.ops.dissolve_limit(bm, verts=bm.verts, edges=bm.edges, angle_limit=0.08726646)
+        bmesh.ops.beautify_fill(bm, faces=bm.faces, edges=bm.edges)
+        bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=0.1)
 
         bmesh.update_edit_mesh(bpy.context.edit_object.data)
         bpy.ops.object.mode_set(mode='OBJECT')
