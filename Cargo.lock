@@ -1228,9 +1228,9 @@ dependencies = [
 
 [[package]]
 name = "document-features"
-version = "0.2.8"
+version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef5282ad69563b5fc40319526ba27e0e7363d552a896f0297d54f767717f9b95"
+checksum = "4a344f0a78e998787823fe12c8245b9e1fcdb1da9eca625082c2e3d641297fa3"
 dependencies = [
  "litrs",
 ]
