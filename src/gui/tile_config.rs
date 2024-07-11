@@ -10,26 +10,20 @@ use automancy_resources::{
     data::{Data, DataMap},
     inventory::Inventory,
 };
-use yakui::{
-    column, constrained, row,
-    widgets::{Layer, List},
-    Constraints,
-};
+use yakui::{constrained, widgets::Layer, Constraints, Vec2};
 
-use crate::GameState;
-use crate::{gui::centered_column, tile_entity::TileEntityMsg};
+use crate::tile_entity::TileEntityMsg;
+use crate::{gui::row, GameState};
 
 use super::{
-    button, centered_row, info_tip, interactive,
-    item::draw_item,
-    label, movable, scroll_vertical, selectable_symbol_button, selection_button, slider, symbol,
-    symbol_button,
-    util::{pad_x, searchable_id},
-    window_box, TextField, MEDIUM_ICON_SIZE, PADDING_LARGE, SMALL_ICON_SIZE,
+    button, center_col, center_row, col, info_tip, interactive, item::draw_item, label, list_col,
+    movable, num_input, scroll_vertical_bar_alignment, selectable_symbol_button, selection_button,
+    slider, spaced_col, spaced_row, symbol, symbol_button, util::searchable_id, window_box,
+    TextField, MEDIUM_ICON_SIZE, PADDING_LARGE, SMALL_ICON_SIZE,
 };
 
 /// Draws the direction selector.
-fn add_direction(target_coord: &mut Option<TileCoord>, n: u8, margin: f32) {
+fn add_direction(target_coord: &mut Option<TileCoord>, n: u8) {
     let coord = match n {
         0 => Some(TileCoord::TOP_RIGHT),
         1 => Some(TileCoord::RIGHT),
@@ -40,70 +34,64 @@ fn add_direction(target_coord: &mut Option<TileCoord>, n: u8, margin: f32) {
         _ => None,
     };
 
-    pad_x(0.0, margin).show(|| {
-        selection_button(target_coord, coord, |selected| {
-            selectable_symbol_button(
-                match n {
-                    0 => "\u{f46c}",
-                    1 => "\u{f432}",
-                    2 => "\u{f43e}",
-                    3 => "\u{f424}",
-                    4 => "\u{f434}",
-                    5 => "\u{f45c}",
-                    _ => "",
-                },
-                colors::BLACK,
-                selected,
-            )
-        });
+    selection_button(target_coord, coord, |selected| {
+        selectable_symbol_button(
+            match n {
+                0 => "\u{f46c}",
+                1 => "\u{f432}",
+                2 => "\u{f43e}",
+                3 => "\u{f424}",
+                4 => "\u{f434}",
+                5 => "\u{f45c}",
+                _ => "",
+            },
+            colors::BLACK,
+            selected,
+        )
     });
 }
 
 fn config_direction(state: &GameState, data: &DataMap, tile_entity: ActorRef<TileEntityMsg>) {
     let current_dir = data
-        .get(&state.resource_man.registry.data_ids.direction)
+        .get(state.resource_man.registry.data_ids.direction)
         .cloned()
         .and_then(Data::into_coord);
 
     let mut new_dir = current_dir;
 
-    centered_row(|| {
+    center_row(|| {
         label(
             &state
                 .resource_man
-                .gui_str(&state.resource_man.registry.gui_ids.tile_config_direction),
+                .gui_str(state.resource_man.registry.gui_ids.tile_config_direction),
         );
 
         info_tip(
             &state
                 .resource_man
-                .gui_str(&state.resource_man.registry.gui_ids.direction_tip),
+                .gui_str(state.resource_man.registry.gui_ids.direction_tip),
         );
     });
 
-    constrained(Constraints::loose(vec2(100.0, 80.0)), || {
-        column(|| {
-            pad_x(4.0, 0.0).show(|| {
-                centered_row(|| {
-                    add_direction(&mut new_dir, 5, 8.0);
-                    add_direction(&mut new_dir, 0, 8.0);
+    center_col(|| {
+        constrained(Constraints::loose(vec2(70.0, 90.0)), || {
+            spaced_col(|| {
+                spaced_row(|| {
+                    add_direction(&mut new_dir, 5);
+                    add_direction(&mut new_dir, 0);
                 });
-            });
 
-            centered_row(|| {
-                add_direction(&mut new_dir, 4, 4.0);
-                pad_x(0.0, 4.0).show(|| {
+                spaced_row(|| {
+                    add_direction(&mut new_dir, 4);
                     if symbol_button("\u{f467}", colors::RED).clicked {
                         new_dir = None;
                     }
+                    add_direction(&mut new_dir, 1);
                 });
-                add_direction(&mut new_dir, 1, 4.0);
-            });
 
-            pad_x(4.0, 0.0).show(|| {
-                centered_row(|| {
-                    add_direction(&mut new_dir, 3, 8.0);
-                    add_direction(&mut new_dir, 2, 8.0);
+                spaced_row(|| {
+                    add_direction(&mut new_dir, 3);
+                    add_direction(&mut new_dir, 2);
                 });
             });
         });
@@ -130,11 +118,11 @@ fn config_direction(state: &GameState, data: &DataMap, tile_entity: ActorRef<Til
 fn config_linking(state: &mut GameState, config_open: TileCoord) {
     // TODO make this more generic and not constrained to master_node
 
-    centered_row(|| {
+    center_row(|| {
         if button(
             &state
                 .resource_man
-                .gui_str(&state.resource_man.registry.gui_ids.btn_link_network),
+                .gui_str(state.resource_man.registry.gui_ids.btn_link_network),
         )
         .clicked
         {
@@ -144,7 +132,7 @@ fn config_linking(state: &mut GameState, config_open: TileCoord) {
         info_tip(
             &state
                 .resource_man
-                .gui_str(&state.resource_man.registry.gui_ids.link_destination_tip),
+                .gui_str(state.resource_man.registry.gui_ids.link_destination_tip),
         );
     });
 }
@@ -214,11 +202,11 @@ fn config_selectable_id(
     data_id: Id,
     hint_id: Id,
     ids: &[Id],
-    names: &[String],
+    names: &[impl AsRef<str>],
     tile_entity: ActorRef<TileEntityMsg>,
     draw: &'static impl Fn(&mut GameState, &Id, &str),
 ) -> bool {
-    let current_id = data.get(&data_id).cloned().and_then(Data::into_id);
+    let current_id = data.get(data_id).cloned().and_then(Data::into_id);
     let mut new_id = current_id;
 
     searchable_id(
@@ -226,7 +214,7 @@ fn config_selectable_id(
         names,
         &mut new_id,
         TextField::Filter,
-        state.resource_man.gui_str(&hint_id).to_string(),
+        &state.resource_man.gui_str(hint_id),
         draw,
         state,
     );
@@ -245,7 +233,7 @@ fn config_selectable_id(
 
 fn draw_script_info(state: &mut GameState, data: &mut DataMap) {
     let script = data
-        .get(&state.resource_man.registry.data_ids.script)
+        .get(state.resource_man.registry.data_ids.script)
         .cloned()
         .and_then(Data::into_id);
 
@@ -253,8 +241,8 @@ fn draw_script_info(state: &mut GameState, data: &mut DataMap) {
         return;
     };
 
-    scroll_vertical(200.0, || {
-        column(|| {
+    scroll_vertical_bar_alignment(Vec2::ZERO, Vec2::new(f32::INFINITY, 200.0), None, || {
+        col(|| {
             if let Some(inputs) = &script.instructions.inputs {
                 for input in inputs {
                     draw_item(
@@ -288,21 +276,60 @@ fn rhai_ui(
 ) {
     match ui {
         RhaiUiUnit::Label { id } => {
-            label(&state.resource_man.gui_str(&id));
+            label(&state.resource_man.gui_str(id));
         }
         RhaiUiUnit::LabelAmount { amount } => {
             label(&amount.to_string());
         }
-        RhaiUiUnit::SliderAmount { id, max } => {
-            let Data::Amount(current_amount) = data.get(&id).cloned().unwrap_or(Data::Amount(0))
+        RhaiUiUnit::InputAmount { id, max } => {
+            let Data::Amount(current_amount) = data.get(id).cloned().unwrap_or(Data::Amount(0))
             else {
                 return;
             };
 
             let mut new_amount = current_amount;
+            let max_digit_count = (max.checked_ilog10().unwrap_or(0) + 1) as usize;
 
-            // TODO numerical input
-            slider(&mut new_amount, 0..=max, Some(128));
+            num_input(
+                &mut new_amount,
+                false,
+                0..=max,
+                |v| v.parse().ok(),
+                |v| {
+                    let n = v.to_string();
+                    let spaces = " ".repeat(max_digit_count.saturating_sub(n.len()));
+
+                    format!("{spaces}{n}")
+                },
+            );
+
+            if new_amount != current_amount {
+                tile_entity
+                    .send_message(TileEntityMsg::SetDataValue(id, Data::Amount(new_amount)))
+                    .unwrap();
+            }
+        }
+        RhaiUiUnit::SliderAmount { id, max } => {
+            let Data::Amount(current_amount) = data.get(id).cloned().unwrap_or(Data::Amount(0))
+            else {
+                return;
+            };
+
+            let mut new_amount = current_amount;
+            let max_digit_count = (max.checked_ilog10().unwrap_or(0) + 1) as usize;
+
+            slider(
+                &mut new_amount,
+                0..=max,
+                None,
+                |v| v.parse().ok(),
+                |v| {
+                    let n = v.to_string();
+                    let spaces = " ".repeat(max_digit_count.saturating_sub(n.len()));
+
+                    format!("{spaces}{n}")
+                },
+            );
 
             if new_amount != current_amount {
                 tile_entity
@@ -311,14 +338,14 @@ fn rhai_ui(
             }
         }
         RhaiUiUnit::Row { e } => {
-            centered_row(|| {
+            row(|| {
                 for ui in e {
                     rhai_ui(state, tile_entity.clone(), data, ui);
                 }
             });
         }
         RhaiUiUnit::Col { e } => {
-            centered_column(|| {
+            col(|| {
                 for ui in e {
                     rhai_ui(state, tile_entity.clone(), data, ui);
                 }
@@ -361,227 +388,250 @@ pub fn tile_config_ui(state: &mut GameState, game_data: &mut DataMap) {
             window_box(
                 state
                     .resource_man
-                    .gui_str(&state.resource_man.registry.gui_ids.tile_config)
+                    .gui_str(state.resource_man.registry.gui_ids.tile_config)
                     .to_string(),
                 || {
-                    scroll_vertical(300.0, || {
-                        let mut col = List::column();
-                        col.item_spacing = PADDING_LARGE;
-
-                        col.show(|| {
-                            let tile_info = state
-                                .resource_man
-                                .registry
-                                .tiles
-                                .get(&tile)
-                                .unwrap()
-                                .clone();
-
-                            if tile_info
-                                .data
-                                .get(&state.resource_man.registry.data_ids.storage_takeable)
-                                .cloned()
-                                .and_then(Data::into_bool)
-                                .unwrap_or(false)
+                    scroll_vertical_bar_alignment(
+                        Vec2::ZERO,
+                        Vec2::new(f32::INFINITY, 360.0),
+                        None,
+                        || {
                             {
-                                if let Some(Data::Inventory(buffer)) = data
-                                    .get(&state.resource_man.registry.data_ids.buffer)
+                                let mut col = list_col();
+                                col.item_spacing = PADDING_LARGE;
+                                col
+                            }
+                            .show(|| {
+                                let tile_info = state
+                                    .resource_man
+                                    .registry
+                                    .tiles
+                                    .get(&tile)
+                                    .unwrap()
+                                    .clone();
+
+                                if tile_info
+                                    .data
+                                    .get(state.resource_man.registry.data_ids.storage_takeable)
                                     .cloned()
+                                    .and_then(Data::into_bool)
+                                    .unwrap_or(false)
                                 {
-                                    column(|| {
-                                        centered_row(|| {
-                                            label(&state.resource_man.gui_str(
-                                                &state.resource_man.registry.gui_ids.inventory,
-                                            ));
+                                    if let Some(Data::Inventory(buffer)) = data
+                                        .get(state.resource_man.registry.data_ids.buffer)
+                                        .cloned()
+                                    {
+                                        col(|| {
+                                            center_row(|| {
+                                                label(&state.resource_man.gui_str(
+                                                    state.resource_man.registry.gui_ids.inventory,
+                                                ));
 
-                                            info_tip(&state.resource_man.gui_str(
-                                                &state.resource_man.registry.gui_ids.inventory_tip,
-                                            ));
+                                                info_tip(
+                                                    &state.resource_man.gui_str(
+                                                        state
+                                                            .resource_man
+                                                            .registry
+                                                            .gui_ids
+                                                            .inventory_tip,
+                                                    ),
+                                                );
+                                            });
+
+                                            takeable_items(
+                                                state,
+                                                game_data,
+                                                buffer,
+                                                tile_entity.clone(),
+                                            );
                                         });
+                                    }
+                                }
 
-                                        takeable_items(
-                                            state,
-                                            game_data,
-                                            buffer,
-                                            tile_entity.clone(),
-                                        );
+                                if let Some(ui) = tile_config_ui {
+                                    col(|| {
+                                        rhai_ui(state, tile_entity.clone(), &mut data, ui);
                                     });
                                 }
-                            }
 
-                            if let Some(ui) = tile_config_ui {
-                                column(|| {
-                                    rhai_ui(state, tile_entity.clone(), &mut data, ui);
-                                });
-                            }
-
-                            if let Some(Data::VecId(scripts)) = tile_info
-                                .data
-                                .get(&state.resource_man.registry.data_ids.scripts)
-                            {
-                                column(|| {
-                                    centered_row(|| {
-                                        label(&state.resource_man.gui_str(
-                                            &state.resource_man.registry.gui_ids.tile_config_script,
-                                        ));
-
-                                        info_tip(
-                                            &state.resource_man.gui_str(
-                                                &state
-                                                    .resource_man
-                                                    .registry
-                                                    .gui_ids
-                                                    .tile_config_script_info,
-                                            ),
-                                        );
-                                    });
-
-                                    draw_script_info(state, &mut data);
-
-                                    let names = scripts
-                                        .iter()
-                                        .map(|id| state.resource_man.script_name(id).to_string())
-                                        .collect::<Vec<_>>();
-
-                                    static DRAW: fn(&mut GameState, &Id, &str) =
-                                        |state, id, name| {
-                                            if let Some(stacks) =
-                                                state.resource_man.registry.scripts.get(id).map(
-                                                    |script| script.instructions.outputs.as_slice(),
-                                                )
-                                            {
-                                                for stack in stacks {
-                                                    draw_item(
-                                                        &state.resource_man,
-                                                        || {},
-                                                        *stack,
-                                                        SMALL_ICON_SIZE,
-                                                        false,
-                                                    );
-                                                }
-                                            }
-
-                                            label(name);
-                                        };
-
-                                    if config_selectable_id(
-                                        state,
-                                        &data,
-                                        state.resource_man.registry.data_ids.script,
-                                        state.resource_man.registry.gui_ids.search_script_tip,
-                                        scripts,
-                                        &names,
-                                        tile_entity.clone(),
-                                        &DRAW,
-                                    ) {
-                                        tile_entity
-                                            .send_message(TileEntityMsg::RemoveData(
-                                                state.resource_man.registry.data_ids.buffer,
-                                            ))
-                                            .unwrap();
-                                    }
-                                });
-                            }
-
-                            if let Some(Data::Id(item_type)) = tile_info
-                                .data
-                                .get(&state.resource_man.registry.data_ids.item_type)
-                                .cloned()
-                            {
-                                column(|| {
-                                    row(|| {
-                                        label(
-                                            &state.resource_man.gui_str(
-                                                &state
-                                                    .resource_man
-                                                    .registry
-                                                    .gui_ids
-                                                    .tile_config_item_type,
-                                            ),
-                                        );
-
-                                        let current_id = data
-                                            .get(&state.resource_man.registry.data_ids.item)
-                                            .cloned()
-                                            .and_then(Data::into_id);
-
-                                        if let Some(id) = current_id {
-                                            draw_item(
-                                                &state.resource_man,
-                                                || {},
-                                                ItemStack { id, amount: 0 },
-                                                SMALL_ICON_SIZE,
-                                                true,
+                                if let Some(Data::VecId(scripts)) = tile_info
+                                    .data
+                                    .get(state.resource_man.registry.data_ids.scripts)
+                                {
+                                    col(|| {
+                                        center_row(|| {
+                                            label(
+                                                &state.resource_man.gui_str(
+                                                    state
+                                                        .resource_man
+                                                        .registry
+                                                        .gui_ids
+                                                        .tile_config_script,
+                                                ),
                                             );
+
+                                            info_tip(
+                                                &state.resource_man.gui_str(
+                                                    state
+                                                        .resource_man
+                                                        .registry
+                                                        .gui_ids
+                                                        .tile_config_script_info,
+                                                ),
+                                            );
+                                        });
+
+                                        draw_script_info(state, &mut data);
+
+                                        let names = scripts
+                                            .iter()
+                                            .cloned()
+                                            .map(|id| state.resource_man.script_name(id))
+                                            .collect::<Vec<_>>();
+
+                                        static DRAW: fn(&mut GameState, &Id, &str) =
+                                            |state, id, name| {
+                                                if let Some(stacks) =
+                                                    state.resource_man.registry.scripts.get(id).map(
+                                                        |script| {
+                                                            script.instructions.outputs.as_slice()
+                                                        },
+                                                    )
+                                                {
+                                                    for stack in stacks {
+                                                        draw_item(
+                                                            &state.resource_man,
+                                                            || {},
+                                                            *stack,
+                                                            SMALL_ICON_SIZE,
+                                                            false,
+                                                        );
+                                                    }
+                                                }
+
+                                                label(name);
+                                            };
+
+                                        if config_selectable_id(
+                                            state,
+                                            &data,
+                                            state.resource_man.registry.data_ids.script,
+                                            state.resource_man.registry.gui_ids.search_script_tip,
+                                            scripts,
+                                            &names,
+                                            tile_entity.clone(),
+                                            &DRAW,
+                                        ) {
+                                            tile_entity
+                                                .send_message(TileEntityMsg::RemoveData(
+                                                    state.resource_man.registry.data_ids.buffer,
+                                                ))
+                                                .unwrap();
                                         }
                                     });
+                                }
 
-                                    let ids = state
-                                        .resource_man
-                                        .get_items(item_type, &mut state.loop_store.tag_cache)
-                                        .iter()
-                                        .map(|item| item.id)
-                                        .collect::<Vec<_>>();
-                                    let names = ids
-                                        .iter()
-                                        .map(|id| state.resource_man.item_name(id).to_string())
-                                        .collect::<Vec<_>>();
-
-                                    static DRAW: fn(&mut GameState, &Id, &str) =
-                                        |state, id, _name| {
-                                            draw_item(
-                                                &state.resource_man,
-                                                || {},
-                                                ItemStack { id: *id, amount: 0 },
-                                                SMALL_ICON_SIZE,
-                                                true,
+                                if let Some(Data::Id(item_type)) = tile_info
+                                    .data
+                                    .get(state.resource_man.registry.data_ids.item_type)
+                                    .cloned()
+                                {
+                                    col(|| {
+                                        center_row(|| {
+                                            label(
+                                                &state.resource_man.gui_str(
+                                                    state
+                                                        .resource_man
+                                                        .registry
+                                                        .gui_ids
+                                                        .tile_config_item_type,
+                                                ),
                                             );
-                                        };
 
-                                    if config_selectable_id(
-                                        state,
-                                        &data,
-                                        state.resource_man.registry.data_ids.item,
-                                        state.resource_man.registry.gui_ids.search_item_tip,
-                                        &ids,
-                                        &names,
-                                        tile_entity.clone(),
-                                        &DRAW,
-                                    ) {
-                                        tile_entity
-                                            .send_message(TileEntityMsg::RemoveData(
-                                                state.resource_man.registry.data_ids.buffer,
-                                            ))
-                                            .unwrap();
-                                    }
-                                });
-                            }
+                                            let current_id = data
+                                                .get(state.resource_man.registry.data_ids.item)
+                                                .cloned()
+                                                .and_then(Data::into_id);
 
-                            if !tile_info
-                                .data
-                                .get(&state.resource_man.registry.data_ids.indirectional)
-                                .cloned()
-                                .and_then(Data::into_bool)
-                                .unwrap_or(false)
-                            {
-                                column(|| {
-                                    config_direction(state, &data, tile_entity.clone());
-                                });
-                            }
+                                            if let Some(id) = current_id {
+                                                draw_item(
+                                                    &state.resource_man,
+                                                    || {},
+                                                    ItemStack { id, amount: 0 },
+                                                    SMALL_ICON_SIZE,
+                                                    true,
+                                                );
+                                            }
+                                        });
 
-                            if tile_info
-                                .data
-                                .get(&state.resource_man.registry.data_ids.linking)
-                                .cloned()
-                                .and_then(Data::into_bool)
-                                .unwrap_or(false)
-                            {
-                                column(|| {
-                                    config_linking(state, config_open_at);
-                                });
-                            }
-                        });
-                    });
+                                        let ids = state
+                                            .resource_man
+                                            .get_items(item_type, &mut state.loop_store.tag_cache)
+                                            .iter()
+                                            .map(|item| item.id)
+                                            .collect::<Vec<_>>();
+                                        let names = ids
+                                            .iter()
+                                            .cloned()
+                                            .map(|id| state.resource_man.item_name(id))
+                                            .collect::<Vec<_>>();
+
+                                        static DRAW: fn(&mut GameState, &Id, &str) =
+                                            |state, id, _name| {
+                                                draw_item(
+                                                    &state.resource_man,
+                                                    || {},
+                                                    ItemStack { id: *id, amount: 0 },
+                                                    SMALL_ICON_SIZE,
+                                                    true,
+                                                );
+                                            };
+
+                                        if config_selectable_id(
+                                            state,
+                                            &data,
+                                            state.resource_man.registry.data_ids.item,
+                                            state.resource_man.registry.gui_ids.search_item_tip,
+                                            &ids,
+                                            &names,
+                                            tile_entity.clone(),
+                                            &DRAW,
+                                        ) {
+                                            tile_entity
+                                                .send_message(TileEntityMsg::RemoveData(
+                                                    state.resource_man.registry.data_ids.buffer,
+                                                ))
+                                                .unwrap();
+                                        }
+                                    });
+                                }
+
+                                if !tile_info
+                                    .data
+                                    .get(state.resource_man.registry.data_ids.indirectional)
+                                    .cloned()
+                                    .and_then(Data::into_bool)
+                                    .unwrap_or(false)
+                                {
+                                    col(|| {
+                                        config_direction(state, &data, tile_entity.clone());
+                                    });
+                                }
+
+                                if tile_info
+                                    .data
+                                    .get(state.resource_man.registry.data_ids.linking)
+                                    .cloned()
+                                    .and_then(Data::into_bool)
+                                    .unwrap_or(false)
+                                {
+                                    col(|| {
+                                        config_linking(state, config_open_at);
+                                    });
+                                }
+                            });
+                        },
+                    );
                 },
             );
         });

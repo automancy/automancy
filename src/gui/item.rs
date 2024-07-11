@@ -1,14 +1,10 @@
-use automancy_defs::math;
 use automancy_defs::math::Float;
 use automancy_defs::rendering::InstanceData;
-use automancy_defs::{
-    glam::{dvec3, vec2},
-    stack::ItemStack,
-};
-use automancy_resources::ResourceManager;
+use automancy_defs::{glam::vec2, stack::ItemStack};
+use automancy_resources::{types::IconMode, ResourceManager};
 use yakui::Rect;
 
-use super::{centered_row, label, ui_game_object};
+use super::{center_row, label, ui_game_object};
 
 /// Draws an Item's icon.
 pub fn draw_item(
@@ -20,14 +16,14 @@ pub fn draw_item(
 ) -> Option<Rect> {
     let mut rect = None;
 
-    centered_row(|| {
+    center_row(|| {
         prefix();
 
         rect = ui_game_object(
             InstanceData::default(),
             resource_man.item_model_or_missing(stack.id),
             vec2(size, size),
-            Some(math::view(dvec3(0.0, 0.0, 1.0)).as_mat4()),
+            Some(IconMode::Item.world_matrix()),
         )
         .into_inner();
 
@@ -35,11 +31,11 @@ pub fn draw_item(
             if stack.amount > 0 {
                 label(&format!(
                     "{} ({})",
-                    resource_man.item_name(&stack.id),
+                    resource_man.item_name(stack.id),
                     stack.amount
                 ));
             } else {
-                label(&resource_man.item_name(&stack.id));
+                label(&resource_man.item_name(stack.id));
             }
         }
     });

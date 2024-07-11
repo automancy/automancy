@@ -10,22 +10,84 @@ use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
 use winit::keyboard::Key;
 
-
 use automancy_defs::math::Double;
 
 use crate::input::{get_default_keymap, KeyAction};
 
-#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+static OPTIONS_PATH: &str = "options.ron";
+static MISC_OPTIONS_PATH: &str = "misc_options.ron";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MiscOptions {
+    pub language: String,
+
+    #[serde(skip)]
+    pub synced: bool,
+}
+
+impl Default for MiscOptions {
+    fn default() -> Self {
+        Self {
+            language: String::from("en_US"),
+            synced: false,
+        }
+    }
+}
+
+impl MiscOptions {
+    pub fn load() -> Self {
+        log::info!("Loading options...");
+
+        let file = read_to_string(Path::new(MISC_OPTIONS_PATH)).unwrap_or_default();
+
+        let mut this: MiscOptions = ron::de::from_str(&file)
+            .inspect_err(|err| {
+                log::warn!("Error parsing misc options! A fresh one will be created. Error: {err}")
+            })
+            .unwrap_or_default();
+
+        if let Err(err) = this.save() {
+            log::error!("Error saving misc options! {err}");
+        }
+
+        this
+    }
+
+    pub fn save(&mut self) -> anyhow::Result<()> {
+        let mut file = File::create(MISC_OPTIONS_PATH)?;
+
+        log::info!("Serializing misc options...");
+        log::debug!("{self:?}");
+
+        let document = ron::ser::to_string_pretty(&self, PrettyConfig::default())
+            .inspect_err(|err| log::warn!("Error writing misc options! Error: {err}"))?;
+
+        log::info!("Saving misc options...");
+
+        write!(&mut file, "{document}")?;
+
+        log::info!("Saved misc options!");
+
+        self.synced = false;
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Options {
     pub graphics: GraphicsOptions,
     pub audio: AudioOptions,
     pub gui: GuiOptions,
     pub keymap: HashMap<Key, KeyAction>,
+
+    #[serde(skip)]
     pub synced: bool,
 }
 
-impl Options {
-    pub fn new() -> Self {
+#[allow(clippy::derivable_impls)]
+impl Default for Options {
+    fn default() -> Self {
         Self {
             graphics: Default::default(),
             audio: Default::default(),
@@ -36,15 +98,17 @@ impl Options {
     }
 }
 
-static OPTIONS_PATH: &str = "options.ron";
-
 impl Options {
-    pub fn load(resource_man: &ResourceManager) -> Options {
+    pub fn load(resource_man: &ResourceManager) -> Self {
         log::info!("Loading options...");
 
         let file = read_to_string(Path::new(OPTIONS_PATH)).unwrap_or_default();
 
-        let mut this: Options = ron::de::from_str(&file).unwrap_or_default();
+        let mut this: Options = ron::de::from_str(&file)
+            .inspect_err(|err| {
+                log::warn!("Error parsing options! A fresh one will be created. Error: {err}")
+            })
+            .unwrap_or_default();
         let read_keymap = mem::take(&mut this.keymap);
 
         let mut default = get_default_keymap(resource_man);
@@ -86,7 +150,8 @@ impl Options {
         log::info!("Serializing options...");
         log::debug!("{self:?}");
 
-        let document = ron::ser::to_string_pretty(&self, PrettyConfig::default())?;
+        let document = ron::ser::to_string_pretty(&self, PrettyConfig::default())
+            .inspect_err(|err| log::warn!("Error writing options! Error: {err}"))?;
 
         log::info!("Saving options...");
 

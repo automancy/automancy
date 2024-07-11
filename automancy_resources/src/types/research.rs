@@ -4,15 +4,13 @@ use std::path::Path;
 
 use serde::Deserialize;
 
+use automancy_defs::{graph::visit::IntoNodeReferences, id::Id, parse_item_stacks};
 use automancy_defs::{
-    graph::visit::IntoNodeReferences,
     parse_ids,
     stack::{ItemAmount, ItemStack},
 };
-use automancy_defs::{id::Id, parse_item_stacks};
 
-use crate::data::DataMapRaw;
-use crate::types::function::RhaiDataMap;
+use crate::data::{DataMap, DataMapRaw};
 use crate::types::IconMode;
 use crate::{load_recursively, ResourceManager, RON_EXT};
 
@@ -27,7 +25,7 @@ pub struct ResearchDef {
     pub description: Id,
     pub completed_description: Id,
     pub required_items: Option<Vec<ItemStack>>,
-    pub attached_puzzle: Option<(Id, RhaiDataMap)>,
+    pub attached_puzzle: Option<(Id, DataMap)>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -78,9 +76,7 @@ impl ResourceManager {
         let attached_puzzle = v.attached_puzzle.map(|(id, data)| {
             (
                 Id::parse(&id, &mut self.interner, Some(namespace)).unwrap(),
-                RhaiDataMap::from_data_map(
-                    data.intern_to_data(&mut self.interner, Some(namespace)),
-                ),
+                data.intern_to_data(&mut self.interner, Some(namespace)),
             )
         });
         let icon_mode = v.icon_mode;
@@ -149,14 +145,6 @@ impl ResourceManager {
                     self.registry.researches.add_edge(prev, this, ());
                 }
             }
-        }
-    }
-
-    pub fn get_puzzle_model(&self, maybe_item: Id) -> Id {
-        if self.registry.items.contains_key(&maybe_item) {
-            self.registry.items[&maybe_item].model
-        } else {
-            self.registry.model_ids.puzzle_space
         }
     }
 }

@@ -4,7 +4,7 @@ use automancy_defs::coord::{TileBounds, TileCoord};
 use automancy_defs::glam::{dvec2, dvec3, vec2};
 use automancy_defs::hexx::Hex;
 use automancy_defs::math;
-use automancy_defs::math::{matrix, DMatrix4, DVec2, DVec3, Double, Float, HEX_GRID_LAYOUT};
+use automancy_defs::math::{camera_matrix, DMatrix4, DVec2, DVec3, Double, Float, HEX_GRID_LAYOUT};
 
 use crate::input::InputHandler;
 
@@ -38,7 +38,7 @@ pub fn fit_pos(DVec3 { x, y, z }: DVec3) -> DVec3 {
 impl Camera {
     pub fn new((width, height): (Double, Double)) -> Self {
         let pos = dvec3(0.0, 0.0, 2.0);
-        let matrix = matrix(fit_pos(pos), width / height);
+        let matrix = camera_matrix(fit_pos(pos), width / height);
 
         Self {
             pos,
@@ -109,7 +109,7 @@ impl Camera {
             self.scroll_vel -= self.scroll_vel * elapsed.mul(15.0).min(0.9);
         }
 
-        self.matrix = matrix(self.get_pos(), width / height);
+        self.matrix = camera_matrix(self.get_pos(), width / height);
         self.culling_range = math::get_culling_range((width, height), self.get_pos());
     }
 

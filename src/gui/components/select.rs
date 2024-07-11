@@ -1,16 +1,14 @@
 use automancy_defs::colors;
 use yakui::{
-    colored_circle, column, use_state,
+    colored_circle, reflow, use_state,
     widgets::{ButtonResponse, Circle, Layer, Pad},
-    Alignment, Dim2, Pivot, Response,
+    Alignment, Dim2, Pivot, Response, Vec2,
 };
 
 use super::{
-    button,
+    button, center_row, col,
     container::RoundRect,
     interactive::{interactive, InteractiveResponse},
-    layout::centered_row,
-    relative::Relative,
     scrollable::scroll_vertical,
     PADDING_MEDIUM,
 };
@@ -23,18 +21,18 @@ pub fn selection_box<T: Clone + Eq>(
     let open = use_state(|| false);
     let mut selected = default;
 
-    column(|| {
+    col(|| {
         if button(&format(&selected)).clicked {
             open.modify(|v| !v);
         }
 
         if open.get() {
-            Relative::new(Alignment::BOTTOM_LEFT, Pivot::TOP_LEFT, Dim2::ZERO).show(|| {
+            reflow(Alignment::BOTTOM_LEFT, Pivot::TOP_LEFT, Dim2::ZERO, || {
                 Layer::new().show(|| {
                     RoundRect::new(8.0, colors::BACKGROUND_1).show_children(|| {
-                        scroll_vertical(250.0, || {
-                            Pad::all(PADDING_MEDIUM).show(|| {
-                                column(|| {
+                        scroll_vertical(Vec2::ZERO, Vec2::new(160.0, 200.0), || {
+                            Pad::vertical(PADDING_MEDIUM).show(|| {
+                                col(|| {
                                     for option in options.into_iter() {
                                         if button(&format(&option)).clicked {
                                             selected = option;
@@ -75,7 +73,7 @@ pub fn radio<T: Eq>(
     let hovered = use_state(|| false);
 
     let r = interactive(|| {
-        centered_row(|| {
+        center_row(|| {
             let mut outer_circle = Circle::new();
             outer_circle.color = if hovered.get() {
                 colors::BACKGROUND_3

@@ -2,13 +2,15 @@ use std::{cell::Cell, fmt::Debug, ops::RangeInclusive};
 
 use automancy_defs::colors;
 use yakui::{
-    colored_box, colored_circle, draggable,
+    colored_box, colored_circle, draggable, use_state,
     util::widget,
     widget::{LayoutContext, PaintContext, Widget},
     Color, Constraints, Rect, Response, Vec2,
 };
 
-use crate::util::num::NumTrait;
+use crate::{gui::util::pad_x, util::num::NumTrait};
+
+use super::{center_row, simple_textbox, PADDING_SMALL};
 
 const TRACK_COLOR: Color = colors::BACKGROUND_2;
 const KNOB_COLOR: Color = colors::ORANGE;
@@ -73,7 +75,7 @@ impl<T: NumTrait> Widget for SliderWidget<T> {
             colored_circle(KNOB_COLOR, KNOB_SIZE);
         });
 
-        let mut value = self.props.value;
+        let mut value = T::clamp(self.props.value, self.props.min, self.props.max);
 
         if let (Some(drag), Some(rect)) = (res.dragging, self.rect.get()) {
             let min_pos = rect.pos().x;
@@ -152,11 +154,62 @@ fn round_to_step<T: NumTrait>(value: T, step: T) -> T {
     }
 }
 
-pub fn slider<T: NumTrait>(value: &mut T, range: RangeInclusive<T>, step: Option<T>) {
-    let mut slider = Slider::new(*value, *range.start(), *range.end());
-    slider.step = step;
+pub fn num_input<T: NumTrait>(
+    value: &mut T,
+    value_changed: bool,
+    range: RangeInclusive<T>,
+    parse: impl Fn(&str) -> Option<T>,
+    to_string: impl Fn(&T) -> String,
+) {
+    let text = use_state(String::new);
 
-    if let Some(v) = slider.show().value {
-        *value = v
+    let updated = use_state(|| false);
+
+    if value_changed {
+        updated.set(true);
     }
+
+    let string_v = to_string(value);
+
+    let res = simple_textbox(
+        &string_v,
+        updated.get().then_some(&string_v),
+        Some(&string_v),
+    )
+    .into_inner();
+
+    if let Some(v) = res.text {
+        text.set(v);
+    }
+
+    updated.set(false);
+
+    if res.activated || res.lost_focus {
+        if let Some(v) = parse(text.borrow().as_str()) {
+            *value = v.clamp(*range.start(), *range.end());
+        }
+
+        updated.set(true);
+    }
+}
+
+pub fn slider<T: NumTrait>(
+    value: &mut T,
+    range: RangeInclusive<T>,
+    step: Option<T>,
+    parse: impl Fn(&str) -> Option<T>,
+    to_string: impl Fn(&T) -> String,
+) {
+    center_row(|| {
+        let mut slider = Slider::new(*value, *range.start(), *range.end());
+        slider.step = step;
+
+        let mut updated = false;
+        if let Some(v) = slider.show().value {
+            *value = v;
+            updated = true;
+        }
+
+        pad_x(PADDING_SMALL, 0.0).show(|| num_input(value, updated, range, parse, to_string));
+    });
 }

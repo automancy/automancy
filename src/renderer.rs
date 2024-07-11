@@ -40,8 +40,8 @@ use yakui::Rect;
 use yakui_wgpu::SurfaceInfo;
 
 use crate::gpu::{
-    AnimationMap, GlobalResources, Gpu, RenderResources, SharedResources, NORMAL_CLEAR,
-    SCREENSHOT_FORMAT,
+    AnimationMap, GlobalResources, Gpu, RenderResources, SharedResources, MODEL_DEPTH_CLEAR,
+    NORMAL_CLEAR, SCREENSHOT_FORMAT,
 };
 use crate::{
     game::{GameSystemMessage, TransactionRecord, TransactionRecords, TRANSACTION_ANIMATION_SPEED},
@@ -250,16 +250,14 @@ impl Renderer {
                         let direction = HEX_GRID_LAYOUT.hex_to_world_pos(*direction);
                         let theta = direction_to_angle(direction);
 
-                        let instance = InstanceData::default()
-                            .with_model_matrix(
-                                Matrix4::from_translation(vec3(
-                                    point.x as Float,
-                                    point.y as Float,
-                                    (FAR + 0.025) as Float,
-                                )) * Matrix4::from_rotation_z(theta)
-                                    * Matrix4::from_scale(vec3(0.3, 0.3, 0.3)),
-                            )
-                            .with_light_pos(camera_pos_float, None);
+                        let instance = InstanceData::default().with_model_matrix(
+                            Matrix4::from_translation(vec3(
+                                point.x as Float,
+                                point.y as Float,
+                                (FAR + 0.025) as Float,
+                            )) * Matrix4::from_rotation_z(theta)
+                                * Matrix4::from_scale(vec3(0.3, 0.3, 0.3)),
+                        );
                         let model = state.resource_man.item_model_or_missing(stack.id);
 
                         extra_instances.push((instance, model, ()));
@@ -270,11 +268,10 @@ impl Renderer {
 
         for (coord, data) in all_data {
             let world_coord = HEX_GRID_LAYOUT.hex_to_world_pos(**coord);
-            if let Some(Data::Coord(link)) = data.get(&state.resource_man.registry.data_ids.link) {
+            if let Some(Data::Coord(link)) = data.get(state.resource_man.registry.data_ids.link) {
                 extra_instances.push((
                     InstanceData::default()
                         .with_color_offset(colors::RED.to_linear())
-                        .with_light_pos(camera_pos_float, None)
                         .with_model_matrix(make_line(
                             world_coord,
                             HEX_GRID_LAYOUT.hex_to_world_pos(**link),
@@ -285,14 +282,12 @@ impl Renderer {
                 ));
             }
 
-            if let Some(Data::Id(id)) = data.get(&state.resource_man.registry.data_ids.item) {
+            if let Some(Data::Id(id)) = data.get(state.resource_man.registry.data_ids.item) {
                 extra_instances.push((
-                    InstanceData::default()
-                        .with_light_pos(camera_pos_float, None)
-                        .with_model_matrix(
-                            Matrix4::from_translation(world_coord.extend(0.1))
-                                * Matrix4::from_scale(vec3(0.25, 0.25, 1.0)),
-                        ),
+                    InstanceData::default().with_model_matrix(
+                        Matrix4::from_translation(world_coord.extend(0.1))
+                            * Matrix4::from_scale(vec3(0.25, 0.25, 1.0)),
+                    ),
                     state.resource_man.item_model_or_missing(*id),
                     (),
                 ))
@@ -304,7 +299,7 @@ impl Renderer {
 
             if let Some(theta) = all_data
                 .get(coord)
-                .and_then(|data| data.get(&state.resource_man.registry.data_ids.direction))
+                .and_then(|data| data.get(state.resource_man.registry.data_ids.direction))
                 .and_then(|direction| {
                     if let Data::Coord(target) = direction {
                         math::tile_direction_to_angle(*target)
@@ -315,13 +310,12 @@ impl Renderer {
             {
                 if let Data::Color(color) = tile
                     .data
-                    .get(&state.resource_man.registry.data_ids.direction_color)
+                    .get(state.resource_man.registry.data_ids.direction_color)
                     .unwrap_or(&Data::Color(colors::ORANGE))
                 {
                     extra_instances.push((
                         InstanceData::default()
                             .with_color_offset(color.to_linear())
-                            .with_light_pos(camera_pos_float, None)
                             .with_model_matrix(
                                 unit.instance.get_model_matrix()
                                     * Matrix4::from_rotation_z(theta.to_radians())
@@ -391,45 +385,43 @@ impl Renderer {
                         && pos.y > bound_min.y
                         && pos.y < bound_max.y
                     {
-                        {
-                            let tile = state.resource_man.registry.tiles.get(&id).unwrap();
+                        let tile = state.resource_man.registry.tiles.get(&id).unwrap();
 
-                            if let Some(theta) = all_data
-                                .get(&coord)
-                                .and_then(|data| {
-                                    data.get(&state.resource_man.registry.data_ids.direction)
-                                })
-                                .and_then(|direction| {
-                                    if let Data::Coord(target) = direction {
-                                        math::tile_direction_to_angle(*target)
-                                    } else {
-                                        None
-                                    }
-                                })
-                            {
-                                unit.instance = unit
-                                    .instance
-                                    .add_model_matrix(Matrix4::from_rotation_z(theta.to_radians()));
-                            } else if let Some(Data::Id(inactive)) = tile
-                                .data
-                                .get(&state.resource_man.registry.data_ids.inactive_model)
-                            {
-                                unit.model_override =
-                                    Some(state.resource_man.tile_model_or_missing(*inactive));
-                            }
+                        if let Some(theta) = all_data
+                            .get(&coord)
+                            .and_then(|data| {
+                                data.get(state.resource_man.registry.data_ids.direction)
+                            })
+                            .and_then(|direction| {
+                                if let Data::Coord(target) = direction {
+                                    math::tile_direction_to_angle(*target)
+                                } else {
+                                    None
+                                }
+                            })
+                        {
+                            unit.instance = unit
+                                .instance
+                                .add_model_matrix(Matrix4::from_rotation_z(theta.to_radians()));
                         }
 
+                        if let Some(Data::Id(inactive)) = tile
+                            .data
+                            .get(state.resource_man.registry.data_ids.inactive_model)
                         {
-                            if let Some(color) = tile_tints.get(&coord) {
-                                unit.instance = unit.instance.with_color_offset(color.to_array())
-                            }
+                            unit.model_override =
+                                Some(state.resource_man.tile_model_or_missing(*inactive));
+                        }
 
-                            unit.instance = unit.instance.with_light_pos(camera_pos_float, None);
+                        if let Some(color) = tile_tints.get(&coord) {
+                            unit.instance = unit.instance.with_color_offset(color.to_array())
                         }
 
                         let model = state.resource_man.tile_model_or_missing(id);
 
-                        let model = unit.model_override.unwrap_or(model);
+                        let model = state
+                            .resource_man
+                            .model_or_missing(unit.model_override.unwrap_or(model));
 
                         try_add_animation(
                             &state.resource_man,
@@ -506,18 +498,41 @@ impl Renderer {
         };
 
         let camera_matrix = state.camera.get_matrix().as_mat4();
+        let camera_pos = state.camera.get_pos().as_vec3();
 
         let size = renderer.gpu.window.inner_size();
 
         let game_data = game_instances.map(|game_instances| {
-            gpu::indirect_instance(&state.resource_man, game_instances, &animation_map, true)
+            gpu::indirect_instance(
+                &state.resource_man,
+                game_instances
+                    .into_iter()
+                    .map(|v| (v.0, camera_matrix, v.1, v.2))
+                    .collect(),
+                &animation_map,
+                true,
+            )
         });
 
-        let extra_game_data =
-            gpu::indirect_instance(&state.resource_man, extra_instances, &animation_map, true);
+        let extra_game_data = gpu::indirect_instance(
+            &state.resource_man,
+            extra_instances
+                .into_iter()
+                .map(|v| (v.0, camera_matrix, v.1, v.2))
+                .collect(),
+            &animation_map,
+            true,
+        );
 
-        let overlay_game_data =
-            gpu::indirect_instance(&state.resource_man, overlay_instances, &animation_map, true);
+        let overlay_game_data = gpu::indirect_instance(
+            &state.resource_man,
+            overlay_instances
+                .into_iter()
+                .map(|v| (v.0, camera_matrix, v.1, v.2))
+                .collect(),
+            &animation_map,
+            true,
+        );
 
         let output = renderer.gpu.surface.get_current_texture()?;
 
@@ -541,6 +556,7 @@ impl Renderer {
                 opaques,
                 non_opaques,
                 matrix_data,
+                world_matrix_data,
                 draw_data,
             } = extra_game_data;
 
@@ -583,10 +599,10 @@ impl Renderer {
                         },
                     }),
                     Some(RenderPassColorAttachment {
-                        view: &renderer.shared_resources.model_texture().1,
+                        view: &renderer.shared_resources.model_depth_texture().1,
                         resolve_target: None,
                         ops: Operations {
-                            load: LoadOp::Clear(Color::TRANSPARENT),
+                            load: LoadOp::Clear(MODEL_DEPTH_CLEAR),
                             store: StoreOp::Store,
                         },
                     }),
@@ -610,7 +626,7 @@ impl Renderer {
                         .extra_objects_resources
                         .uniform_buffer,
                     0,
-                    bytemuck::cast_slice(&[GameUBO::new(camera_matrix)]),
+                    bytemuck::cast_slice(&[GameUBO::new(camera_pos, None)]),
                 );
                 renderer.gpu.queue.write_buffer(
                     &renderer
@@ -618,7 +634,17 @@ impl Renderer {
                         .extra_objects_resources
                         .matrix_data_buffer,
                     0,
-                    bytemuck::cast_slice(matrix_data.as_slice()),
+                    bytemuck::cast_slice(matrix_data.into_iter().collect::<Vec<_>>().as_slice()),
+                );
+                renderer.gpu.queue.write_buffer(
+                    &renderer
+                        .render_resources
+                        .extra_objects_resources
+                        .world_matrix_data_buffer,
+                    0,
+                    bytemuck::cast_slice(
+                        world_matrix_data.into_iter().collect::<Vec<_>>().as_slice(),
+                    ),
                 );
 
                 render_pass.set_pipeline(&renderer.global_resources.game_pipeline);
@@ -671,6 +697,7 @@ impl Renderer {
             opaques,
             non_opaques,
             matrix_data,
+            world_matrix_data,
             draw_data,
         }) = game_data.as_ref().or(renderer.last_game_data.as_ref())
         {
@@ -713,7 +740,7 @@ impl Renderer {
                         },
                     }),
                     Some(RenderPassColorAttachment {
-                        view: &renderer.shared_resources.model_texture().1,
+                        view: &renderer.shared_resources.model_depth_texture().1,
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Load,
@@ -737,12 +764,32 @@ impl Renderer {
                 renderer.gpu.queue.write_buffer(
                     &renderer.render_resources.game_resources.uniform_buffer,
                     0,
-                    bytemuck::cast_slice(&[GameUBO::new(camera_matrix)]),
+                    bytemuck::cast_slice(&[GameUBO::new(camera_pos, None)]),
                 );
                 renderer.gpu.queue.write_buffer(
                     &renderer.render_resources.game_resources.matrix_data_buffer,
                     0,
-                    bytemuck::cast_slice(matrix_data.as_slice()),
+                    bytemuck::cast_slice(
+                        matrix_data
+                            .into_iter()
+                            .cloned()
+                            .collect::<Vec<_>>()
+                            .as_slice(),
+                    ),
+                );
+                renderer.gpu.queue.write_buffer(
+                    &renderer
+                        .render_resources
+                        .game_resources
+                        .world_matrix_data_buffer,
+                    0,
+                    bytemuck::cast_slice(
+                        world_matrix_data
+                            .into_iter()
+                            .cloned()
+                            .collect::<Vec<_>>()
+                            .as_slice(),
+                    ),
                 );
 
                 render_pass.set_pipeline(&renderer.global_resources.game_pipeline);
@@ -800,6 +847,7 @@ impl Renderer {
                 opaques,
                 non_opaques,
                 matrix_data,
+                world_matrix_data,
                 draw_data,
             } = overlay_game_data;
 
@@ -842,7 +890,7 @@ impl Renderer {
                         },
                     }),
                     Some(RenderPassColorAttachment {
-                        view: &renderer.shared_resources.model_texture().1,
+                        view: &renderer.shared_resources.model_depth_texture().1,
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Load,
@@ -869,7 +917,7 @@ impl Renderer {
                         .overlay_objects_resources
                         .uniform_buffer,
                     0,
-                    bytemuck::cast_slice(&[GameUBO::new(camera_matrix)]),
+                    bytemuck::cast_slice(&[GameUBO::new(camera_pos, None)]),
                 );
                 renderer.gpu.queue.write_buffer(
                     &renderer
@@ -877,7 +925,17 @@ impl Renderer {
                         .overlay_objects_resources
                         .matrix_data_buffer,
                     0,
-                    bytemuck::cast_slice(matrix_data.as_slice()),
+                    bytemuck::cast_slice(matrix_data.into_iter().collect::<Vec<_>>().as_slice()),
+                );
+                renderer.gpu.queue.write_buffer(
+                    &renderer
+                        .render_resources
+                        .overlay_objects_resources
+                        .world_matrix_data_buffer,
+                    0,
+                    bytemuck::cast_slice(
+                        world_matrix_data.into_iter().collect::<Vec<_>>().as_slice(),
+                    ),
                 );
 
                 render_pass.set_pipeline(&renderer.global_resources.game_pipeline);
@@ -937,7 +995,6 @@ impl Renderer {
                     .uniform_buffer,
                 0,
                 bytemuck::cast_slice(&[PostProcessingUBO {
-                    world_matrix: camera_matrix.to_cols_array_2d(),
                     ..Default::default()
                 }]),
             );

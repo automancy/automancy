@@ -1,6 +1,6 @@
 use std::{f32::consts::PI, mem::size_of};
 
-use bytemuck::{Pod, Zeroable};
+use bytemuck::{ByteEq, ByteHash, Pod, Zeroable};
 
 use glam::{vec3, vec4};
 use gltf::{
@@ -8,9 +8,12 @@ use gltf::{
     Document,
 };
 use gltf::{buffer::Data, scene::Transform};
-use wgpu::{vertex_attr_array, BufferAddress, VertexAttribute, VertexBufferLayout, VertexStepMode};
+use wgpu::{
+    naga::FastIndexSet, vertex_attr_array, BufferAddress, VertexAttribute, VertexBufferLayout,
+    VertexStepMode,
+};
 
-use crate::math::{direction_to_angle, Float, Matrix3, Matrix4, Quaternion, Vec2, Vec3, Vec4};
+use crate::math::{direction_to_angle, Float, Matrix3, Matrix4, Quaternion, Vec2, Vec3};
 
 pub const LINE_DEPTH: Float = 0.1;
 
@@ -62,7 +65,6 @@ impl Vertex {
 pub struct InstanceData {
     color_offset: VertexColor,
     alpha: Float,
-    light_pos: Vec4,
     model_matrix: Matrix4,
 }
 
@@ -71,7 +73,6 @@ impl Default for InstanceData {
         Self {
             color_offset: Default::default(),
             alpha: 1.0,
-            light_pos: vec4(0.0, 0.0, 1.0, 1.0),
             model_matrix: Matrix4::IDENTITY,
         }
     }
@@ -126,13 +127,6 @@ impl InstanceData {
     }
 
     #[inline]
-    pub fn with_light_pos(mut self, light_pos: Vec3, light_strength: Option<Float>) -> Self {
-        self.light_pos = light_pos.extend(light_strength.unwrap_or(1.0));
-
-        self
-    }
-
-    #[inline]
     pub fn with_color_offset(mut self, color_offset: impl Into<VertexColor>) -> Self {
         self.color_offset = color_offset.into();
 
@@ -140,10 +134,16 @@ impl InstanceData {
     }
 }
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialOrd, PartialEq, Zeroable, Pod)]
+#[derive(Clone, Copy, Debug, Default, PartialOrd, Zeroable, Pod, ByteHash, ByteEq)]
 pub struct MatrixData {
     model_matrix: RawMat4,
     normal_matrix: [[Float; 4]; 3], // memory alignment issue, padded to 16 bytes
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialOrd, Zeroable, Pod, ByteHash, ByteEq)]
+pub struct WorldMatrixData {
+    world_matrix: RawMat4,
 }
 
 #[repr(C)]
@@ -151,8 +151,8 @@ pub struct MatrixData {
 pub struct RawInstanceData {
     color_offset: VertexColor,
     alpha: Float,
-    light_pos: [Float; 4],
     matrix_index: u32,
+    world_matrix_index: u32,
 }
 
 static FIX_COORD: Matrix4 = Matrix4::from_cols(
@@ -163,41 +163,40 @@ static FIX_COORD: Matrix4 = Matrix4::from_cols(
 );
 
 impl RawInstanceData {
-    pub fn from_instance(instance: InstanceData, buffer: &mut Vec<MatrixData>) -> Self {
+    pub fn from_instance(
+        instance: InstanceData,
+        world_matrix: Matrix4,
+        matrix_buffer: &mut FastIndexSet<MatrixData>,
+        world_matrix_buffer: &mut FastIndexSet<WorldMatrixData>,
+    ) -> Self {
         let model_matrix = instance.model_matrix;
 
-        if buffer.last().map(|v| v.model_matrix) != Some(model_matrix.to_cols_array_2d()) {
-            let inverse_transpose = Matrix3::from_cols(
-                model_matrix.x_axis.truncate(),
-                model_matrix.y_axis.truncate(),
-                model_matrix.z_axis.truncate(),
-            )
-            .inverse()
-            .transpose();
+        let inverse_transpose = Matrix3::from_cols(
+            model_matrix.x_axis.truncate(),
+            model_matrix.y_axis.truncate(),
+            model_matrix.z_axis.truncate(),
+        )
+        .inverse()
+        .transpose();
 
-            let matrix_data = MatrixData {
-                model_matrix: model_matrix.to_cols_array_2d(),
-                normal_matrix: [
-                    inverse_transpose.x_axis.extend(0.0).to_array(),
-                    inverse_transpose.y_axis.extend(0.0).to_array(),
-                    inverse_transpose.z_axis.extend(0.0).to_array(),
-                ],
-            };
+        let matrix_data = MatrixData {
+            model_matrix: model_matrix.to_cols_array_2d(),
+            normal_matrix: [
+                inverse_transpose.x_axis.extend(0.0).to_array(),
+                inverse_transpose.y_axis.extend(0.0).to_array(),
+                inverse_transpose.z_axis.extend(0.0).to_array(),
+            ],
+        };
 
-            buffer.push(matrix_data);
-        }
-        let index = buffer.len() - 1;
+        let world_matrix_data = WorldMatrixData {
+            world_matrix: (FIX_COORD * world_matrix).to_cols_array_2d(),
+        };
 
         Self {
             color_offset: instance.color_offset,
             alpha: instance.alpha,
-            light_pos: [
-                instance.light_pos.x,
-                instance.light_pos.y,
-                instance.light_pos.z,
-                instance.light_pos.w,
-            ],
-            matrix_index: index as u32,
+            matrix_index: matrix_buffer.insert_full(matrix_data).0 as u32,
+            world_matrix_index: world_matrix_buffer.insert_full(world_matrix_data).0 as u32,
         }
     }
 
@@ -205,7 +204,7 @@ impl RawInstanceData {
         static ATTRIBUTES: &[VertexAttribute] = &vertex_attr_array![
             3 => Float32x4,
             4 => Float32,
-            5 => Float32x4,
+            5 => Uint32,
             6 => Uint32,
         ];
 
@@ -225,21 +224,21 @@ pub static DEFAULT_LIGHT_COLOR: VertexColor = [1.0; 4];
 #[derive(Clone, Copy, Debug, Zeroable, Pod)]
 pub struct GameUBO {
     light_color: VertexColor,
-    world_matrix: RawMat4,
+    light_pos: [f32; 4],
 }
 
 impl GameUBO {
-    pub fn new(world_matrix: Matrix4) -> Self {
+    pub fn new(light_pos: Vec3, light_strength: Option<Float>) -> Self {
         Self {
             light_color: DEFAULT_LIGHT_COLOR,
-            world_matrix: (FIX_COORD * world_matrix).to_cols_array_2d(),
+            light_pos: light_pos.extend(light_strength.unwrap_or(1.0)).to_array(),
         }
     }
 }
 
 impl Default for GameUBO {
     fn default() -> Self {
-        Self::new(Matrix4::IDENTITY)
+        Self::new(Vec3::new(0.0, 0.0, 6.0), None)
     }
 }
 
@@ -248,7 +247,6 @@ pub const FLAG_SCREEN_EFFECT: u32 = 1;
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Zeroable, Pod)]
 pub struct PostProcessingUBO {
-    pub world_matrix: RawMat4,
     pub flags: u32,
     pub _p0: [f32; 3],
 }
@@ -256,7 +254,6 @@ pub struct PostProcessingUBO {
 impl Default for PostProcessingUBO {
     fn default() -> Self {
         Self {
-            world_matrix: Matrix4::IDENTITY.to_cols_array_2d(),
             flags: FLAG_SCREEN_EFFECT,
             _p0: [0.0; 3],
         }

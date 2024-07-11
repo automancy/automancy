@@ -85,6 +85,11 @@ pub struct GuiIds {
     pub inventory: Id,
     pub tile_config: Id,
 
+    pub options_graphics: Id,
+    pub options_audio: Id,
+    pub options_gui: Id,
+    pub options_controls: Id,
+
     pub inventory_tip: Id,
     pub search_tip: Id,
     pub search_script_tip: Id,

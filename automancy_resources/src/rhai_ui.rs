@@ -9,6 +9,7 @@ pub enum RhaiUiUnit {
     Col { e: Vec<RhaiUiUnit> },
     Label { id: Id },
     LabelAmount { amount: ItemAmount },
+    InputAmount { id: Id, max: ItemAmount },
     SliderAmount { id: Id, max: ItemAmount },
 }
 
@@ -32,6 +33,9 @@ mod ui {
     }
     pub fn LabelAmount(amount: ItemAmount) -> RhaiUiUnit {
         RhaiUiUnit::LabelAmount { amount }
+    }
+    pub fn InputAmount(id: Id, max: ItemAmount) -> RhaiUiUnit {
+        RhaiUiUnit::InputAmount { id, max }
     }
     pub fn SliderAmount(id: Id, max: ItemAmount) -> RhaiUiUnit {
         RhaiUiUnit::SliderAmount { id, max }

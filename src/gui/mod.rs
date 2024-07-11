@@ -43,8 +43,8 @@ pub mod tile_config;
 pub mod tile_selection;
 pub mod util;
 
+pub const TINY_ICON_SIZE: Float = 16.0;
 pub const SMALL_ICON_SIZE: Float = 24.0;
-pub const SMALLISH_ICON_SIZE: Float = 36.0;
 pub const MEDIUM_ICON_SIZE: Float = 48.0;
 pub const LARGE_ICON_SIZE: Float = 96.0;
 
@@ -283,7 +283,7 @@ pub type YakuiRenderResources = (
     Option<GuiResources>,
     TextureFormat,
     AnimationMap,
-    Option<Vec<(InstanceData, Id, (usize, Vec2))>>,
+    Option<Vec<(InstanceData, Matrix4, Id, (usize, Vec2))>>,
     Option<UVec2>,
     Vec<Option<crunch::Rect>>,
     Option<Texture>,
@@ -335,14 +335,13 @@ pub fn render_ui(
 
                     if let Some(id) = state.gui_state.selected_tile_id {
                         state.renderer.as_mut().unwrap().overlay_instances.push((
-                            InstanceData::default()
-                                .with_alpha(0.6)
-                                .with_light_pos(state.camera.get_pos().as_vec3(), None)
-                                .with_model_matrix(Matrix4::from_translation(vec3(
+                            InstanceData::default().with_alpha(0.6).with_model_matrix(
+                                Matrix4::from_translation(vec3(
                                     cursor_pos.x as Float,
                                     cursor_pos.y as Float,
                                     FAR,
-                                ))),
+                                )),
+                            ),
                             state.resource_man.tile_model_or_missing(id),
                             (),
                         ))
@@ -352,7 +351,6 @@ pub fn render_ui(
                         state.renderer.as_mut().unwrap().overlay_instances.push((
                             InstanceData::default()
                                 .with_color_offset(colors::RED.to_linear())
-                                .with_light_pos(state.camera.get_pos().as_vec3(), None)
                                 .with_model_matrix(make_line(
                                     HEX_GRID_LAYOUT.hex_to_world_pos(*coord),
                                     cursor_pos.truncate().as_vec2(),
@@ -371,7 +369,7 @@ pub fn render_ui(
                         if dir != TileCoord::ZERO
                             && !state.resource_man.registry.tiles[&selected_tile_id]
                                 .data
-                                .get(&state.resource_man.registry.data_ids.indirectional)
+                                .get(state.resource_man.registry.data_ids.indirectional)
                                 .cloned()
                                 .and_then(Data::into_bool)
                                 .unwrap_or(false)
@@ -379,7 +377,6 @@ pub fn render_ui(
                             state.renderer.as_mut().unwrap().extra_instances.push((
                                 InstanceData::default()
                                     .with_color_offset(colors::RED.to_linear())
-                                    .with_light_pos(state.camera.get_pos().as_vec3(), None)
                                     .with_model_matrix(make_line(
                                         HEX_GRID_LAYOUT.hex_to_world_pos(*state.camera.pointing_at),
                                         HEX_GRID_LAYOUT
@@ -438,7 +435,6 @@ pub fn render_ui(
             state.renderer.as_mut().unwrap().overlay_instances.push((
                 InstanceData::default()
                     .with_color_offset(colors::LIGHT_BLUE.to_linear())
-                    .with_light_pos(state.camera.get_pos().as_vec3(), None)
                     .with_model_matrix(make_line(
                         HEX_GRID_LAYOUT.hex_to_world_pos(*start),
                         HEX_GRID_LAYOUT.hex_to_world_pos(*state.camera.pointing_at),
@@ -459,7 +455,7 @@ pub fn render_ui(
 
             if let Some(data) = data {
                 let rotate = Matrix4::from_rotation_z(
-                    data.get(&state.resource_man.registry.data_ids.direction)
+                    data.get(state.resource_man.registry.data_ids.direction)
                         .and_then(|direction| {
                             if let Data::Coord(direction) = direction {
                                 math::tile_direction_to_angle(*direction)
@@ -477,7 +473,6 @@ pub fn render_ui(
             state.renderer.as_mut().unwrap().overlay_instances.push((
                 InstanceData::default()
                     .with_alpha(0.5)
-                    .with_light_pos(state.camera.get_pos().as_vec3(), None)
                     .with_model_matrix(model_matrix),
                 state.resource_man.tile_model_or_missing(*id),
                 (),

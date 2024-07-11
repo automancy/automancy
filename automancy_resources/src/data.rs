@@ -1,5 +1,10 @@
-use std::ops::{Deref, DerefMut};
-use std::{any::TypeId, collections::BTreeMap};
+use std::{
+    any::TypeId,
+    collections::{
+        btree_map::{self, Entry},
+        BTreeMap,
+    },
+};
 
 use hashbrown::{HashMap, HashSet};
 use rhai::Dynamic;
@@ -8,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use automancy_defs::{
     coord::{TileBounds, TileCoord, TileUnit},
     resolve_map_id_of, resolve_map_v_id,
-    stack::ItemAmount,
+    stack::{ItemAmount, ItemStack},
     try_parse_ids,
 };
 use automancy_defs::{glam::IVec2, try_parse_map_id_of};
@@ -151,35 +156,57 @@ impl Data {
 #[derive(Clone, Debug, Default)]
 pub struct DataMap(BTreeMap<Id, Data>);
 
-impl From<DataMap> for BTreeMap<Id, Data> {
-    fn from(value: DataMap) -> Self {
-        value.0
-    }
-}
+impl IntoIterator for DataMap {
+    type Item = (Id, Data);
 
-impl From<BTreeMap<Id, Data>> for DataMap {
-    fn from(value: BTreeMap<Id, Data>) -> Self {
-        Self(value)
-    }
-}
+    type IntoIter = btree_map::IntoIter<Id, Data>;
 
-impl Deref for DataMap {
-    type Target = BTreeMap<Id, Data>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for DataMap {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
     }
 }
 
 impl DataMap {
-    pub fn into_inner(self) -> BTreeMap<Id, Data> {
+    pub fn rhai_get(&mut self, id: Id) -> Dynamic {
+        if let Some(v) = self.get(id).cloned() {
+            v.into_dynamic()
+        } else {
+            Dynamic::UNIT
+        }
+    }
+
+    pub fn rhai_set(&mut self, id: Id, data: Dynamic) {
+        if let Some(data) = Data::from_dynamic(data) {
+            self.set(id, data);
+        }
+    }
+
+    pub fn get_or_new_inventory(&mut self, id: Id) -> Dynamic {
         self.0
+            .entry(id)
+            .or_insert_with(|| Data::Inventory(Default::default()))
+            .clone()
+            .into_dynamic()
+    }
+
+    pub fn get(&self, id: Id) -> Option<&Data> {
+        self.0.get(&id)
+    }
+
+    pub fn get_mut(&mut self, id: Id) -> Option<&mut Data> {
+        self.0.get_mut(&id)
+    }
+
+    pub fn set(&mut self, id: Id, data: Data) {
+        self.0.insert(id, data);
+    }
+
+    pub fn remove(&mut self, id: Id) -> Option<Data> {
+        self.0.remove(&id)
+    }
+
+    pub fn entry(&mut self, id: Id) -> Entry<'_, Id, Data> {
+        self.0.entry(id)
     }
 
     pub fn to_raw(&self, interner: &Interner) -> DataMapRaw {
@@ -193,6 +220,28 @@ impl DataMap {
                 })
                 .collect(),
         )
+    }
+
+    pub fn contains_id(&self, key: Id, id: Id) -> bool {
+        if let Some(v) = self.get(key) {
+            match v {
+                Data::Inventory(v) => v.contains_key(&id),
+                Data::Id(v) => *v == id,
+                Data::VecId(v) => v.contains(&id),
+                Data::SetId(v) => v.contains(&id),
+                _ => false,
+            }
+        } else {
+            false
+        }
+    }
+
+    pub fn contains_stack(&mut self, key: Id, stack: ItemStack) -> bool {
+        if let Some(Data::Inventory(v)) = self.get_mut(key) {
+            v.contains(stack)
+        } else {
+            false
+        }
     }
 }
 

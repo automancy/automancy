@@ -20,17 +20,7 @@ pub(crate) fn render_info_tip(state: &mut GameState) {
         Layer::new().show(|| {
             hover_tip(|| {
                 constrained(
-                    Constraints::loose(
-                        state
-                            .gui
-                            .as_ref()
-                            .unwrap()
-                            .yak
-                            .layout_dom()
-                            .viewport()
-                            .size()
-                            .min(Vec2::new(500.0, f32::INFINITY)),
-                    ),
+                    Constraints::loose(state.ui_viewport().min(Vec2::new(500.0, f32::INFINITY))),
                     || {
                         tip.show();
                     },

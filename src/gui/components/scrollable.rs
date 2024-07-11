@@ -3,11 +3,11 @@ use std::cell::Cell;
 use automancy_defs::{
     colors,
     glam::{vec2, Vec2Swizzles},
-    math::Float,
 };
 use yakui::{
-    column, constrained,
+    constrained,
     input::MouseButton,
+    reflow,
     widget::{EventContext, LayoutContext, Widget},
     Alignment, Dim2,
 };
@@ -17,13 +17,13 @@ use yakui::{
 };
 use yakui::{
     geometry::{Constraints, Vec2},
-    row,
+    widgets::Pad,
 };
 use yakui::{Pivot, Response};
 
 use crate::gui::util::{pad_x, pad_y};
 
-use super::{container::RoundRect, relative::Relative};
+use super::{col, container::RoundRect, row};
 
 const SCROLL_SIZE: f32 = 8.0;
 const SCROLL_RADIUS: f32 = 4.0;
@@ -32,22 +32,32 @@ const SCROLL_RADIUS: f32 = 4.0;
 #[non_exhaustive]
 pub struct Scrollable {
     pub direction: Option<ScrollDirection>,
+    pub min: Vec2,
+    pub max: f32,
 }
 
 impl Scrollable {
     pub fn none() -> Self {
-        Scrollable { direction: None }
-    }
-
-    fn vertical() -> Self {
         Scrollable {
-            direction: Some(ScrollDirection::Y),
+            direction: None,
+            min: Vec2::default(),
+            max: 0.0,
         }
     }
 
-    fn horizontal() -> Self {
+    fn vertical(min: Vec2, max: f32) -> Self {
+        Scrollable {
+            direction: Some(ScrollDirection::Y),
+            min,
+            max,
+        }
+    }
+
+    fn horizontal(min: Vec2, max: f32) -> Self {
         Scrollable {
             direction: Some(ScrollDirection::X),
+            min,
+            max,
         }
     }
 
@@ -105,7 +115,11 @@ impl Widget for ScrollableWidget {
                 let size = self.size.get().y;
 
                 ScrollableResponse {
-                    pos_percentage: self.scroll_position.get().y / (canvas_size - size),
+                    pos_percentage: if canvas_size == size {
+                        0.0
+                    } else {
+                        self.scroll_position.get().y / (canvas_size - size)
+                    },
                     canvas_size,
                     size,
                 }
@@ -115,7 +129,11 @@ impl Widget for ScrollableWidget {
                 let size = self.size.get().x;
 
                 ScrollableResponse {
-                    pos_percentage: self.scroll_position.get().x / (canvas_size - size),
+                    pos_percentage: if canvas_size == size {
+                        0.0
+                    } else {
+                        self.scroll_position.get().x / (canvas_size - size)
+                    },
                     canvas_size,
                     size,
                 }
@@ -132,12 +150,12 @@ impl Widget for ScrollableWidget {
 
         let child_constraints = match self.props.direction {
             Some(ScrollDirection::Y) => Constraints {
-                min: Vec2::new(constraints.min.x, 0.0),
-                max: Vec2::new(constraints.max.x, f32::INFINITY),
+                min: constraints.min.max(self.props.min),
+                max: Vec2::new(self.props.max.min(constraints.max.x), f32::INFINITY),
             },
             Some(ScrollDirection::X) => Constraints {
-                min: Vec2::new(0.0, constraints.min.y),
-                max: Vec2::new(f32::INFINITY, constraints.max.y),
+                min: constraints.min.max(self.props.min),
+                max: Vec2::new(f32::INFINITY, self.props.max.min(constraints.max.y)),
             },
             None => constraints,
         };
@@ -267,70 +285,97 @@ impl Widget for ScrollableWidget {
     }
 }
 
-pub fn scroll_vertical(max_height: Float, children: impl FnOnce()) {
+pub fn scroll_vertical_bar_alignment(
+    min: Vec2,
+    max: Vec2,
+    alignment: Option<Alignment>,
+    children: impl FnOnce(),
+) {
     row(|| {
         let mut res = None;
-        constrained(Constraints::loose(vec2(f32::INFINITY, max_height)), || {
-            res = Some(Scrollable::vertical().show(|| {
-                pad_x(0.0, SCROLL_SIZE * 2.0).show(children);
+        constrained(Constraints::loose(Vec2::new(f32::INFINITY, max.y)), || {
+            res = Some(Scrollable::vertical(min, max.x).show(|| {
+                if alignment.is_some() {
+                    Pad::horizontal(SCROLL_SIZE).show(children);
+                } else {
+                    children();
+                }
             }));
         });
         let res = res.unwrap();
 
-        let ratio = res.size / res.canvas_size;
-        let diff = res.canvas_size - res.size;
-
-        if diff > 0.0 {
-            Relative::new(Alignment::TOP_RIGHT, Pivot::TOP_RIGHT, Dim2::ZERO).show(|| {
-                RoundRect::new(SCROLL_RADIUS, colors::WHITE).show_children(|| {
-                    pad_y(
-                        diff * ratio * res.pos_percentage,
-                        diff * ratio * (1.0 - res.pos_percentage),
-                    )
-                    .show(|| {
-                        let mut rect = RoundRect::colored_y(
-                            SCROLL_RADIUS,
-                            (colors::ORANGE, colors::ORANGE.adjust(1.0 + (1.0 - ratio))),
-                        );
-                        rect.min_size = vec2(SCROLL_SIZE, (res.size * ratio).floor());
-                        rect.show();
-                    });
-                });
-            });
+        if let Some(alignment) = alignment {
+            scroll_bar(res.into_inner(), alignment.as_vec2(), ScrollDirection::X);
         }
     });
 }
 
-pub fn scroll_horizontal(max_width: Float, children: impl FnOnce()) {
-    column(|| {
+pub fn scroll_vertical(min: Vec2, max: Vec2, children: impl FnOnce()) {
+    scroll_vertical_bar_alignment(min, max, Some(Alignment::TOP_RIGHT), children)
+}
+
+pub fn scroll_horizontal_bar_alignment(
+    min: Vec2,
+    max: Vec2,
+    alignment: Option<Alignment>,
+    children: impl FnOnce(),
+) {
+    col(|| {
         let mut res = None;
-        constrained(Constraints::loose(vec2(max_width, f32::INFINITY)), || {
-            res = Some(Scrollable::horizontal().show(|| {
-                pad_y(0.0, SCROLL_SIZE * 2.0).show(children);
+        constrained(Constraints::loose(Vec2::new(max.x, f32::INFINITY)), || {
+            res = Some(Scrollable::horizontal(min, max.y).show(|| {
+                if alignment.is_some() {
+                    Pad::vertical(SCROLL_SIZE).show(children);
+                } else {
+                    children();
+                }
             }));
         });
         let res = res.unwrap();
 
-        let ratio = res.size / res.canvas_size;
-        let diff = res.canvas_size - res.size;
-
-        if diff > 0.0 {
-            Relative::new(Alignment::BOTTOM_LEFT, Pivot::BOTTOM_LEFT, Dim2::ZERO).show(|| {
-                RoundRect::new(SCROLL_RADIUS, colors::WHITE).show_children(|| {
-                    pad_x(
-                        diff * ratio * res.pos_percentage,
-                        diff * ratio * (1.0 - res.pos_percentage),
-                    )
-                    .show(|| {
-                        let mut rect = RoundRect::colored_x(
-                            SCROLL_RADIUS,
-                            (colors::ORANGE, colors::ORANGE.adjust(1.0 + ratio)),
-                        );
-                        rect.min_size = vec2((res.size * ratio).floor(), SCROLL_SIZE);
-                        rect.show();
-                    });
-                });
-            });
+        if let Some(alignment) = alignment {
+            scroll_bar(res.into_inner(), alignment.as_vec2(), ScrollDirection::Y);
         }
     });
+}
+
+pub fn scroll_horizontal(min: Vec2, max: Vec2, children: impl FnOnce()) {
+    scroll_horizontal_bar_alignment(min, max, Some(Alignment::BOTTOM_LEFT), children)
+}
+
+fn scroll_bar(res: ScrollableResponse, alignment: Vec2, dir: ScrollDirection) {
+    let ratio = res.size / res.canvas_size;
+    let diff = res.canvas_size - res.size;
+
+    reflow(
+        Alignment::new(alignment.x, alignment.y),
+        Pivot::new(alignment.x, alignment.y),
+        Dim2::ZERO,
+        || {
+            RoundRect::new(SCROLL_RADIUS, colors::BACKGROUND_3).show_children(|| {
+                let pad_f = if dir == ScrollDirection::Y {
+                    pad_x
+                } else {
+                    pad_y
+                };
+
+                pad_f(
+                    diff * ratio * res.pos_percentage,
+                    diff * ratio * (1.0 - res.pos_percentage),
+                )
+                .show(|| {
+                    let mut rect = RoundRect::colored_x(
+                        SCROLL_RADIUS,
+                        (colors::ORANGE, colors::ORANGE.adjust(1.0 + (1.0 - ratio))),
+                    );
+                    rect.min_size = if dir == ScrollDirection::Y {
+                        vec2((res.size * ratio).floor(), SCROLL_SIZE)
+                    } else {
+                        vec2(SCROLL_SIZE, (res.size * ratio).floor())
+                    };
+                    rect.show();
+                });
+            });
+        },
+    );
 }

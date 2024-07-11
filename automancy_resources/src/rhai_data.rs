@@ -10,12 +10,13 @@ use crate::types::{
     item::ItemDef,
     script::{InstructionsDef, ScriptDef},
 };
-use crate::{inventory::Inventory, types::function::RhaiDataMap};
+use crate::{data::DataMap, inventory::Inventory};
 
 pub(crate) fn register_data_stuff(engine: &mut Engine) {
     engine
-        .register_indexer_get_set(RhaiDataMap::rhai_get, RhaiDataMap::rhai_set)
-        .register_fn("get_or_new_inventory", RhaiDataMap::get_or_new_inventory);
+        .register_type_with_name::<DataMap>("DataMap")
+        .register_indexer_get_set(DataMap::rhai_get, DataMap::rhai_set)
+        .register_fn("get_or_new_inventory", DataMap::get_or_new_inventory);
 
     engine
         .register_type_with_name::<Inventory>("Inventory")

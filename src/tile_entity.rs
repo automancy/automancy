@@ -9,9 +9,7 @@ use automancy_defs::id::Id;
 use automancy_defs::{coord::TileCoord, stack::ItemStack};
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::rhai_ui::RhaiUiUnit;
-use automancy_resources::types::function::{
-    OnFailAction, RhaiDataMap, TileResult, TileTransactionResult,
-};
+use automancy_resources::types::function::{OnFailAction, TileResult, TileTransactionResult};
 use automancy_resources::{rhai_call_options, rhai_log_err, ResourceManager};
 use thiserror::Error;
 
@@ -35,7 +33,7 @@ pub struct TileEntityState {
     game: ActorRef<GameSystemMessage>,
 
     /// The data map stored by the tile.
-    data: RhaiDataMap,
+    data: DataMap,
 
     /// Rhai scope
     scope: Option<Scope<'static>>,
@@ -252,7 +250,7 @@ impl TileEntity {
                 ]),),
             );
 
-            state.data = rhai_state.take().cast::<RhaiDataMap>();
+            state.data = rhai_state.take().cast::<DataMap>();
 
             match result {
                 Ok(result) => {
@@ -270,7 +268,7 @@ impl TileEntity {
 
 #[derive(Error, Debug)]
 pub enum TileEntityError {
-    #[error("the tile id at {0} is no longer existent")]
+    #[error("the tile ID at {0} is no longer existent")]
     NonExistent(TileCoord),
 }
 
@@ -329,7 +327,7 @@ impl Actor for TileEntity {
                         ]),),
                     );
 
-                    state.data = rhai_state.take().cast::<RhaiDataMap>();
+                    state.data = rhai_state.take().cast::<DataMap>();
 
                     match result {
                         Ok(result) => {
@@ -392,7 +390,7 @@ impl Actor for TileEntity {
                         ]),),
                     );
 
-                    state.data = rhai_state.take().cast::<RhaiDataMap>();
+                    state.data = rhai_state.take().cast::<DataMap>();
 
                     match result {
                         Ok(_) => {}
@@ -403,25 +401,25 @@ impl Actor for TileEntity {
                 }
             }
             SetData(data) => {
-                state.data = RhaiDataMap::from_data_map(data);
+                state.data = data;
             }
             SetDataValue(key, value) => {
                 state.data.set(key, value);
             }
             TakeData(reply) => {
-                reply.send(mem::take(&mut state.data).to_data_map())?;
+                reply.send(mem::take(&mut state.data))?;
             }
             RemoveData(key) => {
                 state.data.remove(key);
             }
             GetData(reply) => {
-                reply.send(state.data.clone().to_data_map())?;
+                reply.send(state.data.clone())?;
             }
             GetDataValue(key, reply) => {
                 reply.send(state.data.get(key).cloned())?;
             }
             GetDataWithCoord(reply) => {
-                reply.send((self.coord, state.data.clone().to_data_map()))?;
+                reply.send((self.coord, state.data.clone()))?;
             }
             ExtractRequest {
                 requested_from_id,
@@ -463,7 +461,7 @@ impl Actor for TileEntity {
                         ]),),
                     );
 
-                    state.data = rhai_state.take().cast::<RhaiDataMap>();
+                    state.data = rhai_state.take().cast::<DataMap>();
 
                     match result {
                         Ok(result) => {
@@ -506,7 +504,7 @@ impl Actor for TileEntity {
                         ]),),
                     );
 
-                    state.data = rhai_state.take().cast::<RhaiDataMap>();
+                    state.data = rhai_state.take().cast::<DataMap>();
 
                     match result {
                         Ok(result) => {

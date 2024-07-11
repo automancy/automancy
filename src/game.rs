@@ -662,12 +662,12 @@ pub fn try_category(resource_man: &ResourceManager, id: Id, category_item: impl 
         .registry
         .tiles
         .get(&id)
-        .and_then(|tile| tile.data.get(&resource_man.registry.data_ids.category))
+        .and_then(|tile| tile.data.get(resource_man.registry.data_ids.category))
     {
         if Data::Bool(false)
             == *resource_man.registry.tiles[&id]
                 .data
-                .get(&resource_man.registry.data_ids.default_tile)
+                .get(resource_man.registry.data_ids.default_tile)
                 .unwrap_or(&Data::Bool(false))
         {
             if let Some(item) = resource_man
@@ -830,20 +830,20 @@ pub fn tick(state: &mut GameSystemState) {
 pub fn copy_auxiliary_data(resource_man: &ResourceManager, data: &mut DataMap) -> DataMap {
     let mut copied = DataMap::default();
 
-    if let Some(v) = data.remove(&resource_man.registry.data_ids.direction) {
-        copied.insert(resource_man.registry.data_ids.direction, v);
+    if let Some(v) = data.remove(resource_man.registry.data_ids.direction) {
+        copied.set(resource_man.registry.data_ids.direction, v);
     }
-    if let Some(v) = data.remove(&resource_man.registry.data_ids.link) {
-        copied.insert(resource_man.registry.data_ids.link, v);
+    if let Some(v) = data.remove(resource_man.registry.data_ids.link) {
+        copied.set(resource_man.registry.data_ids.link, v);
     }
-    if let Some(v) = data.remove(&resource_man.registry.data_ids.script) {
-        copied.insert(resource_man.registry.data_ids.script, v);
+    if let Some(v) = data.remove(resource_man.registry.data_ids.script) {
+        copied.set(resource_man.registry.data_ids.script, v);
     }
-    if let Some(v) = data.remove(&resource_man.registry.data_ids.amount) {
-        copied.insert(resource_man.registry.data_ids.amount, v);
+    if let Some(v) = data.remove(resource_man.registry.data_ids.amount) {
+        copied.set(resource_man.registry.data_ids.amount, v);
     }
-    if let Some(v) = data.remove(&resource_man.registry.data_ids.item) {
-        copied.insert(resource_man.registry.data_ids.item, v);
+    if let Some(v) = data.remove(resource_man.registry.data_ids.item) {
+        copied.set(resource_man.registry.data_ids.item, v);
     }
 
     copied

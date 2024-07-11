@@ -1,14 +1,18 @@
 use std::{fs, mem};
 
-use automancy_defs::{glam::vec2, log};
-use automancy_resources::{format, format_time};
+use automancy_defs::{colors::BACKGROUND_3, glam::vec2, log};
+use automancy_resources::{
+    error::push_err,
+    format::{FormatContext, Formattable},
+    format_time,
+};
+
 use winit::event_loop::ActiveEventLoop;
-use yakui::{column, image, row, spacer, widgets::Pad};
+use yakui::{constrained, divider, image, spacer, widgets::Pad, Constraints, Vec2};
 
 use crate::game::{load_map, GameSystemMessage, COULD_NOT_LOAD_ANYTHING};
 use crate::gui::{OptionsMenuState, PopupState, Screen, SubState, TextField};
 use crate::map::{Map, MAIN_MENU};
-use crate::options::AAType;
 use crate::{
     event::{refresh_maps, shutdown_graceful},
     game::GameLoadResult,
@@ -16,9 +20,9 @@ use crate::{
 use crate::{GameState, VERSION};
 
 use super::{
-    button, centered_column, centered_row, checkbox, group, heading, label, scroll_vertical,
-    selection_box, slider, stretch_column, textbox, window, PADDING_LARGE, PADDING_MEDIUM,
-    PADDING_SMALL,
+    button, center_col, checkbox, col, group, heading, label, row, scroll_horizontal_bar_alignment,
+    scroll_vertical, selection_box, slider, stretch_col, textbox, util::pad_x, window,
+    DIVIER_HEIGHT, DIVIER_THICKNESS, PADDING_LARGE, PADDING_MEDIUM, PADDING_SMALL,
 };
 
 /// Draws the main menu.
@@ -26,66 +30,64 @@ pub fn main_menu(state: &mut GameState, event_loop: &ActiveEventLoop) -> anyhow:
     let mut result = Ok(false);
 
     window("Main Menu".to_string(), || {
-        centered_column(|| {
-            image(state.logo.unwrap(), vec2(128.0, 128.0));
+        image(state.logo.unwrap(), vec2(128.0, 128.0));
 
-            if button(
-                &state
-                    .resource_man
-                    .gui_str(&state.resource_man.registry.gui_ids.btn_play),
-            )
-            .clicked
-            {
-                refresh_maps(state);
-                state.gui_state.switch_screen(Screen::MapLoad)
-            };
+        if button(
+            &state
+                .resource_man
+                .gui_str(state.resource_man.registry.gui_ids.btn_play),
+        )
+        .clicked
+        {
+            refresh_maps(state);
+            state.gui_state.switch_screen(Screen::MapLoad)
+        };
 
-            if button(
-                &state
-                    .resource_man
-                    .gui_str(&state.resource_man.registry.gui_ids.btn_options),
-            )
-            .clicked
-            {
-                state.gui_state.switch_screen(Screen::Options)
-            };
+        if button(
+            &state
+                .resource_man
+                .gui_str(state.resource_man.registry.gui_ids.btn_options),
+        )
+        .clicked
+        {
+            state.gui_state.switch_screen(Screen::Options)
+        };
 
-            if button(
-                &state
-                    .resource_man
-                    .gui_str(&state.resource_man.registry.gui_ids.btn_fedi),
-            )
-            .clicked
-            {
-                open::that("https://gamedev.lgbt/@automancy").unwrap();
-            }
+        if button(
+            &state
+                .resource_man
+                .gui_str(state.resource_man.registry.gui_ids.btn_fedi),
+        )
+        .clicked
+        {
+            open::that("https://gamedev.lgbt/@automancy").unwrap();
+        }
 
-            if button(
-                &state
-                    .resource_man
-                    .gui_str(&state.resource_man.registry.gui_ids.btn_source),
-            )
-            .clicked
-            {
-                open::that("https://github.com/automancy/automancy").unwrap();
-            }
+        if button(
+            &state
+                .resource_man
+                .gui_str(state.resource_man.registry.gui_ids.btn_source),
+        )
+        .clicked
+        {
+            open::that("https://github.com/automancy/automancy").unwrap();
+        }
 
-            if button(
-                &state
-                    .resource_man
-                    .gui_str(&state.resource_man.registry.gui_ids.btn_exit),
-            )
-            .clicked
-            {
-                result = state.tokio.block_on(shutdown_graceful(
-                    &state.game,
-                    &mut state.game_handle,
-                    event_loop,
-                ));
-            };
+        if button(
+            &state
+                .resource_man
+                .gui_str(state.resource_man.registry.gui_ids.btn_exit),
+        )
+        .clicked
+        {
+            result = state.tokio.block_on(shutdown_graceful(
+                &state.game,
+                &mut state.game_handle,
+                event_loop,
+            ));
+        };
 
-            label(VERSION);
-        });
+        label(VERSION);
     });
 
     result
@@ -94,51 +96,49 @@ pub fn main_menu(state: &mut GameState, event_loop: &ActiveEventLoop) -> anyhow:
 /// Draws the pause menu.
 pub fn pause_menu(state: &mut GameState) {
     window("Game Paused".to_string(), || {
-        centered_column(|| {
-            if button(
-                &state
-                    .resource_man
-                    .gui_str(&state.resource_man.registry.gui_ids.btn_unpause),
-            )
-            .clicked
-            {
-                state.gui_state.switch_screen(Screen::Ingame)
-            };
+        if button(
+            &state
+                .resource_man
+                .gui_str(state.resource_man.registry.gui_ids.btn_unpause),
+        )
+        .clicked
+        {
+            state.gui_state.switch_screen(Screen::Ingame)
+        };
 
-            if button(
-                &state
-                    .resource_man
-                    .gui_str(&state.resource_man.registry.gui_ids.btn_options),
-            )
-            .clicked
-            {
-                state.gui_state.switch_screen(Screen::Options)
-            };
+        if button(
+            &state
+                .resource_man
+                .gui_str(state.resource_man.registry.gui_ids.btn_options),
+        )
+        .clicked
+        {
+            state.gui_state.switch_screen(Screen::Options)
+        };
 
-            if button(
-                &state
-                    .resource_man
-                    .gui_str(&state.resource_man.registry.gui_ids.btn_exit),
-            )
-            .clicked
-            {
-                state
-                    .tokio
-                    .block_on(state.game.call(GameSystemMessage::SaveMap, None))
-                    .unwrap()
-                    .unwrap();
+        if button(
+            &state
+                .resource_man
+                .gui_str(state.resource_man.registry.gui_ids.btn_exit),
+        )
+        .clicked
+        {
+            state
+                .tokio
+                .block_on(state.game.call(GameSystemMessage::SaveMap, None))
+                .unwrap()
+                .unwrap();
 
-                assert!(
-                    load_map(state, MAIN_MENU.to_string(), false) != GameLoadResult::Failed,
-                    "{}",
-                    COULD_NOT_LOAD_ANYTHING
-                );
+            assert!(
+                load_map(state, MAIN_MENU.to_string(), false) != GameLoadResult::Failed,
+                "{}",
+                COULD_NOT_LOAD_ANYTHING
+            );
 
-                state.gui_state.switch_screen(Screen::MainMenu)
-            };
+            state.gui_state.switch_screen(Screen::MainMenu)
+        };
 
-            label(VERSION);
-        });
+        label(VERSION);
     });
 }
 
@@ -147,56 +147,63 @@ pub fn map_menu(state: &mut GameState) {
     window(
         state
             .resource_man
-            .gui_str(&state.resource_man.registry.gui_ids.load_map)
+            .gui_str(state.resource_man.registry.gui_ids.load_map)
             .to_string(),
         || {
-            centered_column(|| {
-                scroll_vertical(400.0, || {
-                    stretch_column(450.0, || {
+            scroll_vertical(
+                Vec2::ZERO,
+                Vec2::new(state.ui_viewport().x * 0.7, 260.0),
+                || {
+                    stretch_col(|| {
                         let mut dirty = false;
 
                         for ((_, save_time), map_name) in state.loop_store.map_infos_cache.clone() {
                             group(|| {
-                                Pad::vertical(PADDING_SMALL).show(|| {
-                                    if Some(&map_name) == state.gui_state.renaming_map.as_ref() {
-                                        let renaming =
-                                            state.gui_state.text_field.get(TextField::MapRenaming);
+                                row(|| {
+                                    Pad::vertical(PADDING_SMALL).show(|| {
+                                        if Some(&map_name) == state.gui_state.renaming_map.as_ref()
+                                        {
+                                            let renaming = state
+                                                .gui_state
+                                                .text_field
+                                                .get(TextField::MapRenaming);
 
-                                        let res = textbox(renaming, None, None);
-                                        if res.lost_focus || res.activated {
-                                            state.gui_state.renaming_map = None;
+                                            let res = textbox(renaming, None, None);
+                                            if res.lost_focus || res.activated {
+                                                state.gui_state.renaming_map = None;
 
-                                            let s = mem::take(renaming)
-                                                .chars()
-                                                .filter(|v| v.is_alphanumeric())
-                                                .collect::<String>();
+                                                let s = mem::take(renaming)
+                                                    .chars()
+                                                    .filter(|v| v.is_alphanumeric())
+                                                    .collect::<String>();
 
-                                            if fs::rename(Map::path(&map_name), Map::path(&s))
-                                                .is_ok()
-                                            {
-                                                log::info!("Renamed map {map_name} to {}", s);
+                                                if fs::rename(Map::path(&map_name), Map::path(&s))
+                                                    .is_ok()
+                                                {
+                                                    log::info!("Renamed map {map_name} to {}", s);
 
-                                                dirty = true;
-                                            } else {
-                                                state.gui_state.popup = PopupState::InvalidName;
+                                                    dirty = true;
+                                                } else {
+                                                    state.gui_state.popup = PopupState::InvalidName;
+                                                }
                                             }
+                                        } else if button(&map_name).clicked {
+                                            state
+                                                .gui_state
+                                                .text_field
+                                                .get(TextField::MapRenaming)
+                                                .clone_from(&map_name);
+                                            state.gui_state.renaming_map = Some(map_name.clone());
                                         }
-                                    } else if button(&map_name).clicked {
-                                        state
-                                            .gui_state
-                                            .text_field
-                                            .get(TextField::MapRenaming)
-                                            .clone_from(&map_name);
-                                        state.gui_state.renaming_map = Some(map_name.clone());
-                                    }
+                                    });
                                 });
 
-                                centered_row(|| {
+                                row(|| {
                                     if let Some(save_time) = save_time {
                                         label(&format_time(
                                             save_time,
                                             &state.resource_man.gui_str(
-                                                &state.resource_man.registry.gui_ids.time_fmt,
+                                                state.resource_man.registry.gui_ids.time_fmt,
                                             ),
                                         ));
                                     }
@@ -206,7 +213,7 @@ pub fn map_menu(state: &mut GameState) {
                                     row(|| {
                                         if button(
                                             &state.resource_man.gui_str(
-                                                &state.resource_man.registry.gui_ids.btn_load,
+                                                state.resource_man.registry.gui_ids.btn_load,
                                             ),
                                         )
                                         .clicked
@@ -224,7 +231,7 @@ pub fn map_menu(state: &mut GameState) {
                                             }
                                         }
                                         if button(&state.resource_man.gui_str(
-                                            &state.resource_man.registry.gui_ids.btn_delete,
+                                            state.resource_man.registry.gui_ids.btn_delete,
                                         ))
                                         .clicked
                                         {
@@ -242,39 +249,160 @@ pub fn map_menu(state: &mut GameState) {
                             refresh_maps(state);
                         }
                     });
-                });
+                },
+            );
 
-                label(&format(
+            label(&state.resource_man.gui_fmt(
+                state.resource_man.registry.gui_ids.lbl_maps_loaded,
+                [(
+                    "maps_number",
+                    Formattable::integer(&state.loop_store.map_infos_cache.len()),
+                )],
+            ));
+
+            row(|| {
+                if button(
                     &state
                         .resource_man
-                        .gui_str(&state.resource_man.registry.gui_ids.lbl_maps_loaded),
-                    &[&state.loop_store.map_infos_cache.len().to_string()],
-                ));
+                        .gui_str(state.resource_man.registry.gui_ids.btn_new_map),
+                )
+                .clicked
+                {
+                    state.gui_state.popup = PopupState::MapCreate
+                }
 
-                row(|| {
-                    if button(
-                        &state
-                            .resource_man
-                            .gui_str(&state.resource_man.registry.gui_ids.btn_new_map),
-                    )
-                    .clicked
-                    {
-                        state.gui_state.popup = PopupState::MapCreate
-                    }
-
-                    if button(
-                        &state
-                            .resource_man
-                            .gui_str(&state.resource_man.registry.gui_ids.btn_cancel),
-                    )
-                    .clicked
-                    {
-                        state.gui_state.switch_screen(Screen::MainMenu)
-                    }
-                });
+                if button(
+                    &state
+                        .resource_man
+                        .gui_str(state.resource_man.registry.gui_ids.btn_cancel),
+                )
+                .clicked
+                {
+                    state.gui_state.switch_screen(Screen::MainMenu)
+                }
             });
         },
     );
+}
+
+pub fn options_menu_item(state: &mut GameState, menu: OptionsMenuState) {
+    match menu {
+        OptionsMenuState::Graphics => {
+            center_col(|| {
+                label(&format!(
+                    "Max FPS: {: >3}",
+                    if state.options.graphics.fps_limit == 0 {
+                        "Vsync".to_string()
+                    } else if state.options.graphics.fps_limit == 250 {
+                        "Unlimited".to_string()
+                    } else {
+                        state.options.graphics.fps_limit.to_string()
+                    }
+                ));
+
+                slider(
+                    &mut state.options.graphics.fps_limit,
+                    0..=250,
+                    None,
+                    |v| v.parse().ok(),
+                    i32::to_string,
+                );
+            });
+
+            center_col(|| {
+                label(&format!(
+                    "Scale: {: >3}%",
+                    (state.options.graphics.scale * 100.0) as i32
+                ));
+
+                slider(
+                    &mut state.options.graphics.scale,
+                    0.5..=4.0,
+                    Some(0.5),
+                    |v| v.parse::<f64>().ok().map(|v| v / 100.0),
+                    |v| ((v * 100.0) as i32).to_string(),
+                );
+            });
+
+            center_col(|| {
+                label("Fullscreen: ");
+
+                checkbox(&mut state.options.graphics.fullscreen);
+            });
+
+            /*
+            row(|| {
+                label("Antialiasing: ");
+
+                state.options.graphics.anti_aliasing = selection_box(
+                    [AAType::None, AAType::FXAA, AAType::TAA],
+                    state.options.graphics.anti_aliasing,
+                    &|v| {
+                        format!(
+                            "{:?}",
+                            v //TODO inconsistent, use a to_string?
+                        )
+                    },
+                );
+            }); */
+        }
+        OptionsMenuState::Audio => {
+            center_col(|| {
+                label(&format!(
+                    "SFX Volume: {: >3}%",
+                    (state.options.audio.sfx_volume * 100.0) as i32
+                ));
+
+                slider(
+                    &mut state.options.audio.sfx_volume,
+                    0.0..=1.0,
+                    Some(0.01),
+                    |v| v.parse::<f64>().ok().map(|v| v / 100.0),
+                    |v| ((v * 100.0) as i32).to_string(),
+                );
+            });
+
+            center_col(|| {
+                label(&format!(
+                    "Music Volume: {: >3}%",
+                    (state.options.audio.music_volume * 100.0) as i32
+                ));
+
+                slider(
+                    &mut state.options.audio.music_volume,
+                    0.0..=1.0,
+                    Some(0.01),
+                    |v| v.parse::<f64>().ok().map(|v| v / 100.0),
+                    |v| ((v * 100.0) as i32).to_string(),
+                );
+            });
+        }
+        OptionsMenuState::Gui => {
+            center_col(|| {
+                label("Font:");
+
+                state.options.gui.font = selection_box(
+                    state.resource_man.fonts.keys().cloned().map(Some),
+                    state.options.gui.font.clone(),
+                    &|font| font.clone().unwrap_or_default(),
+                );
+            });
+
+            center_col(|| {
+                label("Language:");
+
+                label("TODO: UNIMPLEMENTED");
+                /*
+                state.options.gui.font = selection_box(
+                    state.resource_man.fonts.keys().cloned().map(Some),
+                    state.options.gui.font.clone(),
+                    &|font| font.clone().unwrap_or_default(),
+                );
+                 */
+            });
+        }
+        OptionsMenuState::Controls => {}
+    }
 }
 
 /// Draws the options menu.
@@ -282,154 +410,119 @@ pub fn options_menu(state: &mut GameState) {
     window(
         state
             .resource_man
-            .gui_str(&state.resource_man.registry.gui_ids.options)
+            .gui_str(state.resource_man.registry.gui_ids.options)
             .to_string(),
         || {
-            centered_column(|| {
-                row(|| {
-                    column(|| {
-                        // TODO translate these
-                        if button("Graphics").clicked {
+            center_col(|| {
+                scroll_horizontal_bar_alignment(Vec2::ZERO, Vec2::INFINITY, None, || {
+                    row(|| {
+                        if button(
+                            &state
+                                .resource_man
+                                .gui_str(state.resource_man.registry.gui_ids.options_graphics),
+                        )
+                        .clicked
+                        {
                             state.gui_state.substate = SubState::Options(OptionsMenuState::Graphics)
                         }
 
-                        if button("Audio").clicked {
+                        if button(
+                            &state
+                                .resource_man
+                                .gui_str(state.resource_man.registry.gui_ids.options_audio),
+                        )
+                        .clicked
+                        {
                             state.gui_state.substate = SubState::Options(OptionsMenuState::Audio)
                         }
 
-                        if button("GUI").clicked {
+                        if button(
+                            &state
+                                .resource_man
+                                .gui_str(state.resource_man.registry.gui_ids.options_gui),
+                        )
+                        .clicked
+                        {
                             state.gui_state.substate = SubState::Options(OptionsMenuState::Gui)
                         }
 
-                        if button("Controls").clicked {
+                        if button(
+                            &state
+                                .resource_man
+                                .gui_str(state.resource_man.registry.gui_ids.options_controls),
+                        )
+                        .clicked
+                        {
                             state.gui_state.substate = SubState::Options(OptionsMenuState::Controls)
                         }
                     });
+                });
 
-                    let child: Option<Box<dyn FnMut()>> = if let SubState::Options(menu) =
-                        state.gui_state.substate
-                    {
-                        match menu {
-                            OptionsMenuState::Graphics => Some(Box::new(|| {
-                                heading("Graphics");
-
-                                column(|| {
-                                    label(&format!(
-                                        "Max FPS: {}",
-                                        if state.options.graphics.fps_limit == 0 {
-                                            "Vsync".to_string()
-                                        } else if state.options.graphics.fps_limit == 250 {
-                                            "Unlimited".to_string()
-                                        } else {
-                                            state.options.graphics.fps_limit.to_string()
+                Pad::all(PADDING_LARGE).show(|| {
+                    if let SubState::Options(menu) = state.gui_state.substate {
+                        group(|| {
+                            scroll_vertical(Vec2::ZERO, Vec2::new(f32::INFINITY, 260.0), || {
+                                col(|| {
+                                    heading(&state.resource_man.gui_str(match menu {
+                                        OptionsMenuState::Graphics => {
+                                            state.resource_man.registry.gui_ids.options_graphics
                                         }
-                                    ));
+                                        OptionsMenuState::Audio => {
+                                            state.resource_man.registry.gui_ids.options_audio
+                                        }
+                                        OptionsMenuState::Gui => {
+                                            state.resource_man.registry.gui_ids.options_gui
+                                        }
+                                        OptionsMenuState::Controls => {
+                                            state.resource_man.registry.gui_ids.options_controls
+                                        }
+                                    }));
 
-                                    slider(&mut state.options.graphics.fps_limit, 0..=250, Some(5))
-                                });
+                                    divider(BACKGROUND_3, DIVIER_HEIGHT, DIVIER_THICKNESS);
 
-                                column(|| {
-                                    label(&format!(
-                                        "Scale: {}%",
-                                        (state.options.graphics.scale * 100.0) as i32
-                                    ));
-
-                                    slider(&mut state.options.graphics.scale, 0.5..=4.0, Some(0.5));
-                                });
-
-                                centered_row(|| {
-                                    label("Fullscreen: ");
-
-                                    checkbox(&mut state.options.graphics.fullscreen);
-                                });
-
-                                centered_row(|| {
-                                    label("Antialiasing: ");
-
-                                    state.options.graphics.anti_aliasing = selection_box(
-                                        [AAType::None, AAType::FXAA, AAType::TAA],
-                                        state.options.graphics.anti_aliasing,
-                                        &|v| {
-                                            format!(
-                                                "{:?}",
-                                                v //TODO inconsistent, use a to_string?
-                                            )
+                                    constrained(
+                                        Constraints {
+                                            min: Vec2::new(280.0, 300.0),
+                                            max: Vec2::INFINITY,
+                                        },
+                                        || {
+                                            pad_x(0.0, PADDING_MEDIUM).show(|| {
+                                                center_col(|| {
+                                                    options_menu_item(state, menu);
+                                                });
+                                            });
                                         },
                                     );
-                                });
-                            })),
-                            OptionsMenuState::Audio => Some(Box::new(|| {
-                                heading("Audio");
-
-                                column(|| {
-                                    label(&format!(
-                                        "SFX Volume: {}%",
-                                        (state.options.audio.sfx_volume * 100.0) as i32
-                                    ));
-
-                                    slider(&mut state.options.audio.sfx_volume, 0.0..=1.0, None);
-                                });
-
-                                column(|| {
-                                    label(&format!(
-                                        "Music Volume: {}%",
-                                        (state.options.audio.music_volume * 100.0) as i32
-                                    ));
-
-                                    slider(&mut state.options.audio.music_volume, 0.0..=1.0, None);
-                                });
-                            })),
-                            OptionsMenuState::Gui => Some(Box::new(|| {
-                                heading("GUI");
-
-                                centered_row(|| {
-                                    label("Font:");
-
-                                    state.options.gui.font = selection_box(
-                                        state.resource_man.fonts.keys().cloned().map(Some),
-                                        state.options.gui.font.clone(),
-                                        &|font| font.clone().unwrap_or_default(),
-                                    );
-                                });
-                            })),
-                            OptionsMenuState::Controls => Some(Box::new(|| {
-                                heading("Controls");
-                            })),
-                        }
-                    } else {
-                        None
-                    };
-
-                    if let Some(child) = child {
-                        Pad::horizontal(PADDING_LARGE).show(|| {
-                            group(|| {
-                                scroll_vertical(200.0, || {
-                                    Pad::horizontal(PADDING_SMALL).show(|| {
-                                        column(child);
-                                    });
                                 });
                             });
                         });
                     }
                 });
 
-                Pad::vertical(PADDING_MEDIUM).show(|| {
+                row(|| {
                     if button(
                         &state
                             .resource_man
-                            .gui_str(&state.resource_man.registry.gui_ids.btn_confirm),
+                            .gui_str(state.resource_man.registry.gui_ids.btn_confirm),
                     )
                     .clicked
                     {
                         if state.options.save().is_err() {
-                            state.resource_man.error_man.push(
-                                (
-                                    state.resource_man.registry.err_ids.unwritable_options,
-                                    vec![],
-                                ),
+                            push_err(
+                                state.resource_man.registry.err_ids.unwritable_options,
+                                &FormatContext::from([].into_iter()),
                                 &state.resource_man,
                             );
                         }
+
+                        if state.misc_options.save().is_err() {
+                            push_err(
+                                state.resource_man.registry.err_ids.unwritable_options,
+                                &FormatContext::from([].into_iter()),
+                                &state.resource_man,
+                            );
+                        }
+
                         state.gui_state.return_screen();
                     }
                 });

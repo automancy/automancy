@@ -2,8 +2,8 @@ use std::f32::consts::FRAC_PI_4;
 
 use serde::{Deserialize, Serialize};
 
-use automancy_defs::glam::vec3;
 use automancy_defs::math::{z_far, z_near, Float, Matrix4};
+use automancy_defs::{glam::vec3, math::Quaternion};
 
 pub mod audio;
 pub mod category;
@@ -28,7 +28,7 @@ impl IconMode {
     pub fn model_matrix(self) -> Matrix4 {
         match self {
             IconMode::Item => Matrix4::default(),
-            IconMode::Tile => Matrix4::from_rotation_x(0.4),
+            IconMode::Tile => Matrix4::default(),
         }
     }
     pub fn world_matrix(self) -> Matrix4 {
@@ -39,10 +39,12 @@ impl IconMode {
                 vec3(0.0, 1.0, 0.0),
             ),
             IconMode::Tile => {
+                let rot = Quaternion::from_rotation_x(-0.4);
+
                 Matrix4::perspective_lh(FRAC_PI_4, 1.0, z_near() as Float, z_far() as Float)
                     * Matrix4::look_to_rh(
-                        vec3(0.0, 0.0, 2.75),
-                        vec3(0.0, 0.0, 1.0),
+                        rot * vec3(0.0, 0.15, 2.85),
+                        rot * vec3(0.0, 0.0, 1.0),
                         vec3(0.0, 1.0, 0.0),
                     )
             }

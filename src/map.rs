@@ -15,8 +15,12 @@ use zstd::{Decoder, Encoder};
 use automancy_defs::coord::TileCoord;
 use automancy_defs::id::{Id, Interner};
 
-use automancy_resources::data::{DataMap, DataMapRaw};
-use automancy_resources::ResourceManager;
+use automancy_resources::{
+    data::{DataMap, DataMapRaw},
+    error::push_err,
+    format::Formattable,
+};
+use automancy_resources::{format::FormatContext, ResourceManager};
 
 use crate::game;
 use crate::game::GameSystemMessage;
@@ -115,10 +119,10 @@ impl Map {
             Err(e) => {
                 log::error!("Error loading map {map_name}, in reading info: serde: {e:?}");
 
-                resource_man.error_man.push(
-                    (
-                        resource_man.registry.err_ids.invalid_map_data,
-                        vec![map_name.to_string()],
+                push_err(
+                    resource_man.registry.err_ids.invalid_map_data,
+                    &FormatContext::from(
+                        [("map_name", Formattable::display(&map_name))].into_iter(),
                     ),
                     resource_man,
                 );
@@ -141,10 +145,10 @@ impl Map {
             Err(e) => {
                 log::error!("Error loading map {map_name}, in reading map: serde: {e:?}");
 
-                resource_man.error_man.push(
-                    (
-                        resource_man.registry.err_ids.invalid_map_data,
-                        vec![map_name.to_string()],
+                push_err(
+                    resource_man.registry.err_ids.invalid_map_data,
+                    &FormatContext::from(
+                        [("map_name", Formattable::display(&map_name))].into_iter(),
                     ),
                     resource_man,
                 );
@@ -175,9 +179,8 @@ impl Map {
             {
                 let tile_entity =
                     game::new_tile(resource_man.clone(), game.clone(), coord, id).await;
-                let data = data.to_data(&resource_man.interner).into_inner();
 
-                for (key, value) in data {
+                for (key, value) in data.to_data(&resource_man.interner) {
                     tile_entity
                         .send_message(TileEntityMsg::SetDataValue(key, value))
                         .unwrap();

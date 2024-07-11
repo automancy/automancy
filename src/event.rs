@@ -239,7 +239,7 @@ async fn on_link_tile(
 
     if tile_def
         .data
-        .get(&resource_man.registry.data_ids.linked)
+        .get(resource_man.registry.data_ids.linked)
         .cloned()
         .and_then(Data::into_bool)
         .unwrap_or(false)
@@ -287,7 +287,7 @@ fn place_tile(id: Id, coord: TileCoord, state: &mut GameState) -> anyhow::Result
             }
         }
 
-        data.insert(
+        data.set(
             state.resource_man.registry.data_ids.direction,
             Data::Coord(coord),
         );
@@ -601,7 +601,7 @@ pub fn on_event(
             if state.input_handler.key_active(ActionType::SelectMode)
                 && !state.resource_man.registry.tiles[&selected_tile_id]
                     .data
-                    .get(&state.resource_man.registry.data_ids.indirectional)
+                    .get(state.resource_man.registry.data_ids.indirectional)
                     .cloned()
                     .and_then(Data::into_bool)
                     .unwrap_or(false)
@@ -622,6 +622,8 @@ pub fn on_event(
         }
 
         state.screenshotting = state.input_handler.key_active(ActionType::Screenshot);
+
+        state.input_hints.push(vec![ActionType::ToggleGui]);
     }
 
     Ok(false)

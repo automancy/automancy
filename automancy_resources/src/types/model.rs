@@ -26,6 +26,22 @@ struct Raw {
 }
 
 impl ResourceManager {
+    pub fn model_or_missing(&self, id: Id) -> Id {
+        if self.all_models.contains_key(&id) {
+            id
+        } else {
+            self.registry.model_ids.missing
+        }
+    }
+
+    pub fn model_or_puzzle_space(&self, id: Id) -> Id {
+        if self.all_models.contains_key(&id) {
+            id
+        } else {
+            self.registry.model_ids.puzzle_space
+        }
+    }
+
     pub fn tile_model_or_missing(&self, id: Id) -> Id {
         if let Some(def) = self.registry.tiles.get(&id) {
             if self.all_models.contains_key(&def.model) {

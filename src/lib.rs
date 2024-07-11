@@ -4,16 +4,16 @@ use std::time::Instant;
 use automancy_defs::rendering::Vertex;
 use gui::{Gui, GuiState};
 use input::ActionType;
+use options::MiscOptions;
 use ractor::ActorRef;
 use tokio::runtime::Runtime;
 use tokio::task::JoinHandle;
 
 use automancy_defs::kira::manager::AudioManager;
 
-use automancy_resources::types::function::RhaiDataMap;
-use automancy_resources::ResourceManager;
+use automancy_resources::{data::DataMap, ResourceManager};
 
-use yakui::ManagedTextureId;
+use yakui::{ManagedTextureId, Vec2};
 
 use crate::camera::Camera;
 use crate::event::EventLoopStorage;
@@ -44,6 +44,7 @@ pub mod util;
 pub struct GameState {
     pub gui_state: GuiState,
     pub options: Options,
+    pub misc_options: MiscOptions,
     pub resource_man: Arc<ResourceManager>,
     pub input_handler: InputHandler,
     pub loop_store: EventLoopStorage,
@@ -59,10 +60,22 @@ pub struct GameState {
 
     pub logo: Option<ManagedTextureId>,
     pub input_hints: Vec<Vec<ActionType>>,
-    pub puzzle_state: Option<(RhaiDataMap, bool)>,
+    pub puzzle_state: Option<(DataMap, bool)>,
 
     pub game_handle: Option<JoinHandle<()>>,
 
     pub vertices_init: Option<Vec<Vertex>>,
     pub indices_init: Option<Vec<u16>>,
+}
+
+impl GameState {
+    pub fn ui_viewport(&self) -> Vec2 {
+        self.gui
+            .as_ref()
+            .unwrap()
+            .yak
+            .layout_dom()
+            .viewport()
+            .size()
+    }
 }

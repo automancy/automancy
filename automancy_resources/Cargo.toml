@@ -22,3 +22,5 @@ walkdir = { workspace = true }
 hashbrown = { workspace = true }
 
 rhai = { workspace = true }
+
+interpolator = { version = "0.5.0", features = ["number"] }

@@ -74,7 +74,7 @@ impl ResourceManager {
     pub fn ordered_items(&mut self) {
         let mut ids = self.registry.items.keys().cloned().collect::<Vec<_>>();
 
-        ids.sort_by_key(|id| self.item_name(id));
+        ids.sort_by_key(|id| self.item_name(*id));
 
         self.ordered_items = ids;
     }

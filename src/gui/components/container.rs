@@ -1,98 +1,18 @@
-use std::cell::Cell;
-
 use automancy_defs::colors;
 use yakui::{
-    colored_box_container, column,
+    align, colored_box_container,
     util::{widget, widget_children},
     widgets::{Layer, Pad},
-    Alignment, Dim2, Flow, Pivot,
+    Alignment,
 };
 
 use yakui::geometry::{Color, Constraints, Vec2};
 use yakui::widget::{LayoutContext, PaintContext, Widget};
 use yakui::Response;
 
-use crate::gui::{
-    heading,
-    shapes::RoundedRectLerpedColor,
-    util::{clamp_percentage_to_viewport, pad_y},
-    ROUNDED_MEDIUM,
-};
+use crate::gui::{heading, shapes::RoundedRectLerpedColor, util::pad_y, ROUNDED_MEDIUM};
 
-use super::{centered_row, layout::centered_column, PADDING_LARGE, PADDING_MEDIUM};
-
-/**
-Changes the flow behavior a widget tree, allowing it to break out of any layouts, and be positioned in relation to the screen instead.
-*/
-#[derive(Debug, Clone)]
-pub struct AbsoluteRect {
-    pub pos: Vec2,
-    pub pivot: Pivot,
-}
-
-impl AbsoluteRect {
-    pub fn new(pos: Vec2, pivot: Pivot) -> Self {
-        Self { pos, pivot }
-    }
-
-    pub fn show<F: FnOnce()>(self, children: F) -> Response<AbsoluteResponse> {
-        widget_children::<AbsoluteRectWidget, F>(children, self)
-    }
-}
-
-#[derive(Debug)]
-pub struct AbsoluteRectWidget {
-    props: AbsoluteRect,
-    alignment: Cell<Vec2>,
-}
-
-pub type AbsoluteResponse = ();
-
-impl Widget for AbsoluteRectWidget {
-    type Props<'a> = AbsoluteRect;
-    type Response = AbsoluteResponse;
-
-    fn new() -> Self {
-        Self {
-            props: AbsoluteRect {
-                pos: Vec2::ZERO,
-                pivot: Pivot::TOP_LEFT,
-            },
-            alignment: Cell::default(),
-        }
-    }
-
-    fn update(&mut self, props: Self::Props<'_>) -> Self::Response {
-        self.props = props;
-    }
-
-    fn flow(&self) -> Flow {
-        Flow::Absolute {
-            anchor: Alignment::new(self.alignment.get().x, self.alignment.get().y),
-            offset: Dim2::ZERO,
-        }
-    }
-
-    fn layout(&self, mut ctx: LayoutContext<'_>, constraints: Constraints) -> Vec2 {
-        let node = ctx.dom.get_current();
-        let mut size = Vec2::ZERO;
-        for &child in &node.children {
-            size = size.max(ctx.calculate_layout(child, Constraints::none()));
-        }
-
-        let pivot_offset = -size * self.props.pivot.as_vec2();
-        for &child in &node.children {
-            ctx.layout.set_pos(child, pivot_offset);
-        }
-        self.alignment.set(clamp_percentage_to_viewport(
-            size,
-            self.props.pos / ctx.layout.viewport().size(),
-            ctx.layout.viewport(),
-        ));
-
-        constraints.constrain_min(size)
-    }
-}
+use super::{center_col, col, PADDING_LARGE, PADDING_MEDIUM};
 
 /**
 A colored box with rounded corners that can contain children.
@@ -201,7 +121,7 @@ pub fn group(children: impl FnOnce()) {
         Pad::all(2.0).show(|| {
             colored_box_container(colors::BACKGROUND_1, || {
                 Pad::all(PADDING_MEDIUM).show(|| {
-                    column(children);
+                    col(children);
                 });
             });
         });
@@ -211,7 +131,7 @@ pub fn group(children: impl FnOnce()) {
 pub fn window_box(title: String, children: impl FnOnce()) {
     RoundRect::new(ROUNDED_MEDIUM, colors::BACKGROUND_1).show_children(|| {
         Pad::all(PADDING_LARGE).show(|| {
-            centered_column(|| {
+            center_col(|| {
                 pad_y(0.0, PADDING_MEDIUM).show(|| {
                     heading(&title);
                 });
@@ -224,10 +144,8 @@ pub fn window_box(title: String, children: impl FnOnce()) {
 
 pub fn window(title: String, children: impl FnOnce()) {
     Layer::new().show(|| {
-        centered_column(|| {
-            centered_row(|| {
-                window_box(title, children);
-            });
+        align(Alignment::CENTER, || {
+            window_box(title, children);
         });
     });
 }

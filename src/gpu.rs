@@ -5,6 +5,7 @@ use std::sync::Arc;
 use hashbrown::HashMap;
 use image::EncodableLayout;
 use wgpu::{
+    naga::FastIndexSet,
     util::{backend_bits_from_env, power_preference_from_env, BufferInitDescriptor, DeviceExt},
     InstanceFlags, PipelineCompilationOptions,
 };
@@ -29,27 +30,28 @@ use wgpu::{
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
-use automancy_defs::math::Matrix4;
 use automancy_defs::rendering::PostProcessingUBO;
 use automancy_defs::rendering::{GameUBO, InstanceData, MatrixData, RawInstanceData, Vertex};
 use automancy_defs::slice_group_by::GroupBy;
 use automancy_defs::{id::Id, rendering::IntermediateUBO};
+use automancy_defs::{math::Matrix4, rendering::WorldMatrixData};
 use automancy_macros::OptionGetter;
 use automancy_resources::ResourceManager;
 
 use crate::SSAO_NOISE_MAP;
 
-pub const NORMAL_CLEAR: Color = Color {
-    r: 0.0,
+pub const NORMAL_CLEAR: Color = Color::TRANSPARENT;
+pub const MODEL_DEPTH_CLEAR: Color = Color {
+    r: -1.0,
     g: 0.0,
-    b: 1.0,
+    b: 0.0,
     a: 0.0,
 };
 
 pub const DEPTH_FORMAT: TextureFormat = TextureFormat::Depth32Float;
+pub const MODEL_DEPTH_FORMAT: TextureFormat = TextureFormat::R32Float;
 pub const SCREENSHOT_FORMAT: TextureFormat = TextureFormat::Rgba8UnormSrgb;
 pub const NORMAL_FORMAT: TextureFormat = TextureFormat::Rgba16Float;
-pub const MODEL_FORMAT: TextureFormat = TextureFormat::Rgba16Float;
 
 pub type AnimationMap = HashMap<Id, HashMap<usize, Matrix4>>;
 
@@ -170,6 +172,16 @@ pub fn init_gpu_resources(
                 },
                 count: None,
             },
+            BindGroupLayoutEntry {
+                binding: 2,
+                visibility: ShaderStages::VERTEX,
+                ty: BindingType::Buffer {
+                    ty: BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
         ],
         label: Some("game_bind_group_layout"),
     });
@@ -204,9 +216,9 @@ pub fn init_gpu_resources(
                     write_mask: ColorWrites::COLOR,
                 }),
                 Some(ColorTargetState {
-                    format: MODEL_FORMAT,
+                    format: MODEL_DEPTH_FORMAT,
                     blend: None,
-                    write_mask: ColorWrites::COLOR,
+                    write_mask: ColorWrites::ALL,
                 }),
             ],
             compilation_options: PipelineCompilationOptions::default(),
@@ -239,12 +251,14 @@ pub fn init_gpu_resources(
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
 
-        const MATRIX_DATA_SIZE: usize = 4096;
         let matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Extra Objects Matrix Data Buffer"),
-            contents: &Vec::from_iter(
-                (0..(mem::size_of::<MatrixData>() * MATRIX_DATA_SIZE)).map(|_| 0),
-            ),
+            contents: &Vec::from_iter((0..(mem::size_of::<MatrixData>() * 4096)).map(|_| 0)),
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+        });
+        let world_matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Extra Objects World Matrix Data Buffer"),
+            contents: &Vec::from_iter((0..(mem::size_of::<WorldMatrixData>() * 16)).map(|_| 0)),
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
         });
 
@@ -258,6 +272,10 @@ pub fn init_gpu_resources(
                 BindGroupEntry {
                     binding: 1,
                     resource: matrix_data_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: world_matrix_data_buffer.as_entire_binding(),
                 },
             ],
             label: Some("extra_objects_bind_group"),
@@ -275,6 +293,7 @@ pub fn init_gpu_resources(
                 usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
             }),
             matrix_data_buffer,
+            world_matrix_data_buffer,
             uniform_buffer,
             bind_group,
         }
@@ -287,12 +306,15 @@ pub fn init_gpu_resources(
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
 
-        const MATRIX_DATA_SIZE: usize = 1024;
         let matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Overlay Objects Matrix Data Buffer"),
-            contents: &Vec::from_iter(
-                (0..(mem::size_of::<MatrixData>() * MATRIX_DATA_SIZE)).map(|_| 0),
-            ),
+            contents: &Vec::from_iter((0..(mem::size_of::<MatrixData>() * 1024)).map(|_| 0)),
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+        });
+
+        let world_matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Overlay Objects World Matrix Data Buffer"),
+            contents: &Vec::from_iter((0..(mem::size_of::<WorldMatrixData>() * 256)).map(|_| 0)),
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
         });
 
@@ -306,6 +328,10 @@ pub fn init_gpu_resources(
                 BindGroupEntry {
                     binding: 1,
                     resource: matrix_data_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: world_matrix_data_buffer.as_entire_binding(),
                 },
             ],
             label: Some("overlay_objects_bind_group"),
@@ -323,6 +349,7 @@ pub fn init_gpu_resources(
                 usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
             }),
             matrix_data_buffer,
+            world_matrix_data_buffer,
             uniform_buffer,
             bind_group,
         }
@@ -335,12 +362,15 @@ pub fn init_gpu_resources(
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
 
-        const MATRIX_DATA_SIZE: usize = 65536;
         let matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Game Matrix Data Buffer"),
-            contents: &Vec::from_iter(
-                (0..(mem::size_of::<MatrixData>() * MATRIX_DATA_SIZE)).map(|_| 0),
-            ),
+            contents: &Vec::from_iter((0..(mem::size_of::<MatrixData>() * 65536)).map(|_| 0)),
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+        });
+
+        let world_matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Game World Matrix Data Buffer"),
+            contents: &Vec::from_iter((0..(mem::size_of::<WorldMatrixData>() * 16)).map(|_| 0)),
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
         });
 
@@ -354,6 +384,10 @@ pub fn init_gpu_resources(
                 BindGroupEntry {
                     binding: 1,
                     resource: matrix_data_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: world_matrix_data_buffer.as_entire_binding(),
                 },
             ],
             label: Some("game_bind_group"),
@@ -371,6 +405,7 @@ pub fn init_gpu_resources(
                 usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
             }),
             matrix_data_buffer,
+            world_matrix_data_buffer,
             uniform_buffer,
             bind_group,
         }
@@ -391,35 +426,16 @@ pub fn init_gpu_resources(
             ),
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
         });
-
-        let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            entries: &[
-                BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: ShaderStages::VERTEX_FRAGMENT,
-                    ty: BindingType::Buffer {
-                        ty: BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: ShaderStages::VERTEX,
-                    ty: BindingType::Buffer {
-                        ty: BufferBindingType::Storage { read_only: true },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-            ],
-            label: Some("gui_bind_group_layout"),
+        let world_matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Gui World Matrix Data Buffer"),
+            contents: &Vec::from_iter(
+                (0..(mem::size_of::<WorldMatrixData>() * MATRIX_DATA_SIZE)).map(|_| 0),
+            ),
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
         });
 
         let bind_group = device.create_bind_group(&BindGroupDescriptor {
-            layout: &bind_group_layout,
+            layout: &game_bind_group_layout,
             entries: &[
                 BindGroupEntry {
                     binding: 0,
@@ -428,6 +444,10 @@ pub fn init_gpu_resources(
                 BindGroupEntry {
                     binding: 1,
                     resource: matrix_data_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: world_matrix_data_buffer.as_entire_binding(),
                 },
             ],
             label: Some("gui_bind_group"),
@@ -446,6 +466,7 @@ pub fn init_gpu_resources(
             }),
             uniform_buffer,
             matrix_data_buffer,
+            world_matrix_data_buffer,
             bind_group,
         }
     };
@@ -894,7 +915,7 @@ pub fn init_gpu_resources(
         gui_texture_resolve: None,
         normal_texture: None,
         depth_texture: None,
-        model_texture: None,
+        model_depth_texture: None,
 
         game_post_processing_bind_group: None,
         game_post_processing_texture: None,
@@ -964,42 +985,54 @@ pub struct CompiledInstances<T> {
 
 pub fn compile_instances<T: Clone + Send>(
     resource_man: &ResourceManager,
-    instances: Vec<(InstanceData, Id, T)>,
+    instances: Vec<(InstanceData, Matrix4, Id, T)>,
     animation_map: &AnimationMap,
-) -> (CompiledInstances<T>, Vec<MatrixData>) {
-    let mut matrix_data = vec![];
+) -> (
+    CompiledInstances<T>,
+    FastIndexSet<MatrixData>,
+    FastIndexSet<WorldMatrixData>,
+) {
+    let mut matrix_data = FastIndexSet::default();
+    let mut world_matrix_data = FastIndexSet::default();
 
     let mut opaques = HashMap::new();
     let mut non_opaques = HashMap::new();
 
-    instances.into_iter().for_each(|(instance, id, extra)| {
-        if let Some((meshes, ..)) = &resource_man.all_models.get(&id) {
-            for mesh in meshes.iter().flatten() {
-                let mut instance = instance;
+    instances
+        .into_iter()
+        .for_each(|(instance, world_matrix, id, extra)| {
+            if let Some((meshes, ..)) = &resource_man.all_models.get(&id) {
+                for mesh in meshes.iter().flatten() {
+                    let mut instance = instance;
 
-                let mut matrix = mesh.matrix;
-                if let Some(anim) = animation_map
-                    .get(&id)
-                    .and_then(|anim| anim.get(&mesh.index))
-                {
-                    matrix *= *anim;
-                }
-                instance = instance.add_model_matrix(matrix);
+                    let mut matrix = mesh.matrix;
+                    if let Some(anim) = animation_map
+                        .get(&id)
+                        .and_then(|anim| anim.get(&mesh.index))
+                    {
+                        matrix *= *anim;
+                    }
+                    instance = instance.add_model_matrix(matrix);
 
-                if mesh.opaque {
-                    &mut opaques
-                } else {
-                    &mut non_opaques
+                    if mesh.opaque {
+                        &mut opaques
+                    } else {
+                        &mut non_opaques
+                    }
+                    .entry((id, mesh.index))
+                    .or_insert_with(Vec::new)
+                    .push((
+                        RawInstanceData::from_instance(
+                            instance,
+                            world_matrix,
+                            &mut matrix_data,
+                            &mut world_matrix_data,
+                        ),
+                        extra.clone(),
+                    ));
                 }
-                .entry((id, mesh.index))
-                .or_insert_with(Vec::new)
-                .push((
-                    RawInstanceData::from_instance(instance, &mut matrix_data),
-                    extra.clone(),
-                ));
             }
-        }
-    });
+        });
 
     let mut opaques = opaques
         .into_iter()
@@ -1018,6 +1051,7 @@ pub fn compile_instances<T: Clone + Send>(
             non_opaques,
         },
         matrix_data,
+        world_matrix_data,
     )
 }
 
@@ -1084,17 +1118,18 @@ fn draw_data<T: Clone + Send + Sync>(
 pub struct IndirectInstanceDrawData<T> {
     pub opaques: Vec<RawInstanceData>,
     pub non_opaques: Vec<RawInstanceData>,
-    pub matrix_data: Vec<MatrixData>,
+    pub matrix_data: FastIndexSet<MatrixData>,
+    pub world_matrix_data: FastIndexSet<WorldMatrixData>,
     pub draw_data: DrawData<T>,
 }
 
 pub fn indirect_instance<T: Clone + Send + Sync>(
     resource_man: &ResourceManager,
-    instances: Vec<(InstanceData, Id, T)>,
+    instances: Vec<(InstanceData, Matrix4, Id, T)>,
     animation_map: &AnimationMap,
     grouped: bool,
 ) -> IndirectInstanceDrawData<T> {
-    let (compiled_instances, matrix_data) =
+    let (compiled_instances, matrix_data, world_matrix_data) =
         compile_instances(resource_man, instances, animation_map);
 
     let draw_data = draw_data(resource_man, &compiled_instances, grouped);
@@ -1114,6 +1149,7 @@ pub fn indirect_instance<T: Clone + Send + Sync>(
         opaques,
         non_opaques,
         matrix_data,
+        world_matrix_data,
         draw_data,
     }
 }
@@ -1180,7 +1216,7 @@ fn make_combine_bind_group(
     })
 }
 
-fn make_fxaa_bind_group(
+pub fn make_fxaa_bind_group(
     device: &Device,
     bind_group_layout: &BindGroupLayout,
     frame_texture: &TextureView,
@@ -1207,6 +1243,7 @@ pub struct ExtraObjectsResources {
     pub non_opaques_instance_buffer: Buffer,
     pub uniform_buffer: Buffer,
     pub matrix_data_buffer: Buffer,
+    pub world_matrix_data_buffer: Buffer,
     pub bind_group: BindGroup,
 }
 
@@ -1215,6 +1252,7 @@ pub struct GameResources {
     pub non_opaques_instance_buffer: Buffer,
     pub uniform_buffer: Buffer,
     pub matrix_data_buffer: Buffer,
+    pub world_matrix_data_buffer: Buffer,
     pub bind_group: BindGroup,
 }
 
@@ -1223,6 +1261,7 @@ pub struct GuiResources {
     pub non_opaques_instance_buffer: Buffer,
     pub uniform_buffer: Buffer,
     pub matrix_data_buffer: Buffer,
+    pub world_matrix_data_buffer: Buffer,
     pub bind_group: BindGroup,
 }
 
@@ -1288,7 +1327,7 @@ pub struct SharedResources {
     #[getters(get)]
     depth_texture: Option<(Texture, TextureView)>,
     #[getters(get)]
-    model_texture: Option<(Texture, TextureView)>,
+    model_depth_texture: Option<(Texture, TextureView)>,
 
     #[getters(get)]
     game_post_processing_bind_group: Option<BindGroup>,
@@ -1391,7 +1430,7 @@ impl SharedResources {
                 view_formats: &[],
             },
         ));
-        self.model_texture = Some(create_texture_and_view(
+        self.model_depth_texture = Some(create_texture_and_view(
             device,
             &TextureDescriptor {
                 label: None,
@@ -1399,7 +1438,7 @@ impl SharedResources {
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: TextureDimension::D2,
-                format: MODEL_FORMAT,
+                format: MODEL_DEPTH_FORMAT,
                 usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
                 view_formats: &[],
             },
@@ -1431,7 +1470,7 @@ impl SharedResources {
                     },
                     BindGroupEntry {
                         binding: 5,
-                        resource: BindingResource::TextureView(&self.model_texture().1),
+                        resource: BindingResource::TextureView(&self.model_depth_texture().1),
                     },
                     BindGroupEntry {
                         binding: 6,

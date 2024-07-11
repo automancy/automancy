@@ -25,7 +25,6 @@ use automancy_defs::{
     stack::ItemStack,
 };
 
-use crate::error::ErrorManager;
 use crate::registry::{DataIds, ErrorIds, GuiIds, KeyIds, ModelIds, Registry};
 use crate::types::font::Font;
 use crate::types::model::IndexRange;
@@ -39,6 +38,7 @@ pub mod registry;
 
 pub mod types;
 
+pub mod format;
 pub mod rhai_coord;
 pub mod rhai_data;
 pub mod rhai_resources;
@@ -60,16 +60,6 @@ pub enum LoadResourceError {
 
 pub static RESOURCE_MAN: RwLock<Option<Arc<ResourceManager>>> = RwLock::new(None);
 
-// TODO this fucking sucks
-/// like format!, but does not require the format string to be static.
-pub fn format(format: &str, args: &[&str]) -> String {
-    let mut string = format.to_string();
-    for arg in args {
-        string = string.replacen("{}", arg, 1);
-    }
-    string
-}
-
 /// Converts a UTC Unix timestamp into a formatted time string, using the given strftime format string.
 pub fn format_time(time: SystemTime, fmt: &str) -> String {
     let time = DateTime::<Local>::from(time);
@@ -90,12 +80,11 @@ pub static RESOURCES_PATH: &str = "resources";
 
 pub static FONT_EXT: [&str; 2] = ["ttf", "otf"];
 pub static RON_EXT: &str = "ron";
-pub static AUDIO_EXT: &str = "ogg";
 pub static FUNCTION_EXT: &str = "rhai";
 pub static SHADER_EXT: &str = "wgsl";
-pub static IMAGE_EXT: &str = "png";
 
 /// TODO set of extensions
+pub static AUDIO_EXT: &str = "ogg";
 
 #[derive(Error, Debug)]
 pub enum ResourceError {
@@ -107,7 +96,6 @@ pub enum ResourceError {
 pub struct ResourceManager {
     pub interner: Interner,
     pub track: TrackHandle,
-    pub error_man: ErrorManager,
     pub engine: Engine,
 
     pub registry: Registry,
@@ -157,7 +145,6 @@ impl ResourceManager {
         Self {
             interner,
             track,
-            error_man: Default::default(),
             engine,
 
             registry: Registry {
@@ -206,11 +193,11 @@ pub fn rhai_log_err(called_func: &str, function_id: &str, err: &rhai::EvalAltRes
     match err {
         rhai::EvalAltResult::ErrorFunctionNotFound(name, ..) => {
             if name != called_func {
-                log::error!("In {function_id}: {err}");
+                log::error!("In {function_id}, {called_func}: {err}");
             }
         }
         _ => {
-            log::error!("In {function_id}: {err}");
+            log::error!("In {function_id}, {called_func}: {err}");
         }
     }
 }

@@ -24,7 +24,8 @@ use yakui_wgpu::CallbackTrait;
 
 use crate::{
     gpu::{
-        self, IndirectInstanceDrawData, DEPTH_FORMAT, MODEL_FORMAT, NORMAL_CLEAR, NORMAL_FORMAT,
+        self, make_fxaa_bind_group, IndirectInstanceDrawData, DEPTH_FORMAT, MODEL_DEPTH_CLEAR,
+        MODEL_DEPTH_FORMAT, NORMAL_CLEAR, NORMAL_FORMAT,
     },
     gui::YakuiRenderResources,
     renderer::try_add_animation,
@@ -113,10 +114,12 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
         let start_instant = START_INSTANT.get().unwrap();
         try_add_animation(resource_man, start_instant, props.model, animation_map);
 
-        instances
-            .as_mut()
-            .unwrap()
-            .push((props.instance, props.model, (props.index, props.size)));
+        instances.as_mut().unwrap().push((
+            props.instance,
+            props.world_matrix,
+            props.model,
+            (props.index, props.size),
+        ));
     }
 
     fn finish_prepare(
@@ -157,6 +160,7 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                 opaques,
                 non_opaques,
                 matrix_data,
+                world_matrix_data,
                 draw_data,
             } = gpu::indirect_instance(resource_man, instances, animation_map, false);
 
@@ -182,13 +186,19 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
             queue.write_buffer(
                 &gui_resources.matrix_data_buffer,
                 0,
-                bytemuck::cast_slice(matrix_data.as_slice()),
+                bytemuck::cast_slice(matrix_data.into_iter().collect::<Vec<_>>().as_slice()),
+            );
+
+            queue.write_buffer(
+                &gui_resources.world_matrix_data_buffer,
+                0,
+                bytemuck::cast_slice(world_matrix_data.into_iter().collect::<Vec<_>>().as_slice()),
             );
 
             queue.write_buffer(
                 &gui_resources.uniform_buffer,
                 0,
-                bytemuck::cast_slice(&[GameUBO::new(self.props.world_matrix)]),
+                bytemuck::cast_slice(&[GameUBO::default()]),
             );
 
             let size = UVec2::new(packed.w as u32, packed.h as u32);
@@ -233,7 +243,7 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                 view_formats: &[],
             });
 
-            let model_texture = device.create_texture(&TextureDescriptor {
+            let model_depth_texture = device.create_texture(&TextureDescriptor {
                 label: None,
                 size: Extent3d {
                     width: size.x,
@@ -243,7 +253,7 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: TextureDimension::D2,
-                format: MODEL_FORMAT,
+                format: MODEL_DEPTH_FORMAT,
                 usage: TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT,
                 view_formats: &[],
             });
@@ -266,7 +276,6 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
             let post_processing_uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
                 label: None,
                 contents: bytemuck::cast_slice(&[PostProcessingUBO {
-                    world_matrix: self.props.world_matrix.to_cols_array_2d(),
                     flags: 0,
                     ..Default::default()
                 }]),
@@ -285,8 +294,8 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
 
             let color = color_texture.create_view(&TextureViewDescriptor::default());
             let depth = depth_texture.create_view(&TextureViewDescriptor::default());
-            let model = model_texture.create_view(&TextureViewDescriptor::default());
             let normal = normal_texture.create_view(&TextureViewDescriptor::default());
+            let model_depth = model_depth_texture.create_view(&TextureViewDescriptor::default());
 
             let post_processing_bind_group_textures =
                 device.create_bind_group(&BindGroupDescriptor {
@@ -316,7 +325,7 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                         },
                         BindGroupEntry {
                             binding: 5,
-                            resource: BindingResource::TextureView(&model),
+                            resource: BindingResource::TextureView(&model_depth),
                         },
                         BindGroupEntry {
                             binding: 6,
@@ -330,7 +339,7 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                     label: None,
                 });
 
-            *present_texture = Some(device.create_texture(&TextureDescriptor {
+            let post_processing_texture = device.create_texture(&TextureDescriptor {
                 label: None,
                 size: Extent3d {
                     width: size.x,
@@ -343,11 +352,33 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                 format: *surface_format,
                 usage: TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT,
                 view_formats: &[],
+            });
+
+            let antialiasing_bind_group = make_fxaa_bind_group(
+                device,
+                &global_resources.fxaa_bind_group_layout,
+                &post_processing_texture.create_view(&TextureViewDescriptor::default()),
+                &global_resources.filtering_sampler,
+            );
+
+            *present_texture = Some(device.create_texture(&TextureDescriptor {
+                label: None,
+                size: Extent3d {
+                    width: size.x / 2,
+                    height: size.y / 2,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: *surface_format,
+                usage: TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
             }));
 
             {
                 let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                    label: Some(&format!("UI Model Render Pass {:?}", self.props.model)),
+                    label: Some("UI Model Render Pass"),
                     color_attachments: &[
                         Some(RenderPassColorAttachment {
                             view: &color,
@@ -366,10 +397,10 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                             },
                         }),
                         Some(RenderPassColorAttachment {
-                            view: &model,
+                            view: &model_depth,
                             resolve_target: None,
                             ops: Operations {
-                                load: LoadOp::Clear(Color::TRANSPARENT),
+                                load: LoadOp::Clear(MODEL_DEPTH_CLEAR),
                                 store: StoreOp::Store,
                             },
                         }),
@@ -439,16 +470,10 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
             }
 
             {
-                let view = present_texture
-                    .as_ref()
-                    .unwrap()
-                    .create_view(&TextureViewDescriptor::default());
+                let view = post_processing_texture.create_view(&TextureViewDescriptor::default());
 
                 let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                    label: Some(&format!(
-                        "UI Model Post Processing Render Pass {:?}",
-                        self.props.model
-                    )),
+                    label: Some("UI Model Post Processing Render Pass"),
                     color_attachments: &[Some(RenderPassColorAttachment {
                         view: &view,
                         resolve_target: None,
@@ -467,14 +492,37 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                 render_pass.set_bind_group(1, &post_processing_bind_group_uniform, &[]);
                 render_pass.draw(0..3, 0..1);
             }
+
+            {
+                let view = present_texture
+                    .as_ref()
+                    .unwrap()
+                    .create_view(&TextureViewDescriptor::default());
+
+                let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                    label: Some("UI Model Antialiasing Render Pass"),
+                    color_attachments: &[Some(RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: Operations {
+                            load: LoadOp::Clear(Color::TRANSPARENT),
+                            store: StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+
+                render_pass.set_pipeline(&global_resources.fxaa_pipeline);
+                render_pass.set_bind_group(0, &antialiasing_bind_group, &[]);
+                render_pass.draw(0..3, 0..1);
+            }
         }
 
         if self.present_uniform.is_none() {
             self.present_uniform = Some(device.create_buffer_init(&BufferInitDescriptor {
-                label: Some(&format!(
-                    "UI Model Present Uniform Buffer {:?}",
-                    self.props.model
-                )),
+                label: Some("UI Model Present Uniform Buffer"),
                 contents: bytemuck::cast_slice(&[IntermediateUBO {
                     viewport_size: [0.0; 2],
                     viewport_pos: [0.0; 2],
@@ -603,7 +651,7 @@ impl Widget for GameElementWidget {
         let paint_clip = ctx.paint.get_current_clip();
 
         if let Some(mut rect) = self.layout_rect.get() {
-            let clip = self.clip.get();
+            let clip = ctx.layout.unscaled_viewport().constrain(self.clip.get());
 
             if clip.size().x > 0.0 && clip.size().y > 0.0 {
                 rect.set_size(rect.size() * ctx.layout.scale_factor());
@@ -624,9 +672,9 @@ impl Widget for GameElementWidget {
                     let dy = (dy * clip.size().y).round() / clip.size().y;
 
                     self.adjusted_matrix.set(Some(
-                        Matrix4::from_translation(vec3(-dx, dy, 0.0))
-                            * self.props.get().unwrap().instance.get_model_matrix()
-                            * Matrix4::from_scale(vec3(sx, sy, 1.0)),
+                        Matrix4::from_translation(vec3(dx, dy, 0.0))
+                            * Matrix4::from_scale(vec3(sx, sy, 1.0))
+                            * self.props.get().unwrap().world_matrix,
                     ));
                 }
             }
@@ -639,7 +687,7 @@ impl Widget for GameElementWidget {
         if let Some(layer) = ctx.paint.layers_mut().current_mut() {
             let mut props = self.props.get().unwrap();
             if let Some(matrix) = self.adjusted_matrix.get() {
-                props.instance = props.instance.with_model_matrix(matrix);
+                props.world_matrix = matrix;
             }
 
             let paint = Box::new(GameElementPaint {

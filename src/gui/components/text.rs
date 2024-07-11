@@ -1,16 +1,14 @@
 use automancy_defs::colors::BLACK;
 use yakui::{
+    align, constrained,
     style::TextStyle,
-    widgets::{ConstrainedBox, Pad, Text, TextResponse},
-    Color, Constraints, Response, Vec2,
+    widgets::{Pad, Text, TextResponse},
+    Alignment, Color, Constraints, Response, Vec2,
 };
 
 use crate::SYMBOLS_FONT_KEY;
 
-use super::{
-    centered_column, centered_row, HEADING_SIZE, LABEL_SIZE, PADDING_MEDIUM, PADDING_SMALL,
-    SMALL_SIZE,
-};
+use super::{HEADING_SIZE, LABEL_SIZE, PADDING_MEDIUM, SMALL_SIZE};
 
 pub fn colored_sized_text(text: &str, color: Color, font_size: f32) -> Text {
     let mut text = Text::with_style(
@@ -68,20 +66,20 @@ pub fn heading(text: &str) -> Response<TextResponse> {
 pub fn symbol_text(symbol: &str, color: Color) -> Text {
     let mut text = colored_label_text(symbol, color);
     text.style.attrs.family_owned = cosmic_text::FamilyOwned::Name(SYMBOLS_FONT_KEY.to_owned());
-    text.padding = Pad::all(PADDING_SMALL);
+    text.padding = Pad::ZERO;
     text
 }
 
 pub fn symbol(symbol: &str, color: Color) {
-    ConstrainedBox::new(Constraints::tight(Vec2::new(
-        LABEL_SIZE + PADDING_SMALL * 2.0,
-        LABEL_SIZE + PADDING_SMALL * 2.0,
-    )))
-    .show(|| {
-        centered_row(|| {
-            centered_column(|| {
+    constrained(
+        Constraints::tight(Vec2::new(
+            LABEL_SIZE + PADDING_MEDIUM,
+            LABEL_SIZE + PADDING_MEDIUM,
+        )),
+        || {
+            align(Alignment::CENTER, || {
                 symbol_text(symbol, color).show();
             });
-        });
-    });
+        },
+    );
 }

@@ -1,17 +1,17 @@
 use std::time::Instant;
 
-use automancy_defs::{glam::dvec3, id::Id, math, rendering::InstanceData};
+use automancy_defs::{id::Id, rendering::InstanceData};
+use automancy_resources::types::IconMode;
 use fuzzy_matcher::FuzzyMatcher;
 use hashbrown::HashMap;
 use yakui::{
-    column,
     widgets::{Absolute, Layer, Pad},
     Alignment, Dim2, Pivot, Rect, Vec2,
 };
 
 use crate::{game::TAKE_ITEM_ANIMATION_SPEED, GameState};
 
-use super::{radio, scroll_vertical, textbox, ui_game_object, TextField};
+use super::{col, radio, scroll_vertical, textbox, ui_game_object, TextField};
 
 pub fn pad_y(top: f32, bottom: f32) -> Pad {
     let mut pad = Pad::ZERO;
@@ -46,28 +46,24 @@ pub fn clamp_percentage_to_viewport(size: Vec2, mut pos: Vec2, viewport: Rect) -
 /// Draws a search bar.
 pub fn searchable_id(
     ids: &[Id],
-    names: &[String],
+    names: &[impl AsRef<str>],
     new_id: &mut Option<Id>,
     field: TextField,
-    hint_text: String,
+    hint_text: &str,
     draw: &'static impl Fn(&mut GameState, &Id, &str),
     state: &mut GameState,
 ) {
-    textbox(
-        state.gui_state.text_field.get(field),
-        None,
-        Some(&hint_text),
-    );
+    textbox(state.gui_state.text_field.get(field), None, Some(hint_text));
 
-    scroll_vertical(200.0, || {
-        column(|| {
+    scroll_vertical(Vec2::ZERO, Vec2::new(f32::INFINITY, 200.0), || {
+        col(|| {
             let ids = if !state.gui_state.text_field.get(field).is_empty() {
                 let text = state.gui_state.text_field.get(field).clone();
                 let mut filtered = ids
                     .iter()
                     .enumerate()
                     .flat_map(|(idx, id)| {
-                        let name = &names[idx];
+                        let name = names[idx].as_ref();
                         let score = state.gui_state.text_field.fuse.fuzzy_match(name, &text);
 
                         if score.unwrap_or(0) < (name.len() / 2) as i64 {
@@ -87,7 +83,7 @@ pub fn searchable_id(
 
             for (idx, id) in ids.iter().enumerate() {
                 radio(new_id, Some(*id), || {
-                    draw(state, id, &names[idx]);
+                    draw(state, id, names[idx].as_ref());
                 });
             }
         });
@@ -149,7 +145,7 @@ pub fn take_item_animation(state: &mut GameState, id: Id, dst_rect: Rect) {
                         InstanceData::default(),
                         state.resource_man.item_model_or_missing(id),
                         size,
-                        Some(math::view(dvec3(0.0, 0.0, 1.0)).as_mat4()),
+                        Some(IconMode::Item.world_matrix()),
                     );
                 });
             });

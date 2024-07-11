@@ -1,10 +1,10 @@
 **/target
-**/.cargo
 
 __pycache__
 
 map
 options.ron
+misc_options.ron
 rhai
 
 *.gltf

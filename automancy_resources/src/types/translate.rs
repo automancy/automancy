@@ -1,8 +1,9 @@
-use std::ffi::OsStr;
 use std::fs::{read_dir, read_to_string};
 use std::path::Path;
+use std::{ffi::OsStr, fmt::Debug};
 
 use hashbrown::HashMap;
+use interpolator::Formattable;
 use serde::Deserialize;
 
 use automancy_defs::{
@@ -10,7 +11,7 @@ use automancy_defs::{
     parse_map_id_str,
 };
 
-use crate::{ResourceManager, RON_EXT};
+use crate::{format::FormatContext, ResourceManager, RON_EXT};
 
 #[derive(Debug, Default, Clone)]
 pub struct TranslateDef {
@@ -88,6 +89,7 @@ impl ResourceManager {
         if self.translates.unnamed.is_empty() {
             self.translates.unnamed = new.unnamed;
         }
+
         self.translates.items.extend(new.items);
         self.translates.tiles.extend(new.tiles);
         self.translates.categories.extend(new.categories);
@@ -100,19 +102,22 @@ impl ResourceManager {
         Ok(())
     }
 
-    pub fn load_translates(&mut self, dir: &Path, namespace: &str) -> anyhow::Result<()> {
-        let translates = dir.join("translates");
-        let translates = read_dir(translates);
+    pub fn load_translates(
+        &mut self,
+        dir: &Path,
+        namespace: &str,
+        selected_language: &str,
+    ) -> anyhow::Result<()> {
+        let lang = OsStr::new(selected_language);
 
-        if let Ok(translates) = translates {
-            for file in translates
+        if let Ok(dir) = read_dir(dir.join("translates")) {
+            for file in dir
                 .into_iter()
                 .flatten()
                 .map(|v| v.path())
                 .filter(|v| v.extension() == Some(OsStr::new(RON_EXT)))
             {
-                // TODO language selection
-                if file.file_stem() == Some(OsStr::new("en_US")) {
+                if file.file_stem() == Some(lang) {
                     self.load_translate(&file, namespace)?;
                 }
             }
@@ -121,14 +126,14 @@ impl ResourceManager {
         Ok(())
     }
 
-    pub fn item_name(&self, id: &Id) -> SharedStr {
-        match self.translates.items.get(id) {
+    pub fn item_name(&self, id: Id) -> SharedStr {
+        match self.translates.items.get(&id) {
             Some(name) => name.clone(),
             None => self.translates.unnamed.clone(),
         }
     }
 
-    pub fn try_item_name(&self, id: Option<&Id>) -> SharedStr {
+    pub fn try_item_name(&self, id: Option<Id>) -> SharedStr {
         if let Some(id) = id {
             self.item_name(id)
         } else {
@@ -136,14 +141,14 @@ impl ResourceManager {
         }
     }
 
-    pub fn script_name(&self, id: &Id) -> SharedStr {
-        match self.translates.scripts.get(id) {
+    pub fn script_name(&self, id: Id) -> SharedStr {
+        match self.translates.scripts.get(&id) {
             Some(name) => name.clone(),
             None => self.translates.unnamed.clone(),
         }
     }
 
-    pub fn try_script_name(&self, id: Option<&Id>) -> SharedStr {
+    pub fn try_script_name(&self, id: Option<Id>) -> SharedStr {
         if let Some(id) = id {
             self.item_name(id)
         } else {
@@ -151,14 +156,14 @@ impl ResourceManager {
         }
     }
 
-    pub fn tile_name(&self, id: &Id) -> SharedStr {
-        match self.translates.tiles.get(id) {
+    pub fn tile_name(&self, id: Id) -> SharedStr {
+        match self.translates.tiles.get(&id) {
             Some(name) => name.clone(),
             None => self.translates.unnamed.clone(),
         }
     }
 
-    pub fn try_tile_name(&self, id: Option<&Id>) -> SharedStr {
+    pub fn try_tile_name(&self, id: Option<Id>) -> SharedStr {
         if let Some(id) = id {
             self.tile_name(id)
         } else {
@@ -166,14 +171,14 @@ impl ResourceManager {
         }
     }
 
-    pub fn category_name(&self, id: &Id) -> SharedStr {
-        match self.translates.categories.get(id) {
+    pub fn category_name(&self, id: Id) -> SharedStr {
+        match self.translates.categories.get(&id) {
             Some(name) => name.clone(),
             None => self.translates.unnamed.clone(),
         }
     }
 
-    pub fn try_category_name(&self, id: Option<&Id>) -> SharedStr {
+    pub fn try_category_name(&self, id: Option<Id>) -> SharedStr {
         if let Some(id) = id {
             self.category_name(id)
         } else {
@@ -181,16 +186,30 @@ impl ResourceManager {
         }
     }
 
-    pub fn gui_str(&self, id: &Id) -> SharedStr {
-        match self.translates.gui.get(id) {
-            Some(name) => name.clone(),
+    pub fn gui_str(&self, id: Id) -> SharedStr {
+        match self.translates.gui.get(&id) {
+            Some(v) => v.clone(),
             None => self.translates.unnamed.clone(),
         }
     }
 
-    pub fn research_str(&self, id: &Id) -> SharedStr {
-        match self.translates.research.get(id) {
-            Some(name) => name.clone(),
+    pub fn gui_fmt<const LEN: usize>(&self, id: Id, fmt: [(&str, Formattable); LEN]) -> String {
+        match self.translates.gui.get(&id) {
+            Some(v) => interpolator::format(v, &FormatContext::from(fmt.into_iter()))
+                .unwrap_or_else(|err| {
+                    panic!(
+                        "Could not format gui translation of ID {:?}. Error: {err:?}. Available variables: {:?}",
+                        self.interner.resolve(id),
+                        fmt,
+                    )
+                }),
+            None => self.translates.unnamed.to_string(),
+        }
+    }
+
+    pub fn research_str(&self, id: Id) -> SharedStr {
+        match self.translates.research.get(&id) {
+            Some(v) => v.clone(),
             None => self.translates.unnamed.clone(),
         }
     }

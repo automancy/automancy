@@ -27,7 +27,6 @@ use winit::{
     window::{Fullscreen, Icon},
 };
 
-use automancy::gui::GuiState;
 use automancy::input::InputHandler;
 use automancy::map::MAIN_MENU;
 use automancy::options::Options;
@@ -45,6 +44,7 @@ use automancy::{
     gpu::{init_gpu_resources, Gpu},
     SYMBOLS_FONT,
 };
+use automancy::{gui::GuiState, options::MiscOptions};
 use automancy::{GameState, LOGO};
 use automancy_defs::glam::uvec2;
 use automancy_defs::kira::manager::{AudioManager, AudioManagerSettings};
@@ -56,7 +56,10 @@ use automancy_resources::{ResourceManager, RESOURCES_PATH, RESOURCE_MAN};
 use yakui::paint::Texture;
 
 /// Initialize the Resource Manager system, and loads all the resources in all namespaces.
-fn load_resources(track: TrackHandle) -> (Arc<ResourceManager>, Vec<Vertex>, Vec<u16>) {
+fn load_resources(
+    selected_language: &str,
+    track: TrackHandle,
+) -> (Arc<ResourceManager>, Vec<Vertex>, Vec<u16>) {
     let mut resource_man = ResourceManager::new(track);
 
     fs::read_dir(RESOURCES_PATH)
@@ -94,7 +97,7 @@ fn load_resources(track: TrackHandle) -> (Arc<ResourceManager>, Vec<Vertex>, Vec
                 .expect("Error loading scripts");
 
             resource_man
-                .load_translates(&dir, namespace)
+                .load_translates(&dir, namespace, selected_language)
                 .expect("Error loading translates");
 
             resource_man
@@ -468,7 +471,9 @@ fn main() -> anyhow::Result<()> {
             builder
         })?;
 
-        let (resource_man, vertices, indices) = load_resources(track);
+        let misc_options = MiscOptions::load();
+
+        let (resource_man, vertices, indices) = load_resources(&misc_options.language, track);
         RESOURCE_MAN.write().unwrap().replace(resource_man.clone());
         log::info!("Loaded resources.");
 
@@ -500,6 +505,7 @@ fn main() -> anyhow::Result<()> {
         GameState {
             gui_state: GuiState::default(),
             options,
+            misc_options,
             resource_man,
             input_handler,
             loop_store,
