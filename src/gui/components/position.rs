@@ -1,4 +1,4 @@
-use yakui::{util::widget_children, widget::Widget, Response, Vec2};
+use yakui::{util::widget_children, widget::Widget, Rect, Response, Vec2};
 
 use std::cell::Cell;
 
@@ -18,10 +18,10 @@ impl PositionRecord {
 #[derive(Debug)]
 pub struct PositionRecordWidget {
     props: PositionRecord,
-    pos: Cell<Vec2>,
+    rect: Cell<Option<Rect>>,
 }
 
-pub type PositionRecordResponse = Vec2;
+pub type PositionRecordResponse = Option<Rect>;
 
 impl Widget for PositionRecordWidget {
     type Props<'a> = PositionRecord;
@@ -30,14 +30,14 @@ impl Widget for PositionRecordWidget {
     fn new() -> Self {
         Self {
             props: PositionRecord::new(),
-            pos: Cell::default(),
+            rect: Cell::default(),
         }
     }
 
     fn update(&mut self, props: Self::Props<'_>) -> Self::Response {
         self.props = props;
 
-        self.pos.get()
+        self.rect.get()
     }
 
     fn layout(
@@ -48,7 +48,7 @@ impl Widget for PositionRecordWidget {
         if let Some(layout_node) = ctx.layout.get(ctx.dom.current()) {
             let rect = layout_node.rect;
             if !rect.pos().abs_diff_eq(Vec2::ZERO, 0.001) {
-                self.pos.set(rect.pos())
+                self.rect.set(Some(rect));
             }
         }
 

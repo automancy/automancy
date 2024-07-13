@@ -474,14 +474,14 @@ impl Actor for TileEntity {
                 }
             }
             GetTileConfigUi(reply) => {
-                let tile = self
+                let tile_def = self
                     .resource_man
                     .registry
                     .tiles
                     .get(&self.id)
                     .ok_or(Box::new(TileEntityError::NonExistent(self.coord)))?;
 
-                if let Some((ast, default_scope, function_id)) = tile
+                if let Some((ast, default_scope, function_id)) = tile_def
                     .function
                     .as_ref()
                     .and_then(|v| self.resource_man.functions.get(v))
@@ -501,6 +501,7 @@ impl Actor for TileEntity {
                         (rhai::Map::from([
                             ("coord".into(), Dynamic::from(self.coord)),
                             ("id".into(), Dynamic::from(self.id)),
+                            ("setup".into(), Dynamic::from(tile_def.data.clone())),
                         ]),),
                     );
 

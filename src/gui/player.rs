@@ -55,23 +55,20 @@ fn player_inventory(state: &mut GameState, game_data: &mut DataMap) {
                 let amount = *amount;
 
                 if amount != 0 {
-                    let rect = draw_item(
-                        &state.resource_man,
-                        || {},
-                        ItemStack { id: *id, amount },
-                        MEDIUM_ICON_SIZE,
-                        true,
-                    );
+                    let rect = PositionRecord::new()
+                        .show(|| {
+                            draw_item(
+                                &state.resource_man,
+                                || {},
+                                ItemStack { id: *id, amount },
+                                MEDIUM_ICON_SIZE,
+                                true,
+                            );
+                        })
+                        .into_inner();
 
                     if let Some(rect) = rect {
-                        take_item_animation(
-                            state,
-                            *id,
-                            Rect::from_pos_size(
-                                rect.pos(),
-                                vec2(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE),
-                            ),
-                        );
+                        take_item_animation(state, *id, rect);
                     }
                 }
             }
@@ -224,7 +221,7 @@ fn research_board_tiles(
     interact.clicked
 }
 
-fn research_puzzle(state: &mut GameState, game_data: &mut DataMap) -> Option<Vec2> {
+fn research_puzzle(state: &mut GameState, game_data: &mut DataMap) -> Option<Rect> {
     let research = state
         .gui_state
         .selected_research
@@ -363,21 +360,19 @@ fn research_puzzle(state: &mut GameState, game_data: &mut DataMap) -> Option<Vec
                 group(|| {
                     scroll_horizontal_bar_alignment(Vec2::ZERO, BOARD_SIZE, None, || {
                         scroll_vertical_bar_alignment(Vec2::ZERO, BOARD_SIZE, None, || {
-                            board_pos = Some(
-                                PositionRecord::new()
-                                    .show(|| {
-                                        constrained(
-                                            Constraints {
-                                                min: BOARD_SIZE,
-                                                max: Vec2::INFINITY,
-                                            },
-                                            || {
-                                                clicked = research_board_tiles(state, tiles);
-                                            },
-                                        );
-                                    })
-                                    .into_inner(),
-                            );
+                            board_pos = PositionRecord::new()
+                                .show(|| {
+                                    constrained(
+                                        Constraints {
+                                            min: BOARD_SIZE,
+                                            max: Vec2::INFINITY,
+                                        },
+                                        || {
+                                            clicked = research_board_tiles(state, tiles);
+                                        },
+                                    );
+                                })
+                                .into_inner();
                         });
                     });
                 });
@@ -386,7 +381,7 @@ fn research_puzzle(state: &mut GameState, game_data: &mut DataMap) -> Option<Vec
             if !completed && clicked {
                 if let Some(min) = board_pos {
                     let p = state.input_handler.main_pos.as_vec2()
-                        - min
+                        - min.pos()
                         - PUZZLE_HEX_GRID_LAYOUT.hex_size;
 
                     let p = TileCoord::from(PUZZLE_HEX_GRID_LAYOUT.world_pos_to_hex(p));
@@ -560,7 +555,7 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
 
             if let Some((coord, ids)) = &state.gui_state.research_puzzle_selections {
                 if let Some(min) = board_pos {
-                    let p = (PUZZLE_HEX_GRID_LAYOUT.hex_to_world_pos(**coord) + min).round();
+                    let p = (PUZZLE_HEX_GRID_LAYOUT.hex_to_world_pos(**coord) + min.pos()).round();
 
                     Layer::new().show(|| {
                         Absolute::new(

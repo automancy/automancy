@@ -58,7 +58,7 @@ pub fn ui_game_object(
     model: Id,
     size: Vec2,
     world_matrix: Option<Matrix4>,
-) -> Response<Option<Rect>> {
+) -> Response<()> {
     GameElement::new(instance, model, size, world_matrix).show()
 }
 
@@ -83,7 +83,7 @@ impl GameElement {
         result
     }
 
-    pub fn show(self) -> Response<Option<Rect>> {
+    pub fn show(self) -> Response<()> {
         widget::<GameElementWidget>(Some(self))
     }
 }
@@ -364,8 +364,8 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
             *present_texture = Some(device.create_texture(&TextureDescriptor {
                 label: None,
                 size: Extent3d {
-                    width: size.x / 2,
-                    height: size.y / 2,
+                    width: size.x * 3 / 2,
+                    height: size.y * 3 / 2,
                     depth_or_array_layers: 1,
                 },
                 mip_level_count: 1,
@@ -605,19 +605,17 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
 #[derive(Debug, Clone)]
 pub struct GameElementWidget {
     props: Cell<Option<GameElement>>,
-    layout_rect: Cell<Option<Rect>>,
     clip: Cell<Rect>,
     adjusted_matrix: Cell<Option<Matrix4>>,
 }
 
 impl Widget for GameElementWidget {
     type Props<'a> = Option<GameElement>;
-    type Response = Option<Rect>;
+    type Response = ();
 
     fn new() -> Self {
         Self {
             props: Cell::default(),
-            layout_rect: Cell::default(),
             clip: Cell::new(Rect::ZERO),
             adjusted_matrix: Cell::default(),
         }
@@ -625,21 +623,13 @@ impl Widget for GameElementWidget {
 
     fn update(&mut self, props: Self::Props<'_>) -> Self::Response {
         self.props.set(props);
-
-        self.layout_rect.get()
     }
 
     fn layout(
         &self,
-        ctx: yakui::widget::LayoutContext<'_>,
+        _ctx: yakui::widget::LayoutContext<'_>,
         constraints: yakui::Constraints,
     ) -> yakui::Vec2 {
-        ctx.layout.enable_clipping(ctx.dom);
-
-        if let Some(layout_node) = ctx.layout.get(ctx.dom.current()) {
-            self.layout_rect.set(Some(layout_node.rect));
-        }
-
         if let Some(paint) = self.props.get() {
             constraints.constrain(paint.size)
         } else {
@@ -650,7 +640,12 @@ impl Widget for GameElementWidget {
     fn paint(&self, ctx: yakui::widget::PaintContext<'_>) {
         let paint_clip = ctx.paint.get_current_clip();
 
-        if let Some(mut rect) = self.layout_rect.get() {
+        if let Some(clip) = paint_clip {
+            self.clip.set(clip);
+        }
+
+        let mut new_clip_rect = Rect::ZERO;
+        if let Some(mut rect) = ctx.layout.get(ctx.dom.current()).map(|v| v.rect) {
             let clip = ctx.layout.unscaled_viewport().constrain(self.clip.get());
 
             if clip.size().x > 0.0 && clip.size().y > 0.0 {
@@ -668,20 +663,14 @@ impl Widget for GameElementWidget {
                     let dx = (sx - 1.0) * sign.x.signum();
                     let dy = (sy - 1.0) * sign.y.signum();
 
-                    let dx = (dx * clip.size().x).round() / clip.size().x;
-                    let dy = (dy * clip.size().y).round() / clip.size().y;
-
                     self.adjusted_matrix.set(Some(
                         Matrix4::from_translation(vec3(dx, dy, 0.0))
                             * Matrix4::from_scale(vec3(sx, sy, 1.0))
                             * self.props.get().unwrap().world_matrix,
                     ));
                 }
+                new_clip_rect = inside;
             }
-        }
-
-        if let Some(clip) = paint_clip {
-            self.clip.set(clip);
         }
 
         if let Some(layer) = ctx.paint.layers_mut().current_mut() {
@@ -698,7 +687,7 @@ impl Widget for GameElementWidget {
 
             layer.calls.push((
                 PaintCall::Custom(CustomPaintCall { callback: paint }),
-                paint_clip,
+                Some(new_clip_rect),
             ));
         }
     }

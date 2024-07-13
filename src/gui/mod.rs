@@ -11,13 +11,13 @@ use winit::{event_loop::ActiveEventLoop, window::Window};
 use yakui_wgpu::YakuiWgpu;
 use yakui_winit::YakuiWinit;
 
+use automancy_defs::id::Id;
 use automancy_defs::math::Vec2;
 use automancy_defs::math::{Float, Matrix4, FAR, HEX_GRID_LAYOUT};
 use automancy_defs::rendering::{make_line, InstanceData};
 use automancy_defs::{colors, math, window};
 use automancy_defs::{coord::TileCoord, glam::vec2};
 use automancy_defs::{glam::vec3, log};
-use automancy_defs::{id::Id, rendering::LINE_DEPTH};
 use automancy_resources::data::Data;
 use automancy_resources::data::DataMap;
 use automancy_resources::ResourceManager;
@@ -117,9 +117,6 @@ pub struct GuiState {
     pub paste_from: Option<TileCoord>,
     pub paste_content: Vec<(TileCoord, Id, Option<DataMap>)>,
 
-    pub placement_direction: Option<TileCoord>,
-    pub prev_placement_direction: Option<TileCoord>,
-
     pub tile_config_ui_position: Vec2,
     pub player_ui_position: Vec2,
     pub debugger_ui_position: Vec2,
@@ -150,8 +147,6 @@ impl Default for GuiState {
             grouped_tiles: Default::default(),
             paste_from: Default::default(),
             paste_content: Default::default(),
-            placement_direction: Default::default(),
-            prev_placement_direction: Default::default(),
 
             tile_config_ui_position: vec2(0.1, 0.1), // TODO make default pos screen center?
             player_ui_position: vec2(0.1, 0.1),
@@ -359,34 +354,6 @@ pub fn render_ui(
                             state.resource_man.registry.model_ids.cube1x1,
                             (),
                         ));
-                    }
-
-                    if let Some((dir, selected_tile_id)) = state
-                        .gui_state
-                        .placement_direction
-                        .zip(state.gui_state.selected_tile_id)
-                    {
-                        if dir != TileCoord::ZERO
-                            && !state.resource_man.registry.tiles[&selected_tile_id]
-                                .data
-                                .get(state.resource_man.registry.data_ids.indirectional)
-                                .cloned()
-                                .and_then(Data::into_bool)
-                                .unwrap_or(false)
-                        {
-                            state.renderer.as_mut().unwrap().extra_instances.push((
-                                InstanceData::default()
-                                    .with_color_offset(colors::RED.to_linear())
-                                    .with_model_matrix(make_line(
-                                        HEX_GRID_LAYOUT.hex_to_world_pos(*state.camera.pointing_at),
-                                        HEX_GRID_LAYOUT
-                                            .hex_to_world_pos(*(state.camera.pointing_at + dir)),
-                                        LINE_DEPTH,
-                                    )),
-                                state.resource_man.registry.model_ids.cube1x1,
-                                (),
-                            ));
-                        }
                     }
                 }
             }

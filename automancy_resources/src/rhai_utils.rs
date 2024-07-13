@@ -35,6 +35,13 @@ mod utils {
             None => Dynamic::UNIT,
         }
     }
+
+    pub fn item_ids_of_tag(id: Id) -> Dynamic {
+        Dynamic::from_iter(crate::item_ids_of_tag(
+            RESOURCE_MAN.read().unwrap().as_ref().unwrap(),
+            id,
+        ))
+    }
 }
 
 pub(crate) fn register_functions(engine: &mut Engine) {

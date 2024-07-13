@@ -1,15 +1,12 @@
 use std::ffi::OsStr;
 use std::fs::read_to_string;
 use std::path::Path;
-use std::sync::Arc;
 
 use serde::Deserialize;
 
 use automancy_defs::id::Id;
 
-use hashbrown::HashMap;
-
-use crate::{item_match, load_recursively, ResourceManager, RON_EXT};
+use crate::{load_recursively, ResourceManager, RON_EXT};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 pub struct ItemDef {
@@ -45,30 +42,6 @@ impl ResourceManager {
         }
 
         Ok(())
-    }
-
-    pub fn get_items(
-        &self,
-        id: Id,
-        tag_cache: &mut HashMap<Id, Arc<Vec<ItemDef>>>,
-    ) -> Arc<Vec<ItemDef>> {
-        if let Some(item) = self.registry.items.get(&id) {
-            Arc::new(vec![*item])
-        } else {
-            tag_cache
-                .entry(id)
-                .or_insert_with(|| {
-                    let items = self
-                        .ordered_items
-                        .iter()
-                        .filter(|v| item_match(self, **v, id))
-                        .flat_map(|v| self.registry.items.get(v).cloned())
-                        .collect();
-
-                    Arc::new(items)
-                })
-                .clone()
-        }
     }
 
     pub fn ordered_items(&mut self) {

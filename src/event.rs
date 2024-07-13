@@ -15,15 +15,11 @@ use winit::{
 };
 
 use automancy_defs::coord::TileCoord;
-use automancy_defs::hexx::Hex;
 use automancy_defs::id::Id;
 use automancy_defs::kira::manager::AudioManager;
-use automancy_defs::{log, math, window};
+use automancy_defs::{log, window};
 use automancy_resources::ResourceManager;
-use automancy_resources::{
-    data::{Data, DataMap},
-    types::item::ItemDef,
-};
+use automancy_resources::{data::Data, types::item::ItemDef};
 
 use crate::gui::{Screen, TextField};
 use crate::input::ActionType;
@@ -277,24 +273,6 @@ async fn on_link_tile(
 }
 
 fn place_tile(id: Id, coord: TileCoord, state: &mut GameState) -> anyhow::Result<()> {
-    let mut data = DataMap::default();
-
-    if let Some(mut coord) = state.gui_state.placement_direction.take() {
-        if let Some(old) = state.gui_state.prev_placement_direction.replace(coord) {
-            if old == -coord {
-                coord = old;
-                state.gui_state.prev_placement_direction.replace(old);
-            }
-        }
-
-        data.set(
-            state.resource_man.registry.data_ids.direction,
-            Data::Coord(coord),
-        );
-    } else {
-        state.gui_state.prev_placement_direction = None;
-    }
-
     let response = state
         .tokio
         .block_on(state.game.call(
@@ -303,7 +281,7 @@ fn place_tile(id: Id, coord: TileCoord, state: &mut GameState) -> anyhow::Result
                 id,
                 record: true,
                 reply: Some(reply),
-                data: Some(data),
+                data: None,
             },
             None,
         ))?
@@ -595,30 +573,6 @@ pub fn on_event(
         if state.input_handler.key_active(ActionType::Fullscreen) {
             state.options.graphics.fullscreen = !state.options.graphics.fullscreen;
             state.options.synced = false
-        }
-
-        if let Some(selected_tile_id) = state.gui_state.selected_tile_id {
-            if state.input_handler.key_active(ActionType::SelectMode)
-                && !state.resource_man.registry.tiles[&selected_tile_id]
-                    .data
-                    .get(state.resource_man.registry.data_ids.indirectional)
-                    .cloned()
-                    .and_then(Data::into_bool)
-                    .unwrap_or(false)
-            {
-                let hex = math::main_pos_to_fract_hex(
-                    window::window_size_double(&state.renderer.as_ref().unwrap().gpu.window),
-                    state.input_handler.main_pos,
-                    state.camera.get_pos(),
-                );
-                let rounded = Hex::round(hex.to_array()).as_vec2();
-                let fract = (hex - rounded) * 2.0;
-
-                state.gui_state.placement_direction = Some(Hex::round(fract.to_array()).into())
-            } else {
-                state.gui_state.placement_direction = None;
-                state.gui_state.prev_placement_direction = None;
-            }
         }
 
         state.screenshotting = state.input_handler.key_active(ActionType::Screenshot);

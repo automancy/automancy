@@ -35,10 +35,8 @@ pub struct Registry {
 #[derive(Copy, Clone, IdReg)]
 pub struct DataIds {
     pub script: Id,
-    pub scripts: Id,
     pub buffer: Id,
     pub item: Id,
-    pub item_type: Id,
     pub amount: Id,
     pub direction: Id,
     pub link: Id,
@@ -46,17 +44,23 @@ pub struct DataIds {
     pub player_inventory: Id,
     pub research_items_filled: Id,
     pub research_puzzle_completed: Id,
+
     pub tiles: Id,
 
+    #[namespace("core")]
+    pub unlocked_researches: Id,
+
+    #[namespace("core")]
     pub direction_color: Id,
-    pub storage_takeable: Id,
+    #[namespace("core")]
     pub inactive_model: Id,
-    pub indirectional: Id,
+    #[namespace("core")]
+    pub default_tile: Id,
+    #[namespace("core")]
+    pub category: Id,
+
     pub linked: Id,
     pub linking: Id,
-    pub default_tile: Id,
-    pub unlocked_researches: Id,
-    pub category: Id,
 }
 
 #[derive(Copy, Clone, IdReg)]
@@ -82,7 +86,6 @@ pub struct GuiIds {
     pub create_map: Id,
     pub invalid_name: Id,
     pub options: Id,
-    pub inventory: Id,
     pub tile_config: Id,
 
     pub options_graphics: Id,
@@ -90,17 +93,7 @@ pub struct GuiIds {
     pub options_gui: Id,
     pub options_controls: Id,
 
-    pub inventory_tip: Id,
-    pub search_tip: Id,
-    pub search_script_tip: Id,
-    pub search_item_tip: Id,
-    pub direction_tip: Id,
-    pub link_destination_tip: Id,
-
-    pub tile_config_script_info: Id,
-    pub tile_config_script: Id,
-    pub tile_config_item_type: Id,
-    pub tile_config_direction: Id,
+    pub tip_link_destination: Id, // TODO remove me
 
     pub lbl_maps_loaded: Id,
     pub lbl_pick_another_name: Id,

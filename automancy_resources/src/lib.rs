@@ -230,20 +230,11 @@ pub fn item_stack_matches(
     others.find(|&other| item_match(resource_man, id, other.id))
 }
 
-/*
-pub fn item_match_str(resource_man: &ResourceManager, id: Id, other: &str) -> bool {
-    if let Some(other) = resource_man.interner.get(other) {
-        item_match(resource_man, id, other)
-    } else {
-        false
-    }
+pub fn item_ids_of_tag(resource_man: &ResourceManager, id: Id) -> Vec<Id> {
+    resource_man
+        .ordered_items
+        .iter()
+        .filter(|v| item_match(resource_man, **v, id))
+        .cloned()
+        .collect()
 }
-
-pub fn rhai_item_match_str(id: Id, other: ImmutableString) -> bool {
-    item_match_str(
-        RESOURCE_MAN.read().unwrap().as_ref().unwrap(),
-        id,
-        other.as_str(),
-    )
-}
- */

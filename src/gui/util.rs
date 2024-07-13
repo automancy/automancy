@@ -1,6 +1,10 @@
+use std::sync::Arc;
 use std::time::Instant;
 
-use automancy_defs::{id::Id, rendering::InstanceData};
+use automancy_defs::{
+    id::{Id, SharedStr},
+    rendering::InstanceData,
+};
 use automancy_resources::types::IconMode;
 use fuzzy_matcher::FuzzyMatcher;
 use hashbrown::HashMap;
@@ -45,15 +49,19 @@ pub fn clamp_percentage_to_viewport(size: Vec2, mut pos: Vec2, viewport: Rect) -
 
 /// Draws a search bar.
 pub fn searchable_id(
+    state: &mut GameState,
     ids: &[Id],
-    names: &[impl AsRef<str>],
     new_id: &mut Option<Id>,
     field: TextField,
-    hint_text: &str,
-    draw: &'static impl Fn(&mut GameState, &Id, &str),
-    state: &mut GameState,
+    hint_text: Option<SharedStr>,
+    draw: impl Fn(&mut GameState, Id),
+    get_name: impl Fn(&mut GameState, Id) -> SharedStr,
 ) {
-    textbox(state.gui_state.text_field.get(field), None, Some(hint_text));
+    textbox(
+        state.gui_state.text_field.get(field),
+        None,
+        hint_text.as_deref().map(Arc::<str>::as_ref),
+    );
 
     scroll_vertical(Vec2::ZERO, Vec2::new(f32::INFINITY, 200.0), || {
         col(|| {
@@ -61,10 +69,9 @@ pub fn searchable_id(
                 let text = state.gui_state.text_field.get(field).clone();
                 let mut filtered = ids
                     .iter()
-                    .enumerate()
-                    .flat_map(|(idx, id)| {
-                        let name = names[idx].as_ref();
-                        let score = state.gui_state.text_field.fuse.fuzzy_match(name, &text);
+                    .flat_map(|id| {
+                        let name = get_name(state, *id);
+                        let score = state.gui_state.text_field.fuse.fuzzy_match(&name, &text);
 
                         if score.unwrap_or(0) < (name.len() / 2) as i64 {
                             None
@@ -81,9 +88,9 @@ pub fn searchable_id(
                 ids.to_vec()
             };
 
-            for (idx, id) in ids.iter().enumerate() {
+            for id in ids.iter() {
                 radio(new_id, Some(*id), || {
-                    draw(state, id, names[idx].as_ref());
+                    draw(state, *id);
                 });
             }
         });
