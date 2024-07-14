@@ -15,7 +15,7 @@ use wgpu::{
 
 use crate::math::{direction_to_angle, Float, Matrix3, Matrix4, Quaternion, Vec2, Vec3};
 
-pub const LINE_DEPTH: Float = 0.1;
+pub const LINE_DEPTH: Float = 0.075;
 
 /// Produces a line shape.
 pub fn make_line(a: Vec2, b: Vec2, z: Float) -> Matrix4 {
