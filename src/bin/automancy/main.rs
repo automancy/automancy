@@ -384,14 +384,17 @@ impl ApplicationHandler for Automancy {
                 frame_time = Duration::from_secs_f64(1.0 / fps_limit as f64);
             }
 
-            if self.state.loop_store.frame_start.unwrap().elapsed() > frame_time {
-                self.window.as_ref().unwrap().request_redraw();
-                event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + frame_time));
+            if self.state.loop_store.frame_start.unwrap().elapsed() < frame_time {
+                let time_left = frame_time - self.state.loop_store.frame_start.unwrap().elapsed();
+
+                event_loop.set_control_flow(ControlFlow::wait_duration(time_left));
+                return;
             }
         } else {
-            self.window.as_ref().unwrap().request_redraw();
             event_loop.set_control_flow(ControlFlow::Poll);
         }
+
+        self.window.as_ref().unwrap().request_redraw();
     }
 }
 

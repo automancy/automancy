@@ -105,8 +105,6 @@ fn render(
 ) -> anyhow::Result<bool> {
     let mut result = Ok(false);
 
-    state.loop_store.frame_start = Some(Instant::now());
-
     {
         if !state
             .loop_store
@@ -309,7 +307,7 @@ pub fn on_event(
             match event {
                 WindowEvent::RedrawRequested => {
                     state.loop_store.elapsed =
-                        Instant::now().duration_since(state.loop_store.frame_start.take().unwrap());
+                        state.loop_store.frame_start.take().unwrap().elapsed();
 
                     state.camera.update_pointing_at(
                         state.input_handler.main_pos,
@@ -319,6 +317,8 @@ pub fn on_event(
                         window::window_size_double(&state.renderer.as_ref().unwrap().gpu.window),
                         state.loop_store.elapsed.as_secs_f64(),
                     );
+
+                    state.loop_store.frame_start = Some(Instant::now());
 
                     let result = render(state, event_loop, state.screenshotting);
 
