@@ -55,7 +55,7 @@ fn player_inventory(state: &mut GameState, game_data: &mut DataMap) {
                 let amount = *amount;
 
                 if amount != 0 {
-                    let rect = PositionRecord::new()
+                    let pos = PositionRecord::new()
                         .show(|| {
                             draw_item(
                                 &state.resource_man,
@@ -67,8 +67,12 @@ fn player_inventory(state: &mut GameState, game_data: &mut DataMap) {
                         })
                         .into_inner();
 
-                    if let Some(rect) = rect {
-                        take_item_animation(state, *id, rect);
+                    if let Some(pos) = pos {
+                        take_item_animation(
+                            state,
+                            *id,
+                            Rect::from_pos_size(pos, Vec2::new(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE)),
+                        );
                     }
                 }
             }
@@ -221,7 +225,7 @@ fn research_board_tiles(
     interact.clicked
 }
 
-fn research_puzzle(state: &mut GameState, game_data: &mut DataMap) -> Option<Rect> {
+fn research_puzzle(state: &mut GameState, game_data: &mut DataMap) -> Option<Vec2> {
     let research = state
         .gui_state
         .selected_research
@@ -381,7 +385,7 @@ fn research_puzzle(state: &mut GameState, game_data: &mut DataMap) -> Option<Rec
             if !completed && clicked {
                 if let Some(min) = board_pos {
                     let p = state.input_handler.main_pos.as_vec2()
-                        - min.pos()
+                        - min
                         - PUZZLE_HEX_GRID_LAYOUT.hex_size;
 
                     let p = TileCoord::from(PUZZLE_HEX_GRID_LAYOUT.world_pos_to_hex(p));
@@ -555,7 +559,7 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
 
             if let Some((coord, ids)) = &state.gui_state.research_puzzle_selections {
                 if let Some(min) = board_pos {
-                    let p = (PUZZLE_HEX_GRID_LAYOUT.hex_to_world_pos(**coord) + min.pos()).round();
+                    let p = (PUZZLE_HEX_GRID_LAYOUT.hex_to_world_pos(**coord) + min).round();
 
                     Layer::new().show(|| {
                         Absolute::new(

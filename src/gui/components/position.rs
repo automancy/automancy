@@ -22,7 +22,7 @@ pub struct PositionRecordWidget {
     rect: Cell<Option<Rect>>,
 }
 
-pub type PositionRecordResponse = Option<Rect>;
+pub type PositionRecordResponse = Option<Vec2>;
 
 impl Widget for PositionRecordWidget {
     type Props<'a> = PositionRecord;
@@ -38,7 +38,7 @@ impl Widget for PositionRecordWidget {
     fn update(&mut self, props: Self::Props<'_>) -> Self::Response {
         self.props = props;
 
-        self.rect.get()
+        self.rect.get().as_ref().map(Rect::pos)
     }
 
     fn layout(
@@ -47,10 +47,7 @@ impl Widget for PositionRecordWidget {
         constraints: yakui::Constraints,
     ) -> Vec2 {
         if let Some(layout_node) = ctx.layout.get(ctx.dom.current()) {
-            let rect = layout_node.rect;
-            if !rect.pos().abs_diff_eq(Vec2::ZERO, 0.001) {
-                self.rect.set(Some(rect));
-            }
+            self.rect.set(Some(layout_node.rect));
         }
 
         self.default_layout(ctx, constraints)

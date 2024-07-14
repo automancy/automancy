@@ -36,7 +36,7 @@ pub const MAX_ALLOWED_TICK_INTERVAL: Duration = TICK_INTERVAL.saturating_mul(5);
 
 pub const TRANSACTION_ANIMATION_SPEED: Duration = Duration::from_nanos(800_000_000);
 pub const TRANSACTION_MIN_INTERVAL: Duration = Duration::from_nanos(250_000_000);
-pub const TAKE_ITEM_ANIMATION_SPEED: Duration = Duration::from_nanos(200_000_000);
+pub const TAKE_ITEM_ANIMATION_SPEED: Duration = Duration::from_nanos(300_000_000);
 
 const UNDO_CACHE_SIZE: usize = 256;
 

@@ -3,14 +3,14 @@ use std::time::Instant;
 use ractor::rpc::CallResult;
 use ractor::ActorRef;
 
+use automancy_defs::id::Id;
 use automancy_defs::{colors, coord::TileCoord, stack::ItemStack};
-use automancy_defs::{glam::vec2, id::Id};
 use automancy_resources::rhai_ui::RhaiUiUnit;
 use automancy_resources::{
     data::{Data, DataMap},
     inventory::Inventory,
 };
-use yakui::{constrained, widgets::Layer, Constraints, Vec2};
+use yakui::{constrained, widgets::Layer, Constraints, Rect, Vec2};
 
 use crate::tile_entity::TileEntityMsg;
 use crate::{gui::row, GameState};
@@ -67,10 +67,10 @@ fn takeable_items(
     let mut dirty = false;
 
     for (id, amount) in buffer.clone().into_inner() {
-        let mut rect = None;
+        let mut pos = None;
 
         let interact = interactive(|| {
-            rect = PositionRecord::new()
+            pos = PositionRecord::new()
                 .show(|| {
                     draw_item(
                         &state.resource_man,
@@ -90,7 +90,7 @@ fn takeable_items(
                 dirty = true;
                 inventory.add(id, amount);
 
-                if let Some(rect) = rect {
+                if let Some(pos) = pos {
                     state
                         .renderer
                         .as_mut()
@@ -98,7 +98,10 @@ fn takeable_items(
                         .take_item_animations
                         .entry(id)
                         .or_default()
-                        .push_back((Instant::now(), rect));
+                        .push_back((
+                            Instant::now(),
+                            Rect::from_pos_size(pos, Vec2::new(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE)),
+                        ));
                 }
             }
         }
@@ -251,7 +254,7 @@ fn rhai_ui(
             let mut new_dir = current_dir;
 
             center_col(|| {
-                constrained(Constraints::loose(vec2(70.0, 90.0)), || {
+                constrained(Constraints::loose(Vec2::new(70.0, 90.0)), || {
                     spaced_col(|| {
                         spaced_row(|| {
                             add_direction(&mut new_dir, 5);
