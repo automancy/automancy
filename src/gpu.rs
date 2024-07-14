@@ -1625,7 +1625,7 @@ pub struct Gpu {
 impl Gpu {
     fn pick_present_mode(vsync: bool) -> PresentMode {
         if vsync {
-            PresentMode::Fifo
+            PresentMode::AutoVsync
         } else {
             PresentMode::AutoNoVsync
         }

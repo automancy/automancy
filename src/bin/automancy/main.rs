@@ -384,8 +384,9 @@ impl ApplicationHandler for Automancy {
                 frame_time = Duration::from_secs_f64(1.0 / fps_limit as f64);
             }
 
-            if self.state.loop_store.frame_start.unwrap().elapsed() < frame_time {
-                let time_left = frame_time - self.state.loop_store.frame_start.unwrap().elapsed();
+            let elapsed = self.state.loop_store.frame_start.unwrap().elapsed();
+            if elapsed < frame_time {
+                let time_left = frame_time - elapsed;
 
                 event_loop.set_control_flow(ControlFlow::wait_duration(time_left));
                 return;
@@ -483,7 +484,7 @@ fn main() -> anyhow::Result<()> {
         let options = Options::load(&resource_man);
         let input_handler = InputHandler::new(&options);
 
-        let loop_store = EventLoopStorage::default();
+        let mut loop_store = EventLoopStorage::default();
         let camera = Camera::new((1.0, 1.0)); // dummy value
 
         log::info!("Creating game...");
@@ -504,6 +505,7 @@ fn main() -> anyhow::Result<()> {
 
         let start_instant = Instant::now();
         init_custom_paint_state(start_instant);
+        loop_store.frame_start = Some(start_instant);
 
         GameState {
             gui_state: GuiState::default(),
@@ -535,7 +537,6 @@ fn main() -> anyhow::Result<()> {
 
     // load the main menu
     load_map(&mut state, MAIN_MENU.to_string(), false);
-    state.loop_store.frame_start = Some(Instant::now());
 
     let mut automancy = Automancy {
         state,

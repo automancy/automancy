@@ -306,8 +306,9 @@ pub fn on_event(
         {
             match event {
                 WindowEvent::RedrawRequested => {
-                    state.loop_store.elapsed =
-                        state.loop_store.frame_start.take().unwrap().elapsed();
+                    let now = Instant::now();
+
+                    state.loop_store.elapsed = now - state.loop_store.frame_start.take().unwrap();
 
                     state.camera.update_pointing_at(
                         state.input_handler.main_pos,
@@ -318,7 +319,7 @@ pub fn on_event(
                         state.loop_store.elapsed.as_secs_f64(),
                     );
 
-                    state.loop_store.frame_start = Some(Instant::now());
+                    state.loop_store.frame_start = Some(now);
 
                     let result = render(state, event_loop, state.screenshotting);
 
