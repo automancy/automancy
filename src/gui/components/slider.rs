@@ -39,6 +39,7 @@ impl<T: NumTrait> Slider<T> {
         }
     }
 
+    #[track_caller]
     pub fn show(self) -> Response<SliderResponse<T>> {
         widget::<SliderWidget<T>>(self)
     }
@@ -154,6 +155,7 @@ fn round_to_step<T: NumTrait>(value: T, step: T) -> T {
     }
 }
 
+#[track_caller]
 pub fn num_input<T: NumTrait>(
     value: &mut T,
     value_changed: bool,
@@ -193,6 +195,7 @@ pub fn num_input<T: NumTrait>(
     }
 }
 
+#[track_caller]
 pub fn slider<T: NumTrait>(
     value: &mut T,
     range: RangeInclusive<T>,
@@ -210,6 +213,8 @@ pub fn slider<T: NumTrait>(
             updated = true;
         }
 
-        pad_x(PADDING_SMALL, 0.0).show(|| num_input(value, updated, range, parse, to_string));
+        pad_x(PADDING_SMALL, 0.0).show(|| {
+            num_input(value, updated, range, parse, to_string);
+        });
     });
 }

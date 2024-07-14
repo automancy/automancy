@@ -26,6 +26,7 @@ impl Movable {
         Movable { position }
     }
 
+    #[track_caller]
     fn show<F: FnOnce()>(self, children: F) -> Response<MovableResponse> {
         widget_children::<MovableWidget, F>(children, self)
     }

@@ -10,6 +10,7 @@ impl PositionRecord {
         Self::default()
     }
 
+    #[track_caller]
     pub fn show<F: FnOnce()>(self, children: F) -> Response<PositionRecordResponse> {
         widget_children::<PositionRecordWidget, F>(children, self)
     }

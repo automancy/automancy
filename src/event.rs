@@ -16,9 +16,7 @@ use winit::{
 
 use automancy_defs::coord::TileCoord;
 use automancy_defs::id::Id;
-use automancy_defs::kira::manager::AudioManager;
 use automancy_defs::{log, window};
-use automancy_resources::ResourceManager;
 use automancy_resources::{data::Data, types::item::ItemDef};
 
 use crate::gui::{Screen, TextField};
@@ -74,7 +72,7 @@ pub struct EventLoopStorage {
     pub map_infos_cache: Vec<((MapInfoRaw, Option<SystemTime>), String)>,
     pub map_info: Option<(Arc<Mutex<MapInfo>>, String)>,
 
-    pub config_open_cache: Arc<Mutex<Option<TileEntityWithId>>>,
+    pub config_open_cache: Arc<Mutex<Option<ActorRef<TileEntityMsg>>>>,
     pub config_open_updating: Arc<AtomicBool>,
     pub pointing_cache: Arc<Mutex<Option<TileEntityWithId>>>,
     pub pointing_updating: Arc<AtomicBool>,
@@ -110,44 +108,41 @@ fn render(
     state.loop_store.frame_start = Some(Instant::now());
 
     {
-        if let Some(config_open_at) = state.gui_state.config_open_at {
-            if !state
-                .loop_store
-                .config_open_updating
-                .load(Ordering::Relaxed)
-            {
-                let cache = state.loop_store.config_open_cache.clone();
-                let updating = state.loop_store.config_open_updating.clone();
-                let game = state.game.clone();
+        if !state
+            .loop_store
+            .config_open_updating
+            .load(Ordering::Relaxed)
+        {
+            let config_open_at = state.gui_state.config_open_at;
 
-                updating.store(true, Ordering::Relaxed);
+            let cache = state.loop_store.config_open_cache.clone();
+            let updating = state.loop_store.config_open_updating.clone();
+            let game = state.game.clone();
 
-                state.tokio.spawn(async move {
-                    let Ok(CallResult::Success(tile)) = game
-                        .call(
-                            |reply| GameSystemMessage::GetTile(config_open_at, reply),
-                            None,
-                        )
-                        .await
-                    else {
-                        return;
-                    };
+            updating.store(true, Ordering::Relaxed);
 
-                    let Ok(CallResult::Success(entity)) = game
-                        .call(
-                            |reply| GameSystemMessage::GetTileEntity(config_open_at, reply),
-                            None,
-                        )
-                        .await
-                    else {
-                        return;
-                    };
-
-                    *cache.lock().await = tile.zip(entity);
-
+            state.tokio.spawn(async move {
+                let Some(config_open_at) = config_open_at else {
+                    *cache.lock().await = None;
                     updating.store(false, Ordering::Relaxed);
-                });
-            }
+
+                    return;
+                };
+
+                let Ok(CallResult::Success(entity)) = game
+                    .call(
+                        |reply| GameSystemMessage::GetTileEntity(config_open_at, reply),
+                        None,
+                    )
+                    .await
+                else {
+                    return;
+                };
+
+                *cache.lock().await = entity;
+
+                updating.store(false, Ordering::Relaxed);
+            });
         }
 
         if !state.loop_store.pointing_updating.load(Ordering::Relaxed) {
@@ -219,56 +214,35 @@ fn render(
     result
 }
 
-async fn on_link_tile(
-    resource_man: Arc<ResourceManager>,
-    audio_man: &mut AudioManager,
-    pointing_cache: Arc<Mutex<Option<TileEntityWithId>>>,
-    linking_tile: TileCoord,
-) {
-    let Some((tile, entity)) = pointing_cache.lock().await.clone() else {
+fn link_tile(state: &mut GameState, entity: Option<TileEntityWithId>, link_to: TileCoord, id: Id) {
+    let Some((_, entity)) = entity else {
         return;
     };
 
-    let Some(tile_def) = resource_man.registry.tiles.get(&tile) else {
+    let Ok(CallResult::Success(old)) = state
+        .tokio
+        .block_on(entity.call(|reply| TileEntityMsg::GetDataValue(id, reply), None))
+    else {
         return;
     };
 
-    if tile_def
-        .data
-        .get(resource_man.registry.data_ids.linked)
-        .cloned()
-        .and_then(Data::into_bool)
-        .unwrap_or(false)
-    {
-        let Ok(CallResult::Success(old)) = entity
-            .call(
-                |reply| TileEntityMsg::GetDataValue(resource_man.registry.data_ids.link, reply),
-                None,
-            )
-            .await
-        else {
-            return;
-        };
+    if old.is_some() {
+        entity.send_message(TileEntityMsg::RemoveData(id)).unwrap();
 
-        if old.is_some() {
-            entity
-                .send_message(TileEntityMsg::RemoveData(
-                    resource_man.registry.data_ids.link,
-                ))
-                .unwrap();
+        state
+            .audio_man
+            .play(state.resource_man.audio["click"].clone())
+            .unwrap();
+        // TODO click2
+    } else {
+        entity
+            .send_message(TileEntityMsg::SetDataValue(id, Data::Coord(link_to)))
+            .unwrap();
 
-            audio_man.play(resource_man.audio["click"].clone()).unwrap();
-            // TODO click2
-        } else {
-            entity
-                .send_message(TileEntityMsg::SetDataValue(
-                    resource_man.registry.data_ids.link,
-                    Data::Coord(linking_tile),
-                ))
-                .unwrap();
-
-            audio_man.play(resource_man.audio["click"].clone()).unwrap();
-        }
+        state
+            .audio_man
+            .play(state.resource_man.audio["click"].clone())
+            .unwrap();
     }
 }
 
@@ -379,6 +353,8 @@ pub fn on_event(
     };
 
     if window_event.is_some() || device_event.is_some() {
+        let pointing_at_entity = state.loop_store.pointing_cache.blocking_lock().clone();
+
         state.input_handler.reset();
 
         state.input_handler.update(input::convert_input(
@@ -437,23 +413,16 @@ pub fn on_event(
 
         if !state.input_handler.key_active(ActionType::SelectMode) {
             // TODO hint this
-            if let Some(linking_tile) = state.gui_state.linking_tile {
-                if state.input_handler.alternate_pressed {
-                    state.tokio.block_on(on_link_tile(
-                        state.resource_man.clone(),
-                        &mut state.audio_man,
-                        state.loop_store.pointing_cache.clone(),
-                        linking_tile,
-                    ));
-                }
-            } else if Some(state.camera.pointing_at) == state.gui_state.config_open_at {
-                if state.input_handler.alternate_pressed {
+            if state.input_handler.alternate_pressed {
+                if let Some((link_to, id)) = state.gui_state.linking_tile {
+                    link_tile(state, pointing_at_entity, link_to, id);
+                } else if Some(state.camera.pointing_at) == state.gui_state.config_open_at {
                     state.gui_state.config_open_at = None;
                     state.gui_state.text_field.get(TextField::Filter).clear();
+                } else {
+                    state.gui_state.config_open_at = Some(state.camera.pointing_at);
+                    state.gui_state.text_field.get(TextField::Filter).clear();
                 }
-            } else if state.input_handler.alternate_pressed {
-                state.gui_state.config_open_at = Some(state.camera.pointing_at);
-                state.gui_state.text_field.get(TextField::Filter).clear();
             }
         }
 

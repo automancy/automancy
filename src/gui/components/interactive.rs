@@ -14,6 +14,7 @@ impl Interactive {
         Self::default()
     }
 
+    #[track_caller]
     pub fn show<F: FnOnce()>(self, children: F) -> Response<InteractiveResponse> {
         widget_children::<InteractiveWidget, F>(children, self)
     }
@@ -102,6 +103,7 @@ impl Widget for InteractiveWidget {
     }
 }
 
+#[track_caller]
 pub fn interactive(children: impl FnOnce()) -> Response<InteractiveResponse> {
     Interactive::new().show(children)
 }

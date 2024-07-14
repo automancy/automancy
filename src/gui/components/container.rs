@@ -60,10 +60,12 @@ impl RoundRect {
         }
     }
 
+    #[track_caller]
     pub fn show(self) -> Response<RoundRectResponse> {
         widget::<RoundRectWidget>(self)
     }
 
+    #[track_caller]
     pub fn show_children<F: FnOnce()>(self, children: F) -> Response<RoundRectResponse> {
         widget_children::<RoundRectWidget, F>(children, self)
     }

@@ -83,6 +83,7 @@ impl GameElement {
         result
     }
 
+    #[track_caller]
     pub fn show(self) -> Response<()> {
         widget::<GameElementWidget>(Some(self))
     }

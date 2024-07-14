@@ -160,7 +160,7 @@ impl Renderer {
 
         let tile_tints = mem::take(&mut renderer.tile_tints);
         let mut extra_instances = mem::take(&mut renderer.extra_instances);
-        let overlay_instances = mem::take(&mut renderer.overlay_instances);
+        let mut overlay_instances = mem::take(&mut renderer.overlay_instances);
 
         let size = renderer.gpu.window.inner_size();
 
@@ -283,9 +283,9 @@ impl Renderer {
             }
 
             if let Some(Data::Id(id)) = data.get(state.resource_man.registry.data_ids.item) {
-                extra_instances.push((
+                overlay_instances.push((
                     InstanceData::default().with_model_matrix(
-                        Matrix4::from_translation(world_coord.extend(0.1))
+                        Matrix4::from_translation(world_coord.extend(LINE_DEPTH))
                             * Matrix4::from_scale(vec3(0.25, 0.25, 1.0)),
                     ),
                     state.resource_man.item_model_or_missing(*id),

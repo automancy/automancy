@@ -19,6 +19,7 @@ impl Hover {
         Self::default()
     }
 
+    #[track_caller]
     pub fn show<F: FnOnce()>(self, children: F) -> Response<HoverResponse> {
         widget_children::<HoverWidget, F>(children, self)
     }
@@ -75,6 +76,7 @@ impl Widget for HoverWidget {
     }
 }
 
+#[track_caller]
 pub fn hover_tip(children: impl FnOnce()) {
     Hover::new().show(|| {
         RoundRect::new(8.0, colors::BACKGROUND_1).show_children(|| {

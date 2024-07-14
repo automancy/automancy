@@ -13,6 +13,7 @@ use super::{
     PADDING_MEDIUM,
 };
 
+#[track_caller]
 pub fn selection_box<T: Clone + Eq>(
     options: impl IntoIterator<Item = T>,
     default: T,
@@ -51,6 +52,7 @@ pub fn selection_box<T: Clone + Eq>(
     selected
 }
 
+#[track_caller]
 pub fn selection_button<T: Eq>(
     current: &mut T,
     this: T,
@@ -65,6 +67,7 @@ pub fn selection_button<T: Eq>(
     r
 }
 
+#[track_caller]
 pub fn radio<T: Eq>(
     current: &mut T,
     this: T,

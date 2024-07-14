@@ -23,14 +23,24 @@ fn setup_textbox(mut textbox: TextBox, placeholder: Option<&str>) -> TextBox {
     textbox
 }
 
+#[track_caller]
 pub fn simple_textbox(
     initial_text: &str,
     updated_text: Option<&str>,
     placeholder: Option<&str>,
 ) -> Response<TextBoxResponse> {
-    setup_textbox(TextBox::with_text(initial_text, updated_text), placeholder).show()
+    let first_time = use_state(|| true);
+
+    if first_time.get() {
+        first_time.set(false);
+
+        setup_textbox(TextBox::new(Some(initial_text.into())), placeholder).show()
+    } else {
+        setup_textbox(TextBox::new(updated_text.map(Into::into)), placeholder).show()
+    }
 }
 
+#[track_caller]
 pub fn textbox(
     text: &mut String,
     initial: Option<&str>,

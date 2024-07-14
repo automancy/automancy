@@ -34,7 +34,7 @@ pub enum RhaiUiUnit {
     HexDirInput {
         id: Id,
     },
-    SelectableIds {
+    SelectableItems {
         data_id: Id,
         hint_id: Id,
         ids: Vec<Id>,
@@ -47,6 +47,10 @@ pub enum RhaiUiUnit {
     Inventory {
         id: Id,
         empty_text: Id,
+    },
+    Linkage {
+        id: Id,
+        button_text: Id,
     },
 }
 
@@ -88,8 +92,8 @@ mod ui {
     pub fn HexDirInput(id: Id) -> RhaiUiUnit {
         RhaiUiUnit::HexDirInput { id }
     }
-    pub fn SelectableIds(data_id: Id, hint_id: Id, ids: Array) -> RhaiUiUnit {
-        RhaiUiUnit::SelectableIds {
+    pub fn SelectableItems(data_id: Id, hint_id: Id, ids: Array) -> RhaiUiUnit {
+        RhaiUiUnit::SelectableItems {
             data_id,
             hint_id,
             ids: ids.into_iter().map(Dynamic::cast::<Id>).collect(),
@@ -104,6 +108,9 @@ mod ui {
     }
     pub fn Inventory(id: Id, empty_text: Id) -> RhaiUiUnit {
         RhaiUiUnit::Inventory { id, empty_text }
+    }
+    pub fn Linkage(id: Id, button_text: Id) -> RhaiUiUnit {
+        RhaiUiUnit::Linkage { id, button_text }
     }
 }
 

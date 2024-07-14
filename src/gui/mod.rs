@@ -110,7 +110,7 @@ pub struct GuiState {
     /// the tile that has its config menu open.
     pub config_open_at: Option<TileCoord>,
     /// tile currently linking
-    pub linking_tile: Option<TileCoord>,
+    pub linking_tile: Option<(TileCoord, Id)>,
     /// the currently grouped tiles
     pub grouped_tiles: HashSet<TileCoord>,
     /// the stored initial cursor position, for moving/copying tiles
@@ -342,7 +342,7 @@ pub fn render_ui(
                         ))
                     }
 
-                    if let Some(coord) = state.gui_state.linking_tile {
+                    if let Some((coord, ..)) = state.gui_state.linking_tile {
                         state.renderer.as_mut().unwrap().overlay_instances.push((
                             InstanceData::default()
                                 .with_color_offset(colors::RED.to_linear())

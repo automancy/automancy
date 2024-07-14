@@ -30,6 +30,7 @@ pub(crate) fn render_info_tip(state: &mut GameState) {
     }
 }
 
+#[track_caller]
 pub fn info_tip(info: &str) {
     let label = interactive(|| {
         symbol("\u{f449}", colors::BLACK);

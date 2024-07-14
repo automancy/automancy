@@ -61,6 +61,7 @@ impl Scrollable {
         }
     }
 
+    #[track_caller]
     pub fn show<F: FnOnce()>(self, children: F) -> Response<ScrollableResponse> {
         widget_children::<ScrollableWidget, F>(children, self)
     }
@@ -283,6 +284,7 @@ impl Widget for ScrollableWidget {
     }
 }
 
+#[track_caller]
 pub fn scroll_vertical_bar_alignment(
     min: Vec2,
     max: Vec2,
@@ -308,10 +310,12 @@ pub fn scroll_vertical_bar_alignment(
     });
 }
 
+#[track_caller]
 pub fn scroll_vertical(min: Vec2, max: Vec2, children: impl FnOnce()) {
     scroll_vertical_bar_alignment(min, max, Some(Alignment::TOP_RIGHT), children)
 }
 
+#[track_caller]
 pub fn scroll_horizontal_bar_alignment(
     min: Vec2,
     max: Vec2,
@@ -337,10 +341,12 @@ pub fn scroll_horizontal_bar_alignment(
     });
 }
 
+#[track_caller]
 pub fn scroll_horizontal(min: Vec2, max: Vec2, children: impl FnOnce()) {
     scroll_horizontal_bar_alignment(min, max, Some(Alignment::BOTTOM_LEFT), children)
 }
 
+#[track_caller]
 fn scroll_bar(res: ScrollableResponse, alignment: Vec2, dir: ScrollDirection) {
     let ratio = res.size / res.canvas_size;
     let diff = res.canvas_size - res.size;

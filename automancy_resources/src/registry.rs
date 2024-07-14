@@ -58,9 +58,6 @@ pub struct DataIds {
     pub default_tile: Id,
     #[namespace("core")]
     pub category: Id,
-
-    pub linked: Id,
-    pub linking: Id,
 }
 
 #[derive(Copy, Clone, IdReg)]
@@ -92,8 +89,6 @@ pub struct GuiIds {
     pub options_audio: Id,
     pub options_gui: Id,
     pub options_controls: Id,
-
-    pub tip_link_destination: Id, // TODO remove me
 
     pub lbl_maps_loaded: Id,
     pub lbl_pick_another_name: Id,

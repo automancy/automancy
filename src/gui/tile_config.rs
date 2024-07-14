@@ -3,7 +3,7 @@ use std::time::Instant;
 use ractor::rpc::CallResult;
 use ractor::ActorRef;
 
-use automancy_defs::{colors, coord::TileCoord, id::SharedStr, stack::ItemStack};
+use automancy_defs::{colors, coord::TileCoord, stack::ItemStack};
 use automancy_defs::{glam::vec2, id::Id};
 use automancy_resources::rhai_ui::RhaiUiUnit;
 use automancy_resources::{
@@ -19,7 +19,7 @@ use super::{
     button, center_col, center_row, col, info_tip, interactive, item::draw_item, label, list_col,
     movable, num_input, scroll_vertical_bar_alignment, selectable_symbol_button, selection_button,
     slider, spaced_col, spaced_row, symbol, symbol_button, util::searchable_id, window_box,
-    PositionRecord, TextField, MEDIUM_ICON_SIZE, PADDING_SMALL, SMALL_ICON_SIZE,
+    PositionRecord, TextField, MEDIUM_ICON_SIZE, PADDING_XSMALL, SMALL_ICON_SIZE,
 };
 
 /// Draws the direction selector.
@@ -48,28 +48,6 @@ fn add_direction(target_coord: &mut Option<TileCoord>, n: u8) {
             colors::BLACK,
             selected,
         )
-    });
-}
-
-fn config_linking(state: &mut GameState, config_open: TileCoord) {
-    // TODO make this more generic and not constrained to master_node
-
-    center_row(|| {
-        if button(
-            &state
-                .resource_man
-                .gui_str(state.resource_man.registry.gui_ids.btn_link_network),
-        )
-        .clicked
-        {
-            state.gui_state.linking_tile = Some(config_open);
-        };
-
-        info_tip(
-            &state
-                .resource_man
-                .gui_str(state.resource_man.registry.gui_ids.tip_link_destination),
-        );
     });
 }
 
@@ -160,43 +138,6 @@ fn draw_item_script(state: &mut GameState, id: Id) {
     }
 
     label(&state.resource_man.script_name(id));
-}
-
-fn config_selectable_id(
-    state: &mut GameState,
-    data: &DataMap,
-    data_id: Id,
-    hint_id: Id,
-    ids: &[Id],
-    tile_entity: ActorRef<TileEntityMsg>,
-    draw: impl Fn(&mut GameState, Id),
-    get_name: impl Fn(&mut GameState, Id) -> SharedStr,
-) -> bool {
-    let current_id = data.get(data_id).cloned().and_then(Data::into_id);
-    let mut new_id = current_id;
-
-    let hint = state.resource_man.gui_str(hint_id);
-
-    searchable_id(
-        state,
-        ids,
-        &mut new_id,
-        TextField::Filter,
-        Some(hint),
-        draw,
-        get_name,
-    );
-
-    if new_id != current_id {
-        if let Some(id) = new_id {
-            tile_entity
-                .send_message(TileEntityMsg::SetDataValue(data_id, Data::Id(id)))
-                .unwrap();
-            return true;
-        }
-    }
-
-    false
 }
 
 fn draw_script_info(state: &mut GameState, data: &DataMap, id: Id) {
@@ -350,37 +291,61 @@ fn rhai_ui(
                 }
             }
         }
-        RhaiUiUnit::SelectableIds {
+        RhaiUiUnit::SelectableItems {
             data_id,
             hint_id,
             ids,
         } => {
-            config_selectable_id(
+            let current_id = data.get(data_id).cloned().and_then(Data::into_id);
+            let mut new_id = current_id;
+
+            let hint = state.resource_man.gui_str(hint_id);
+
+            searchable_id(
                 state,
-                data,
-                data_id,
-                hint_id,
                 &ids,
-                tile_entity.clone(),
+                &mut new_id,
+                TextField::Filter,
+                Some(hint),
                 draw_item_plain,
                 |state, id| state.resource_man.item_name(id),
             );
+
+            if new_id != current_id {
+                if let Some(id) = new_id {
+                    tile_entity
+                        .send_message(TileEntityMsg::SetDataValue(data_id, Data::Id(id)))
+                        .unwrap();
+                }
+            }
         }
         RhaiUiUnit::SelectableScripts {
             data_id,
             hint_id,
             ids,
         } => {
-            config_selectable_id(
+            let current_id = data.get(data_id).cloned().and_then(Data::into_id);
+            let mut new_id = current_id;
+
+            let hint = state.resource_man.gui_str(hint_id);
+
+            searchable_id(
                 state,
-                data,
-                data_id,
-                hint_id,
                 &ids,
-                tile_entity.clone(),
+                &mut new_id,
+                TextField::Filter,
+                Some(hint),
                 draw_item_script,
                 |state, id| state.resource_man.script_name(id),
             );
+
+            if new_id != current_id {
+                if let Some(id) = new_id {
+                    tile_entity
+                        .send_message(TileEntityMsg::SetDataValue(data_id, Data::Id(id)))
+                        .unwrap();
+                }
+            }
 
             draw_script_info(state, data, data_id);
         }
@@ -392,6 +357,11 @@ fn rhai_ui(
                     label(&state.resource_man.gui_str(empty_text));
                 }
             });
+        }
+        RhaiUiUnit::Linkage { id, button_text } => {
+            if button(&state.resource_man.gui_str(button_text)).clicked {
+                state.gui_state.linking_tile = state.gui_state.config_open_at.zip(Some(id));
+            };
         }
         RhaiUiUnit::Row { e } => {
             row(|| {
@@ -410,7 +380,7 @@ fn rhai_ui(
         RhaiUiUnit::Col { e } => {
             {
                 let mut col = list_col();
-                col.item_spacing = PADDING_SMALL;
+                col.item_spacing = PADDING_XSMALL;
                 col
             }
             .show(|| {
@@ -425,12 +395,7 @@ fn rhai_ui(
 /// Draws the tile configuration menu.
 pub fn tile_config_ui(state: &mut GameState, game_data: &mut DataMap) {
     Layer::new().show(|| {
-        let Some(config_open_at) = state.gui_state.config_open_at else {
-            return;
-        };
-
-        let Some((tile, tile_entity)) = state.loop_store.config_open_cache.blocking_lock().clone()
-        else {
+        let Some(tile_entity) = state.loop_store.config_open_cache.blocking_lock().clone() else {
             return;
         };
 
@@ -451,14 +416,6 @@ pub fn tile_config_ui(state: &mut GameState, game_data: &mut DataMap) {
             tile_config_ui = None;
         }
 
-        let tile_def = state
-            .resource_man
-            .registry
-            .tiles
-            .get(&tile)
-            .unwrap()
-            .clone();
-
         let mut pos = state.gui_state.tile_config_ui_position;
         movable(&mut pos, || {
             window_box(
@@ -474,21 +431,7 @@ pub fn tile_config_ui(state: &mut GameState, game_data: &mut DataMap) {
                         || {
                             col(|| {
                                 if let Some(ui) = tile_config_ui {
-                                    col(|| {
-                                        rhai_ui(state, tile_entity.clone(), &data, game_data, ui);
-                                    });
-                                }
-
-                                if tile_def
-                                    .data
-                                    .get(state.resource_man.registry.data_ids.linking)
-                                    .cloned()
-                                    .and_then(Data::into_bool)
-                                    .unwrap_or(false)
-                                {
-                                    col(|| {
-                                        config_linking(state, config_open_at);
-                                    });
+                                    rhai_ui(state, tile_entity.clone(), &data, game_data, ui);
                                 }
                             });
                         },

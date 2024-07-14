@@ -40,6 +40,7 @@ pub fn button_text(text: Text) -> Button {
     button_styled(text, Pad::all(8.0))
 }
 
+#[track_caller]
 pub fn selectable_symbol_button(
     symbol: &str,
     color: Color,
@@ -55,10 +56,12 @@ pub fn selectable_symbol_button(
     button.show()
 }
 
+#[track_caller]
 pub fn symbol_button(symbol: &str, color: Color) -> Response<ButtonResponse> {
     selectable_symbol_button(symbol, color, false)
 }
 
+#[track_caller]
 pub fn inactive_button(text: &str) -> Response<ButtonResponse> {
     let mut r = None;
 
@@ -71,6 +74,7 @@ pub fn inactive_button(text: &str) -> Response<ButtonResponse> {
     r.unwrap()
 }
 
+#[track_caller]
 pub fn button(text: &str) -> Response<ButtonResponse> {
     let mut r = None;
 
