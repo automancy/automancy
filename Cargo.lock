@@ -473,7 +473,6 @@ dependencies = [
  "open",
  "ractor",
  "rand",
- "rayon",
  "rfd",
  "rhai",
  "ron",
@@ -1840,7 +1839,6 @@ checksum = "e5274423e17b7c9fc20b6e7e208532f9b19825d82dfd615708b70edd83df41f1"
 dependencies = [
  "ahash",
  "allocator-api2",
- "rayon",
  "serde",
 ]
 
@@ -2006,7 +2004,6 @@ checksum = "168fb715dda47215e360912c096649d23d58bf392ac62f73919e831745e40f26"
 dependencies = [
  "equivalent",
  "hashbrown",
- "serde",
 ]
 
 [[package]]
@@ -2393,7 +2390,6 @@ dependencies = [
  "log",
  "num-traits",
  "rustc-hash",
- "serde",
  "spirv",
  "termcolor",
  "thiserror",
@@ -4668,7 +4664,6 @@ dependencies = [
  "parking_lot",
  "profiling",
  "raw-window-handle",
- "ron",
  "rustc-hash",
  "serde",
  "smallvec",
