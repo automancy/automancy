@@ -187,7 +187,7 @@ pub fn num_input<T: NumTrait>(
     updated.set(false);
 
     if res.activated || res.lost_focus {
-        if let Some(v) = parse(text.borrow().as_str()) {
+        if let Some(v) = parse(text.borrow().as_str().trim()) {
             *value = v.clamp(*range.start(), *range.end());
         }
 
