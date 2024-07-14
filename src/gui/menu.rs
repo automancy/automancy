@@ -305,7 +305,7 @@ pub fn options_menu_item(state: &mut GameState, menu: OptionsMenuState) {
                     0..=250,
                     None,
                     |v| v.parse().ok(),
-                    i32::to_string,
+                    |v| format!("{: >3}", v),
                 );
             });
 
@@ -320,7 +320,7 @@ pub fn options_menu_item(state: &mut GameState, menu: OptionsMenuState) {
                     0.5..=4.0,
                     Some(0.5),
                     |v| v.parse::<f64>().ok().map(|v| v / 100.0),
-                    |v| ((v * 100.0) as i32).to_string(),
+                    |v| format!("{: >3}", (v * 100.0) as i32),
                 );
             });
 
@@ -358,7 +358,7 @@ pub fn options_menu_item(state: &mut GameState, menu: OptionsMenuState) {
                     0.0..=1.0,
                     Some(0.01),
                     |v| v.parse::<f64>().ok().map(|v| v / 100.0),
-                    |v| ((v * 100.0) as i32).to_string(),
+                    |v| format!("{: >3}", (v * 100.0) as i32),
                 );
             });
 
@@ -373,7 +373,7 @@ pub fn options_menu_item(state: &mut GameState, menu: OptionsMenuState) {
                     0.0..=1.0,
                     Some(0.01),
                     |v| v.parse::<f64>().ok().map(|v| v / 100.0),
-                    |v| ((v * 100.0) as i32).to_string(),
+                    |v| format!("{: >3}", (v * 100.0) as i32),
                 );
             });
         }
