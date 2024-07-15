@@ -37,7 +37,7 @@ pub struct DataIds {
     pub script: Id,
     pub buffer: Id,
     pub item: Id,
-    pub amount: Id,
+    pub capacity: Id,
     pub direction: Id,
     pub link: Id,
 

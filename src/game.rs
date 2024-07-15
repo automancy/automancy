@@ -839,8 +839,8 @@ pub fn copy_auxiliary_data(resource_man: &ResourceManager, data: &mut DataMap) -
     if let Some(v) = data.remove(resource_man.registry.data_ids.script) {
         copied.set(resource_man.registry.data_ids.script, v);
     }
-    if let Some(v) = data.remove(resource_man.registry.data_ids.amount) {
-        copied.set(resource_man.registry.data_ids.amount, v);
+    if let Some(v) = data.remove(resource_man.registry.data_ids.capacity) {
+        copied.set(resource_man.registry.data_ids.capacity, v);
     }
     if let Some(v) = data.remove(resource_man.registry.data_ids.item) {
         copied.set(resource_man.registry.data_ids.item, v);
