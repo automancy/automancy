@@ -11,8 +11,10 @@ use crate::{load_recursively, ResourceManager, RON_EXT};
 
 #[derive(Debug, Clone)]
 pub struct TileDef {
-    pub model: Id,
+    pub id: Id,
     pub function: Option<Id>,
+    pub category: Option<Id>,
+    pub model: Id,
     pub data: DataMap,
 }
 
@@ -20,6 +22,8 @@ pub struct TileDef {
 struct Raw {
     pub id: String,
     pub function: Option<String>,
+    #[serde(default)]
+    pub category: Option<String>,
     pub model: String,
     pub data: DataMapRaw,
 }
@@ -34,6 +38,9 @@ impl ResourceManager {
         let function = v
             .function
             .map(|v| Id::parse(&v, &mut self.interner, Some(namespace)).unwrap());
+        let category = v
+            .category
+            .map(|v| Id::parse(&v, &mut self.interner, Some(namespace)).unwrap());
         let model = Id::parse(&v.model, &mut self.interner, Some(namespace)).unwrap();
 
         let data = v.data.intern_to_data(&mut self.interner, Some(namespace));
@@ -41,7 +48,9 @@ impl ResourceManager {
         self.registry.tiles.insert(
             id,
             TileDef {
+                id,
                 function,
+                category,
                 model,
                 data,
             },

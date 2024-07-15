@@ -658,11 +658,11 @@ impl Actor for GameSystem {
 }
 
 pub fn try_category(resource_man: &ResourceManager, id: Id, category_item: impl FnOnce(Id)) {
-    if let Some(Data::Id(category)) = resource_man
+    if let Some(category) = resource_man
         .registry
         .tiles
         .get(&id)
-        .and_then(|tile| tile.data.get(resource_man.registry.data_ids.category))
+        .and_then(|tile| tile.category)
     {
         if Data::Bool(false)
             == *resource_man.registry.tiles[&id]
@@ -673,7 +673,7 @@ pub fn try_category(resource_man: &ResourceManager, id: Id, category_item: impl 
             if let Some(item) = resource_man
                 .registry
                 .categories
-                .get(category)
+                .get(&category)
                 .and_then(|v| v.item)
             {
                 category_item(item);

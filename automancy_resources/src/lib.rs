@@ -152,6 +152,7 @@ impl ResourceManager {
                 scripts: Default::default(),
                 tags: Default::default(),
                 categories: Default::default(),
+                categories_tiles_map: Default::default(),
                 items: Default::default(),
                 researches: Default::default(),
                 researches_id_map: Default::default(),

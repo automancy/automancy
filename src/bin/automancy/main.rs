@@ -128,7 +128,7 @@ fn load_resources(
     resource_man.compile_researches();
     resource_man.ordered_tiles();
     resource_man.ordered_items();
-    resource_man.ordered_categories();
+    resource_man.compile_categories();
 
     let (vertices, indices) = resource_man.compile_models();
 

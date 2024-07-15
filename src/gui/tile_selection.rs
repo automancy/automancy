@@ -16,7 +16,7 @@ use yakui::{
     Alignment, Dim2, Pivot, Vec2,
 };
 
-use crate::util::is_research_unlocked;
+use crate::util::{is_research_unlocked, should_category_show};
 use crate::GameState;
 
 use super::{
@@ -84,11 +84,8 @@ fn draw_tile_selection(
     let mut hovered = None;
 
     for id in &state.resource_man.ordered_tiles {
-        if let Some(Data::Id(category)) = state.resource_man.registry.tiles[id]
-            .data
-            .get(state.resource_man.registry.data_ids.category)
-        {
-            if Some(*category) != current_category {
+        if let Some(category) = state.resource_man.registry.tiles[id].category {
+            if Some(category) != current_category {
                 continue;
             }
         }
@@ -175,6 +172,10 @@ pub fn tile_selections(
                         scroll_horizontal_bar_alignment(Vec2::ZERO, Vec2::INFINITY, None, || {
                             row(|| {
                                 for id in &state.resource_man.ordered_categories {
+                                    if !should_category_show(*id, &state.resource_man, game_data) {
+                                        continue;
+                                    }
+
                                     let category = state.resource_man.registry.categories[id];
                                     let model =
                                         state.resource_man.tile_model_or_missing(category.icon);

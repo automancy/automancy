@@ -2,6 +2,7 @@ use std::ffi::OsStr;
 use std::fs::read_to_string;
 use std::path::Path;
 
+use hashbrown::HashMap;
 use serde::Deserialize;
 
 use automancy_defs::id::Id;
@@ -26,7 +27,7 @@ struct Raw {
 
 impl ResourceManager {
     fn load_category(&mut self, file: &Path, namespace: &str) -> anyhow::Result<()> {
-        log::info!("Loading tag at: {file:?}");
+        log::info!("Loading category at: {file:?}");
 
         let v = ron::from_str::<Raw>(&read_to_string(file)?)?;
 
@@ -60,11 +61,32 @@ impl ResourceManager {
         Ok(())
     }
 
-    pub fn ordered_categories(&mut self) {
+    pub fn compile_categories(&mut self) {
         let mut ids = self.registry.categories.keys().cloned().collect::<Vec<_>>();
 
         ids.sort_by_key(|v| self.registry.categories[v].ord);
 
+        let mut categories_tiles_map = HashMap::new();
+
+        for tile in self.registry.tiles.values() {
+            if let Some(category) = tile.category {
+                categories_tiles_map
+                    .entry(category)
+                    .or_insert_with(Vec::new)
+                    .push(tile.id)
+            }
+        }
+
         self.ordered_categories = ids;
+        self.registry.categories_tiles_map = categories_tiles_map;
+    }
+
+    pub fn get_researches_by_category(&self, id: Id) -> Option<Vec<Id>> {
+        self.registry.categories_tiles_map.get(&id).map(|tiles| {
+            tiles
+                .iter()
+                .flat_map(|tile| self.get_research_by_unlock(*tile).map(|v| v.id))
+                .collect()
+        })
     }
 }

@@ -17,10 +17,11 @@ pub struct Registry {
     pub scripts: HashMap<Id, ScriptDef>,
     pub tags: HashMap<Id, TagDef>,
     pub categories: HashMap<Id, CategoryDef>,
+    pub(crate) categories_tiles_map: HashMap<Id, Vec<Id>>,
     pub items: HashMap<Id, ItemDef>,
     pub researches: StableDiGraph<ResearchDef, ()>,
-    pub researches_id_map: HashMap<Id, NodeIndex>,
-    pub researches_unlock_map: HashMap<Id, NodeIndex>,
+    pub(crate) researches_id_map: HashMap<Id, NodeIndex>,
+    pub(crate) researches_unlock_map: HashMap<Id, NodeIndex>,
 
     pub none: Id,
     pub any: Id,
@@ -56,8 +57,6 @@ pub struct DataIds {
     pub inactive_model: Id,
     #[namespace("core")]
     pub default_tile: Id,
-    #[namespace("core")]
-    pub category: Id,
 }
 
 #[derive(Copy, Clone, IdReg)]
