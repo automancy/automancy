@@ -10,7 +10,11 @@ use automancy_resources::{
     data::{Data, DataMap},
     inventory::Inventory,
 };
-use yakui::{constrained, widgets::Layer, Constraints, Rect, Vec2};
+use yakui::{
+    constrained,
+    widgets::{Layer, Pad},
+    Constraints, Rect, Vec2,
+};
 
 use crate::tile_entity::TileEntityMsg;
 use crate::{gui::row, GameState};
@@ -19,7 +23,7 @@ use super::{
     button, center_col, center_row, col, info_tip, interactive, item::draw_item, label, list_col,
     movable, num_input, scroll_vertical_bar_alignment, selectable_symbol_button, selection_button,
     slider, spaced_col, spaced_row, symbol, symbol_button, util::searchable_id, window_box,
-    PositionRecord, TextField, MEDIUM_ICON_SIZE, PADDING_XSMALL, SMALL_ICON_SIZE,
+    PositionRecord, TextField, MEDIUM_ICON_SIZE, PADDING_MEDIUM, PADDING_XSMALL, SMALL_ICON_SIZE,
 };
 
 /// Draws the direction selector.
@@ -432,10 +436,12 @@ pub fn tile_config_ui(state: &mut GameState, game_data: &mut DataMap) {
                         Vec2::new(f32::INFINITY, 360.0),
                         None,
                         || {
-                            col(|| {
-                                if let Some(ui) = tile_config_ui {
-                                    rhai_ui(state, tile_entity.clone(), &data, game_data, ui);
-                                }
+                            Pad::horizontal(PADDING_MEDIUM).show(|| {
+                                col(|| {
+                                    if let Some(ui) = tile_config_ui {
+                                        rhai_ui(state, tile_entity.clone(), &data, game_data, ui);
+                                    }
+                                });
                             });
                         },
                     );

@@ -63,7 +63,7 @@ pub fn searchable_id(
         hint_text.as_deref().map(Arc::<str>::as_ref),
     );
 
-    scroll_vertical(Vec2::ZERO, Vec2::new(f32::INFINITY, 200.0), || {
+    scroll_vertical(Vec2::ZERO, Vec2::new(f32::INFINITY, 240.0), || {
         col(|| {
             let ids = if !state.gui_state.text_field.get(field).is_empty() {
                 let text = state.gui_state.text_field.get(field).clone();

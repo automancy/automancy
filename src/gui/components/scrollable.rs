@@ -248,9 +248,6 @@ impl Widget for ScrollableWidget {
                     delta = delta.yx();
                 }
 
-                let pos = self.scroll_position.get();
-                let pos = pos + delta;
-
                 match self.props.direction {
                     Some(ScrollDirection::Y) => {
                         if delta.y.abs() < 0.01 {
@@ -264,6 +261,9 @@ impl Widget for ScrollableWidget {
                     }
                     None => {}
                 }
+
+                let pos = self.scroll_position.get();
+                let pos = pos + delta;
 
                 let max_scroll_position =
                     (self.canvas_size.get() - self.size.get()).max(Vec2::ZERO);
