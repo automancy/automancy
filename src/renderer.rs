@@ -1,10 +1,10 @@
+use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::f32::consts::FRAC_PI_6;
 use std::mem;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
-use std::{borrow::Cow, time::Duration};
 
 use arboard::{Clipboard, ImageData};
 use hashbrown::HashMap;
@@ -55,9 +55,6 @@ use crate::{
 };
 use crate::{gpu, gui};
 
-const UPS: u64 = 60;
-const UPDATE_INTERVAL: Duration = Duration::from_nanos(1_000_000_000 / UPS);
-
 type RenderInfo = (RenderUnits, HashMap<TileCoord, DataMap>);
 
 pub struct Renderer {
@@ -76,9 +73,6 @@ pub struct Renderer {
     pub overlay_instances: Vec<(InstanceData, Id, ())>,
 
     pub take_item_animations: HashMap<Id, VecDeque<(Instant, Rect)>>,
-
-    last_update: Option<Instant>,
-    last_game_data: Option<IndirectInstanceDrawData<()>>,
 
     screenshot_clipboard: Clipboard,
 }
@@ -106,9 +100,6 @@ impl Renderer {
             overlay_instances: vec![],
 
             take_item_animations: Default::default(),
-
-            last_update: None,
-            last_game_data: None,
 
             screenshot_clipboard: Clipboard::new().unwrap(),
         }
@@ -330,14 +321,7 @@ impl Renderer {
             }
         }
 
-        let game_instances = if Instant::now()
-            .duration_since(*renderer.last_update.get_or_insert_with(Instant::now))
-            < UPDATE_INTERVAL
-        {
-            None
-        } else {
-            renderer.last_update = Some(Instant::now());
-
+        let game_instances = {
             let mut render_info = render_info.clone();
 
             let (bound_min, bound_max) = get_screen_world_bounding_vec(
@@ -441,13 +425,11 @@ impl Renderer {
                         .total_cmp(&camera_pos.distance_squared(*b))
                 });
 
-                Some(
-                    instances
-                        .into_iter()
-                        .rev()
-                        .map(|v| (v.0, v.1, ()))
-                        .collect::<Vec<_>>(),
-                )
+                instances
+                    .into_iter()
+                    .rev()
+                    .map(|v| (v.0, v.1, ()))
+                    .collect::<Vec<_>>()
             }
         };
 
@@ -488,7 +470,7 @@ impl Renderer {
     fn inner_render(
         state: &mut GameState,
         screenshotting: bool,
-        game_instances: Option<Vec<(InstanceData, Id, ())>>,
+        game_instances: Vec<(InstanceData, Id, ())>,
         extra_instances: Vec<(InstanceData, Id, ())>,
         overlay_instances: Vec<(InstanceData, Id, ())>,
         animation_map: AnimationMap,
@@ -502,17 +484,15 @@ impl Renderer {
 
         let size = renderer.gpu.window.inner_size();
 
-        let game_data = game_instances.map(|game_instances| {
-            gpu::indirect_instance(
-                &state.resource_man,
-                game_instances
-                    .into_iter()
-                    .map(|v| (v.0, camera_matrix, v.1, v.2))
-                    .collect(),
-                &animation_map,
-                true,
-            )
-        });
+        let game_data = gpu::indirect_instance(
+            &state.resource_man,
+            game_instances
+                .into_iter()
+                .map(|v| (v.0, camera_matrix, v.1, v.2))
+                .collect(),
+            &animation_map,
+            true,
+        );
 
         let extra_game_data = gpu::indirect_instance(
             &state.resource_man,
@@ -693,14 +673,15 @@ impl Renderer {
             }
         }
 
-        if let Some(IndirectInstanceDrawData {
-            opaques,
-            non_opaques,
-            matrix_data,
-            world_matrix_data,
-            draw_data,
-        }) = game_data.as_ref().or(renderer.last_game_data.as_ref())
         {
+            let IndirectInstanceDrawData {
+                opaques,
+                non_opaques,
+                matrix_data,
+                world_matrix_data,
+                draw_data,
+            } = game_data;
+
             gpu::update_instance_buffer(
                 &renderer.gpu.device,
                 &renderer.gpu.queue,
@@ -708,7 +689,7 @@ impl Renderer {
                     .render_resources
                     .game_resources
                     .opaques_instance_buffer,
-                opaques,
+                &opaques,
             );
             gpu::update_instance_buffer(
                 &renderer.gpu.device,
@@ -717,7 +698,7 @@ impl Renderer {
                     .render_resources
                     .game_resources
                     .non_opaques_instance_buffer,
-                non_opaques,
+                &non_opaques,
             );
 
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
@@ -769,13 +750,7 @@ impl Renderer {
                 renderer.gpu.queue.write_buffer(
                     &renderer.render_resources.game_resources.matrix_data_buffer,
                     0,
-                    bytemuck::cast_slice(
-                        matrix_data
-                            .into_iter()
-                            .cloned()
-                            .collect::<Vec<_>>()
-                            .as_slice(),
-                    ),
+                    bytemuck::cast_slice(matrix_data.into_iter().collect::<Vec<_>>().as_slice()),
                 );
                 renderer.gpu.queue.write_buffer(
                     &renderer
@@ -784,11 +759,7 @@ impl Renderer {
                         .world_matrix_data_buffer,
                     0,
                     bytemuck::cast_slice(
-                        world_matrix_data
-                            .into_iter()
-                            .cloned()
-                            .collect::<Vec<_>>()
-                            .as_slice(),
+                        world_matrix_data.into_iter().collect::<Vec<_>>().as_slice(),
                     ),
                 );
 
@@ -835,10 +806,6 @@ impl Renderer {
                         draw.first_instance..(draw.first_instance + draw.instance_count),
                     );
                 }
-            }
-
-            if game_data.is_some() {
-                renderer.last_game_data = game_data;
             }
         }
 
