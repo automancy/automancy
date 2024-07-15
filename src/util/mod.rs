@@ -35,6 +35,21 @@ pub fn should_category_show(
         return false;
     };
 
+    let Some(tiles) = resource_man.get_tiles_by_category(category.id) else {
+        return false;
+    };
+
+    if tiles.iter().any(|id| {
+        resource_man.registry.tiles[id]
+            .data
+            .get(resource_man.registry.data_ids.default_tile)
+            .cloned()
+            .and_then(|v| v.into_bool())
+            .unwrap_or(false)
+    }) {
+        return true;
+    }
+
     let Some(researches) = resource_man.get_researches_by_category(category.id) else {
         return false;
     };

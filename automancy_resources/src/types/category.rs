@@ -81,6 +81,10 @@ impl ResourceManager {
         self.registry.categories_tiles_map = categories_tiles_map;
     }
 
+    pub fn get_tiles_by_category(&self, id: Id) -> Option<&Vec<Id>> {
+        self.registry.categories_tiles_map.get(&id)
+    }
+
     pub fn get_researches_by_category(&self, id: Id) -> Option<Vec<Id>> {
         self.registry.categories_tiles_map.get(&id).map(|tiles| {
             tiles
