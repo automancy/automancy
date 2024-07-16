@@ -140,7 +140,10 @@ fn current_research(state: &mut GameState, game_data: &mut DataMap) {
     };
 
     heading(&state.resource_man.research_str(research.name));
-    label(&state.resource_man.research_str(research.description));
+
+    constrained(Constraints::loose(Vec2::new(500.0, f32::INFINITY)), || {
+        label(&state.resource_man.research_str(research.description));
+    });
 
     if !game_data.contains_id(
         state.resource_man.registry.data_ids.unlocked_researches,
@@ -532,7 +535,7 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
 
                                                 scroll_vertical(
                                                     Vec2::ZERO,
-                                                    Vec2::new(360.0, 360.0),
+                                                    Vec2::new(460.0, 130.0),
                                                     || {
                                                         label(&state.resource_man.research_str(
                                                             research.completed_description,
