@@ -24,7 +24,6 @@ use crate::renderer::Renderer;
 
 pub static VERSION: &str = env!("CARGO_PKG_VERSION");
 pub static LOGO: &[u8] = include_bytes!("assets/logo.png");
-pub static SSAO_NOISE_MAP: &[u8] = include_bytes!("assets/noise_map.png");
 
 pub static SYMBOLS_FONT: &[u8] = include_bytes!("assets/SymbolsNerdFont-Regular.ttf");
 pub static SYMBOLS_FONT_KEY: &str = "Symbols Nerd Font Mono";

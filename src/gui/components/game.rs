@@ -328,14 +328,6 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                             binding: 5,
                             resource: BindingResource::TextureView(&model_depth),
                         },
-                        BindGroupEntry {
-                            binding: 6,
-                            resource: BindingResource::TextureView(
-                                &global_resources
-                                    .ssao_noise_map
-                                    .create_view(&TextureViewDescriptor::default()),
-                            ),
-                        },
                     ],
                     label: None,
                 });
@@ -365,8 +357,8 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
             *present_texture = Some(device.create_texture(&TextureDescriptor {
                 label: None,
                 size: Extent3d {
-                    width: size.x * 3 / 2,
-                    height: size.y * 3 / 2,
+                    width: size.x,
+                    height: size.y,
                     depth_or_array_layers: 1,
                 },
                 mip_level_count: 1,

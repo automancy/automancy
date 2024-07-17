@@ -3,16 +3,12 @@ use std::mem;
 use std::sync::Arc;
 
 use hashbrown::HashMap;
-use image::EncodableLayout;
 use wgpu::{
     naga::FastIndexSet,
     util::{backend_bits_from_env, power_preference_from_env, BufferInitDescriptor, DeviceExt},
     InstanceFlags, PipelineCompilationOptions,
 };
-use wgpu::{
-    util::{DrawIndexedIndirectArgs, TextureDataOrder},
-    Face,
-};
+use wgpu::{util::DrawIndexedIndirectArgs, Face};
 use wgpu::{AdapterInfo, Surface};
 use wgpu::{
     AddressMode, Backends, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout,
@@ -37,8 +33,6 @@ use automancy_defs::{id::Id, rendering::IntermediateUBO};
 use automancy_defs::{math::Matrix4, rendering::WorldMatrixData};
 use automancy_macros::OptionGetter;
 use automancy_resources::ResourceManager;
-
-use crate::SSAO_NOISE_MAP;
 
 pub const NORMAL_CLEAR: Color = Color::TRANSPARENT;
 pub const MODEL_DEPTH_CLEAR: Color = Color {
@@ -99,29 +93,6 @@ pub fn init_gpu_resources(
         contents: bytemuck::cast_slice(indices.as_slice()),
         usage: BufferUsages::INDEX,
     });
-
-    let ssao_noise_map = image::load_from_memory(SSAO_NOISE_MAP)
-        .unwrap()
-        .to_rgba32f();
-    let ssao_noise_map = device.create_texture_with_data(
-        queue,
-        &TextureDescriptor {
-            label: None,
-            size: Extent3d {
-                width: ssao_noise_map.width(),
-                height: ssao_noise_map.height(),
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: TextureDimension::D2,
-            format: TextureFormat::Rgba32Float,
-            usage: TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        },
-        TextureDataOrder::LayerMajor,
-        ssao_noise_map.as_bytes(),
-    );
 
     let filtering_sampler = device.create_sampler(&SamplerDescriptor {
         address_mode_u: AddressMode::ClampToEdge,
@@ -661,16 +632,6 @@ pub fn init_gpu_resources(
                     },
                     count: None,
                 },
-                BindGroupLayoutEntry {
-                    binding: 6,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: TextureViewDimension::D2,
-                        sample_type: TextureSampleType::Float { filterable: false },
-                    },
-                    count: None,
-                },
             ],
             label: Some("post_processing_bind_group_layout_textures"),
         });
@@ -969,8 +930,6 @@ pub fn init_gpu_resources(
         filtering_sampler,
         nonfiltering_sampler,
         repeating_sampler,
-
-        ssao_noise_map,
     };
 
     shared.create(device, config, &global);
@@ -1310,8 +1269,6 @@ pub struct GlobalResources {
     pub filtering_sampler: Sampler,
     pub nonfiltering_sampler: Sampler,
     pub repeating_sampler: Sampler,
-
-    pub ssao_noise_map: Texture,
 }
 
 #[derive(OptionGetter)]
@@ -1444,8 +1401,8 @@ impl SharedResources {
             },
         ));
 
-        self.game_post_processing_bind_group = Some(
-            device.create_bind_group(&BindGroupDescriptor {
+        self.game_post_processing_bind_group =
+            Some(device.create_bind_group(&BindGroupDescriptor {
                 layout: &global_resources.post_processing_bind_group_layout_textures,
                 entries: &[
                     BindGroupEntry {
@@ -1472,18 +1429,9 @@ impl SharedResources {
                         binding: 5,
                         resource: BindingResource::TextureView(&self.model_depth_texture().1),
                     },
-                    BindGroupEntry {
-                        binding: 6,
-                        resource: BindingResource::TextureView(
-                            &global_resources
-                                .ssao_noise_map
-                                .create_view(&TextureViewDescriptor::default()),
-                        ),
-                    },
                 ],
                 label: None,
-            }),
-        );
+            }));
         self.game_post_processing_texture = Some(create_texture_and_view(
             device,
             &TextureDescriptor {
