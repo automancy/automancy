@@ -269,7 +269,6 @@ impl ApplicationHandler for Automancy {
         log::info!("Setting up rendering...");
         let (shared_resources, render_resources, global_resources) = init_gpu_resources(
             &gpu.device,
-            &gpu.queue,
             &gpu.config,
             &self.state.resource_man,
             self.state.vertices_init.take().unwrap(),

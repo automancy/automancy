@@ -51,7 +51,6 @@ pub type AnimationMap = HashMap<Id, HashMap<usize, Matrix4>>;
 
 pub fn init_gpu_resources(
     device: &Device,
-    queue: &Queue,
     config: &SurfaceConfiguration,
     resource_man: &ResourceManager,
     vertices: Vec<Vertex>,
