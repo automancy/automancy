@@ -202,12 +202,13 @@ pub fn slider<T: NumTrait>(
     step: Option<T>,
     parse: impl Fn(&str) -> Option<T>,
     to_string: impl Fn(&T) -> String,
-) {
+) -> bool {
+    let mut updated = false;
+
     center_row(|| {
         let mut slider = Slider::new(*value, *range.start(), *range.end());
         slider.step = step;
 
-        let mut updated = false;
         if let Some(v) = slider.show().value {
             *value = v;
             updated = true;
@@ -217,4 +218,6 @@ pub fn slider<T: NumTrait>(
             num_input(value, updated, range, parse, to_string);
         });
     });
+
+    updated
 }

@@ -176,7 +176,7 @@ pub enum AAType {
 pub struct GraphicsOptions {
     pub fps_limit: i32,
     pub fullscreen: bool,
-    pub scale: Double,
+    pub ui_scale: Double,
     pub anti_aliasing: AAType,
 }
 
@@ -185,7 +185,7 @@ impl Default for GraphicsOptions {
         Self {
             fps_limit: 0,
             fullscreen: false,
-            scale: 1.0,
+            ui_scale: 1.0,
             anti_aliasing: AAType::FXAA,
         }
     }

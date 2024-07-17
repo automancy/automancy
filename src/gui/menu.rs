@@ -290,6 +290,26 @@ pub fn options_menu_item(state: &mut GameState, menu: OptionsMenuState) {
         OptionsMenuState::Graphics => {
             center_col(|| {
                 label(&format!(
+                    "UI Scale: {: >3}%",
+                    (state.options.graphics.ui_scale * 100.0) as i32
+                ));
+
+                if slider(
+                    &mut state.options.graphics.ui_scale,
+                    0.5..=1.5,
+                    Some(0.5),
+                    |v| v.parse::<f64>().ok().map(|v| v / 100.0),
+                    |v| format!("{: >3}", (v * 100.0) as i32),
+                ) {
+                    state.gui.as_mut().unwrap().yak.set_scale_factor(
+                        (state.renderer.as_ref().unwrap().gpu.window.scale_factor()
+                            * state.options.graphics.ui_scale) as f32,
+                    );
+                }
+            });
+
+            center_col(|| {
+                label(&format!(
                     "Max FPS: {: >3}",
                     if state.options.graphics.fps_limit == 0 {
                         "Vsync".to_string()
@@ -306,21 +326,6 @@ pub fn options_menu_item(state: &mut GameState, menu: OptionsMenuState) {
                     None,
                     |v| v.parse().ok(),
                     |v| format!("{: >3}", v),
-                );
-            });
-
-            center_col(|| {
-                label(&format!(
-                    "Scale: {: >3}%",
-                    (state.options.graphics.scale * 100.0) as i32
-                ));
-
-                slider(
-                    &mut state.options.graphics.scale,
-                    0.5..=4.0,
-                    Some(0.5),
-                    |v| v.parse::<f64>().ok().map(|v| v / 100.0),
-                    |v| format!("{: >3}", (v * 100.0) as i32),
                 );
             });
 

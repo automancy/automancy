@@ -291,6 +291,11 @@ impl ApplicationHandler for Automancy {
             &renderer.gpu.window,
         );
 
+        gui.window.set_automatic_scale_factor(false);
+        gui.yak.set_scale_factor(
+            (renderer.gpu.window.scale_factor() * self.state.options.graphics.ui_scale) as f32,
+        );
+
         gui.fonts.insert(
             SYMBOLS_FONT_KEY.to_string(),
             cosmic_text::fontdb::Source::Binary(Arc::from(&SYMBOLS_FONT)),
