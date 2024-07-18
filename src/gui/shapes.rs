@@ -33,7 +33,7 @@ fn lerp_color(uv: Vec2, color: (Color, Color, Color, Color)) -> Vec4 {
     let x = x0.to_linear().lerp(x1.to_linear(), uv.x);
     let y = y0.to_linear().lerp(y1.to_linear(), uv.y);
 
-    (x + y) / 2.0
+    ((x + y) / 2.0).with_w(x.w + y.w * (1.0 - x.w))
 }
 
 impl PaintRectLerpedColor {
