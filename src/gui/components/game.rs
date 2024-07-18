@@ -146,8 +146,8 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                 .map(|(.., (index, size))| {
                     Item::new(
                         *index,
-                        size.x.round() as usize * 2,
-                        size.y.round() as usize * 2,
+                        (size.x.round() * 2.0) as usize,
+                        (size.y.round() * 2.0) as usize,
                         Rotation::None,
                     )
                 })
@@ -357,8 +357,8 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
             *present_texture = Some(device.create_texture(&TextureDescriptor {
                 label: None,
                 size: Extent3d {
-                    width: size.x,
-                    height: size.y,
+                    width: size.x * 3 / 2,
+                    height: size.y * 3 / 2,
                     depth_or_array_layers: 1,
                 },
                 mip_level_count: 1,
@@ -637,32 +637,30 @@ impl Widget for GameElementWidget {
             self.clip.set(clip);
         }
 
-        let mut new_clip_rect = Rect::ZERO;
+        let mut inside = Rect::ZERO;
         if let Some(mut rect) = ctx.layout.get(ctx.dom.current()).map(|v| v.rect) {
-            let clip = ctx.layout.unscaled_viewport().constrain(self.clip.get());
+            rect.set_pos(rect.pos() * ctx.layout.scale_factor());
+            rect.set_size(rect.size() * ctx.layout.scale_factor());
 
-            if clip.size().x > 0.0 && clip.size().y > 0.0 {
-                rect.set_size(rect.size() * ctx.layout.scale_factor());
-                rect.set_pos(rect.pos() * ctx.layout.scale_factor());
+            inside = ctx
+                .layout
+                .unscaled_viewport()
+                .constrain(self.clip.get())
+                .constrain(rect);
+            if !inside.size().abs_diff_eq(Vec2::ZERO, 0.1) {
+                let sign = (rect.max() - rect.size() / 2.0) - (inside.max() - inside.size() / 2.0);
 
-                let inside = clip.constrain(rect);
-                if !inside.size().abs_diff_eq(Vec2::ZERO, 0.1) {
-                    let sign =
-                        (rect.max() - rect.size() / 2.0) - (inside.max() - inside.size() / 2.0);
+                let sx = rect.size().x / inside.size().x;
+                let sy = rect.size().y / inside.size().y;
 
-                    let sx = rect.size().x / inside.size().x;
-                    let sy = rect.size().y / inside.size().y;
+                let dx = (sx - 1.0) * sign.x.signum();
+                let dy = (sy - 1.0) * sign.y.signum();
 
-                    let dx = (sx - 1.0) * sign.x.signum();
-                    let dy = (sy - 1.0) * sign.y.signum();
-
-                    self.adjusted_matrix.set(Some(
-                        Matrix4::from_translation(vec3(dx, dy, 0.0))
-                            * Matrix4::from_scale(vec3(sx, sy, 1.0))
-                            * self.props.get().unwrap().world_matrix,
-                    ));
-                }
-                new_clip_rect = inside;
+                self.adjusted_matrix.set(Some(
+                    Matrix4::from_translation(vec3(dx, dy, 0.0))
+                        * Matrix4::from_scale(vec3(sx, sy, 1.0))
+                        * self.props.get().unwrap().world_matrix,
+                ));
             }
         }
 
@@ -671,6 +669,7 @@ impl Widget for GameElementWidget {
             if let Some(matrix) = self.adjusted_matrix.get() {
                 props.world_matrix = matrix;
             }
+            props.size *= ctx.layout.scale_factor();
 
             let paint = Box::new(GameElementPaint {
                 props,
@@ -680,7 +679,7 @@ impl Widget for GameElementWidget {
 
             layer.calls.push((
                 PaintCall::Custom(CustomPaintCall { callback: paint }),
-                Some(new_clip_rect),
+                Some(inside),
             ));
         }
     }
