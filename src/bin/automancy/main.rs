@@ -53,7 +53,7 @@ use automancy_defs::kira::tween::Tween;
 
 use automancy_defs::rendering::Vertex;
 use automancy_resources::{ResourceManager, RESOURCES_PATH, RESOURCE_MAN};
-use yakui::paint::Texture;
+use yakui::paint::{Texture, TextureFilter};
 
 /// Initialize the Resource Manager system, and loads all the resources in all namespaces.
 fn load_resources(
@@ -308,11 +308,14 @@ impl ApplicationHandler for Automancy {
         log::info!("Gui setup.");
 
         let logo = image::load_from_memory(LOGO).unwrap();
-        let logo = gui.yak.add_texture(Texture::new(
+        let mut logo = Texture::new(
             yakui::paint::TextureFormat::Rgba8Srgb,
             uvec2(logo.width(), logo.height()),
             logo.into_bytes(),
-        ));
+        );
+        logo.mag_filter = TextureFilter::Linear;
+        logo.min_filter = TextureFilter::Linear;
+        let logo = gui.yak.add_texture(logo);
 
         self.state.logo = Some(logo);
         self.state.gui = Some(gui);
