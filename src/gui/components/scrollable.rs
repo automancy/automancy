@@ -9,7 +9,7 @@ use yakui::{
     input::MouseButton,
     reflow,
     widget::{EventContext, LayoutContext, Widget},
-    Alignment, Dim2,
+    Alignment, Dim2, Rect,
 };
 use yakui::{
     event::{EventInterest, EventResponse, WidgetEvent},
@@ -21,7 +21,10 @@ use yakui::{
 };
 use yakui::{Pivot, Response};
 
-use crate::gui::util::{pad_x, pad_y};
+use crate::gui::{
+    shapes::PaintRectLerpedColor,
+    util::{pad_x, pad_y},
+};
 
 use super::{col, container::RoundRect, row};
 
@@ -191,6 +194,77 @@ impl Widget for ScrollableWidget {
         size
     }
 
+    fn paint(&self, mut ctx: yakui::widget::PaintContext<'_>) {
+        let clip = ctx.paint.get_current_clip().unwrap_or(Rect::ZERO);
+
+        let node = ctx.dom.get_current();
+        for &child in &node.children {
+            ctx.paint(child);
+        }
+
+        let Some(dir) = self.props.direction else {
+            return;
+        };
+
+        let layout_pos = ctx.layout.get(ctx.dom.current()).unwrap().rect.pos();
+
+        let scroll_min = Vec2::ZERO;
+        let scroll_max = self.canvas_size.get();
+
+        let canvas_min = self.scroll_position.get();
+        let canvas_max = canvas_min + self.size.get();
+
+        let min = ((canvas_min - scroll_min).abs() / 30.0).clamp(Vec2::ZERO, Vec2::ONE);
+        let max = ((canvas_max - scroll_max).abs() / 30.0).clamp(Vec2::ZERO, Vec2::ONE);
+
+        const SIZE: f32 = 20.0;
+        let dir_size = match dir {
+            ScrollDirection::Y => Vec2::new(scroll_max.x, SIZE),
+            ScrollDirection::X => Vec2::new(SIZE, scroll_max.y),
+        };
+
+        let a = Rect::from_pos_size(layout_pos, dir_size);
+        let b = Rect::from_pos_size(layout_pos + self.size.get() - dir_size, dir_size);
+
+        const MUL: f32 = 0.5;
+
+        {
+            let mut rect = PaintRectLerpedColor::new(match dir {
+                ScrollDirection::Y => a,
+                ScrollDirection::X => b,
+            });
+
+            let size = clip.constrain(rect.rect).size();
+            if size.x >= SIZE && size.y >= SIZE {
+                let x0 = colors::BLACK.with_alpha(max.x * MUL);
+                let x1 = colors::TRANSPARENT;
+                let y0 = colors::BLACK.with_alpha(min.y * MUL);
+                let y1 = colors::TRANSPARENT;
+
+                rect.color = (x0, y0, x1, y1);
+                rect.add(ctx.paint);
+            }
+        }
+
+        {
+            let mut rect = PaintRectLerpedColor::new(match dir {
+                ScrollDirection::Y => b,
+                ScrollDirection::X => a,
+            });
+
+            let size = clip.constrain(rect.rect).size();
+            if size.x >= SIZE && size.y >= SIZE {
+                let x0 = colors::BLACK.with_alpha(min.x * MUL);
+                let x1 = colors::TRANSPARENT;
+                let y0 = colors::BLACK.with_alpha(max.y * MUL);
+                let y1 = colors::TRANSPARENT;
+
+                rect.color = (x1, y1, x0, y0);
+                rect.add(ctx.paint);
+            }
+        }
+    }
+
     fn event_interest(&self) -> EventInterest {
         EventInterest::MOUSE_INSIDE | EventInterest::MOUSE_MOVE | EventInterest::MOUSE_OUTSIDE
     }
@@ -305,7 +379,7 @@ pub fn scroll_vertical_bar_alignment(
         let res = res.unwrap();
 
         if let Some(alignment) = alignment {
-            scroll_bar(res.into_inner(), alignment.as_vec2(), ScrollDirection::X);
+            scroll_bar(res.into_inner(), alignment.as_vec2(), ScrollDirection::Y);
         }
     });
 }
@@ -336,7 +410,7 @@ pub fn scroll_horizontal_bar_alignment(
         let res = res.unwrap();
 
         if let Some(alignment) = alignment {
-            scroll_bar(res.into_inner(), alignment.as_vec2(), ScrollDirection::Y);
+            scroll_bar(res.into_inner(), alignment.as_vec2(), ScrollDirection::X);
         }
     });
 }
@@ -358,9 +432,9 @@ fn scroll_bar(res: ScrollableResponse, alignment: Vec2, dir: ScrollDirection) {
         || {
             RoundRect::new(SCROLL_RADIUS, colors::BACKGROUND_3).show_children(|| {
                 let pad_f = if dir == ScrollDirection::Y {
-                    pad_x
-                } else {
                     pad_y
+                } else {
+                    pad_x
                 };
 
                 pad_f(
@@ -368,14 +442,19 @@ fn scroll_bar(res: ScrollableResponse, alignment: Vec2, dir: ScrollDirection) {
                     diff * ratio * (1.0 - res.pos_percentage),
                 )
                 .show(|| {
-                    let mut rect = RoundRect::colored_x(
+                    let mut rect = if dir == ScrollDirection::Y {
+                        RoundRect::colored_y
+                    } else {
+                        RoundRect::colored_x
+                    }(
                         SCROLL_RADIUS,
                         (colors::ORANGE, colors::ORANGE.adjust(1.0 + (1.0 - ratio))),
                     );
+
                     rect.min_size = if dir == ScrollDirection::Y {
-                        vec2((res.size * ratio).floor(), SCROLL_SIZE)
-                    } else {
                         vec2(SCROLL_SIZE, (res.size * ratio).floor())
+                    } else {
+                        vec2((res.size * ratio).floor(), SCROLL_SIZE)
                     };
                     rect.show();
                 });
