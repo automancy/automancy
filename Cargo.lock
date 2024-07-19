@@ -779,9 +779,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.1.5"
+version = "1.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "324c74f2155653c90b04f25b2a47a8a631360cb908f92a772695f430c7e31052"
+checksum = "2aba8f4e9906c7ce3c73463f62a7f0c65183ada1a2d47e397cc8810827f9694f"
 dependencies = [
  "jobserver",
  "libc",
@@ -5153,7 +5153,7 @@ checksum = "791978798f0597cfc70478424c2b4fdc2b7a8024aaff78497ef00f24ef674193"
 [[package]]
 name = "yakui"
 version = "0.2.0"
-source = "git+https://github.com/automancy/yakui.git#50854399c038103121175d1b2cd8ab42f8586a9a"
+source = "git+https://github.com/automancy/yakui.git#cbf57744a31bf27335ccfc5beb35b51f18d7a88d"
 dependencies = [
  "yakui-core",
  "yakui-widgets",
@@ -5162,7 +5162,7 @@ dependencies = [
 [[package]]
 name = "yakui-core"
 version = "0.2.0"
-source = "git+https://github.com/automancy/yakui.git#50854399c038103121175d1b2cd8ab42f8586a9a"
+source = "git+https://github.com/automancy/yakui.git#cbf57744a31bf27335ccfc5beb35b51f18d7a88d"
 dependencies = [
  "anymap",
  "bitflags 2.6.0",
@@ -5178,7 +5178,7 @@ dependencies = [
 [[package]]
 name = "yakui-wgpu"
 version = "0.2.0"
-source = "git+https://github.com/automancy/yakui.git#50854399c038103121175d1b2cd8ab42f8586a9a"
+source = "git+https://github.com/automancy/yakui.git#cbf57744a31bf27335ccfc5beb35b51f18d7a88d"
 dependencies = [
  "bytemuck",
  "glam",
@@ -5191,7 +5191,7 @@ dependencies = [
 [[package]]
 name = "yakui-widgets"
 version = "0.2.0"
-source = "git+https://github.com/automancy/yakui.git#50854399c038103121175d1b2cd8ab42f8586a9a"
+source = "git+https://github.com/automancy/yakui.git#cbf57744a31bf27335ccfc5beb35b51f18d7a88d"
 dependencies = [
  "cosmic-text",
  "sys-locale",
@@ -5202,7 +5202,7 @@ dependencies = [
 [[package]]
 name = "yakui-winit"
 version = "0.2.0"
-source = "git+https://github.com/automancy/yakui.git#50854399c038103121175d1b2cd8ab42f8586a9a"
+source = "git+https://github.com/automancy/yakui.git#cbf57744a31bf27335ccfc5beb35b51f18d7a88d"
 dependencies = [
  "winit",
  "yakui-core",
