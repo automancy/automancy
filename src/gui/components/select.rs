@@ -9,8 +9,7 @@ use super::{
     button, center_row, col,
     container::RoundRect,
     interactive::{interactive, InteractiveResponse},
-    scrollable::scroll_vertical,
-    PADDING_MEDIUM,
+    scroll_vertical_bar_alignment, PADDING_MEDIUM,
 };
 
 #[track_caller]
@@ -31,18 +30,23 @@ pub fn selection_box<T: Clone + Eq>(
             reflow(Alignment::BOTTOM_LEFT, Pivot::TOP_LEFT, Dim2::ZERO, || {
                 Layer::new().show(|| {
                     RoundRect::new(8.0, colors::BACKGROUND_1).show_children(|| {
-                        scroll_vertical(Vec2::ZERO, Vec2::new(160.0, 200.0), || {
-                            Pad::vertical(PADDING_MEDIUM).show(|| {
-                                col(|| {
-                                    for option in options.into_iter() {
-                                        if button(&format(&option)).clicked {
-                                            selected = option;
-                                            open.set(false);
+                        scroll_vertical_bar_alignment(
+                            Vec2::ZERO,
+                            Vec2::new(160.0, 200.0),
+                            None,
+                            || {
+                                Pad::all(PADDING_MEDIUM).show(|| {
+                                    col(|| {
+                                        for option in options.into_iter() {
+                                            if button(&format(&option)).clicked {
+                                                selected = option;
+                                                open.set(false);
+                                            }
                                         }
-                                    }
+                                    });
                                 });
-                            });
-                        });
+                            },
+                        );
                     });
                 });
             });

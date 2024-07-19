@@ -4,6 +4,7 @@ use automancy_defs::{
     colors,
     glam::{vec2, Vec2Swizzles},
 };
+use yakui::geometry::{Constraints, Vec2};
 use yakui::{
     constrained,
     input::MouseButton,
@@ -14,10 +15,6 @@ use yakui::{
 use yakui::{
     event::{EventInterest, EventResponse, WidgetEvent},
     util::widget_children,
-};
-use yakui::{
-    geometry::{Constraints, Vec2},
-    widgets::Pad,
 };
 use yakui::{Pivot, Response};
 
@@ -368,13 +365,7 @@ pub fn scroll_vertical_bar_alignment(
     row(|| {
         let mut res = None;
         constrained(Constraints::loose(Vec2::new(f32::INFINITY, max.y)), || {
-            res = Some(Scrollable::vertical(min, max.x).show(|| {
-                if alignment.is_some() {
-                    Pad::horizontal(SCROLL_SIZE).show(children);
-                } else {
-                    children();
-                }
-            }));
+            res = Some(Scrollable::vertical(min, max.x).show(children));
         });
         let res = res.unwrap();
 
@@ -399,13 +390,7 @@ pub fn scroll_horizontal_bar_alignment(
     col(|| {
         let mut res = None;
         constrained(Constraints::loose(Vec2::new(max.x, f32::INFINITY)), || {
-            res = Some(Scrollable::horizontal(min, max.y).show(|| {
-                if alignment.is_some() {
-                    Pad::vertical(SCROLL_SIZE).show(children);
-                } else {
-                    children();
-                }
-            }));
+            res = Some(Scrollable::horizontal(min, max.y).show(children));
         });
         let res = res.unwrap();
 

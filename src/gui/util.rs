@@ -15,7 +15,7 @@ use yakui::{
 
 use crate::{game::TAKE_ITEM_ANIMATION_SPEED, GameState};
 
-use super::{col, radio, scroll_vertical, textbox, ui_game_object, TextField};
+use super::{col, group, radio, scroll_vertical, textbox, ui_game_object, TextField};
 
 pub fn pad_y(top: f32, bottom: f32) -> Pad {
     let mut pad = Pad::ZERO;
@@ -64,35 +64,37 @@ pub fn searchable_id(
     );
 
     scroll_vertical(Vec2::ZERO, Vec2::new(f32::INFINITY, 240.0), || {
-        col(|| {
-            let ids = if !state.gui_state.text_field.get(field).is_empty() {
-                let text = state.gui_state.text_field.get(field).clone();
-                let mut filtered = ids
-                    .iter()
-                    .flat_map(|id| {
-                        let name = get_name(state, *id);
-                        let score = state.gui_state.text_field.fuse.fuzzy_match(&name, &text);
+        group(|| {
+            col(|| {
+                let ids = if !state.gui_state.text_field.get(field).is_empty() {
+                    let text = state.gui_state.text_field.get(field).clone();
+                    let mut filtered = ids
+                        .iter()
+                        .flat_map(|id| {
+                            let name = get_name(state, *id);
+                            let score = state.gui_state.text_field.fuse.fuzzy_match(&name, &text);
 
-                        if score.unwrap_or(0) < (name.len() / 2) as i64 {
-                            None
-                        } else {
-                            Some(*id).zip(score)
-                        }
-                    })
-                    .collect::<Vec<_>>();
+                            if score.unwrap_or(0) < (name.len() / 2) as i64 {
+                                None
+                            } else {
+                                Some(*id).zip(score)
+                            }
+                        })
+                        .collect::<Vec<_>>();
 
-                filtered.sort_unstable_by(|a, b| a.1.cmp(&b.1));
+                    filtered.sort_unstable_by(|a, b| a.1.cmp(&b.1));
 
-                filtered.into_iter().rev().map(|v| v.0).collect::<Vec<_>>()
-            } else {
-                ids.to_vec()
-            };
+                    filtered.into_iter().rev().map(|v| v.0).collect::<Vec<_>>()
+                } else {
+                    ids.to_vec()
+                };
 
-            for id in ids.iter() {
-                radio(new_id, Some(*id), || {
-                    draw(state, *id);
-                });
-            }
+                for id in ids.iter() {
+                    radio(new_id, Some(*id), || {
+                        draw(state, *id);
+                    });
+                }
+            });
         });
     });
 }

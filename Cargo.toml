@@ -46,7 +46,7 @@ members = [
 serde = { version = "1", features = ["derive"] }
 ron = "0.8.1"
 
-wgpu = { version = "0.20.1", features = ["serde"] }
+wgpu = { version = "22.0.0", features = ["serde"] }
 
 winit = { version = "0.30.3", features = ["serde"] }
 

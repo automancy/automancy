@@ -465,8 +465,8 @@ pub fn options_menu(state: &mut GameState) {
 
                 Pad::all(PADDING_LARGE).show(|| {
                     if let SubState::Options(menu) = state.gui_state.substate {
-                        group(|| {
-                            scroll_vertical(Vec2::ZERO, Vec2::new(f32::INFINITY, 260.0), || {
+                        scroll_vertical(Vec2::ZERO, Vec2::new(f32::INFINITY, 260.0), || {
+                            group(|| {
                                 col(|| {
                                     heading(&state.resource_man.gui_str(match menu {
                                         OptionsMenuState::Graphics => {

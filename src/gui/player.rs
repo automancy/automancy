@@ -22,7 +22,7 @@ use crate::{input::ActionType, util::is_research_unlocked};
 
 use super::{
     button, centered_horizontal, col, group, heading, inactive_button, interactive,
-    item::draw_item, label, movable, row, scroll_horizontal, scroll_vertical,
+    item::draw_item, label, list_row, movable, row, scroll_horizontal, scroll_vertical,
     scroll_vertical_bar_alignment, ui_game_object, util::take_item_animation, window_box,
     PositionRecord, RoundRect, DIVIER_HEIGHT, DIVIER_THICKNESS, MEDIUM_ICON_SIZE, PADDING_MEDIUM,
     SMALL_ICON_SIZE, TINY_ICON_SIZE,
@@ -50,32 +50,37 @@ fn player_inventory(state: &mut GameState, game_data: &mut DataMap) {
     };
 
     scroll_vertical(Vec2::ZERO, Vec2::new(f32::INFINITY, 200.0), || {
-        col(|| {
-            for (id, amount) in inventory.iter() {
-                let amount = *amount;
+        group(|| {
+            col(|| {
+                for (id, amount) in inventory.iter() {
+                    let amount = *amount;
 
-                if amount != 0 {
-                    let pos = PositionRecord::new()
-                        .show(|| {
-                            draw_item(
-                                &state.resource_man,
-                                || {},
-                                ItemStack { id: *id, amount },
-                                MEDIUM_ICON_SIZE,
-                                true,
+                    if amount != 0 {
+                        let pos = PositionRecord::new()
+                            .show(|| {
+                                draw_item(
+                                    &state.resource_man,
+                                    || {},
+                                    ItemStack { id: *id, amount },
+                                    MEDIUM_ICON_SIZE,
+                                    true,
+                                );
+                            })
+                            .into_inner();
+
+                        if let Some(pos) = pos {
+                            take_item_animation(
+                                state,
+                                *id,
+                                Rect::from_pos_size(
+                                    pos,
+                                    Vec2::new(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE),
+                                ),
                             );
-                        })
-                        .into_inner();
-
-                    if let Some(pos) = pos {
-                        take_item_animation(
-                            state,
-                            *id,
-                            Rect::from_pos_size(pos, Vec2::new(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE)),
-                        );
+                        }
                     }
                 }
-            }
+            });
         });
     });
 }
@@ -90,42 +95,44 @@ fn research_selection(state: &mut GameState, game_data: &mut DataMap) {
     let mut visitor = Topo::new(&state.resource_man.registry.researches);
 
     scroll_vertical(Vec2::ZERO, Vec2::new(f32::INFINITY, 200.0), || {
-        col(|| {
-            while let Some(idx) = visitor.next(&state.resource_man.registry.researches) {
-                let research = &state.resource_man.registry.researches[idx];
-                let icon = match research.icon_mode {
-                    IconMode::Item => state.resource_man.item_model_or_missing(research.icon),
-                    IconMode::Tile => state.resource_man.tile_model_or_missing(research.icon),
-                };
+        group(|| {
+            col(|| {
+                while let Some(idx) = visitor.next(&state.resource_man.registry.researches) {
+                    let research = &state.resource_man.registry.researches[idx];
+                    let icon = match research.icon_mode {
+                        IconMode::Item => state.resource_man.item_model_or_missing(research.icon),
+                        IconMode::Tile => state.resource_man.tile_model_or_missing(research.icon),
+                    };
 
-                if let Some(prev) = research.depends_on {
-                    if !is_research_unlocked(prev, &state.resource_man, game_data) {
-                        continue;
+                    if let Some(prev) = research.depends_on {
+                        if !is_research_unlocked(prev, &state.resource_man, game_data) {
+                            continue;
+                        }
                     }
-                }
 
-                let interact = interactive(|| {
-                    centered_horizontal(|| {
-                        ui_game_object(
-                            InstanceData::default()
-                                .with_model_matrix(research.icon_mode.model_matrix()),
-                            icon,
-                            vec2(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE),
-                            Some(research.icon_mode.world_matrix()),
-                        );
+                    let interact = interactive(|| {
+                        centered_horizontal(|| {
+                            ui_game_object(
+                                InstanceData::default()
+                                    .with_model_matrix(research.icon_mode.model_matrix()),
+                                icon,
+                                vec2(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE),
+                                Some(research.icon_mode.world_matrix()),
+                            );
 
-                        label(&state.resource_man.research_str(research.name));
+                            label(&state.resource_man.research_str(research.name));
+                        });
                     });
-                });
 
-                if interact.clicked {
-                    state.gui_state.selected_research = Some(research.id);
-                    state.gui_state.selected_research_puzzle_tile = None;
-                    state.gui_state.research_puzzle_selections = None;
-                    state.puzzle_state = None; // TODO have a better save system for this
-                    state.gui_state.force_show_puzzle = false;
-                };
-            }
+                    if interact.clicked {
+                        state.gui_state.selected_research = Some(research.id);
+                        state.gui_state.selected_research_puzzle_tile = None;
+                        state.gui_state.research_puzzle_selections = None;
+                        state.puzzle_state = None; // TODO have a better save system for this
+                        state.gui_state.force_show_puzzle = false;
+                    };
+                }
+            });
         });
     });
 }
@@ -494,12 +501,17 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                     .to_string(),
                 || {
                     col(|| {
-                        row(|| {
-                            group(|| {
+                        {
+                            let mut row = list_row();
+                            row.item_spacing = PADDING_MEDIUM;
+                            row
+                        }
+                        .show(|| {
+                            col(|| {
                                 player_inventory(state, game_data);
                             });
 
-                            group(|| {
+                            col(|| {
                                 research_selection(state, game_data);
                             });
                         });
@@ -537,9 +549,13 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                                                     Vec2::ZERO,
                                                     Vec2::new(460.0, 130.0),
                                                     || {
-                                                        label(&state.resource_man.research_str(
-                                                            research.completed_description,
-                                                        ));
+                                                        group(|| {
+                                                            label(
+                                                                &state.resource_man.research_str(
+                                                                    research.completed_description,
+                                                                ),
+                                                            );
+                                                        });
                                                     },
                                                 );
                                             }

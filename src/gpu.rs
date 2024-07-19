@@ -212,6 +212,7 @@ pub fn init_gpu_resources(
             alpha_to_coverage_enabled: false,
         },
         multiview: None,
+        cache: None,
     });
 
     let extra_objects_resources = {
@@ -516,6 +517,7 @@ pub fn init_gpu_resources(
             alpha_to_coverage_enabled: false,
         },
         multiview: None,
+        cache: None,
     });
 
     let fxaa_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
@@ -578,6 +580,7 @@ pub fn init_gpu_resources(
             alpha_to_coverage_enabled: false,
         },
         multiview: None,
+        cache: None,
     });
 
     let post_processing_bind_group_layout_textures =
@@ -707,6 +710,7 @@ pub fn init_gpu_resources(
                 alpha_to_coverage_enabled: false,
             },
             multiview: None,
+            cache: None,
         });
 
         (
@@ -794,6 +798,7 @@ pub fn init_gpu_resources(
             alpha_to_coverage_enabled: false,
         },
         multiview: None,
+        cache: None,
     });
 
     let present_uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
@@ -833,6 +838,7 @@ pub fn init_gpu_resources(
             alpha_to_coverage_enabled: false,
         },
         multiview: None,
+        cache: None,
     });
 
     let multisampled_present_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
@@ -867,6 +873,7 @@ pub fn init_gpu_resources(
             alpha_to_coverage_enabled: false,
         },
         multiview: None,
+        cache: None,
     });
 
     let mut shared = SharedResources {
@@ -1634,6 +1641,7 @@ impl Gpu {
                     } else {
                         Limits::default()
                     },
+                    memory_hints: Default::default(),
                     label: None,
                 },
                 None,
