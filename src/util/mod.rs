@@ -18,12 +18,12 @@ pub fn is_research_unlocked(
         .entry(resource_man.registry.data_ids.unlocked_researches)
         .or_insert_with(|| Data::SetId(HashSet::new()))
     {
-        if !unlocked.contains(&research) {
-            return false;
+        if unlocked.contains(&research) {
+            return true;
         }
     }
 
-    true
+    false
 }
 
 pub fn should_category_show(
@@ -59,11 +59,11 @@ pub fn should_category_show(
         .or_insert_with(|| Data::SetId(HashSet::new()))
     {
         for research in researches {
-            if !unlocked.contains(&research) {
-                return false;
+            if unlocked.contains(&research) {
+                return true;
             }
         }
     }
 
-    true
+    false
 }
