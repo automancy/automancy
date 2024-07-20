@@ -17,6 +17,7 @@ def main():
 
     attribs = [path.attrib for path in root.iter('{http://www.w3.org/2000/svg}path')]
     ids = dict(map(lambda e: (e[1], e[0]), enumerate(map(lambda a: a['id'], attribs))))
+    styles = dict(map(lambda a: (a['id'], dict(map(lambda p: p.split(':'), (a.get('style') or 'ihate:python').split(';')))), attribs))
     total = float(len(attribs))
 
     bpy.ops.import_curve.svg(filepath=src)
@@ -30,9 +31,9 @@ def main():
 
         new_obj.matrix_world = obj.matrix_world
         new_obj.delta_location.z = (ids[obj.name] / total) / 64.0 + 0.005
-        #alpha = styles[obj.name].get('fill-opacity')
-        #if alpha:
-        #    new_obj.active_material.diffuse_color[3] = float(alpha)
+        alpha = styles[obj.name].get('fill-opacity')
+        if alpha:
+            new_obj.active_material.diffuse_color[3] = float(alpha)
         bpy.context.collection.objects.link(new_obj)
         bpy.data.objects.remove(obj)
 
@@ -57,7 +58,6 @@ def main():
             v.select = True
 
         bmesh.ops.translate(bm, verts=bm.verts, vec=(-1.0, -1.0, 0.0), space=bpy.context.object.matrix_world)
-        bmesh.ops.dissolve_limit(bm, verts=bm.verts, edges=bm.edges, angle_limit=0.08726646)
         bmesh.ops.beautify_fill(bm, faces=bm.faces, edges=bm.edges)
         bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=0.1)
 
