@@ -55,7 +55,7 @@ criteria:
 
 ### Scripts
 
-`input.data` (aka DataMap) needs to be _manually assigned if you make modifications_.
+[WIP]
 
 ### Software
 
