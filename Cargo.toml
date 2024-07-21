@@ -15,22 +15,28 @@ required-features = ["build-binary"]
 
 
 [profile.dev]
+debug = 0
+strip = "debuginfo"
 opt-level = 3
 lto = "off"
 panic = "abort"
 
 [profile.dev.package."*"]
+debug = 0
+strip = "debuginfo"
 opt-level = 3
 
 [profile.release]
+debug = 0
+strip = "debuginfo"
 lto = "off"
 panic = "abort"
 
 [profile.release-bin]
 inherits = "release"
+opt-level = "z"      # optimize for size
 lto = "fat"          # turn on Link-Time Optimizations
 codegen-units = 1    # trade compile time with maximum optimization
-opt-level = "z"      # optimize for size
 
 
 [workspace]
