@@ -1,6 +1,7 @@
 **/target
 
 __pycache__
+.idea/
 
 map
 options.ron
