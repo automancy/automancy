@@ -400,6 +400,8 @@ pub fn on_event(
             }
         }
 
+        state.input_hints.push(vec![ActionType::Player]);
+
         // TODO hint this
         if (state.input_handler.main_pressed
             || (state.input_handler.key_active(ActionType::SelectMode)
