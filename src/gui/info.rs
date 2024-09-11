@@ -5,7 +5,6 @@ use automancy_resources::data::Data;
 use automancy_resources::types::IconMode;
 use winit::keyboard::{Key, NamedKey};
 use yakui::{
-    row,
     widgets::{Absolute, Layer, Pad},
     Alignment, Dim2, Pivot,
 };
@@ -14,90 +13,100 @@ use crate::tile_entity::TileEntityMsg;
 use crate::GameState;
 
 use super::{
-    colored_label, colored_sized_text, group, item::draw_item, label, righthand_col,
-    ui_game_object, window_box, LARGE_ICON_SIZE, PADDING_LARGE, PADDING_XSMALL, SMALL_ICON_SIZE,
-    SMALL_SIZE,
+    col, col_align_end, colored_label, colored_sized_text, group, item::draw_item, label, row,
+    ui_game_object, window_box, LABEL_SIZE, LARGE_ICON_SIZE, PADDING_LARGE, SMALL_ICON_SIZE,
 };
 
-fn input_hint(state: &mut GameState) {
+#[track_caller]
+fn input_hint_names(state: &mut GameState) {
     for hint in &state.input_hints {
-        Pad::vertical(PADDING_XSMALL).show(|| {
-            righthand_col(|| {
-                row(|| {
-                    if let Some(name) = hint
-                        .last()
-                        .and_then(|action| {
-                            state
-                                .input_handler
-                                .key_map
-                                .values()
-                                .find(|v| v.action == *action)
-                        })
-                        .and_then(|v| v.name)
-                    {
-                        if let Some(name) = state.resource_man.translates.keys.get(&name) {
-                            label(name);
-                        } else {
-                            label(&state.resource_man.translates.unnamed);
+        let name = hint
+            .last()
+            .and_then(|action| {
+                state
+                    .input_handler
+                    .key_map
+                    .values()
+                    .find(|v| v.action == *action)
+            })
+            .and_then(|v| v.name);
+
+        if let Some(name) = name.and_then(|name| state.resource_man.translates.keys.get(&name)) {
+            label(name);
+        } else {
+            label(&state.resource_man.translates.unnamed);
+        }
+    }
+}
+
+#[track_caller]
+fn input_hint_keys(state: &mut GameState) {
+    for hint in &state.input_hints {
+        let hint_text = hint
+            .iter()
+            .flat_map(|action| {
+                if let Some((key, _key_action)) = state
+                    .input_handler
+                    .key_map
+                    .iter()
+                    .find(|(_, v)| v.action == *action)
+                {
+                    if let Key::Character(c) = key {
+                        Some(c.to_uppercase())
+                    } else if let Key::Named(n) = key {
+                        match n {
+                            NamedKey::Alt => Some("Alt".to_string()),
+                            NamedKey::Control => Some("Ctrl".to_string()),
+                            NamedKey::Shift => Some("Shift".to_string()),
+                            NamedKey::Delete => Some("Del".to_string()),
+                            NamedKey::Backspace => Some("Backspace".to_string()),
+                            NamedKey::Enter => Some("Enter".to_string()),
+                            NamedKey::Escape => Some("Esc".to_string()),
+                            NamedKey::Tab => Some("Tab".to_string()),
+                            NamedKey::F1 => Some("F1".to_string()),
+                            NamedKey::F2 => Some("F2".to_string()),
+                            NamedKey::F3 => Some("F3".to_string()),
+                            NamedKey::F4 => Some("F4".to_string()),
+                            NamedKey::F5 => Some("F5".to_string()),
+                            NamedKey::F6 => Some("F6".to_string()),
+                            NamedKey::F7 => Some("F7".to_string()),
+                            NamedKey::F8 => Some("F8".to_string()),
+                            NamedKey::F9 => Some("F9".to_string()),
+                            NamedKey::F10 => Some("F10".to_string()),
+                            NamedKey::F11 => Some("F11".to_string()),
+                            NamedKey::F12 => Some("F12".to_string()),
+                            NamedKey::ArrowLeft => Some("Left".to_string()),
+                            NamedKey::ArrowUp => Some("Up".to_string()),
+                            NamedKey::ArrowDown => Some("Down".to_string()),
+                            NamedKey::ArrowRight => Some("Right".to_string()),
+                            _ => Some("<?>".to_string()),
                         }
+                    } else {
+                        None
                     }
-                });
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" + ");
 
-                row(|| {
-                    let hint_text = hint
-                        .iter()
-                        .flat_map(|action| {
-                            if let Some((key, _key_action)) = state
-                                .input_handler
-                                .key_map
-                                .iter()
-                                .find(|(_, v)| v.action == *action)
-                            {
-                                if let Key::Character(c) = key {
-                                    Some(c.to_uppercase())
-                                } else if let Key::Named(n) = key {
-                                    match n {
-                                        NamedKey::Alt => Some("Alt".to_string()),
-                                        NamedKey::Control => Some("Ctrl".to_string()),
-                                        NamedKey::Shift => Some("Shift".to_string()),
-                                        NamedKey::Delete => Some("Del".to_string()),
-                                        NamedKey::Backspace => Some("Backspace".to_string()),
-                                        NamedKey::Enter => Some("Enter".to_string()),
-                                        NamedKey::Escape => Some("Esc".to_string()),
-                                        NamedKey::Tab => Some("Tab".to_string()),
-                                        NamedKey::F1 => Some("F1".to_string()),
-                                        NamedKey::F2 => Some("F2".to_string()),
-                                        NamedKey::F3 => Some("F3".to_string()),
-                                        NamedKey::F4 => Some("F4".to_string()),
-                                        NamedKey::F5 => Some("F5".to_string()),
-                                        NamedKey::F6 => Some("F6".to_string()),
-                                        NamedKey::F7 => Some("F7".to_string()),
-                                        NamedKey::F8 => Some("F8".to_string()),
-                                        NamedKey::F9 => Some("F9".to_string()),
-                                        NamedKey::F10 => Some("F10".to_string()),
-                                        NamedKey::F11 => Some("F11".to_string()),
-                                        NamedKey::F12 => Some("F12".to_string()),
-                                        NamedKey::ArrowLeft => Some("Left".to_string()),
-                                        NamedKey::ArrowUp => Some("Up".to_string()),
-                                        NamedKey::ArrowDown => Some("Down".to_string()),
-                                        NamedKey::ArrowRight => Some("Right".to_string()),
-                                        _ => Some("<?>".to_string()),
-                                    }
-                                } else {
-                                    None
-                                }
-                            } else {
-                                None
-                            }
-                        })
-                        .collect::<Vec<_>>()
-                        .join(" + ");
+        colored_sized_text(&hint_text, colors::GRAY, LABEL_SIZE).show();
+    }
+}
 
-                    colored_sized_text(&hint_text, colors::GRAY, SMALL_SIZE).show();
-                });
+fn rest_of_the_info(state: &mut GameState) {
+    group(|| {
+        row(|| {
+            col(|| {
+                input_hint_names(state);
+            });
+
+            col_align_end(|| {
+                input_hint_keys(state);
             });
         });
-    }
+    });
 }
 
 fn tile_icon(state: &mut GameState, id: Id) {
@@ -107,14 +116,6 @@ fn tile_icon(state: &mut GameState, id: Id) {
         vec2(LARGE_ICON_SIZE, LARGE_ICON_SIZE),
         Some(IconMode::Tile.world_matrix()),
     );
-}
-
-fn rest_of_the_info(state: &mut GameState) {
-    group(|| {
-        righthand_col(|| {
-            input_hint(state);
-        });
-    });
 }
 
 /// Draws the info GUI.
