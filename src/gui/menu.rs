@@ -289,6 +289,7 @@ pub fn options_menu_item(state: &mut GameState, menu: OptionsMenuState) {
     match menu {
         OptionsMenuState::Graphics => {
             center_col(|| {
+                // TODO translate these
                 label(&format!(
                     "UI Scale: {: >3}%",
                     (state.options.graphics.ui_scale * 100.0) as i32
