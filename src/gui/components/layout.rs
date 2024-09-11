@@ -1,8 +1,9 @@
 use yakui::{
     util::widget_children,
     widget::{LayoutContext, Widget},
-    widgets::List,
-    Constraints, CrossAxisAlignment, MainAxisAlignment, MainAxisSize, Response, Vec2,
+    widgets::{CountGrid, List},
+    Constraints, CrossAxisAlignment, MainAxisAlignItems, MainAxisAlignment, MainAxisSize, Response,
+    Vec2,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -44,6 +45,24 @@ impl Widget for ViewportConstrainedWidget {
 
         self.default_layout(ctx, constraints)
     }
+}
+
+pub fn grid_row(count: usize) -> CountGrid {
+    let mut v = CountGrid::row(count);
+    v.main_axis_size = MainAxisSize::Min;
+    v.main_axis_alignment = MainAxisAlignment::Center;
+    v.cross_axis_alignment = CrossAxisAlignment::Stretch;
+    v.main_axis_align_items = MainAxisAlignItems::Center;
+    v
+}
+
+pub fn grid_col(count: usize) -> CountGrid {
+    let mut v = CountGrid::col(count);
+    v.main_axis_size = MainAxisSize::Min;
+    v.main_axis_alignment = MainAxisAlignment::Center;
+    v.cross_axis_alignment = CrossAxisAlignment::Stretch;
+    v.main_axis_align_items = MainAxisAlignItems::Center;
+    v
 }
 
 pub fn list_row() -> List {
@@ -105,14 +124,14 @@ pub fn centered_vertical(children: impl FnOnce()) {
 }
 
 #[track_caller]
-pub fn righthand_row(children: impl FnOnce()) {
+pub fn row_align_end(children: impl FnOnce()) {
     let mut v = list_row();
     v.cross_axis_alignment = CrossAxisAlignment::End;
     v.show(children);
 }
 
 #[track_caller]
-pub fn righthand_col(children: impl FnOnce()) {
+pub fn col_align_end(children: impl FnOnce()) {
     let mut v = list_col();
     v.cross_axis_alignment = CrossAxisAlignment::End;
     v.show(children);
