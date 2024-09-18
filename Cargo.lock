@@ -5154,7 +5154,7 @@ checksum = "af4e2e2f7cba5a093896c1e150fbfe177d1883e7448200efb81d40b9d339ef26"
 [[package]]
 name = "yakui"
 version = "0.2.0"
-source = "git+https://github.com/automancy/yakui.git#d851d6b9bcac96b820b3048237bd54445568480f"
+source = "git+https://github.com/automancy/yakui.git#dce87be81e969eb4c6a9fbe17531687f3f475d50"
 dependencies = [
  "yakui-core",
  "yakui-widgets",
@@ -5163,7 +5163,7 @@ dependencies = [
 [[package]]
 name = "yakui-core"
 version = "0.2.0"
-source = "git+https://github.com/automancy/yakui.git#d851d6b9bcac96b820b3048237bd54445568480f"
+source = "git+https://github.com/automancy/yakui.git#dce87be81e969eb4c6a9fbe17531687f3f475d50"
 dependencies = [
  "anymap",
  "bitflags 2.6.0",
@@ -5179,7 +5179,7 @@ dependencies = [
 [[package]]
 name = "yakui-wgpu"
 version = "0.2.0"
-source = "git+https://github.com/automancy/yakui.git#d851d6b9bcac96b820b3048237bd54445568480f"
+source = "git+https://github.com/automancy/yakui.git#dce87be81e969eb4c6a9fbe17531687f3f475d50"
 dependencies = [
  "bytemuck",
  "glam",
@@ -5192,7 +5192,7 @@ dependencies = [
 [[package]]
 name = "yakui-widgets"
 version = "0.2.0"
-source = "git+https://github.com/automancy/yakui.git#d851d6b9bcac96b820b3048237bd54445568480f"
+source = "git+https://github.com/automancy/yakui.git#dce87be81e969eb4c6a9fbe17531687f3f475d50"
 dependencies = [
  "cosmic-text",
  "sys-locale",
@@ -5203,7 +5203,7 @@ dependencies = [
 [[package]]
 name = "yakui-winit"
 version = "0.2.0"
-source = "git+https://github.com/automancy/yakui.git#d851d6b9bcac96b820b3048237bd54445568480f"
+source = "git+https://github.com/automancy/yakui.git#dce87be81e969eb4c6a9fbe17531687f3f475d50"
 dependencies = [
  "winit",
  "yakui-core",
