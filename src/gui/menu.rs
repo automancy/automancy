@@ -298,7 +298,7 @@ pub fn options_menu_item(state: &mut GameState, menu: OptionsMenuState) {
                 if slider(
                     &mut state.options.graphics.ui_scale,
                     0.5..=1.5,
-                    Some(0.5),
+                    Some(0.25),
                     |v| v.parse::<f64>().ok().map(|v| v / 100.0),
                     |v| format!("{: >3}", (v * 100.0) as i32),
                 ) {
