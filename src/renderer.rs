@@ -2,14 +2,13 @@ use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::f32::consts::FRAC_PI_6;
 use std::mem;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
 use arboard::{Clipboard, ImageData};
 use hashbrown::HashMap;
 use image::{EncodableLayout, RgbaImage};
-use tokio::sync::{oneshot, Mutex};
+use tokio::sync::oneshot;
 use wgpu::{
     BufferAddress, BufferDescriptor, BufferUsages, Color, CommandEncoderDescriptor,
     ImageCopyBuffer, ImageDataLayout, IndexFormat, LoadOp, Maintain, MapMode, Operations,
@@ -63,10 +62,10 @@ pub struct Renderer {
     pub render_resources: RenderResources,
     pub global_resources: Arc<GlobalResources>,
 
-    render_info_cache: Arc<Mutex<Option<RenderInfo>>>,
-    render_info_updating: Arc<AtomicBool>,
-    transaction_records_cache: Arc<Mutex<TransactionRecords>>,
-    transaction_records_updating: Arc<AtomicBool>,
+    render_info_buffer: [Option<RenderInfo>; 2],
+    render_info_cursor: usize,
+    transaction_records_buffer: [Option<TransactionRecords>; 2],
+    transaction_records_cursor: usize,
 
     pub tile_tints: HashMap<TileCoord, Vec4>,
     pub extra_instances: Vec<(InstanceData, Id, ())>,
@@ -90,10 +89,10 @@ impl Renderer {
             render_resources,
             global_resources,
 
-            render_info_cache: Arc::new(Default::default()),
-            render_info_updating: Arc::new(Default::default()),
-            transaction_records_cache: Arc::new(Default::default()),
-            transaction_records_updating: Arc::new(Default::default()),
+            render_info_buffer: Default::default(),
+            render_info_cursor: 0,
+            transaction_records_buffer: Default::default(),
+            transaction_records_cursor: 0,
 
             tile_tints: Default::default(),
             extra_instances: vec![],
@@ -164,13 +163,17 @@ impl Renderer {
         let camera_pos_float = camera_pos.as_vec3();
         let culling_range = state.camera.culling_range;
 
-        if !renderer.render_info_updating.load(Ordering::Relaxed) {
-            let cache = renderer.render_info_cache.clone();
-            let updating = renderer.render_info_updating.clone();
+        let Some((render_info, all_data)) = ({
+            let len = renderer.render_info_buffer.len();
+            let cursor = renderer.render_info_cursor;
+            let next = (cursor + 1) % len;
+            assert_ne!(cursor, next);
+
+            let ptr = renderer.render_info_buffer.as_mut_ptr();
+            let cursor = unsafe { ptr.wrapping_add(cursor).as_ref().unwrap() };
+            let next = unsafe { ptr.wrapping_add(next).as_mut().unwrap() };
+
             let game = state.game.clone();
-
-            updating.store(true, Ordering::Relaxed);
-
             state.tokio.spawn(async move {
                 let all_data = game
                     .call(GameSystemMessage::GetAllData, None)
@@ -189,43 +192,45 @@ impl Renderer {
                     .unwrap()
                     .unwrap();
 
-                *cache.lock().await = Some((instances, all_data));
-
-                updating.store(false, Ordering::Relaxed);
+                *next = Some((instances, all_data));
             });
-        }
 
-        let render_info_lock = renderer.render_info_cache.blocking_lock();
-        let Some((render_info, all_data)) = render_info_lock.as_ref() else {
+            renderer.render_info_cursor = (renderer.render_info_cursor + 1) % len;
+
+            cursor
+        }) else {
+            return Ok(());
+        };
+
+        let Some(transaction_records) = ({
+            let len = renderer.transaction_records_buffer.len();
+            let cursor = renderer.transaction_records_cursor;
+            let next = (cursor + 1) % len;
+            assert_ne!(cursor, next);
+
+            let ptr = renderer.transaction_records_buffer.as_mut_ptr();
+            let cursor = unsafe { ptr.wrapping_add(cursor).as_ref().unwrap() };
+            let next = unsafe { ptr.wrapping_add(next).as_mut().unwrap() };
+
+            let game = state.game.clone();
+            state.tokio.spawn(async move {
+                let result = game
+                    .call(GameSystemMessage::GetRecordedTransactions, None)
+                    .await
+                    .unwrap()
+                    .unwrap();
+
+                *next = Some(result);
+            });
+
+            renderer.transaction_records_cursor = (renderer.transaction_records_cursor + 1) % len;
+
+            cursor
+        }) else {
             return Ok(());
         };
 
         {
-            if !renderer
-                .transaction_records_updating
-                .load(Ordering::Relaxed)
-            {
-                let cache = renderer.transaction_records_cache.clone();
-                let updating = renderer.transaction_records_updating.clone();
-                let game = state.game.clone();
-
-                updating.store(true, Ordering::Relaxed);
-
-                state.tokio.spawn(async move {
-                    let result = game
-                        .call(GameSystemMessage::GetRecordedTransactions, None)
-                        .await
-                        .unwrap()
-                        .unwrap();
-
-                    *cache.lock().await = result;
-
-                    updating.store(false, Ordering::Relaxed);
-                });
-            }
-
-            let transaction_records = renderer.transaction_records_cache.blocking_lock();
-
             let now = Instant::now();
 
             for ((source_coord, coord), instants) in transaction_records.iter() {
@@ -450,8 +455,6 @@ impl Renderer {
                 &mut animation_map,
             );
         }
-
-        drop(render_info_lock);
 
         let r = Renderer::inner_render(
             state,
