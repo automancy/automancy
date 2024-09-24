@@ -10,19 +10,23 @@ use automancy_resources::{
 use winit::event_loop::ActiveEventLoop;
 use yakui::{constrained, divider, image, spacer, widgets::Pad, Constraints, Vec2};
 
-use crate::game::{load_map, GameSystemMessage, COULD_NOT_LOAD_ANYTHING};
 use crate::gui::{OptionsMenuState, PopupState, Screen, SubState, TextField};
 use crate::map::{Map, MAIN_MENU};
 use crate::{
     event::{refresh_maps, shutdown_graceful},
     game::GameLoadResult,
 };
+use crate::{
+    game::{load_map, GameSystemMessage, COULD_NOT_LOAD_ANYTHING},
+    options::UiScale,
+};
 use crate::{GameState, VERSION};
 
 use super::{
-    button, center_col, checkbox, col, group, heading, label, row, scroll_horizontal_bar_alignment,
-    scroll_vertical, selection_box, slider, stretch_col, textbox, util::pad_x, window,
-    DIVIER_HEIGHT, DIVIER_THICKNESS, PADDING_LARGE, PADDING_MEDIUM, PADDING_SMALL,
+    button, center_col, center_row, checkbox, col, group, heading, label, row,
+    scroll_horizontal_bar_alignment, scroll_vertical, selection_box, slider, stretch_col, textbox,
+    util::pad_x, window, DIVIER_HEIGHT, DIVIER_THICKNESS, PADDING_LARGE, PADDING_MEDIUM,
+    PADDING_SMALL,
 };
 
 /// Draws the main menu.
@@ -288,23 +292,53 @@ pub fn map_menu(state: &mut GameState) {
 pub fn options_menu_item(state: &mut GameState, menu: OptionsMenuState) {
     match menu {
         OptionsMenuState::Graphics => {
-            center_col(|| {
+            center_row(|| {
                 // TODO translate these
-                label(&format!(
-                    "UI Scale: {: >3}%",
-                    (state.options.graphics.ui_scale * 100.0) as i32
-                ));
+                label(
+                    &state.resource_man.gui_str(
+                        state
+                            .resource_man
+                            .registry
+                            .gui_ids
+                            .options_graphics_ui_scale,
+                    ),
+                );
 
-                if slider(
-                    &mut state.options.graphics.ui_scale,
-                    0.5..=1.5,
-                    Some(0.25),
-                    |v| v.parse::<f64>().ok().map(|v| v / 100.0),
-                    |v| format!("{: >3}", (v * 100.0) as i32),
-                ) {
+                let new_scale = selection_box(
+                    [UiScale::Small, UiScale::Normal, UiScale::Large],
+                    state.options.graphics.ui_scale,
+                    &|v| match v {
+                        UiScale::Small => state.resource_man.gui_str(
+                            state
+                                .resource_man
+                                .registry
+                                .gui_ids
+                                .options_graphics_ui_scale_small,
+                        ),
+                        UiScale::Normal => state.resource_man.gui_str(
+                            state
+                                .resource_man
+                                .registry
+                                .gui_ids
+                                .options_graphics_ui_scale_normal,
+                        ),
+                        UiScale::Large => state.resource_man.gui_str(
+                            state
+                                .resource_man
+                                .registry
+                                .gui_ids
+                                .options_graphics_ui_scale_large,
+                        ),
+                    },
+                );
+
+                if new_scale != state.options.graphics.ui_scale {
+                    state.options.graphics.ui_scale = new_scale;
+
                     state.gui.as_mut().unwrap().yak.set_scale_factor(
                         (state.renderer.as_ref().unwrap().gpu.window.scale_factor()
-                            * state.options.graphics.ui_scale) as f32,
+                            * state.options.graphics.ui_scale.to_f64())
+                            as f32,
                     );
                 }
             });
@@ -387,11 +421,13 @@ pub fn options_menu_item(state: &mut GameState, menu: OptionsMenuState) {
             center_col(|| {
                 label("Font:");
 
-                state.options.gui.font = selection_box(
+                let new_font = selection_box(
                     state.resource_man.fonts.keys().cloned().map(Some),
-                    state.options.gui.font.clone(),
+                    state.options.gui.get_font(&state.resource_man),
                     &|font| font.clone().unwrap_or_default(),
                 );
+
+                state.options.gui.set_font(&state.resource_man, new_font);
             });
 
             center_col(|| {

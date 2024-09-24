@@ -85,6 +85,10 @@ pub struct GuiIds {
     pub tile_config: Id,
 
     pub options_graphics: Id,
+    pub options_graphics_ui_scale: Id,
+    pub options_graphics_ui_scale_small: Id,
+    pub options_graphics_ui_scale_normal: Id,
+    pub options_graphics_ui_scale_large: Id,
     pub options_audio: Id,
     pub options_gui: Id,
     pub options_controls: Id,

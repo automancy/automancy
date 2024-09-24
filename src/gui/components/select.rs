@@ -13,16 +13,16 @@ use super::{
 };
 
 #[track_caller]
-pub fn selection_box<T: Clone + Eq>(
+pub fn selection_box<T: Clone + Eq, S: AsRef<str>>(
     options: impl IntoIterator<Item = T>,
-    default: T,
-    format: &dyn Fn(&T) -> String,
+    current: T,
+    format: &dyn Fn(&T) -> S,
 ) -> T {
     let open = use_state(|| false);
-    let mut selected = default;
+    let mut selected = current;
 
     col(|| {
-        if button(&format(&selected)).clicked {
+        if button(format(&selected).as_ref()).clicked {
             open.modify(|v| !v);
         }
 
@@ -38,7 +38,7 @@ pub fn selection_box<T: Clone + Eq>(
                                 Pad::all(PADDING_MEDIUM).show(|| {
                                     col(|| {
                                         for option in options.into_iter() {
-                                            if button(&format(&option)).clicked {
+                                            if button(format(&option).as_ref()).clicked {
                                                 selected = option;
                                                 open.set(false);
                                             }

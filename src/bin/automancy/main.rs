@@ -185,21 +185,35 @@ struct Automancy {
 impl Automancy {
     fn try_sync_options(&mut self) {
         if !self.state.options.synced {
-            let font = self
-                .state
-                .options
-                .gui
-                .font
-                .as_ref()
-                .and_then(|name| self.state.resource_man.fonts.get(name.as_str()))
-                .or_else(|| self.state.resource_man.fonts.values().next())
-                .expect("no font loaded!");
+            {
+                let font = self
+                    .state
+                    .resource_man
+                    .fonts
+                    .get(
+                        &self
+                            .state
+                            .options
+                            .gui
+                            .get_font(&self.state.resource_man)
+                            .expect("no fonts loaded!"),
+                    )
+                    .or_else(|| {
+                        self.state
+                            .options
+                            .gui
+                            .set_font(&self.state.resource_man, None);
 
-            self.state.gui.as_mut().unwrap().set_font(
-                SYMBOLS_FONT_KEY,
-                &font.name,
-                Source::Binary(font.data.clone()),
-            );
+                        self.state.resource_man.fonts.values().next()
+                    })
+                    .expect("no fonts loaded! at all! put one in there!");
+
+                self.state.gui.as_mut().unwrap().set_font(
+                    SYMBOLS_FONT_KEY,
+                    &font.name,
+                    Source::Binary(font.data.clone()),
+                );
+            }
 
             self.state
                 .audio_man
@@ -292,7 +306,8 @@ impl ApplicationHandler for Automancy {
 
         gui.window.set_automatic_scale_factor(false);
         gui.yak.set_scale_factor(
-            (renderer.gpu.window.scale_factor() * self.state.options.graphics.ui_scale) as f32,
+            (renderer.gpu.window.scale_factor() * self.state.options.graphics.ui_scale.to_f64())
+                as f32,
         );
 
         gui.fonts.insert(

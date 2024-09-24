@@ -341,12 +341,9 @@ pub fn on_event(
                     return Ok(false);
                 }
                 WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
-                    state
-                        .gui
-                        .as_mut()
-                        .unwrap()
-                        .yak
-                        .set_scale_factor((*scale_factor * state.options.graphics.ui_scale) as f32);
+                    state.gui.as_mut().unwrap().yak.set_scale_factor(
+                        (*scale_factor * state.options.graphics.ui_scale.to_f64()) as f32,
+                    );
                 }
                 event => {
                     window_event = Some(event);

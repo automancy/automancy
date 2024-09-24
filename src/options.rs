@@ -10,8 +10,6 @@ use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
 use winit::keyboard::Key;
 
-use automancy_defs::math::Double;
-
 use crate::input::{get_default_keymap, KeyAction};
 
 static OPTIONS_PATH: &str = "options.ron";
@@ -172,11 +170,28 @@ pub enum AAType {
     TAA,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum UiScale {
+    Small,
+    Normal,
+    Large,
+}
+
+impl UiScale {
+    pub const fn to_f64(self) -> f64 {
+        match self {
+            UiScale::Small => const { 2.0 / 3.0 },
+            UiScale::Normal => const { 1.0 },
+            UiScale::Large => const { 5.0 / 3.0 },
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct GraphicsOptions {
     pub fps_limit: i32,
     pub fullscreen: bool,
-    pub ui_scale: Double,
+    pub ui_scale: UiScale,
     pub anti_aliasing: AAType,
 }
 
@@ -185,7 +200,7 @@ impl Default for GraphicsOptions {
         Self {
             fps_limit: 0,
             fullscreen: false,
-            ui_scale: 1.0,
+            ui_scale: UiScale::Normal,
             anti_aliasing: AAType::FXAA,
         }
     }
@@ -193,7 +208,26 @@ impl Default for GraphicsOptions {
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct GuiOptions {
-    pub font: Option<String>,
+    font: Option<String>,
+}
+
+impl GuiOptions {
+    pub fn get_font(&self, resource_man: &ResourceManager) -> Option<String> {
+        self.font
+            .clone()
+            .or_else(|| resource_man.fonts.keys().next().cloned())
+    }
+
+    pub fn set_font(&mut self, resource_man: &ResourceManager, font: Option<String>) {
+        if font
+            .as_ref()
+            .is_some_and(|font| resource_man.fonts.contains_key(font))
+        {
+            self.font = font
+        } else {
+            self.font = None
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
