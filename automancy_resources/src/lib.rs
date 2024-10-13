@@ -7,19 +7,19 @@ use std::sync::{Arc, RwLock};
 use std::time::SystemTime;
 
 use hashbrown::HashMap;
-use rhai::{CallFnOptions, Dynamic, Engine, Scope, AST};
+use rhai::{CallFnOptions, Dynamic, Engine, AST};
 use thiserror::Error;
 use types::item::ItemDef;
 use walkdir::WalkDir;
 
-use automancy_defs::kira::sound::static_sound::StaticSoundData;
-use automancy_defs::kira::track::TrackHandle;
 use automancy_defs::log;
 use automancy_defs::rendering::{Animation, Mesh};
 use automancy_defs::{
     chrono::{DateTime, Local},
     id::SharedStr,
 };
+use automancy_defs::{id::ModelId, kira::sound::static_sound::StaticSoundData};
+use automancy_defs::{id::TileId, kira::track::TrackHandle};
 use automancy_defs::{
     id::{Id, IdRaw, Interner},
     stack::ItemStack,
@@ -34,13 +34,14 @@ pub mod data;
 pub mod error;
 pub mod inventory;
 
+pub mod format;
 pub mod registry;
-
 pub mod types;
 
-pub mod format;
 pub mod rhai_coord;
 pub mod rhai_data;
+pub mod rhai_math;
+pub mod rhai_render;
 pub mod rhai_resources;
 pub mod rhai_tile;
 pub mod rhai_ui;
@@ -86,6 +87,8 @@ pub static SHADER_EXT: &str = "wgsl";
 /// TODO set of extensions
 pub static AUDIO_EXT: &str = "ogg";
 
+pub type FunctionInfo = (AST, String);
+
 #[derive(Error, Debug)]
 pub enum ResourceError {
     #[error("item could not be found")]
@@ -103,14 +106,14 @@ pub struct ResourceManager {
     pub translates: TranslateDef,
     pub audio: HashMap<String, StaticSoundData>,
     pub shaders: HashMap<String, SharedStr>,
-    pub functions: HashMap<Id, (AST, Scope<'static>, String)>,
+    pub functions: HashMap<Id, FunctionInfo>,
     pub fonts: BTreeMap<String, Font>, // yes this does need to be a BTreeMap
 
-    pub ordered_tiles: Vec<Id>,
+    pub ordered_tiles: Vec<TileId>,
     pub ordered_items: Vec<Id>,
     pub ordered_categories: Vec<Id>,
-    pub all_models: HashMap<Id, (Vec<Option<Mesh>>, Vec<Animation>)>,
-    pub all_index_ranges: HashMap<Id, HashMap<usize, IndexRange>>,
+    pub all_models: HashMap<ModelId, (Vec<Option<Mesh>>, Vec<Animation>)>,
+    pub all_index_ranges: HashMap<ModelId, HashMap<usize, IndexRange>>,
 }
 
 impl Debug for ResourceManager {
@@ -129,12 +132,14 @@ impl ResourceManager {
         engine.set_max_expr_depths(0, 0);
         engine.set_fast_operators(false);
 
+        rhai_math::register_math_stuff(&mut engine);
         rhai_utils::register_functions(&mut engine);
         rhai_coord::register_coord_stuff(&mut engine);
         rhai_data::register_data_stuff(&mut engine);
         rhai_resources::register_resources(&mut engine);
         rhai_tile::register_tile_stuff(&mut engine);
         rhai_ui::register_ui_stuff(&mut engine);
+        rhai_render::register_render_stuff(&mut engine);
 
         let data_ids = DataIds::new(&mut interner);
         let model_ids = ModelIds::new(&mut interner);

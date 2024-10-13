@@ -1,6 +1,6 @@
-use automancy_defs::graph::graph::NodeIndex;
 use automancy_defs::graph::prelude::StableDiGraph;
 use automancy_defs::id::Id;
+use automancy_defs::{graph::graph::NodeIndex, id::TileId};
 use automancy_macros::IdReg;
 use hashbrown::HashMap;
 
@@ -13,15 +13,15 @@ use crate::types::{category::CategoryDef, item::ItemDef};
 /// Represents the resource registry.
 #[derive(Clone)]
 pub struct Registry {
-    pub tiles: HashMap<Id, TileDef>,
+    pub tiles: HashMap<TileId, TileDef>,
     pub scripts: HashMap<Id, ScriptDef>,
     pub tags: HashMap<Id, TagDef>,
     pub categories: HashMap<Id, CategoryDef>,
-    pub(crate) categories_tiles_map: HashMap<Id, Vec<Id>>,
+    pub(crate) categories_tiles_map: HashMap<Id, Vec<TileId>>,
     pub items: HashMap<Id, ItemDef>,
     pub researches: StableDiGraph<ResearchDef, ()>,
     pub(crate) researches_id_map: HashMap<Id, NodeIndex>,
-    pub(crate) researches_unlock_map: HashMap<Id, NodeIndex>,
+    pub(crate) researches_unlock_map: HashMap<TileId, NodeIndex>,
 
     pub none: Id,
     pub any: Id,
@@ -57,14 +57,25 @@ pub struct DataIds {
     pub inactive_model: Id,
     #[namespace("core")]
     pub default_tile: Id,
+
+    #[namespace("core")]
+    #[name("$none_tile")]
+    pub none_tile_render_tag: Id,
 }
 
 #[derive(Copy, Clone, IdReg)]
 pub struct ModelIds {
     #[namespace("core")]
-    pub missing: Id,
+    #[name("tile/none")]
+    pub tile_none: Id,
+
     #[namespace("core")]
-    pub items_missing: Id,
+    #[name("tile/missing")]
+    pub tile_missing: Id,
+    #[namespace("core")]
+    #[name("item/missing")]
+    pub item_missing: Id,
+
     #[namespace("core")]
     pub cube1x1: Id,
     #[namespace("core")]
@@ -118,7 +129,6 @@ pub struct GuiIds {
     pub time_fmt: Id,
 }
 
-// The list of GUI translation keys.
 #[derive(Clone, Copy, IdReg)]
 pub struct KeyIds {
     pub cancel: Id,

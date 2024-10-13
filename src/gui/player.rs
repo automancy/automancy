@@ -1,13 +1,16 @@
 use std::mem;
 
-use rhai::{Array, Dynamic};
+use rhai::{Array, Dynamic, Scope};
 
-use automancy_defs::hexx::{HexLayout, HexOrientation};
 use automancy_defs::rendering::InstanceData;
 use automancy_defs::{colors, glam::Vec2};
 use automancy_defs::{colors::BACKGROUND_3, id::Id};
 use automancy_defs::{coord::TileCoord, glam::vec2};
 use automancy_defs::{graph::visit::Topo, stack::ItemStack};
+use automancy_defs::{
+    hexx::{HexLayout, HexOrientation},
+    id::ModelId,
+};
 use automancy_resources::data::{Data, DataMap};
 use automancy_resources::types::IconMode;
 use automancy_resources::{rhai_call_options, rhai_log_err};
@@ -100,8 +103,8 @@ fn research_selection(state: &mut GameState, game_data: &mut DataMap) {
                 while let Some(idx) = visitor.next(&state.resource_man.registry.researches) {
                     let research = &state.resource_man.registry.researches[idx];
                     let icon = match research.icon_mode {
-                        IconMode::Item => state.resource_man.item_model_or_missing(research.icon),
-                        IconMode::Tile => state.resource_man.tile_model_or_missing(research.icon),
+                        IconMode::Item => state.resource_man.model_or_missing_item(research.icon),
+                        IconMode::Tile => state.resource_man.model_or_missing_tile(research.icon),
                     };
 
                     if let Some(prev) = research.depends_on {
@@ -113,10 +116,10 @@ fn research_selection(state: &mut GameState, game_data: &mut DataMap) {
                     let interact = interactive(|| {
                         centered_horizontal(|| {
                             ui_game_object(
-                                InstanceData::default()
-                                    .with_model_matrix(research.icon_mode.model_matrix()),
+                                InstanceData::default(),
                                 icon,
                                 vec2(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE),
+                                Some(research.icon_mode.model_matrix()),
                                 Some(research.icon_mode.world_matrix()),
                             );
 
@@ -223,8 +226,9 @@ fn research_board_tiles(
                     || {
                         ui_game_object(
                             InstanceData::default(),
-                            state.resource_man.model_or_puzzle_space(id),
+                            state.resource_man.model_or_puzzle_space(ModelId(id)),
                             PUZZLE_HEX_GRID_LAYOUT.hex_size * 2.0,
+                            None,
                             Some(IconMode::Item.world_matrix()),
                         );
                     },
@@ -266,21 +270,19 @@ fn research_puzzle(state: &mut GameState, game_data: &mut DataMap) -> Option<Vec
     }
 
     let mut board_pos = None;
-    if let Some(((ast, default_scope, function_id), setup)) = state
+    if let Some(((ast, function_id), setup)) = state
         .gui_state
         .selected_research
         .and_then(|id| state.resource_man.get_research(id))
         .and_then(|research| research.attached_puzzle.as_ref())
         .and_then(|(id, setup)| state.resource_man.functions.get(id).zip(Some(setup)))
     {
-        let mut scope = default_scope.clone_visible();
-
         let puzzle_state = state.puzzle_state.get_or_insert_with(|| {
             let mut rhai_state = Dynamic::from(DataMap::default());
 
             let result = state.resource_man.engine.call_fn_with_options::<()>(
                 rhai_call_options(&mut rhai_state),
-                &mut scope,
+                &mut Scope::default(),
                 ast,
                 "pre_setup",
                 (Dynamic::from(setup.clone()),),
@@ -298,7 +300,7 @@ fn research_puzzle(state: &mut GameState, game_data: &mut DataMap) -> Option<Vec
 
             let result = state.resource_man.engine.call_fn_with_options::<bool>(
                 rhai_call_options(&mut rhai_state),
-                &mut scope,
+                &mut Scope::new(),
                 ast,
                 "evaluate",
                 (Dynamic::from(setup.clone()),),
@@ -332,7 +334,7 @@ fn research_puzzle(state: &mut GameState, game_data: &mut DataMap) -> Option<Vec
 
             let result = state.resource_man.engine.call_fn_with_options::<Array>(
                 rhai_call_options(&mut rhai_state),
-                &mut scope,
+                &mut Scope::new(),
                 ast,
                 "selection_at_coord",
                 (Dynamic::from(setup.clone()), selected),
@@ -596,15 +598,16 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                                             row(|| {
                                                 let reset = interactive(|| {
                                                     ui_game_object(
-                                                        InstanceData::default().with_model_matrix(
-                                                            IconMode::Item.model_matrix(),
+                                                        InstanceData::default(),
+                                                        ModelId(
+                                                            state
+                                                                .resource_man
+                                                                .registry
+                                                                .model_ids
+                                                                .puzzle_space,
                                                         ),
-                                                        state
-                                                            .resource_man
-                                                            .registry
-                                                            .model_ids
-                                                            .puzzle_space,
                                                         PUZZLE_HEX_GRID_LAYOUT.hex_size * 2.0,
+                                                        Some(IconMode::Item.model_matrix()),
                                                         Some(IconMode::Item.world_matrix()),
                                                     );
                                                 });
@@ -624,14 +627,14 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                                                 for id in ids {
                                                     let select = interactive(|| {
                                                         ui_game_object(
-                                                            InstanceData::default()
-                                                                .with_model_matrix(
-                                                                    IconMode::Item.model_matrix(),
-                                                                ),
+                                                            InstanceData::default(),
                                                             state
                                                                 .resource_man
-                                                                .model_or_missing(*id),
+                                                                .model_or_missing_item(ModelId(
+                                                                    *id,
+                                                                )),
                                                             PUZZLE_HEX_GRID_LAYOUT.hex_size * 2.0,
+                                                            Some(IconMode::Item.model_matrix()),
                                                             Some(IconMode::Item.world_matrix()),
                                                         );
                                                     });

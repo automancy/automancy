@@ -7,7 +7,6 @@ pub use kira;
 pub use log;
 pub use petgraph as graph;
 pub use slice_group_by;
-use stack::{ItemAmount, ItemStack};
 pub use string_interner;
 pub use ttf_parser;
 
@@ -20,6 +19,7 @@ pub mod stack;
 pub mod window;
 
 use id::{Id, Interner, SharedStr};
+use stack::{ItemAmount, ItemStack};
 
 pub fn parse_map_id_of<T, R: FromIterator<(Id, T)>>(
     v: impl Iterator<Item = (impl AsRef<str>, T)>,

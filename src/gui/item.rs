@@ -20,6 +20,7 @@ pub fn draw_item(
             InstanceData::default(),
             resource_man.item_model_or_missing(stack.id),
             vec2(size, size),
+            Some(IconMode::Item.model_matrix()),
             Some(IconMode::Item.world_matrix()),
         );
 

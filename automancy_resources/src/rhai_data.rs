@@ -1,7 +1,11 @@
 use hashbrown::{HashMap, HashSet};
 use rhai::{Dynamic, Engine};
 
-use automancy_defs::{coord::TileCoord, stack::ItemStack};
+use automancy_defs::{
+    coord::TileCoord,
+    id::{ModelId, TileId},
+    stack::ItemStack,
+};
 use automancy_defs::{id::Id, stack::ItemAmount};
 
 use crate::types::tag::TagDef;
@@ -28,6 +32,12 @@ pub(crate) fn register_data_stuff(engine: &mut Engine) {
         .register_type_with_name::<Id>("Id")
         .register_fn("==", |a: Id, b: Id| a == b)
         .register_fn("!=", |a: Id, b: Id| a != b)
+        .register_type_with_name::<TileId>("TileId")
+        .register_fn("==", |a: TileId, b: TileId| a == b)
+        .register_fn("!=", |a: TileId, b: TileId| a != b)
+        .register_type_with_name::<ModelId>("ModelId")
+        .register_fn("==", |a: ModelId, b: ModelId| a == b)
+        .register_fn("!=", |a: ModelId, b: ModelId| a != b)
         .register_fn("contains", |v: &mut HashSet<Id>, id: Id| -> bool {
             v.contains(&id)
         });

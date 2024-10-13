@@ -5,7 +5,7 @@ use std::path::Path;
 use hashbrown::HashMap;
 use serde::Deserialize;
 
-use automancy_defs::id::Id;
+use automancy_defs::id::{Id, TileId};
 
 use crate::{load_recursively, ResourceManager, RON_EXT};
 
@@ -81,7 +81,7 @@ impl ResourceManager {
         self.registry.categories_tiles_map = categories_tiles_map;
     }
 
-    pub fn get_tiles_by_category(&self, id: Id) -> Option<&Vec<Id>> {
+    pub fn get_tiles_by_category(&self, id: Id) -> Option<&Vec<TileId>> {
         self.registry.categories_tiles_map.get(&id)
     }
 

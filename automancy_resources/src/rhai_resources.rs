@@ -1,5 +1,5 @@
 use crate::RESOURCE_MAN;
-use automancy_defs::id::Id;
+use automancy_defs::id::{Id, TileId};
 use rhai::{Dynamic, Engine};
 
 pub(crate) fn register_resources(engine: &mut Engine) {
@@ -26,7 +26,7 @@ pub(crate) fn register_resources(engine: &mut Engine) {
             .unwrap()
             .registry
             .tiles
-            .get(&id)
+            .get(&TileId(id))
             .cloned()
         {
             Some(v) => Dynamic::from(v),

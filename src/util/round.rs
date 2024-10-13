@@ -21,6 +21,7 @@ macro_rules! impl_integer_round {
         }
     };
 }
+
 impl_integer_round!(i8);
 impl_integer_round!(i16);
 impl_integer_round!(i32);

@@ -65,8 +65,8 @@ log = "0.4"
 anyhow = "1"
 thiserror = "1"
 walkdir = "2.5.0"
-hashbrown = { version = "0.14.5", features = ["serde"] }
-bytemuck = "1.16.1"
+hashbrown = { version = "0.15.0", features = ["serde", "rayon"] }
+bytemuck = "1.19.0"
 
 rhai = { version = "1.19.0", features = [
     "sync",
@@ -110,6 +110,7 @@ enum-map = "2.7.3"
 arraydeque = "0.5.1"
 fuzzy-matcher = "0.3.7"
 arboard = "3.4.0"
+ordermap = "0.5.3"
 
 rand = "0.8.5"
 uuid = "1.9.1"
@@ -118,7 +119,8 @@ image = "0.25.1"
 zstd = "0.13.1"
 
 async-trait = "0.1.83"
-ractor = "0.11.1"
+ractor = "0.12.2"
+rayon = "1.10.0"
 tokio = { version = "1", features = ["full"] }
 open = "5.2.0"
 cosmic-text = "0.12.0"

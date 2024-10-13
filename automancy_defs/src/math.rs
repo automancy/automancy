@@ -45,7 +45,7 @@ pub type DQuaternion = glam::DQuat;
 
 #[inline]
 pub fn z_near() -> Double {
-    1.0
+    0.1
 }
 
 #[inline]

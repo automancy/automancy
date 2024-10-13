@@ -4,7 +4,11 @@ use std::path::Path;
 
 use serde::Deserialize;
 
-use automancy_defs::{graph::visit::IntoNodeReferences, id::Id, parse_item_stacks};
+use automancy_defs::{
+    graph::visit::IntoNodeReferences,
+    id::{Id, ModelId, TileId},
+    parse_item_stacks,
+};
 use automancy_defs::{
     parse_ids,
     stack::{ItemAmount, ItemStack},
@@ -17,9 +21,9 @@ use crate::{load_recursively, ResourceManager, RON_EXT};
 #[derive(Debug, Clone)]
 pub struct ResearchDef {
     pub id: Id,
-    pub icon: Id,
+    pub icon: ModelId,
     pub icon_mode: IconMode,
-    pub unlocks: Vec<Id>,
+    pub unlocks: Vec<TileId>,
     pub depends_on: Option<Id>,
     pub name: Id,
     pub description: Id,
@@ -50,7 +54,8 @@ impl ResourceManager {
 
         let id = Id::parse(&v.id, &mut self.interner, Some(namespace)).unwrap();
 
-        let unlocks = parse_ids(v.unlocks.into_iter(), &mut self.interner, Some(namespace));
+        let unlocks: Vec<Id> =
+            parse_ids(v.unlocks.into_iter(), &mut self.interner, Some(namespace));
 
         let icon = Id::parse(&v.icon, &mut self.interner, Some(namespace)).unwrap();
 
@@ -83,9 +88,9 @@ impl ResourceManager {
 
         let index = self.registry.researches.add_node(ResearchDef {
             id,
-            unlocks,
+            unlocks: unlocks.into_iter().map(TileId).collect(),
             depends_on,
-            icon,
+            icon: ModelId(icon),
             name,
             description,
             completed_description,
@@ -105,7 +110,7 @@ impl ResourceManager {
             {
                 log::warn!(
                     "Unlock for {:?} is overritten by {:?}!",
-                    self.interner.resolve(*unlock),
+                    self.interner.resolve(**unlock),
                     self.interner.resolve(id)
                 )
             }
@@ -131,7 +136,7 @@ impl ResourceManager {
             .and_then(|i| self.registry.researches.node_weight(*i))
     }
 
-    pub fn get_research_by_unlock(&self, id: Id) -> Option<&ResearchDef> {
+    pub fn get_research_by_unlock(&self, id: TileId) -> Option<&ResearchDef> {
         self.registry
             .researches_unlock_map
             .get(&id)

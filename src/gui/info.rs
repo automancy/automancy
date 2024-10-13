@@ -1,8 +1,7 @@
 use ractor::rpc::CallResult;
 
-use automancy_defs::{colors, glam::vec2, id::Id, rendering::InstanceData, stack::ItemStack};
+use automancy_defs::{colors, id::TileId, stack::ItemStack};
 use automancy_resources::data::Data;
-use automancy_resources::types::IconMode;
 use winit::keyboard::{Key, NamedKey};
 use yakui::{
     widgets::{Absolute, Layer, Pad},
@@ -14,7 +13,7 @@ use crate::GameState;
 
 use super::{
     col, col_align_end, colored_label, colored_sized_text, group, item::draw_item, label, row,
-    ui_game_object, window_box, LABEL_SIZE, LARGE_ICON_SIZE, PADDING_LARGE, SMALL_ICON_SIZE,
+    window_box, LABEL_SIZE, PADDING_LARGE, SMALL_ICON_SIZE,
 };
 
 #[track_caller]
@@ -109,13 +108,15 @@ fn rest_of_the_info(state: &mut GameState) {
     });
 }
 
-fn tile_icon(state: &mut GameState, id: Id) {
+fn tile_icon(state: &mut GameState, id: TileId) {
+    /*
     ui_game_object(
-        InstanceData::default().with_model_matrix(IconMode::Tile.model_matrix()),
+        InstanceData::default(),
         state.resource_man.tile_model_or_missing(id),
         vec2(LARGE_ICON_SIZE, LARGE_ICON_SIZE),
+        Some(IconMode::Tile.model_matrix()),
         Some(IconMode::Tile.world_matrix()),
-    );
+    ); */
 }
 
 /// Draws the info GUI.
@@ -137,10 +138,10 @@ pub fn info_ui(state: &mut GameState) {
                             label(
                                 &state
                                     .resource_man
-                                    .tile_name(state.resource_man.registry.none),
+                                    .tile_name(TileId(state.resource_man.registry.none)),
                             );
 
-                            tile_icon(state, state.resource_man.registry.none);
+                            tile_icon(state, TileId(state.resource_man.registry.none));
 
                             rest_of_the_info(state);
 

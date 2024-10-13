@@ -4,17 +4,16 @@ use std::path::Path;
 
 use serde::Deserialize;
 
-use automancy_defs::id::Id;
+use automancy_defs::id::{Id, TileId};
 
 use crate::data::{DataMap, DataMapRaw};
 use crate::{load_recursively, ResourceManager, RON_EXT};
 
 #[derive(Debug, Clone)]
 pub struct TileDef {
-    pub id: Id,
+    pub id: TileId,
     pub function: Option<Id>,
     pub category: Option<Id>,
-    pub model: Id,
     pub data: DataMap,
 }
 
@@ -24,7 +23,6 @@ struct Raw {
     pub function: Option<String>,
     #[serde(default)]
     pub category: Option<String>,
-    pub model: String,
     pub data: DataMapRaw,
 }
 
@@ -34,14 +32,13 @@ impl ResourceManager {
 
         let v = ron::from_str::<Raw>(&read_to_string(file)?)?;
 
-        let id = Id::parse(&v.id, &mut self.interner, Some(namespace)).unwrap();
+        let id = TileId(Id::parse(&v.id, &mut self.interner, Some(namespace)).unwrap());
         let function = v
             .function
             .map(|v| Id::parse(&v, &mut self.interner, Some(namespace)).unwrap());
         let category = v
             .category
             .map(|v| Id::parse(&v, &mut self.interner, Some(namespace)).unwrap());
-        let model = Id::parse(&v.model, &mut self.interner, Some(namespace)).unwrap();
 
         let data = v.data.intern_to_data(&mut self.interner, Some(namespace));
 
@@ -51,7 +48,6 @@ impl ResourceManager {
                 id,
                 function,
                 category,
-                model,
                 data,
             },
         );
@@ -75,7 +71,7 @@ impl ResourceManager {
         ids.sort_by_key(|id| self.tile_name(*id));
 
         if let Some(none_idx) = ids.iter().enumerate().find_map(|(idx, id)| {
-            if *id == self.registry.none {
+            if **id == self.registry.none {
                 Some(idx)
             } else {
                 None

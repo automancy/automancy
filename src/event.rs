@@ -14,22 +14,22 @@ use winit::{
     event_loop::ActiveEventLoop,
 };
 
-use automancy_defs::coord::TileCoord;
 use automancy_defs::id::Id;
+use automancy_defs::{coord::TileCoord, id::TileId};
 use automancy_defs::{log, window};
 use automancy_resources::{data::Data, types::item::ItemDef};
 
-use crate::gui::{Screen, TextField};
+use crate::game::{GameSystemMessage, PlaceTileResponse};
 use crate::input::ActionType;
 use crate::map::{Map, MapInfo, MapInfoRaw, MAP_PATH};
 use crate::tile_entity::TileEntityMsg;
-use crate::{
-    game::{GameSystemMessage, PlaceTileResponse},
-    renderer::Renderer,
-};
 use crate::{gui, input, GameState};
+use crate::{
+    gui::{Screen, TextField},
+    renderer,
+};
 
-pub type TileEntityWithId = (Id, ActorRef<TileEntityMsg>);
+pub type TileEntityWithId = (TileId, ActorRef<TileEntityMsg>);
 
 /// Refreshes the list of maps on the filesystem. Should be done every time the list of maps could have changed (on map creation/delete and on game load).
 pub fn refresh_maps(state: &mut GameState) {
@@ -186,7 +186,7 @@ fn render(
         }
 
         if !matches!(result, Ok(true)) {
-            match Renderer::render(state, screenshotting) {
+            match renderer::render(state, screenshotting) {
                 Ok(_) => {}
                 Err(SurfaceError::Lost) => {
                     let renderer = state.renderer.as_mut().unwrap();
@@ -195,7 +195,9 @@ fn render(
                         &mut renderer.shared_resources,
                         &renderer.global_resources,
                         renderer.gpu.window.inner_size(),
-                    )
+                    );
+                    renderer.reset_buffers();
+                    state.game.send_message(GameSystemMessage::ResetVisibility);
                 }
                 Err(SurfaceError::OutOfMemory) => {
                     return state.tokio.block_on(shutdown_graceful(
@@ -244,7 +246,7 @@ fn link_tile(state: &mut GameState, entity: Option<TileEntityWithId>, link_to: T
     }
 }
 
-fn place_tile(id: Id, coord: TileCoord, state: &mut GameState) -> anyhow::Result<()> {
+fn place_tile(id: TileId, coord: TileCoord, state: &mut GameState) -> anyhow::Result<()> {
     let response = state
         .tokio
         .block_on(state.game.call(
@@ -337,6 +339,8 @@ pub fn on_event(
                         &renderer.global_resources,
                         *size,
                     );
+                    renderer.reset_buffers();
+                    state.game.send_message(GameSystemMessage::ResetVisibility);
 
                     return Ok(false);
                 }
@@ -406,14 +410,14 @@ pub fn on_event(
             && state.gui_state.already_placed_at != Some(state.camera.pointing_at)
         {
             if let Some(id) = state.gui_state.selected_tile_id {
-                place_tile(id, state.camera.pointing_at, state)?;
+                place_tile(TileId(id), state.camera.pointing_at, state)?;
             }
         }
 
         state.input_hints.push(vec![ActionType::Delete]);
         if state.input_handler.key_active(ActionType::Delete) {
             place_tile(
-                state.resource_man.registry.none,
+                TileId(state.resource_man.registry.none),
                 state.camera.pointing_at,
                 state,
             )?;
@@ -491,7 +495,7 @@ pub fn on_event(
                                     GameSystemMessage::PlaceTiles {
                                         tiles: coords
                                             .into_iter()
-                                            .map(|coord| (coord, none, None))
+                                            .map(|coord| (coord, TileId(none), None))
                                             .collect::<Vec<_>>(),
                                         reply: Some(reply),
                                         place_over: true,

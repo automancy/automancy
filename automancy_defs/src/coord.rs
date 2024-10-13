@@ -5,6 +5,8 @@ use std::ops::{Add, Deref, Div, Mul, Neg, Sub};
 use hexx::{EdgeDirection, Hex, HexBounds};
 use serde::{Deserialize, Serialize};
 
+use crate::math::{Matrix4, FAR, HEX_GRID_LAYOUT};
+
 /// The type of number that will be stored in a tile's coordinates. Should probably be a signed integer.
 pub type TileUnit = i32;
 
@@ -69,6 +71,12 @@ impl TileCoord {
             self + Self::TOP_LEFT,
         ]
     }
+
+    pub fn as_translation(self) -> Matrix4 {
+        let p = HEX_GRID_LAYOUT.hex_to_world_pos(self.0);
+
+        Matrix4::from_translation(p.extend(FAR))
+    }
 }
 
 impl Display for TileCoord {
@@ -122,6 +130,12 @@ impl Neg for TileCoord {
 /// Represents a tile's position.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct TileBounds(HexBounds);
+
+impl Default for TileBounds {
+    fn default() -> Self {
+        TileBounds::new(TileCoord::ZERO, 0)
+    }
+}
 
 impl TileBounds {
     #[inline]

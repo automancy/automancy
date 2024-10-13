@@ -154,6 +154,7 @@ pub fn take_item_animation(state: &mut GameState, id: Id, dst_rect: Rect) {
                         InstanceData::default(),
                         state.resource_man.item_model_or_missing(id),
                         size,
+                        None,
                         Some(IconMode::Item.world_matrix()),
                     );
                 });

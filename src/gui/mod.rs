@@ -4,27 +4,24 @@ use fuzzy_matcher::skim::SkimMatcherV2;
 use hashbrown::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::mem;
-use std::sync::Arc;
 use tokio::sync::oneshot;
-use wgpu::{Device, Queue, Texture, TextureFormat};
+use wgpu::{Device, Queue};
 use winit::{event_loop::ActiveEventLoop, window::Window};
 use yakui_wgpu::YakuiWgpu;
 use yakui_winit::YakuiWinit;
 
-use automancy_defs::id::Id;
+use automancy_defs::id::{Id, TileId};
 use automancy_defs::math::Vec2;
 use automancy_defs::math::{Float, Matrix4, FAR, HEX_GRID_LAYOUT};
-use automancy_defs::rendering::{make_line, InstanceData};
 use automancy_defs::{colors, math, window};
 use automancy_defs::{coord::TileCoord, glam::vec2};
 use automancy_defs::{glam::vec3, log};
 use automancy_resources::data::Data;
 use automancy_resources::data::DataMap;
-use automancy_resources::ResourceManager;
-use yakui::{font::Fonts, UVec2, Yakui};
+use yakui::{font::Fonts, Yakui};
 
-use crate::gpu::{AnimationMap, GlobalResources, GuiResources};
 use crate::input::ActionType;
+use crate::renderer::YakuiRenderResources;
 use crate::GameState;
 
 mod components;
@@ -115,7 +112,7 @@ pub struct GuiState {
     pub grouped_tiles: HashSet<TileCoord>,
     /// the stored initial cursor position, for moving/copying tiles
     pub paste_from: Option<TileCoord>,
-    pub paste_content: Vec<(TileCoord, Id, Option<DataMap>)>,
+    pub paste_content: Vec<(TileCoord, TileId, Option<DataMap>)>,
 
     pub tile_config_ui_position: Vec2,
     pub player_ui_position: Vec2,
@@ -272,18 +269,6 @@ impl TextFieldState {
     }
 }
 
-pub type YakuiRenderResources = (
-    Arc<ResourceManager>,
-    Arc<GlobalResources>,
-    Option<GuiResources>,
-    TextureFormat,
-    AnimationMap,
-    Option<Vec<(InstanceData, Matrix4, Id, (usize, Vec2))>>,
-    Option<UVec2>,
-    Vec<Option<crunch::Rect>>,
-    Option<Texture>,
-);
-
 pub fn render_ui(
     state: &mut GameState,
     result: &mut anyhow::Result<bool>,
@@ -301,6 +286,7 @@ pub fn render_ui(
                         let mut lock = map_info.blocking_lock();
                         let game_data = &mut lock.data;
 
+                        /*
                         let (selection_send, selection_recv) = oneshot::channel();
 
                         // tile_selections
@@ -314,7 +300,7 @@ pub fn render_ui(
                             } else {
                                 state.gui_state.selected_tile_id = Some(id);
                             }
-                        }
+                        } */
 
                         player::player(state, game_data);
 
@@ -329,6 +315,7 @@ pub fn render_ui(
                     );
 
                     if let Some(id) = state.gui_state.selected_tile_id {
+                        /*
                         state.renderer.as_mut().unwrap().overlay_instances.push((
                             InstanceData::default().with_alpha(0.6).with_model_matrix(
                                 Matrix4::from_translation(vec3(
@@ -339,10 +326,11 @@ pub fn render_ui(
                             ),
                             state.resource_man.tile_model_or_missing(id),
                             (),
-                        ))
+                        )) */
                     }
 
                     if let Some((coord, ..)) = state.gui_state.linking_tile {
+                        /*
                         state.renderer.as_mut().unwrap().overlay_instances.push((
                             InstanceData::default()
                                 .with_color_offset(colors::RED.to_linear())
@@ -353,7 +341,7 @@ pub fn render_ui(
                                 )),
                             state.resource_man.registry.model_ids.cube1x1,
                             (),
-                        ));
+                        )); */
                     }
                 }
             }
@@ -399,6 +387,7 @@ pub fn render_ui(
 
     if let Some(start) = state.gui_state.paste_from {
         if start != state.camera.pointing_at {
+            /*
             state.renderer.as_mut().unwrap().overlay_instances.push((
                 InstanceData::default()
                     .with_color_offset(colors::LIGHT_BLUE.to_linear())
@@ -409,7 +398,7 @@ pub fn render_ui(
                     )),
                 state.resource_man.registry.model_ids.cube1x1,
                 (),
-            ));
+            )); */
         }
 
         let diff = state.camera.pointing_at - start;
@@ -437,13 +426,14 @@ pub fn render_ui(
                 model_matrix *= rotate;
             }
 
+            /*
             state.renderer.as_mut().unwrap().overlay_instances.push((
                 InstanceData::default()
                     .with_alpha(0.5)
                     .with_model_matrix(model_matrix),
                 state.resource_man.tile_model_or_missing(*id),
                 (),
-            ));
+            )); */
         }
     }
 

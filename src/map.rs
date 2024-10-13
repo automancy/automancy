@@ -12,8 +12,8 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use zstd::{Decoder, Encoder};
 
-use automancy_defs::coord::TileCoord;
 use automancy_defs::id::{Id, Interner};
+use automancy_defs::{coord::TileCoord, id::TileId};
 
 use automancy_resources::{
     data::{DataMap, DataMapRaw},
@@ -34,7 +34,7 @@ pub static MAIN_MENU: &str = ".main_menu";
 
 const MAP_BUFFER_SIZE: usize = 256 * 1024;
 
-pub type Tiles = HashMap<TileCoord, Id>;
+pub type Tiles = HashMap<TileCoord, TileId>;
 pub type TileEntities = HashMap<TileCoord, ActorRef<TileEntityMsg>>;
 
 /// Contains information about a map.
@@ -178,7 +178,7 @@ impl Map {
                 .and_then(|id| resource_man.interner.get(id))
             {
                 let tile_entity =
-                    game::new_tile(resource_man.clone(), game.clone(), coord, id).await;
+                    game::new_tile(resource_man.clone(), game.clone(), coord, TileId(id)).await;
 
                 for (key, value) in data.to_data(&resource_man.interner) {
                     tile_entity
@@ -186,7 +186,7 @@ impl Map {
                         .unwrap();
                 }
 
-                tiles.insert(coord, id);
+                tiles.insert(coord, TileId(id));
                 tile_entities.insert(coord, tile_entity);
             }
         }
@@ -226,10 +226,10 @@ impl Map {
 
         for (coord, id) in self.tiles.iter() {
             if let Some(tile_entity) = tile_entities.get(coord) {
-                if !map_raw.tile_map.contains_key(id) {
+                if !map_raw.tile_map.contains_key(&**id) {
                     map_raw
                         .tile_map
-                        .insert(*id, interner.resolve(*id).unwrap().to_string());
+                        .insert(**id, interner.resolve(**id).unwrap().to_string());
                 }
 
                 let data = tile_entity
@@ -239,7 +239,7 @@ impl Map {
                     .unwrap();
                 let data = data.to_raw(interner);
 
-                map_raw.tiles.push((*coord, *id, data));
+                map_raw.tiles.push((*coord, **id, data));
             }
         }
 

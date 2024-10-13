@@ -65,6 +65,8 @@ fn has_category_item(state: &mut GameState, game_data: &mut DataMap, id: Id) -> 
     }
 }
 
+/*
+
 /// Draws the tile selection.
 fn draw_tile_selection(
     state: &mut GameState,
@@ -257,3 +259,4 @@ pub fn tile_selections(
         }
     });
 }
+ */

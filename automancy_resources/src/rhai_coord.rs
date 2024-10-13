@@ -3,8 +3,11 @@ use std::ops::{Add, Neg, Sub};
 use hashbrown::HashMap;
 use rhai::{Dynamic, Engine, Module};
 
-use automancy_defs::coord::{TileBounds, TileCoord, TileUnit};
-use automancy_defs::id::Id;
+use automancy_defs::{
+    coord::{TileBounds, TileCoord, TileUnit},
+    math::tile_direction_to_angle,
+};
+use automancy_defs::{id::Id, math::Matrix4};
 
 pub(crate) fn register_coord_stuff(engine: &mut Engine) {
     let mut module = Module::new();
@@ -27,11 +30,21 @@ pub(crate) fn register_coord_stuff(engine: &mut Engine) {
             Dynamic::from_iter(v.neighbors())
         })
         .register_fn("TileCoord", TileCoord::new)
-        .register_fn("rotate_left", |n: TileCoord| -> TileCoord {
-            TileCoord::from(n.counter_clockwise())
+        .register_fn("rotate_left", |v: TileCoord| -> TileCoord {
+            TileCoord::from(v.counter_clockwise())
         })
-        .register_fn("rotate_right", |n: TileCoord| -> TileCoord {
-            TileCoord::from(n.clockwise())
+        .register_fn("rotate_right", |v: TileCoord| -> TileCoord {
+            TileCoord::from(v.clockwise())
+        })
+        .register_fn("as_translation", |v: TileCoord| -> Matrix4 {
+            v.as_translation()
+        })
+        .register_fn("as_rotation_z", |v: TileCoord| -> Matrix4 {
+            let Some(deg) = tile_direction_to_angle(v) else {
+                return Matrix4::IDENTITY;
+            };
+
+            Matrix4::from_rotation_z(deg.to_radians())
         })
         .register_get("q", |v: &mut TileCoord| -> TileUnit { v.x })
         .register_get("r", |v: &mut TileCoord| -> TileUnit { v.y })

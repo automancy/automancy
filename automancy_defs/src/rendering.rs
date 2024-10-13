@@ -8,10 +8,7 @@ use gltf::{
     Document,
 };
 use gltf::{buffer::Data, scene::Transform};
-use wgpu::{
-    naga::FastIndexSet, vertex_attr_array, BufferAddress, VertexAttribute, VertexBufferLayout,
-    VertexStepMode,
-};
+use wgpu::{vertex_attr_array, BufferAddress, VertexAttribute, VertexBufferLayout, VertexStepMode};
 
 use crate::math::{direction_to_angle, Float, Matrix3, Matrix4, Quaternion, Vec2, Vec3};
 
@@ -33,7 +30,7 @@ pub fn make_line(a: Vec2, b: Vec2, z: Float) -> Matrix4 {
 pub type VertexPos = [Float; 3];
 pub type VertexColor = [Float; 4];
 pub type RawMat4 = [[Float; 4]; 4];
-pub type RawMat3 = [[Float; 3]; 3];
+pub type RawMat3 = [[Float; 4]; 3];
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default, PartialOrd, PartialEq, Zeroable, Pod)]
@@ -63,9 +60,8 @@ impl Vertex {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct InstanceData {
-    color_offset: VertexColor,
-    alpha: Float,
-    model_matrix: Matrix4,
+    pub color_offset: VertexColor,
+    pub alpha: Float,
 }
 
 impl Default for InstanceData {
@@ -73,45 +69,11 @@ impl Default for InstanceData {
         Self {
             color_offset: Default::default(),
             alpha: 1.0,
-            model_matrix: Matrix4::IDENTITY,
         }
     }
 }
 
 impl InstanceData {
-    #[inline]
-    pub fn add_model_matrix(mut self, matrix: Matrix4) -> Self {
-        self.model_matrix *= matrix;
-
-        self
-    }
-
-    #[inline]
-    pub fn add_translation(mut self, translation: Vec3) -> Self {
-        self.model_matrix *= Matrix4::from_translation(translation);
-
-        self
-    }
-
-    #[inline]
-    pub fn add_scale(mut self, scale: Vec3) -> Self {
-        self.model_matrix *= Matrix4::from_scale(scale);
-
-        self
-    }
-
-    #[inline]
-    pub fn with_model_matrix(mut self, matrix: Matrix4) -> Self {
-        self.model_matrix = matrix;
-
-        self
-    }
-
-    #[inline]
-    pub fn get_model_matrix(self) -> Matrix4 {
-        self.model_matrix
-    }
-
     #[inline]
     pub fn add_alpha(mut self, alpha: Float) -> Self {
         self.alpha *= alpha;
@@ -133,83 +95,118 @@ impl InstanceData {
         self
     }
 }
+
+const RAW_IDENTITY_3: RawMat3 = [
+    [1.0, 0.0, 0.0, 0.0],
+    [0.0, 1.0, 0.0, 0.0],
+    [0.0, 0.0, 1.0, 0.0],
+];
+
+const RAW_IDENTITY_4: RawMat4 = [
+    [1.0, 0.0, 0.0, 0.0],
+    [0.0, 1.0, 0.0, 0.0],
+    [0.0, 0.0, 1.0, 0.0],
+    [0.0, 0.0, 0.0, 1.0],
+];
+
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialOrd, Zeroable, Pod, ByteHash, ByteEq)]
+#[derive(Clone, Copy, Debug, PartialOrd, Zeroable, Pod, ByteHash, ByteEq)]
 pub struct MatrixData {
-    model_matrix: RawMat4,
-    normal_matrix: [[Float; 4]; 3], // memory alignment issue, padded to 16 bytes
+    pub model_matrix: RawMat4,
+    // memory alignment issue, padded to 16 bytes
+    pub normal_matrix: RawMat3,
+}
+
+impl Default for MatrixData {
+    fn default() -> Self {
+        Self {
+            model_matrix: RAW_IDENTITY_4,
+            normal_matrix: RAW_IDENTITY_3,
+        }
+    }
+}
+
+impl MatrixData {
+    pub fn new(model_matrix: Matrix4, mesh_matrix: Matrix4) -> Self {
+        let matrix = model_matrix * mesh_matrix;
+
+        let inverse_transpose = Matrix3::from_cols(
+            matrix.x_axis.truncate(),
+            matrix.y_axis.truncate(),
+            matrix.z_axis.truncate(),
+        )
+        .inverse()
+        .transpose();
+
+        MatrixData {
+            model_matrix: matrix.to_cols_array_2d(),
+            normal_matrix: [
+                inverse_transpose.x_axis.extend(0.0).to_array(),
+                inverse_transpose.y_axis.extend(0.0).to_array(),
+                inverse_transpose.z_axis.extend(0.0).to_array(),
+            ],
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialOrd, Zeroable, Pod, ByteHash, ByteEq)]
+pub struct AnimationMatrixData {
+    pub animation_matrix: RawMat4,
+}
+
+impl Default for AnimationMatrixData {
+    fn default() -> Self {
+        Self {
+            animation_matrix: RAW_IDENTITY_4,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialOrd, Zeroable, Pod, ByteHash, ByteEq)]
+pub struct WorldMatrixData {
+    pub world_matrix: RawMat4,
+}
+
+impl Default for WorldMatrixData {
+    fn default() -> Self {
+        Self {
+            world_matrix: RAW_IDENTITY_4,
+        }
+    }
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialOrd, Zeroable, Pod, ByteHash, ByteEq)]
-pub struct WorldMatrixData {
-    world_matrix: RawMat4,
+pub struct GpuInstance {
+    pub color_offset: VertexColor,
+    // TODO i think this isn't really used?? and it doesnt work anyway
+    pub alpha: Float,
+    pub matrix_index: u32,
+    pub animation_matrix_index: u32,
+    pub world_matrix_index: u32,
 }
 
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialOrd, PartialEq, Zeroable, Pod)]
-pub struct RawInstanceData {
-    color_offset: VertexColor,
-    alpha: Float,
-    matrix_index: u32,
-    world_matrix_index: u32,
-}
-
-static FIX_COORD: Matrix4 = Matrix4::from_cols(
+pub static FIX_COORD: Matrix4 = Matrix4::from_cols(
     vec4(1.0, 0.0, 0.0, 0.0),
     vec4(0.0, -1.0, 0.0, 0.0),
     vec4(0.0, 0.0, 1.0, 0.0),
     vec4(0.0, 0.0, 0.0, 1.0),
 );
 
-impl RawInstanceData {
-    pub fn from_instance(
-        instance: InstanceData,
-        world_matrix: Matrix4,
-        matrix_buffer: &mut FastIndexSet<MatrixData>,
-        world_matrix_buffer: &mut FastIndexSet<WorldMatrixData>,
-    ) -> Self {
-        let model_matrix = instance.model_matrix;
-
-        let inverse_transpose = Matrix3::from_cols(
-            model_matrix.x_axis.truncate(),
-            model_matrix.y_axis.truncate(),
-            model_matrix.z_axis.truncate(),
-        )
-        .inverse()
-        .transpose();
-
-        let matrix_data = MatrixData {
-            model_matrix: model_matrix.to_cols_array_2d(),
-            normal_matrix: [
-                inverse_transpose.x_axis.extend(0.0).to_array(),
-                inverse_transpose.y_axis.extend(0.0).to_array(),
-                inverse_transpose.z_axis.extend(0.0).to_array(),
-            ],
-        };
-
-        let world_matrix_data = WorldMatrixData {
-            world_matrix: (FIX_COORD * world_matrix).to_cols_array_2d(),
-        };
-
-        Self {
-            color_offset: instance.color_offset,
-            alpha: instance.alpha,
-            matrix_index: matrix_buffer.insert_full(matrix_data).0 as u32,
-            world_matrix_index: world_matrix_buffer.insert_full(world_matrix_data).0 as u32,
-        }
-    }
-
+impl GpuInstance {
     pub fn desc() -> VertexBufferLayout<'static> {
         static ATTRIBUTES: &[VertexAttribute] = &vertex_attr_array![
             3 => Float32x4,
             4 => Float32,
             5 => Uint32,
             6 => Uint32,
+            7 => Uint32,
         ];
 
         VertexBufferLayout {
-            array_stride: size_of::<RawInstanceData>() as BufferAddress,
+            array_stride: size_of::<GpuInstance>() as BufferAddress,
             step_mode: VertexStepMode::Instance,
             attributes: ATTRIBUTES,
         }
@@ -291,12 +288,11 @@ pub struct Mesh {
     pub index: usize,
 
     pub opaque: bool,
-    pub name: String,
+    pub matrix: Matrix4,
+    pub transform: Transform,
 
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u16>,
-    pub matrix: Matrix4,
-    pub transform: Transform,
 }
 
 pub fn load_gltf_model(
@@ -311,8 +307,6 @@ pub fn load_gltf_model(
             let index = node.index();
 
             if let Some(mesh) = node.mesh() {
-                let name = mesh.name().unwrap_or("").to_string();
-
                 let mut read_vertices = vec![];
                 let mut read_indices = vec![];
 
@@ -343,15 +337,13 @@ pub fn load_gltf_model(
                 meshes[mesh.index()] = Some(Mesh {
                     index,
 
-                    name,
                     opaque: read_vertices.iter().all(|v| v.color[3] >= 1.0),
-
-                    vertices: read_vertices,
-                    indices: read_indices,
-
                     matrix: Matrix4::from_rotation_z(PI)
                         * Matrix4::from_cols_array_2d(&transform.clone().matrix()),
                     transform,
+
+                    vertices: read_vertices,
+                    indices: read_indices,
                 });
             }
         }

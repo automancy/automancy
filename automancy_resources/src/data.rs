@@ -167,6 +167,10 @@ impl IntoIterator for DataMap {
 }
 
 impl DataMap {
+    pub fn keys(&self) -> impl Iterator<Item = &Id> {
+        self.0.keys()
+    }
+
     pub fn rhai_get(&mut self, id: Id) -> Dynamic {
         if let Some(v) = self.get(id).cloned() {
             v.into_dynamic()
@@ -334,22 +338,22 @@ impl DataRaw {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct DataMapRaw(HashMap<String, DataRaw>);
+pub struct DataMapRaw(BTreeMap<String, DataRaw>);
 
-impl From<DataMapRaw> for HashMap<String, DataRaw> {
+impl From<DataMapRaw> for BTreeMap<String, DataRaw> {
     fn from(value: DataMapRaw) -> Self {
         value.0
     }
 }
 
-impl From<HashMap<String, DataRaw>> for DataMapRaw {
-    fn from(value: HashMap<String, DataRaw>) -> Self {
+impl From<BTreeMap<String, DataRaw>> for DataMapRaw {
+    fn from(value: BTreeMap<String, DataRaw>) -> Self {
         Self(value)
     }
 }
 
 impl DataMapRaw {
-    pub fn into_inner(self) -> HashMap<String, DataRaw> {
+    pub fn into_inner(self) -> BTreeMap<String, DataRaw> {
         self.0
     }
 

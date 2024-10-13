@@ -1,6 +1,5 @@
 use rhai::{exported_module, Engine};
 
-#[allow(non_snake_case)]
 mod tile_stuff {
     use automancy_defs::{coord::TileCoord, id::Id, stack::ItemStack};
 
@@ -9,13 +8,15 @@ mod tile_stuff {
 
     use crate::types::function::{OnFailAction, TileResult, TileTransactionResult};
 
+    #[allow(non_snake_case)]
     #[export_module]
     pub mod tile_result {
+        use automancy_defs::id::TileId;
         use rhai::Array;
 
         pub fn MakeTransaction(
             coord: TileCoord,
-            source_id: Id,
+            source_id: TileId,
             source_coord: TileCoord,
             stacks: Array,
         ) -> TileResult {
@@ -28,7 +29,7 @@ mod tile_stuff {
         }
         pub fn MakeExtractRequest(
             coord: TileCoord,
-            requested_from_id: Id,
+            requested_from_id: TileId,
             requested_from_coord: TileCoord,
             on_fail_action: OnFailAction,
         ) -> TileResult {
@@ -41,14 +42,17 @@ mod tile_stuff {
         }
     }
 
+    #[allow(non_snake_case)]
     #[export_module]
     pub mod tile_trans_result {
+        use automancy_defs::id::TileId;
+
         pub fn PassOn(
             coord: TileCoord,
             stack: ItemStack,
             source_coord: TileCoord,
             root_coord: TileCoord,
-            root_id: Id,
+            root_id: TileId,
         ) -> TileTransactionResult {
             TileTransactionResult::PassOn {
                 coord,
@@ -62,9 +66,9 @@ mod tile_stuff {
             coord: TileCoord,
             stack: ItemStack,
             source_coord: TileCoord,
-            source_id: Id,
+            source_id: TileId,
             root_coord: TileCoord,
-            root_id: Id,
+            root_id: TileId,
         ) -> TileTransactionResult {
             TileTransactionResult::Proxy {
                 coord,
@@ -88,6 +92,7 @@ mod tile_stuff {
         }
     }
 
+    #[allow(non_snake_case)]
     #[export_module]
     pub mod on_fail_action {
         pub fn None() -> OnFailAction {

@@ -4,14 +4,14 @@ use std::path::Path;
 
 use serde::Deserialize;
 
-use automancy_defs::id::Id;
+use automancy_defs::id::{Id, ModelId};
 
 use crate::{load_recursively, ResourceManager, RON_EXT};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 pub struct ItemDef {
     pub id: Id,
-    pub model: Id,
+    pub model: ModelId,
 }
 
 #[derive(Debug, Deserialize)]
@@ -29,7 +29,13 @@ impl ResourceManager {
         let id = Id::parse(&v.id, &mut self.interner, Some(namespace)).unwrap();
         let model = Id::parse(&v.model, &mut self.interner, Some(namespace)).unwrap();
 
-        self.registry.items.insert(id, ItemDef { id, model });
+        self.registry.items.insert(
+            id,
+            ItemDef {
+                id,
+                model: ModelId(model),
+            },
+        );
 
         Ok(())
     }

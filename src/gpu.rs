@@ -1,14 +1,13 @@
-use core::slice;
-use std::mem;
 use std::sync::Arc;
+use std::{collections::BTreeMap, mem};
 
-use hashbrown::HashMap;
+use bytemuck::Pod;
+use ordermap::OrderMap;
+use wgpu::util::DrawIndexedIndirectArgs;
 use wgpu::{
-    naga::FastIndexSet,
     util::{backend_bits_from_env, power_preference_from_env, BufferInitDescriptor, DeviceExt},
     InstanceFlags, PipelineCompilationOptions,
 };
-use wgpu::{util::DrawIndexedIndirectArgs, Face};
 use wgpu::{AdapterInfo, Surface};
 use wgpu::{
     AddressMode, Backends, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout,
@@ -26,13 +25,12 @@ use wgpu::{
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
-use automancy_defs::rendering::PostProcessingUBO;
-use automancy_defs::rendering::{GameUBO, InstanceData, MatrixData, RawInstanceData, Vertex};
-use automancy_defs::slice_group_by::GroupBy;
-use automancy_defs::{id::Id, rendering::IntermediateUBO};
-use automancy_defs::{math::Matrix4, rendering::WorldMatrixData};
+use automancy_defs::rendering::{AnimationMatrixData, GameUBO, GpuInstance, MatrixData, Vertex};
+use automancy_defs::rendering::{PostProcessingUBO, WorldMatrixData};
+use automancy_defs::{rendering::IntermediateUBO, slice_group_by::GroupBy};
 use automancy_macros::OptionGetter;
 use automancy_resources::ResourceManager;
+use yakui::UVec2;
 
 pub const NORMAL_CLEAR: Color = Color::TRANSPARENT;
 pub const MODEL_DEPTH_CLEAR: Color = Color {
@@ -46,8 +44,6 @@ pub const DEPTH_FORMAT: TextureFormat = TextureFormat::Depth32Float;
 pub const MODEL_DEPTH_FORMAT: TextureFormat = TextureFormat::R32Float;
 pub const SCREENSHOT_FORMAT: TextureFormat = TextureFormat::Rgba8UnormSrgb;
 pub const NORMAL_FORMAT: TextureFormat = TextureFormat::Rgba16Float;
-
-pub type AnimationMap = HashMap<Id, HashMap<usize, Matrix4>>;
 
 pub fn init_gpu_resources(
     device: &Device,
@@ -120,6 +116,76 @@ pub fn init_gpu_resources(
         ..Default::default()
     });
 
+    let post_processing_bind_group_layout_uniform =
+        device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+            entries: &[BindGroupLayoutEntry {
+                binding: 0,
+                visibility: ShaderStages::FRAGMENT,
+                ty: BindingType::Buffer {
+                    ty: BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+            label: Some("post_processing_bind_group_layout_uniform"),
+        });
+
+    let post_processing_bind_group_layout_textures =
+        device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+            entries: &[
+                BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Sampler(SamplerBindingType::Filtering),
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Texture {
+                        multisampled: false,
+                        view_dimension: TextureViewDimension::D2,
+                        sample_type: TextureSampleType::Float { filterable: true },
+                    },
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Texture {
+                        multisampled: false,
+                        view_dimension: TextureViewDimension::D2,
+                        sample_type: TextureSampleType::Float { filterable: false },
+                    },
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 5,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Texture {
+                        multisampled: false,
+                        view_dimension: TextureViewDimension::D2,
+                        sample_type: TextureSampleType::Float { filterable: false },
+                    },
+                    count: None,
+                },
+            ],
+            label: Some("post_processing_bind_group_layout_textures"),
+        });
+
     let game_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
         entries: &[
             BindGroupLayoutEntry {
@@ -152,6 +218,16 @@ pub fn init_gpu_resources(
                 },
                 count: None,
             },
+            BindGroupLayoutEntry {
+                binding: 3,
+                visibility: ShaderStages::VERTEX,
+                ty: BindingType::Buffer {
+                    ty: BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
         ],
         label: Some("game_bind_group_layout"),
     });
@@ -168,7 +244,7 @@ pub fn init_gpu_resources(
         vertex: VertexState {
             module: &game_shader,
             entry_point: "vs_main",
-            buffers: &[Vertex::desc(), RawInstanceData::desc()],
+            buffers: &[Vertex::desc(), GpuInstance::desc()],
             compilation_options: PipelineCompilationOptions::default(),
         },
         fragment: Some(FragmentState {
@@ -196,7 +272,7 @@ pub fn init_gpu_resources(
         primitive: PrimitiveState {
             topology: PrimitiveTopology::TriangleList,
             front_face: FrontFace::Ccw,
-            cull_mode: Some(Face::Back),
+            cull_mode: None,
             ..Default::default()
         },
         depth_stencil: Some(DepthStencilState {
@@ -215,61 +291,6 @@ pub fn init_gpu_resources(
         cache: None,
     });
 
-    let extra_objects_resources = {
-        let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Extra Objects Uniform Buffer"),
-            contents: bytemuck::cast_slice(&[GameUBO::default()]),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
-
-        let matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Extra Objects Matrix Data Buffer"),
-            contents: &Vec::from_iter((0..(mem::size_of::<MatrixData>() * 4096)).map(|_| 0)),
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-        });
-        let world_matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Extra Objects World Matrix Data Buffer"),
-            contents: &Vec::from_iter((0..(mem::size_of::<WorldMatrixData>() * 16)).map(|_| 0)),
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-        });
-
-        let bind_group = device.create_bind_group(&BindGroupDescriptor {
-            layout: &game_bind_group_layout,
-            entries: &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: uniform_buffer.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: matrix_data_buffer.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 2,
-                    resource: world_matrix_data_buffer.as_entire_binding(),
-                },
-            ],
-            label: Some("extra_objects_bind_group"),
-        });
-
-        ExtraObjectsResources {
-            opaques_instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
-                label: None,
-                contents: &[],
-                usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
-            }),
-            non_opaques_instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
-                label: None,
-                contents: &[],
-                usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
-            }),
-            matrix_data_buffer,
-            world_matrix_data_buffer,
-            uniform_buffer,
-            bind_group,
-        }
-    };
-
     let overlay_objects_resources = {
         let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Overlay Objects Uniform Buffer"),
@@ -279,13 +300,19 @@ pub fn init_gpu_resources(
 
         let matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Overlay Objects Matrix Data Buffer"),
-            contents: &Vec::from_iter((0..(mem::size_of::<MatrixData>() * 1024)).map(|_| 0)),
+            contents: &vec![0; mem::size_of::<MatrixData>() * 1024],
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+        });
+
+        let animation_matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Overlay Objects Animation Matrix Data Buffer"),
+            contents: &vec![0; mem::size_of::<AnimationMatrixData>() * 256],
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
         });
 
         let world_matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Overlay Objects World Matrix Data Buffer"),
-            contents: &Vec::from_iter((0..(mem::size_of::<WorldMatrixData>() * 256)).map(|_| 0)),
+            contents: &vec![0; mem::size_of::<WorldMatrixData>() * 256],
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
         });
 
@@ -302,13 +329,17 @@ pub fn init_gpu_resources(
                 },
                 BindGroupEntry {
                     binding: 2,
+                    resource: animation_matrix_data_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 3,
                     resource: world_matrix_data_buffer.as_entire_binding(),
                 },
             ],
             label: Some("overlay_objects_bind_group"),
         });
 
-        ExtraObjectsResources {
+        OverlayObjectsResources {
             opaques_instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
                 label: None,
                 contents: &[],
@@ -319,7 +350,13 @@ pub fn init_gpu_resources(
                 contents: &[],
                 usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
             }),
+            indirect_buffer: device.create_buffer_init(&BufferInitDescriptor {
+                label: None,
+                contents: &[],
+                usage: BufferUsages::INDIRECT | BufferUsages::COPY_DST,
+            }),
             matrix_data_buffer,
+            animation_matrix_data_buffer,
             world_matrix_data_buffer,
             uniform_buffer,
             bind_group,
@@ -335,13 +372,19 @@ pub fn init_gpu_resources(
 
         let matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Game Matrix Data Buffer"),
-            contents: &Vec::from_iter((0..(mem::size_of::<MatrixData>() * 65536)).map(|_| 0)),
+            contents: &vec![0; mem::size_of::<MatrixData>() * 524288],
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+        });
+
+        let animation_matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Game Animation Matrix Data Buffer"),
+            contents: &vec![0; mem::size_of::<AnimationMatrixData>() * 524288],
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
         });
 
         let world_matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Game World Matrix Data Buffer"),
-            contents: &Vec::from_iter((0..(mem::size_of::<WorldMatrixData>() * 16)).map(|_| 0)),
+            contents: &vec![0; mem::size_of::<WorldMatrixData>()],
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
         });
 
@@ -358,6 +401,10 @@ pub fn init_gpu_resources(
                 },
                 BindGroupEntry {
                     binding: 2,
+                    resource: animation_matrix_data_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 3,
                     resource: world_matrix_data_buffer.as_entire_binding(),
                 },
             ],
@@ -365,17 +412,18 @@ pub fn init_gpu_resources(
         });
 
         GameResources {
-            opaques_instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
+            instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
                 label: None,
                 contents: &[],
                 usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
             }),
-            non_opaques_instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
+            indirect_buffer: device.create_buffer_init(&BufferInitDescriptor {
                 label: None,
                 contents: &[],
-                usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
+                usage: BufferUsages::INDIRECT | BufferUsages::COPY_DST,
             }),
             matrix_data_buffer,
+            animation_matrix_data_buffer,
             world_matrix_data_buffer,
             uniform_buffer,
             bind_group,
@@ -392,16 +440,19 @@ pub fn init_gpu_resources(
         const MATRIX_DATA_SIZE: usize = 4096;
         let matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Gui Matrix Data Buffer"),
-            contents: &Vec::from_iter(
-                (0..(mem::size_of::<MatrixData>() * MATRIX_DATA_SIZE)).map(|_| 0),
-            ),
+            contents: &vec![0; mem::size_of::<MatrixData>() * MATRIX_DATA_SIZE],
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
         });
+
+        let animation_matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Gui Animation Matrix Data Buffer"),
+            contents: &vec![0; mem::size_of::<AnimationMatrixData>() * MATRIX_DATA_SIZE],
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+        });
+
         let world_matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Gui World Matrix Data Buffer"),
-            contents: &Vec::from_iter(
-                (0..(mem::size_of::<WorldMatrixData>() * MATRIX_DATA_SIZE)).map(|_| 0),
-            ),
+            contents: &vec![0; mem::size_of::<WorldMatrixData>() * MATRIX_DATA_SIZE],
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
         });
 
@@ -418,10 +469,32 @@ pub fn init_gpu_resources(
                 },
                 BindGroupEntry {
                     binding: 2,
+                    resource: animation_matrix_data_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 3,
                     resource: world_matrix_data_buffer.as_entire_binding(),
                 },
             ],
             label: Some("gui_bind_group"),
+        });
+
+        let post_processing_uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: None,
+            contents: bytemuck::cast_slice(&[PostProcessingUBO {
+                flags: 0,
+                ..Default::default()
+            }]),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+
+        let post_processing_bind_group_uniform = device.create_bind_group(&BindGroupDescriptor {
+            label: None,
+            layout: &post_processing_bind_group_layout_uniform,
+            entries: &[BindGroupEntry {
+                binding: 0,
+                resource: post_processing_uniform_buffer.as_entire_binding(),
+            }],
         });
 
         GuiResources {
@@ -435,10 +508,30 @@ pub fn init_gpu_resources(
                 contents: &[],
                 usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
             }),
+            indirect_buffer: device.create_buffer_init(&BufferInitDescriptor {
+                label: None,
+                contents: &[],
+                usage: BufferUsages::INDIRECT | BufferUsages::COPY_DST,
+            }),
             uniform_buffer,
             matrix_data_buffer,
+            animation_matrix_data_buffer,
             world_matrix_data_buffer,
             bind_group,
+
+            color_texture: None,
+            depth_texture: None,
+            model_depth_texture: None,
+            normal_texture: None,
+
+            post_processing_uniform_buffer,
+            post_processing_bind_group_uniform,
+            post_processing_bind_group_textures: None,
+
+            post_processing_texture: None,
+            antialiasing_bind_group: None,
+
+            present_texture: None,
         }
     };
 
@@ -582,76 +675,6 @@ pub fn init_gpu_resources(
         multiview: None,
         cache: None,
     });
-
-    let post_processing_bind_group_layout_textures =
-        device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            entries: &[
-                BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::Filtering),
-                    count: None,
-                },
-                BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
-                    count: None,
-                },
-                BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
-                    count: None,
-                },
-                BindGroupLayoutEntry {
-                    binding: 3,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: TextureViewDimension::D2,
-                        sample_type: TextureSampleType::Float { filterable: true },
-                    },
-                    count: None,
-                },
-                BindGroupLayoutEntry {
-                    binding: 4,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: TextureViewDimension::D2,
-                        sample_type: TextureSampleType::Float { filterable: false },
-                    },
-                    count: None,
-                },
-                BindGroupLayoutEntry {
-                    binding: 5,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: TextureViewDimension::D2,
-                        sample_type: TextureSampleType::Float { filterable: false },
-                    },
-                    count: None,
-                },
-            ],
-            label: Some("post_processing_bind_group_layout_textures"),
-        });
-
-    let post_processing_bind_group_layout_uniform =
-        device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            entries: &[BindGroupLayoutEntry {
-                binding: 0,
-                visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Buffer {
-                    ty: BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-            label: Some("post_processing_bind_group_layout_uniform"),
-        });
 
     let (post_processing_resources, post_processing_pipeline) = {
         let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
@@ -899,7 +922,6 @@ pub fn init_gpu_resources(
     };
 
     let render = RenderResources {
-        extra_objects_resources,
         overlay_objects_resources,
         game_resources,
         gui_resources: Some(gui_resources),
@@ -943,198 +965,185 @@ pub fn init_gpu_resources(
     (shared, render, global)
 }
 
-pub struct CompiledInstances<T> {
-    pub opaques: Vec<((Id, usize), RawInstanceData, T)>,
-    pub non_opaques: Vec<((Id, usize), RawInstanceData, T)>,
-}
+fn ordered_map_write_to_buffer<K, V>(data: &OrderMap<K, V>) -> Vec<u8>
+where
+    V: Pod + Default,
+{
+    let mut init_buffer = vec![];
 
-pub fn compile_instances<T: Clone + Send>(
-    resource_man: &ResourceManager,
-    instances: Vec<(InstanceData, Matrix4, Id, T)>,
-    animation_map: &AnimationMap,
-) -> (
-    CompiledInstances<T>,
-    FastIndexSet<MatrixData>,
-    FastIndexSet<WorldMatrixData>,
-) {
-    let mut matrix_data = FastIndexSet::default();
-    let mut world_matrix_data = FastIndexSet::default();
-
-    let mut opaques = HashMap::new();
-    let mut non_opaques = HashMap::new();
-
-    instances
-        .into_iter()
-        .for_each(|(instance, world_matrix, id, extra)| {
-            if let Some((meshes, ..)) = &resource_man.all_models.get(&id) {
-                for mesh in meshes.iter().flatten() {
-                    let mut instance = instance;
-
-                    let mut matrix = mesh.matrix;
-                    if let Some(anim) = animation_map
-                        .get(&id)
-                        .and_then(|anim| anim.get(&mesh.index))
-                    {
-                        matrix *= *anim;
-                    }
-                    instance = instance.add_model_matrix(matrix);
-
-                    if mesh.opaque {
-                        &mut opaques
-                    } else {
-                        &mut non_opaques
-                    }
-                    .entry((id, mesh.index))
-                    .or_insert_with(Vec::new)
-                    .push((
-                        RawInstanceData::from_instance(
-                            instance,
-                            world_matrix,
-                            &mut matrix_data,
-                            &mut world_matrix_data,
-                        ),
-                        extra.clone(),
-                    ));
-                }
-            }
-        });
-
-    let mut opaques = opaques
-        .into_iter()
-        .flat_map(|(key, vec)| vec.into_iter().map(move |v| (key, v.0, v.1)))
-        .collect::<Vec<_>>();
-    opaques.sort_by_key(|v| v.0);
-
-    let non_opaques = non_opaques
-        .into_iter()
-        .flat_map(|(key, vec)| vec.into_iter().map(move |v| (key, v.0, v.1)))
-        .collect::<Vec<_>>();
-
-    (
-        CompiledInstances {
-            opaques,
-            non_opaques,
-        },
-        matrix_data,
-        world_matrix_data,
-    )
-}
-
-pub struct DrawData<T> {
-    pub opaques: Vec<(DrawIndexedIndirectArgs, T)>,
-    pub non_opaques: Vec<(DrawIndexedIndirectArgs, T)>,
-}
-
-fn draw_data<T: Clone + Send + Sync>(
-    resource_man: &ResourceManager,
-    compiled_instances: &CompiledInstances<T>,
-    grouped: bool,
-) -> DrawData<T> {
-    fn collect<'a, T: Clone + Send + Sync + 'a>(
-        resource_man: &ResourceManager,
-        instances: impl Iterator<Item = &'a [((Id, usize), RawInstanceData, T)]>,
-    ) -> Vec<(DrawIndexedIndirectArgs, T)> {
-        let mut counter = 0;
-
-        instances
-            .map(|instances| {
-                let size = instances.len() as u32;
-                let range = &resource_man.all_index_ranges[&instances[0].0 .0][&instances[0].0 .1];
-
-                let r = (
-                    DrawIndexedIndirectArgs {
-                        first_index: range.pos,
-                        index_count: range.count,
-                        base_vertex: range.base_vertex,
-                        first_instance: counter,
-                        instance_count: size,
-                    },
-                    instances[0].2.clone(),
-                );
-
-                counter += size;
-
-                r
-            })
-            .collect()
+    for i in 0..data.len() {
+        init_buffer.extend_from_slice(bytemuck::bytes_of(
+            &data.get_index(i).map(|v| *v.1).unwrap_or_default(),
+        ));
     }
 
-    let opaques = if grouped {
-        collect(
-            resource_man,
-            compiled_instances.opaques.binary_group_by_key(|v| v.0),
-        )
-    } else {
-        collect(
-            resource_man,
-            compiled_instances.opaques.iter().map(slice::from_ref),
-        )
-    };
+    init_buffer
+}
 
-    DrawData {
-        opaques,
-        non_opaques: collect(
-            resource_man,
-            compiled_instances.non_opaques.iter().map(slice::from_ref),
-        ),
+pub fn ordered_map_update_buffer<K, V>(queue: &Queue, buffer: &Buffer, data: &OrderMap<K, V>)
+where
+    V: Pod + Default,
+{
+    queue.write_buffer(buffer, 0, &ordered_map_write_to_buffer(data));
+}
+
+fn map_write_to_buffer<V>(data: &BTreeMap<u32, V>) -> Vec<u8>
+where
+    V: Pod + Default,
+{
+    let mut init_buffer = vec![];
+
+    let max_index = data.keys().cloned().max().unwrap_or_default();
+
+    for i in 0..=max_index {
+        init_buffer.extend_from_slice(bytemuck::bytes_of(
+            &data.get(&i).cloned().unwrap_or_default(),
+        ));
+    }
+
+    init_buffer
+}
+
+pub fn map_update_buffer<V>(queue: &Queue, buffer: &Buffer, data: &BTreeMap<u32, V>)
+where
+    V: Pod + Default,
+{
+    queue.write_buffer(buffer, 0, &map_write_to_buffer(data));
+}
+
+pub fn update_buffer_with_changes<V>(
+    queue: &Queue,
+    buffer: &Buffer,
+    changes: &[u32],
+    data: &BTreeMap<u32, V>,
+) where
+    V: Pod + Default,
+{
+    debug_assert!(changes.windows(2).all(|v| v[0] < v[1]));
+
+    let byte_size = size_of::<V>();
+
+    for batch in changes.linear_group_by(|a, b| b - a == 1) {
+        let updates = batch
+            .iter()
+            .map(|i| data.get(i).cloned().unwrap_or_default())
+            .collect::<Vec<_>>();
+
+        if !updates.is_empty() {
+            queue.write_buffer(
+                buffer,
+                (byte_size * batch[0] as usize) as u64,
+                bytemuck::cast_slice(&updates),
+            );
+        }
     }
 }
 
-pub struct IndirectInstanceDrawData<T> {
-    pub opaques: Vec<RawInstanceData>,
-    pub non_opaques: Vec<RawInstanceData>,
-    pub matrix_data: FastIndexSet<MatrixData>,
-    pub world_matrix_data: FastIndexSet<WorldMatrixData>,
-    pub draw_data: DrawData<T>,
-}
-
-pub fn indirect_instance<T: Clone + Send + Sync>(
-    resource_man: &ResourceManager,
-    instances: Vec<(InstanceData, Matrix4, Id, T)>,
-    animation_map: &AnimationMap,
-    grouped: bool,
-) -> IndirectInstanceDrawData<T> {
-    let (compiled_instances, matrix_data, world_matrix_data) =
-        compile_instances(resource_man, instances, animation_map);
-
-    let draw_data = draw_data(resource_man, &compiled_instances, grouped);
-
-    let opaques = compiled_instances
-        .opaques
-        .into_iter()
-        .map(|v| v.1)
-        .collect();
-    let non_opaques = compiled_instances
-        .non_opaques
-        .into_iter()
-        .map(|v| v.1)
-        .collect();
-
-    IndirectInstanceDrawData {
-        opaques,
-        non_opaques,
-        matrix_data,
-        world_matrix_data,
-        draw_data,
-    }
-}
-
-pub fn update_instance_buffer(
+pub fn resize_update_buffer_with_changes<V>(
     device: &Device,
     queue: &Queue,
     buffer: &mut Buffer,
-    instances: &[RawInstanceData],
-) {
-    if (buffer.size() as usize) < std::mem::size_of_val(instances) {
+    changes: &[u32],
+    data: &BTreeMap<u32, V>,
+) where
+    V: Pod + Default,
+{
+    debug_assert!(changes.windows(2).all(|v| v[0] < v[1]));
+
+    let byte_size = size_of::<V>();
+
+    let max_index = changes.last().cloned().unwrap_or_default();
+    let size = max_index as usize + 1;
+
+    if (buffer.size() as usize) < byte_size * size {
         let usage = buffer.usage();
 
         *buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: None,
-            contents: bytemuck::cast_slice(instances),
+            contents: &map_write_to_buffer(data),
             usage,
         });
     } else {
-        queue.write_buffer(buffer, 0, bytemuck::cast_slice(instances));
+        update_buffer_with_changes(queue, buffer, changes, data);
+    }
+}
+
+pub fn resize_update_buffer<V>(device: &Device, queue: &Queue, buffer: &mut Buffer, data: &[V])
+where
+    V: Pod,
+{
+    if (buffer.size() as usize) < std::mem::size_of_val(data) {
+        let usage = buffer.usage();
+
+        *buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: None,
+            contents: bytemuck::cast_slice(data),
+            usage,
+        });
+    } else {
+        queue.write_buffer(buffer, 0, bytemuck::cast_slice(data));
+    }
+}
+
+pub fn clear_buffer(device: &Device, buffer: &mut Buffer) {
+    let usage = buffer.usage();
+
+    *buffer = device.create_buffer_init(&BufferInitDescriptor {
+        label: None,
+        contents: &[],
+        usage,
+    });
+}
+
+pub fn update_indirect_buffer(
+    device: &Device,
+    queue: &Queue,
+    buffer: &mut Buffer,
+    changes: &[u32],
+    data: &BTreeMap<u32, DrawIndexedIndirectArgs>,
+) {
+    debug_assert!(changes.windows(2).all(|v| v[0] < v[1]));
+
+    const BYTE_SIZE: usize = size_of::<DrawIndexedIndirectArgs>();
+
+    let max_index = changes.last().cloned().unwrap_or_default();
+    let size = max_index as usize + 1;
+
+    if (buffer.size() as usize) < BYTE_SIZE * size {
+        let usage = buffer.usage();
+
+        let mut vec = Vec::<u8>::with_capacity(BYTE_SIZE * size);
+        for v in data.values() {
+            vec.extend(v.as_bytes());
+        }
+
+        *buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: None,
+            contents: &vec,
+            usage,
+        });
+    } else {
+        let updates = changes
+            .iter()
+            .flat_map(|i| data.get(i).cloned().map(|v| (*i, v)))
+            .collect::<Vec<_>>();
+
+        if !updates.is_empty() {
+            for batch in updates.linear_group_by(|a, b| b.0 - a.0 == 1) {
+                let i = batch[0].0;
+                let v = batch
+                    .iter()
+                    .flat_map(|v| v.1.as_bytes())
+                    .cloned()
+                    .collect::<Vec<_>>();
+
+                queue.write_buffer(
+                    buffer,
+                    (BYTE_SIZE * i as usize) as u64,
+                    bytemuck::cast_slice(&v),
+                );
+            }
+        }
     }
 }
 
@@ -1203,31 +1212,210 @@ pub fn make_fxaa_bind_group(
     })
 }
 
-pub struct ExtraObjectsResources {
-    pub opaques_instance_buffer: Buffer,
-    pub non_opaques_instance_buffer: Buffer,
-    pub uniform_buffer: Buffer,
-    pub matrix_data_buffer: Buffer,
-    pub world_matrix_data_buffer: Buffer,
-    pub bind_group: BindGroup,
-}
-
 pub struct GameResources {
-    pub opaques_instance_buffer: Buffer,
-    pub non_opaques_instance_buffer: Buffer,
+    pub instance_buffer: Buffer,
+    pub indirect_buffer: Buffer,
     pub uniform_buffer: Buffer,
     pub matrix_data_buffer: Buffer,
+    pub animation_matrix_data_buffer: Buffer,
     pub world_matrix_data_buffer: Buffer,
     pub bind_group: BindGroup,
 }
 
+pub struct OverlayObjectsResources {
+    pub opaques_instance_buffer: Buffer,
+    pub non_opaques_instance_buffer: Buffer,
+    pub indirect_buffer: Buffer,
+    pub uniform_buffer: Buffer,
+    pub matrix_data_buffer: Buffer,
+    pub animation_matrix_data_buffer: Buffer,
+    pub world_matrix_data_buffer: Buffer,
+    pub bind_group: BindGroup,
+}
+
+#[derive(OptionGetter)]
 pub struct GuiResources {
     pub opaques_instance_buffer: Buffer,
     pub non_opaques_instance_buffer: Buffer,
+    pub indirect_buffer: Buffer,
     pub uniform_buffer: Buffer,
     pub matrix_data_buffer: Buffer,
+    pub animation_matrix_data_buffer: Buffer,
     pub world_matrix_data_buffer: Buffer,
     pub bind_group: BindGroup,
+
+    #[getters(get)]
+    pub color_texture: Option<Texture>,
+    #[getters(get)]
+    pub depth_texture: Option<Texture>,
+    #[getters(get)]
+    pub model_depth_texture: Option<Texture>,
+    #[getters(get)]
+    pub normal_texture: Option<Texture>,
+
+    pub post_processing_uniform_buffer: Buffer,
+    pub post_processing_bind_group_uniform: BindGroup,
+    #[getters(get)]
+    pub post_processing_bind_group_textures: Option<BindGroup>,
+
+    #[getters(get)]
+    pub post_processing_texture: Option<Texture>,
+    #[getters(get)]
+    pub antialiasing_bind_group: Option<BindGroup>,
+
+    #[getters(get)]
+    pub present_texture: Option<Texture>,
+}
+
+impl GuiResources {
+    pub fn resize(
+        &mut self,
+        device: &Device,
+        surface_format: TextureFormat,
+        global_resources: &GlobalResources,
+        size: UVec2,
+    ) {
+        self.color_texture = Some(device.create_texture(&TextureDescriptor {
+            label: None,
+            size: Extent3d {
+                width: size.x,
+                height: size.y,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: surface_format,
+            usage: TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        }));
+
+        self.depth_texture = Some(device.create_texture(&TextureDescriptor {
+            label: None,
+            size: Extent3d {
+                width: size.x,
+                height: size.y,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: DEPTH_FORMAT,
+            usage: TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        }));
+
+        self.model_depth_texture = Some(device.create_texture(&TextureDescriptor {
+            label: None,
+            size: Extent3d {
+                width: size.x,
+                height: size.y,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: MODEL_DEPTH_FORMAT,
+            usage: TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        }));
+
+        self.normal_texture = Some(device.create_texture(&TextureDescriptor {
+            label: None,
+            size: Extent3d {
+                width: size.x,
+                height: size.y,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: NORMAL_FORMAT,
+            usage: TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        }));
+
+        let color = self
+            .color_texture()
+            .create_view(&TextureViewDescriptor::default());
+        let normal = self
+            .normal_texture()
+            .create_view(&TextureViewDescriptor::default());
+        let model_depth = self
+            .model_depth_texture()
+            .create_view(&TextureViewDescriptor::default());
+
+        self.post_processing_bind_group_textures =
+            Some(device.create_bind_group(&BindGroupDescriptor {
+                layout: &global_resources.post_processing_bind_group_layout_textures,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: BindingResource::Sampler(&global_resources.filtering_sampler),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: BindingResource::Sampler(&global_resources.nonfiltering_sampler),
+                    },
+                    BindGroupEntry {
+                        binding: 2,
+                        resource: BindingResource::Sampler(&global_resources.repeating_sampler),
+                    },
+                    BindGroupEntry {
+                        binding: 3,
+                        resource: BindingResource::TextureView(&color),
+                    },
+                    BindGroupEntry {
+                        binding: 4,
+                        resource: BindingResource::TextureView(&normal),
+                    },
+                    BindGroupEntry {
+                        binding: 5,
+                        resource: BindingResource::TextureView(&model_depth),
+                    },
+                ],
+                label: None,
+            }));
+
+        self.post_processing_texture = Some(device.create_texture(&TextureDescriptor {
+            label: None,
+            size: Extent3d {
+                width: size.x,
+                height: size.y,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: surface_format,
+            usage: TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        }));
+
+        self.antialiasing_bind_group = Some(make_fxaa_bind_group(
+            device,
+            &global_resources.fxaa_bind_group_layout,
+            &self
+                .post_processing_texture()
+                .create_view(&TextureViewDescriptor::default()),
+            &global_resources.filtering_sampler,
+        ));
+
+        self.present_texture = Some(device.create_texture(&TextureDescriptor {
+            label: None,
+            size: Extent3d {
+                width: (size.x * 3) / 2,
+                height: (size.y * 3) / 2,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: surface_format,
+            usage: TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        }));
+    }
 }
 
 pub struct PostProcessingResources {
@@ -1236,8 +1424,7 @@ pub struct PostProcessingResources {
 }
 
 pub struct RenderResources {
-    pub extra_objects_resources: ExtraObjectsResources,
-    pub overlay_objects_resources: ExtraObjectsResources,
+    pub overlay_objects_resources: OverlayObjectsResources,
     pub game_resources: GameResources,
 
     pub gui_resources: Option<GuiResources>,
@@ -1633,7 +1820,7 @@ impl Gpu {
         let (device, queue) = adapter
             .request_device(
                 &DeviceDescriptor {
-                    required_features: Features::empty(),
+                    required_features: Features::MULTI_DRAW_INDIRECT,
                     // WebGL doesn't support all of wgpu's features, so if
                     // we're building for the web we'll have to disable some.
                     required_limits: if cfg!(target_arch = "wasm32") {

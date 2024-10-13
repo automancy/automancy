@@ -293,7 +293,7 @@ fn rhai_ui(
                 } else {
                     tile_entity
                         .send_message(TileEntityMsg::RemoveData(
-                            state.resource_man.registry.data_ids.direction,
+                            state.resource_man.registry.data_ids.direction, // TODO ermmmmm these are hardcoded..
                         ))
                         .unwrap();
                 }

@@ -7,7 +7,7 @@ use interpolator::Formattable;
 use serde::Deserialize;
 
 use automancy_defs::{
-    id::{Id, SharedStr},
+    id::{Id, SharedStr, TileId},
     parse_map_id_str,
 };
 
@@ -156,14 +156,14 @@ impl ResourceManager {
         }
     }
 
-    pub fn tile_name(&self, id: Id) -> SharedStr {
-        match self.translates.tiles.get(&id) {
+    pub fn tile_name(&self, id: TileId) -> SharedStr {
+        match self.translates.tiles.get(&*id) {
             Some(name) => name.clone(),
             None => self.translates.unnamed.clone(),
         }
     }
 
-    pub fn try_tile_name(&self, id: Option<Id>) -> SharedStr {
+    pub fn try_tile_name(&self, id: Option<TileId>) -> SharedStr {
         if let Some(id) = id {
             self.tile_name(id)
         } else {

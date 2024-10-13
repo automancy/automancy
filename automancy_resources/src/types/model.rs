@@ -5,7 +5,7 @@ use std::{fs::read_to_string, mem};
 use hashbrown::HashMap;
 use serde::Deserialize;
 
-use automancy_defs::id::Id;
+use automancy_defs::id::{Id, ModelId};
 use automancy_defs::rendering::load_gltf_model;
 use automancy_defs::rendering::Vertex;
 use automancy_defs::{gltf, log};
@@ -26,40 +26,38 @@ struct Raw {
 }
 
 impl ResourceManager {
-    pub fn model_or_missing(&self, id: Id) -> Id {
+    pub fn model_or_missing_tile(&self, id: ModelId) -> ModelId {
         if self.all_models.contains_key(&id) {
             id
         } else {
-            self.registry.model_ids.missing
+            ModelId(self.registry.model_ids.tile_missing)
         }
     }
 
-    pub fn model_or_puzzle_space(&self, id: Id) -> Id {
+    pub fn model_or_missing_item(&self, id: ModelId) -> ModelId {
         if self.all_models.contains_key(&id) {
             id
         } else {
-            self.registry.model_ids.puzzle_space
+            ModelId(self.registry.model_ids.item_missing)
         }
     }
 
-    pub fn tile_model_or_missing(&self, id: Id) -> Id {
-        if let Some(def) = self.registry.tiles.get(&id) {
-            if self.all_models.contains_key(&def.model) {
-                return def.model;
-            }
+    pub fn model_or_puzzle_space(&self, id: ModelId) -> ModelId {
+        if self.all_models.contains_key(&id) {
+            id
+        } else {
+            ModelId(self.registry.model_ids.puzzle_space)
         }
-
-        self.registry.model_ids.missing
     }
 
-    pub fn item_model_or_missing(&self, id: Id) -> Id {
+    pub fn item_model_or_missing(&self, id: Id) -> ModelId {
         if let Some(def) = self.registry.items.get(&id) {
             if self.all_models.contains_key(&def.model) {
                 return def.model;
             }
         }
 
-        self.registry.model_ids.items_missing
+        ModelId(self.registry.model_ids.item_missing)
     }
 
     fn load_model(&mut self, file: &Path, namespace: &str) -> anyhow::Result<()> {
@@ -73,10 +71,10 @@ impl ResourceManager {
 
         let (document, buffers, _images) = gltf::import(file)?;
 
-        self.all_models.insert(
-            Id::parse(&v.id, &mut self.interner, Some(namespace)).unwrap(),
-            load_gltf_model(document, buffers),
-        );
+        let id = Id::parse(&v.id, &mut self.interner, Some(namespace)).unwrap();
+
+        self.all_models
+            .insert(ModelId(id), load_gltf_model(document, buffers));
 
         Ok(())
     }

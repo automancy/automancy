@@ -1,25 +1,84 @@
 use std::mem;
 use std::sync::Arc;
 
+use hashbrown::HashSet;
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort};
 use rand::{thread_rng, RngCore};
 use rhai::{Dynamic, Scope};
 
-use automancy_defs::id::Id;
+use automancy_defs::id::{Id, TileId};
 use automancy_defs::{coord::TileCoord, stack::ItemStack};
-use automancy_resources::data::{Data, DataMap};
-use automancy_resources::rhai_ui::RhaiUiUnit;
 use automancy_resources::types::function::{OnFailAction, TileResult, TileTransactionResult};
+use automancy_resources::{
+    data::{Data, DataMap},
+    FunctionInfo,
+};
 use automancy_resources::{rhai_call_options, rhai_log_err, ResourceManager};
+use automancy_resources::{rhai_render::RenderCommand, rhai_ui::RhaiUiUnit};
 use thiserror::Error;
 
 use crate::game::{GameSystemMessage, TickUnit};
 use crate::tile_entity::TileEntityMsg::*;
 
+fn run_tile_function<Result: 'static, const SIZE: usize>(
+    entity: &TileEntity,
+    state: &mut TileEntityState,
+    (ast, function_id): &FunctionInfo,
+    args: [(&'static str, Dynamic); SIZE],
+    function: &'static str,
+) -> Option<Result> {
+    let tile_def = entity.resource_man.registry.tiles.get(&entity.id)?;
+
+    let mut rhai_state = Dynamic::from(state.data.clone());
+
+    let mut input = rhai::Map::from([
+        ("coord".into(), Dynamic::from(entity.coord)),
+        ("id".into(), Dynamic::from(entity.id)),
+        ("random".into(), Dynamic::from_int(random())),
+        ("setup".into(), Dynamic::from(tile_def.data.clone())),
+    ]);
+    input.extend(args.into_iter().map(|(k, v)| (k.into(), v)));
+
+    let result = entity.resource_man.engine.call_fn_with_options::<Dynamic>(
+        rhai_call_options(&mut rhai_state),
+        &mut Scope::new(),
+        ast,
+        function,
+        (input,),
+    );
+
+    {
+        let new_data = rhai_state.cast::<DataMap>();
+
+        for k in new_data.keys().cloned() {
+            if state.data.get(k).is_none() {
+                state.field_changes.insert(k);
+            }
+        }
+
+        for (k, v) in mem::take(&mut state.data) {
+            let new_v = new_data.get(k);
+            if new_v.is_none() || new_v.is_some_and(|new| new != &v) {
+                state.field_changes.insert(k);
+            }
+        }
+
+        state.data = new_data;
+    }
+
+    match result {
+        Ok(result) => result.try_cast::<Result>(),
+        Err(err) => {
+            rhai_log_err(function, function_id, &err);
+            None
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct TileEntity {
     /// The ID of the tile entity.
-    pub id: Id,
+    pub id: TileId,
     /// The coordinates of the tile entity.
     pub coord: TileCoord,
     /// The handle to the Resource Manager
@@ -35,8 +94,8 @@ pub struct TileEntityState {
     /// The data map stored by the tile.
     data: DataMap,
 
-    /// Rhai scope
-    scope: Option<Scope<'static>>,
+    /// The field changed since last render request.
+    field_changes: HashSet<Id>,
 }
 
 impl TileEntityState {
@@ -46,7 +105,7 @@ impl TileEntityState {
 
             data: Default::default(),
 
-            scope: Default::default(),
+            field_changes: HashSet::new(),
         }
     }
 }
@@ -59,18 +118,19 @@ pub enum TileEntityMsg {
     Transaction {
         stack: ItemStack,
         source_coord: TileCoord,
-        source_id: Id,
+        source_id: TileId,
         root_coord: TileCoord,
-        root_id: Id,
+        root_id: TileId,
         hidden: bool,
     },
     TransactionResult {
         result: ItemStack,
     },
     ExtractRequest {
-        requested_from_id: Id,
+        requested_from_id: TileId,
         requested_from_coord: TileCoord,
     },
+    CollectRenderCommands(RpcReplyPort<Vec<RenderCommand>>, bool, bool),
     SetData(DataMap),
     SetDataValue(Id, Data),
     RemoveData(Id),
@@ -110,11 +170,7 @@ impl TileEntity {
                     OnFailAction::None,
                 );
 
-                Some(GameSystemMessage::RecordTransaction(
-                    stack,
-                    source_coord,
-                    self.coord,
-                ))
+                None
             }
             TileTransactionResult::Proxy {
                 coord,
@@ -139,9 +195,7 @@ impl TileEntity {
                     OnFailAction::None,
                 );
 
-                Some(GameSystemMessage::RecordTransaction(
-                    stack, self.coord, coord,
-                ))
+                None
             }
             TileTransactionResult::Consume {
                 consumed,
@@ -156,11 +210,7 @@ impl TileEntity {
                     OnFailAction::None,
                 );
 
-                Some(GameSystemMessage::RecordTransaction(
-                    consumed,
-                    source_coord,
-                    self.coord,
-                ))
+                None
             }
         }
     }
@@ -215,50 +265,31 @@ impl TileEntity {
         state: &mut TileEntityState,
         stack: ItemStack,
         source_coord: TileCoord,
-        source_id: Id,
+        source_id: TileId,
         root_coord: TileCoord,
-        root_id: Id,
+        root_id: TileId,
     ) -> Option<GameSystemMessage> {
         let tile = self.resource_man.registry.tiles.get(&self.id)?;
 
-        if let Some((ast, default_scope, function_id)) = tile
+        if let Some(function) = tile
             .function
             .as_ref()
             .and_then(|v| self.resource_man.functions.get(v))
         {
-            let scope = state
-                .scope
-                .get_or_insert_with(|| default_scope.clone_visible());
-
-            let data = mem::take(&mut state.data);
-            let mut rhai_state = Dynamic::from(data);
-
-            let result = self.resource_man.engine.call_fn_with_options::<Dynamic>(
-                rhai_call_options(&mut rhai_state),
-                scope,
-                ast,
+            if let Some(result) = run_tile_function(
+                self,
+                state,
+                function,
+                [
+                    ("source_coord", Dynamic::from(source_coord)),
+                    ("source_id", Dynamic::from(source_id)),
+                    ("root_coord", Dynamic::from(root_coord)),
+                    ("root_id", Dynamic::from(root_id)),
+                    ("stack", Dynamic::from(stack)),
+                ],
                 "handle_transaction",
-                (rhai::Map::from([
-                    ("coord".into(), Dynamic::from(self.coord)),
-                    ("id".into(), Dynamic::from(self.id)),
-                    ("source_coord".into(), Dynamic::from(source_coord)),
-                    ("source_id".into(), Dynamic::from(source_id)),
-                    ("root_coord".into(), Dynamic::from(root_coord)),
-                    ("root_id".into(), Dynamic::from(root_id)),
-                    ("random".into(), Dynamic::from_int(random())),
-                    ("stack".into(), Dynamic::from(stack)),
-                ]),),
-            );
-
-            state.data = rhai_state.take().cast::<DataMap>();
-
-            match result {
-                Ok(result) => {
-                    if let Some(result) = result.try_cast::<TileTransactionResult>() {
-                        return self.handle_rhai_transaction_result(state, result);
-                    }
-                }
-                Err(err) => rhai_log_err("handle_transaction", function_id, &err),
+            ) {
+                return self.handle_rhai_transaction_result(state, result);
             }
         }
 
@@ -296,48 +327,22 @@ impl Actor for TileEntity {
             Tick {
                 tick_count: _tick_count,
             } => {
-                let tile = self
+                let tile_def = self
                     .resource_man
                     .registry
                     .tiles
                     .get(&self.id)
                     .ok_or(Box::new(TileEntityError::NonExistent(self.coord)))?;
 
-                if let Some((ast, default_scope, function_id)) = tile
+                if let Some(function) = tile_def
                     .function
                     .as_ref()
                     .and_then(|v| self.resource_man.functions.get(v))
                 {
-                    let scope = state
-                        .scope
-                        .get_or_insert_with(|| default_scope.clone_visible());
-
-                    let data = mem::take(&mut state.data);
-                    let mut rhai_state = Dynamic::from(data);
-
-                    let result = self.resource_man.engine.call_fn_with_options::<Dynamic>(
-                        rhai_call_options(&mut rhai_state),
-                        scope,
-                        ast,
-                        "handle_tick",
-                        (rhai::Map::from([
-                            ("coord".into(), Dynamic::from(self.coord)),
-                            ("id".into(), Dynamic::from(self.id)),
-                            ("random".into(), Dynamic::from_int(random())),
-                        ]),),
-                    );
-
-                    state.data = rhai_state.take().cast::<DataMap>();
-
-                    match result {
-                        Ok(result) => {
-                            if let Some(result) = result.try_cast::<TileResult>() {
-                                self.handle_rhai_result(state, result);
-                            }
-                        }
-                        Err(err) => {
-                            rhai_log_err("handle_tick", function_id, &err);
-                        }
+                    if let Some(result) =
+                        run_tile_function(self, state, function, [], "handle_tick")
+                    {
+                        self.handle_rhai_result(state, result);
                     }
                 }
             }
@@ -358,118 +363,54 @@ impl Actor for TileEntity {
                 }
             }
             TransactionResult { result } => {
-                let tile = self
+                let tile_def = self
                     .resource_man
                     .registry
                     .tiles
                     .get(&self.id)
                     .ok_or(Box::new(TileEntityError::NonExistent(self.coord)))?;
 
-                if let Some((ast, default_scope, function_id)) = tile
+                if let Some(function) = tile_def
                     .function
                     .as_ref()
                     .and_then(|v| self.resource_man.functions.get(v))
                 {
-                    let scope = state
-                        .scope
-                        .get_or_insert_with(|| default_scope.clone_visible());
-
-                    let data = mem::take(&mut state.data);
-                    let mut rhai_state = Dynamic::from(data);
-
-                    let result = self.resource_man.engine.call_fn_with_options::<Dynamic>(
-                        rhai_call_options(&mut rhai_state),
-                        scope,
-                        ast,
+                    let _: Option<()> = run_tile_function(
+                        self,
+                        state,
+                        function,
+                        [("transferred", Dynamic::from(result))],
                         "handle_transaction_result",
-                        (rhai::Map::from([
-                            ("coord".into(), Dynamic::from(self.coord)),
-                            ("id".into(), Dynamic::from(self.id)),
-                            ("random".into(), Dynamic::from_int(random())),
-                            ("transferred".into(), Dynamic::from(result)),
-                        ]),),
                     );
-
-                    state.data = rhai_state.take().cast::<DataMap>();
-
-                    match result {
-                        Ok(_) => {}
-                        Err(err) => {
-                            rhai_log_err("handle_transaction_result", function_id, &err);
-                        }
-                    }
                 }
-            }
-            SetData(data) => {
-                state.data = data;
-            }
-            SetDataValue(key, value) => {
-                state.data.set(key, value);
-            }
-            TakeData(reply) => {
-                reply.send(mem::take(&mut state.data))?;
-            }
-            RemoveData(key) => {
-                state.data.remove(key);
-            }
-            GetData(reply) => {
-                reply.send(state.data.clone())?;
-            }
-            GetDataValue(key, reply) => {
-                reply.send(state.data.get(key).cloned())?;
-            }
-            GetDataWithCoord(reply) => {
-                reply.send((self.coord, state.data.clone()))?;
             }
             ExtractRequest {
                 requested_from_id,
                 requested_from_coord,
             } => {
-                let tile = self
+                let tile_def = self
                     .resource_man
                     .registry
                     .tiles
                     .get(&self.id)
                     .ok_or(Box::new(TileEntityError::NonExistent(self.coord)))?;
 
-                if let Some((ast, default_scope, function_id)) = tile
+                if let Some(function) = tile_def
                     .function
                     .as_ref()
                     .and_then(|v| self.resource_man.functions.get(v))
                 {
-                    let scope = state
-                        .scope
-                        .get_or_insert_with(|| default_scope.clone_visible());
-
-                    let data = mem::take(&mut state.data);
-                    let mut rhai_state = Dynamic::from(data);
-
-                    let result = self.resource_man.engine.call_fn_with_options::<Dynamic>(
-                        rhai_call_options(&mut rhai_state),
-                        scope,
-                        ast,
+                    if let Some(result) = run_tile_function(
+                        self,
+                        state,
+                        function,
+                        [
+                            ("requested_from_coord", Dynamic::from(requested_from_coord)),
+                            ("requested_from_id", Dynamic::from(requested_from_id)),
+                        ],
                         "handle_extract_request",
-                        (rhai::Map::from([
-                            ("coord".into(), Dynamic::from(self.coord)),
-                            ("id".into(), Dynamic::from(self.id)),
-                            ("random".into(), Dynamic::from_int(random())),
-                            (
-                                "requested_from_coord".into(),
-                                Dynamic::from(requested_from_coord),
-                            ),
-                            ("requested_from_id".into(), Dynamic::from(requested_from_id)),
-                        ]),),
-                    );
-
-                    state.data = rhai_state.take().cast::<DataMap>();
-
-                    match result {
-                        Ok(result) => {
-                            if let Some(result) = result.try_cast::<TileResult>() {
-                                self.handle_rhai_result(state, result);
-                            }
-                        }
-                        Err(err) => rhai_log_err("handle_extract_request", function_id, &err),
+                    ) {
+                        self.handle_rhai_result(state, result);
                     }
                 }
             }
@@ -481,42 +422,80 @@ impl Actor for TileEntity {
                     .get(&self.id)
                     .ok_or(Box::new(TileEntityError::NonExistent(self.coord)))?;
 
-                if let Some((ast, default_scope, function_id)) = tile_def
+                if let Some(function) = tile_def
                     .function
                     .as_ref()
                     .and_then(|v| self.resource_man.functions.get(v))
                 {
-                    let scope = state
-                        .scope
-                        .get_or_insert_with(|| default_scope.clone_visible());
-
-                    let data = mem::take(&mut state.data);
-                    let mut rhai_state = Dynamic::from(data);
-
-                    let result = self.resource_man.engine.call_fn_with_options::<RhaiUiUnit>(
-                        rhai_call_options(&mut rhai_state),
-                        scope,
-                        ast,
-                        "tile_config",
-                        (rhai::Map::from([
-                            ("coord".into(), Dynamic::from(self.coord)),
-                            ("id".into(), Dynamic::from(self.id)),
-                            ("setup".into(), Dynamic::from(tile_def.data.clone())),
-                        ]),),
-                    );
-
-                    state.data = rhai_state.take().cast::<DataMap>();
-
-                    match result {
-                        Ok(result) => {
-                            reply.send(Some(result))?;
-                        }
-                        Err(err) => {
-                            rhai_log_err("tile_config", function_id, &err);
-                            reply.send(None)?;
-                        }
+                    if let Some(result) =
+                        run_tile_function(self, state, function, [], "tile_config")
+                    {
+                        reply.send(Some(result))?;
+                    } else {
+                        reply.send(None)?;
                     }
                 }
+            }
+            CollectRenderCommands(reply, loading, unloading) => {
+                let tile_def = self
+                    .resource_man
+                    .registry
+                    .tiles
+                    .get(&self.id)
+                    .ok_or(Box::new(TileEntityError::NonExistent(self.coord)))?;
+
+                if let Some(function) = tile_def
+                    .function
+                    .as_ref()
+                    .and_then(|v| self.resource_man.functions.get(v))
+                {
+                    let field_changes = mem::take(&mut state.field_changes);
+
+                    if let Some(result) = run_tile_function(
+                        self,
+                        state,
+                        function,
+                        [
+                            ("field_changes", Dynamic::from_iter(field_changes)),
+                            ("loading", Dynamic::from_bool(loading)),
+                            ("unloading", Dynamic::from_bool(unloading)),
+                        ],
+                        "tile_render",
+                    ) as Option<rhai::Array>
+                    {
+                        reply.send(
+                            result
+                                .into_iter()
+                                .flat_map(|v| v.try_cast::<RenderCommand>())
+                                .collect(),
+                        )?;
+                    }
+                }
+            }
+            SetData(data) => {
+                state.field_changes.extend(data.keys());
+                state.data = data;
+            }
+            SetDataValue(key, value) => {
+                state.field_changes.insert(key);
+                state.data.set(key, value);
+            }
+            TakeData(reply) => {
+                state.field_changes.extend(state.data.keys());
+                reply.send(mem::take(&mut state.data))?;
+            }
+            RemoveData(key) => {
+                state.field_changes.insert(key);
+                state.data.remove(key);
+            }
+            GetData(reply) => {
+                reply.send(state.data.clone())?;
+            }
+            GetDataValue(key, reply) => {
+                reply.send(state.data.get(key).cloned())?;
+            }
+            GetDataWithCoord(reply) => {
+                reply.send((self.coord, state.data.clone()))?;
             }
         }
 
