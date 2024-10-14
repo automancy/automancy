@@ -100,9 +100,11 @@ fn fill_map_with_none(
         for coord in culling_range.all_coords() {
             let coord = TileCoord::from(coord);
 
-            let v = commands.entry(coord).or_default();
+            if !commands.contains_key(&coord)
+                && !last_culling_range.is_some_and(|v| v.is_in_bounds(*coord))
+            {
+                let v = commands.entry(coord).or_default();
 
-            if v.is_empty() && !last_culling_range.is_some_and(|v| v.is_in_bounds(*coord)) {
                 track_none(v, resource_man, coord);
             }
         }
@@ -112,9 +114,11 @@ fn fill_map_with_none(
         for coord in last_culling_range.all_coords() {
             let coord = TileCoord::from(coord);
 
-            let v = commands.entry(coord).or_default();
+            if !commands.contains_key(&coord)
+                && !culling_range.is_some_and(|v| v.is_in_bounds(*coord))
+            {
+                let v = commands.entry(coord).or_default();
 
-            if v.is_empty() && !culling_range.is_some_and(|v| v.is_in_bounds(*coord)) {
                 untrack_none(v, resource_man);
             }
         }
@@ -242,17 +246,14 @@ impl Actor for GameSystem {
     ) -> Result<(), ActorProcessingErr> {
         match message {
             LoadMap(name, reply) => {
+                let last_culling_range = state.last_culling_range.take();
+
                 let commands = multi_call_iter(
                     &state.tile_entities,
-                    |reply, _| {
-                        let loading = false;
-                        let unloading = true;
-
-                        TileEntityMsg::CollectRenderCommands {
-                            reply,
-                            loading,
-                            unloading,
-                        }
+                    |reply, coord| TileEntityMsg::CollectRenderCommands {
+                        reply,
+                        loading: false,
+                        unloading: last_culling_range.is_some_and(|v| v.is_in_bounds(*coord)),
                     },
                     None,
                 )
@@ -263,7 +264,7 @@ impl Actor for GameSystem {
                         fill_map_with_none(
                             &self.resource_man,
                             None,
-                            state.last_culling_range,
+                            last_culling_range,
                             &mut commands,
                         );
                         state.cleanup_render_commands = commands;
@@ -273,17 +274,15 @@ impl Actor for GameSystem {
                     }
                 }
 
-                for tile_entity in state.tile_entities.values() {
+                for tile_entity in mem::take(&mut state.tile_entities).into_values() {
                     tile_entity
                         .stop_and_wait(Some("Loading new map".to_string()), None)
                         .await
                         .unwrap();
                 }
 
-                state.tile_entities.clear();
                 state.map = None;
                 state.undo_steps.clear();
-                state.last_culling_range = None;
 
                 let (map, tile_entities) =
                     match Map::load(myself.clone(), self.resource_man.clone(), &name).await {

@@ -174,8 +174,7 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
             if SHOULD_RERENDER.get() {
                 rects.clear();
 
-                let mut opaques = vec![];
-                let mut non_opaques = vec![];
+                let mut gpu_instances = vec![];
                 let mut matrix_data = vec![];
                 let mut world_matrix_data = vec![];
 
@@ -215,12 +214,6 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                         world_matrix_data.push(WorldMatrixData::new(game_matrix.world_matrix()));
 
                         for mesh in meshes.iter().flatten() {
-                            let buffer = if mesh.opaque {
-                                &mut opaques
-                            } else {
-                                &mut non_opaques
-                            };
-
                             let draw_info = if mesh.opaque {
                                 &mut opaque_draw_info
                             } else {
@@ -233,7 +226,7 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                             matrix_data
                                 .push(MatrixData::new(game_matrix.model_matrix(), mesh.matrix));
 
-                            buffer.push(GpuInstance {
+                            gpu_instances.push(GpuInstance {
                                 matrix_index: (matrix_data.len() - 1) as u32,
                                 world_matrix_index: (world_matrix_data.len() - 1) as u32,
                                 animation_matrix_index: animation_matrix_index as u32,
@@ -248,7 +241,7 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                                     first_index: index_range.pos,
                                     index_count: index_range.count,
                                     base_vertex: index_range.base_vertex,
-                                    first_instance: (buffer.len() - 1) as u32,
+                                    first_instance: (gpu_instances.len() - 1) as u32,
                                     instance_count: 1,
                                 },
                                 rect_index,
@@ -260,14 +253,8 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                 gpu::resize_update_buffer(
                     device,
                     queue,
-                    &mut gui_resources.opaques_instance_buffer,
-                    &opaques,
-                );
-                gpu::resize_update_buffer(
-                    device,
-                    queue,
-                    &mut gui_resources.non_opaques_instance_buffer,
-                    &non_opaques,
+                    &mut gui_resources.instance_buffer,
+                    &gpu_instances,
                 );
 
                 queue.write_buffer(
@@ -376,10 +363,10 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                 render_pass.set_pipeline(&global_resources.game_pipeline);
                 render_pass.set_bind_group(0, &gui_resources.bind_group, &[]);
                 render_pass.set_vertex_buffer(0, global_resources.vertex_buffer.slice(..));
+                render_pass.set_vertex_buffer(1, gui_resources.instance_buffer.slice(..));
                 render_pass
                     .set_index_buffer(global_resources.index_buffer.slice(..), IndexFormat::Uint16);
 
-                render_pass.set_vertex_buffer(1, gui_resources.opaques_instance_buffer.slice(..));
                 for (draw, rect_index) in opaque_draw_info {
                     let rect = rects[*rect_index].unwrap();
 
@@ -399,8 +386,6 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                     );
                 }
 
-                render_pass
-                    .set_vertex_buffer(1, gui_resources.non_opaques_instance_buffer.slice(..));
                 for (draw, rect_index) in non_opaque_draw_info {
                     let rect = rects[*rect_index].unwrap();
 

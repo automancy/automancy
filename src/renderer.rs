@@ -1,7 +1,7 @@
-use std::mem;
 use std::sync::Arc;
 use std::time::Instant;
 use std::{borrow::Cow, collections::BTreeMap};
+use std::{collections::BTreeSet, mem};
 use std::{collections::VecDeque, ops::Mul};
 
 use arboard::{Clipboard, ImageData};
@@ -261,6 +261,7 @@ pub fn render(state: &mut GameState, screenshotting: bool) -> Result<(), Surface
 
     let mut instances_changes = HashSet::new();
     let mut matrix_data_changes = HashSet::new();
+    let mut draws_changes = HashSet::new();
 
     for batch in render_commands {
         for (coord, commands) in batch {
@@ -318,10 +319,10 @@ pub fn render(state: &mut GameState, screenshotting: bool) -> Result<(), Surface
                                 draws
                                     .remove(&removed_index)
                                     .expect("draw data wasn't tracked");
-                                //draw_changes.insert(removed_index);
+                                draws_changes.insert(removed_index);
                             }
 
-                            if swapping_index != removed_index {
+                            {
                                 let opaque = swapping_type == ObjectType::Opaque;
 
                                 let draws = if opaque {
@@ -330,34 +331,39 @@ pub fn render(state: &mut GameState, screenshotting: bool) -> Result<(), Surface
                                     &mut renderer.non_opaque_draws
                                 };
 
-                                {
-                                    let matrix =
-                                        renderer.matrix_data_map.remove(&swapping_index).unwrap();
+                                if swapping_index != removed_index {
+                                    {
+                                        let matrix = renderer
+                                            .matrix_data_map
+                                            .remove(&swapping_index)
+                                            .unwrap();
 
-                                    matrix_data_changes.insert(swapping_index);
-                                    assert!(renderer
-                                        .matrix_data_map
-                                        .insert(removed_index, matrix)
-                                        .is_none());
-                                }
-                                {
-                                    let mut instance =
-                                        renderer.instances.remove(&swapping_index).unwrap();
-                                    instances_changes.insert(swapping_index);
+                                        matrix_data_changes.insert(swapping_index);
+                                        assert!(renderer
+                                            .matrix_data_map
+                                            .insert(removed_index, matrix)
+                                            .is_none());
+                                    }
+                                    {
+                                        let mut instance =
+                                            renderer.instances.remove(&swapping_index).unwrap();
+                                        instances_changes.insert(swapping_index);
 
-                                    instance.matrix_index = removed_index;
-                                    assert!(renderer
-                                        .instances
-                                        .insert(removed_index, instance)
-                                        .is_none());
-                                }
-                                {
-                                    let mut draw = draws.remove(&swapping_index).unwrap();
-                                    //draw_changes.insert(swapping_index);
+                                        instance.matrix_index = removed_index;
+                                        assert!(renderer
+                                            .instances
+                                            .insert(removed_index, instance)
+                                            .is_none());
+                                    }
 
-                                    draw.first_instance = removed_index;
+                                    {
+                                        let mut draw = draws.remove(&swapping_index).unwrap();
+                                        draws_changes.insert(swapping_index);
 
-                                    assert!(draws.insert(removed_index, draw).is_none());
+                                        draw.first_instance = removed_index;
+
+                                        assert!(draws.insert(removed_index, draw).is_none());
+                                    }
                                 }
                             }
                         }
@@ -367,7 +373,9 @@ pub fn render(state: &mut GameState, screenshotting: bool) -> Result<(), Surface
                             state.resource_man.mesh_or_missing_tile_mesh(&model);
 
                         for mesh in meshes.iter().flatten() {
-                            let draws = if mesh.opaque {
+                            let opaque = mesh.opaque;
+
+                            let draws = if opaque {
                                 &mut renderer.opaque_draws
                             } else {
                                 &mut renderer.non_opaque_draws
@@ -388,7 +396,7 @@ pub fn render(state: &mut GameState, screenshotting: bool) -> Result<(), Surface
 
                             let (index, prev_id_slot) = renderer.object_ids.insert_full(
                                 (coord, tag, model, mesh.index),
-                                if mesh.opaque {
+                                if opaque {
                                     ObjectType::Opaque
                                 } else {
                                     ObjectType::NonOpaque
@@ -455,7 +463,7 @@ pub fn render(state: &mut GameState, screenshotting: bool) -> Result<(), Surface
                                     .is_none(),
                                 "draw data was already tracked",
                             );
-                            //draw_changes.insert(index);
+                            draws_changes.insert(index);
                         }
                     }
                     RenderCommand::Transform {
@@ -502,6 +510,11 @@ pub fn render(state: &mut GameState, screenshotting: bool) -> Result<(), Surface
         if let Some(instance) = renderer.instances.get(key) {
             debug_assert_eq!(*key, instance.matrix_index);
         }
+    }
+
+    #[cfg(debug_assertions)]
+    for key in renderer.opaque_draws.keys() {
+        debug_assert!(!renderer.non_opaque_draws.contains_key(key));
     }
 
     let overlay_instances = mem::take(&mut renderer.overlay_instances);
@@ -580,6 +593,8 @@ pub fn render(state: &mut GameState, screenshotting: bool) -> Result<(), Surface
     instances_changes.sort();
     let mut matrix_data_changes = matrix_data_changes.into_iter().collect::<Vec<_>>();
     matrix_data_changes.sort();
+    let mut draws_changes = draws_changes.into_iter().collect::<Vec<_>>();
+    draws_changes.sort();
 
     let r = renderer.inner_render(
         state.resource_man.clone(),
@@ -588,6 +603,7 @@ pub fn render(state: &mut GameState, screenshotting: bool) -> Result<(), Surface
         state.camera.get_matrix(),
         instances_changes,
         matrix_data_changes,
+        draws_changes,
         overlay_instances,
         screenshotting,
     );
@@ -607,6 +623,7 @@ impl Renderer {
         camera_matrix: Matrix4,
         instances_changes: Vec<u32>,
         matrix_data_changes: Vec<u32>,
+        draws_changes: Vec<u32>,
         overlay_instances: Vec<OverlayInstance>,
         screenshotting: bool,
     ) -> Result<(), SurfaceError> {
@@ -629,66 +646,20 @@ impl Renderer {
                 label: Some("Render Encoder"),
             });
 
-        {
-            let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("Game Render Pass"),
-                color_attachments: &[
-                    Some(RenderPassColorAttachment {
-                        view: &self.shared_resources.game_texture().1,
-                        resolve_target: None,
-                        ops: Operations {
-                            load: LoadOp::Clear(Color::BLACK),
-                            store: StoreOp::Store,
-                        },
-                    }),
-                    Some(RenderPassColorAttachment {
-                        view: &self.shared_resources.normal_texture().1,
-                        resolve_target: None,
-                        ops: Operations {
-                            load: LoadOp::Clear(NORMAL_CLEAR),
-                            store: StoreOp::Store,
-                        },
-                    }),
-                    Some(RenderPassColorAttachment {
-                        view: &self.shared_resources.model_depth_texture().1,
-                        resolve_target: None,
-                        ops: Operations {
-                            load: LoadOp::Clear(MODEL_DEPTH_CLEAR),
-                            store: StoreOp::Store,
-                        },
-                    }),
-                ],
-                depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                    view: &self.shared_resources.depth_texture().1,
-                    depth_ops: Some(Operations {
-                        load: LoadOp::Clear(1.0),
-                        store: StoreOp::Store,
-                    }),
-                    stencil_ops: None,
-                }),
-                occlusion_query_set: None,
-                timestamp_writes: None,
-            });
+        let mut game_staging_belts = [None, None, None];
 
+        {
             if !(self.opaque_draws.is_empty() && self.non_opaque_draws.is_empty()) {
-                gpu::resize_update_buffer_with_changes(
+                game_staging_belts[0] = gpu::resize_update_buffer_with_changes(
+                    &mut encoder,
                     &self.gpu.device,
-                    &self.gpu.queue,
                     &mut self.render_resources.game_resources.instance_buffer,
                     &instances_changes,
                     &self.instances,
                 );
-                /*
-                gpu::update_indirect_buffer(
+                game_staging_belts[1] = gpu::update_buffer_with_changes(
+                    &mut encoder,
                     &self.gpu.device,
-                    &self.gpu.queue,
-                    &mut self.render_resources.game_resources.indirect_buffer,
-                    &opaque_draws_changes,
-                    &self.opaque_draws,
-                ); */
-
-                gpu::update_buffer_with_changes(
-                    &self.gpu.queue,
                     &self.render_resources.game_resources.matrix_data_buffer,
                     &matrix_data_changes,
                     &self.matrix_data_map,
@@ -709,53 +680,123 @@ impl Renderer {
                     0,
                     bytemuck::cast_slice(&[WorldMatrixData::new(camera_matrix)]),
                 );
-
                 self.gpu.queue.write_buffer(
                     &self.render_resources.game_resources.uniform_buffer,
                     0,
                     bytemuck::cast_slice(&[GameUBO::new(camera_pos, None)]),
                 );
 
-                render_pass.set_pipeline(&self.global_resources.game_pipeline);
-                render_pass.set_bind_group(
-                    0,
-                    &self.render_resources.game_resources.bind_group,
-                    &[],
-                );
-                render_pass.set_vertex_buffer(
-                    1,
-                    self.render_resources
-                        .game_resources
-                        .instance_buffer
-                        .slice(..),
-                );
-                render_pass.set_vertex_buffer(0, self.global_resources.vertex_buffer.slice(..));
-                render_pass.set_index_buffer(
-                    self.global_resources.index_buffer.slice(..),
-                    IndexFormat::Uint16,
+                game_staging_belts[2] = gpu::update_indirect_buffer(
+                    &mut encoder,
+                    &self.gpu.device,
+                    &mut self.render_resources.game_resources.indirect_buffer,
+                    &draws_changes,
+                    &self.opaque_draws,
                 );
 
-                for draw in self.opaque_draws.values() {
-                    render_pass.draw_indexed(
-                        draw.first_index..(draw.first_index + draw.index_count),
-                        draw.base_vertex,
-                        draw.first_instance..(draw.first_instance + draw.instance_count),
-                    );
-                }
-                /*
-                render_pass.multi_draw_indexed_indirect(
-                    &self.render_resources.game_resources.indirect_buffer,
-                    0,
-                    self.opaque_draws.keys().max().cloned().unwrap_or_default(),
-                );
-                */
+                {
+                    let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                        label: Some("Game Render Pass"),
+                        color_attachments: &[
+                            Some(RenderPassColorAttachment {
+                                view: &self.shared_resources.game_texture().1,
+                                resolve_target: None,
+                                ops: Operations {
+                                    load: LoadOp::Clear(Color::BLACK),
+                                    store: StoreOp::Store,
+                                },
+                            }),
+                            Some(RenderPassColorAttachment {
+                                view: &self.shared_resources.normal_texture().1,
+                                resolve_target: None,
+                                ops: Operations {
+                                    load: LoadOp::Clear(NORMAL_CLEAR),
+                                    store: StoreOp::Store,
+                                },
+                            }),
+                            Some(RenderPassColorAttachment {
+                                view: &self.shared_resources.model_depth_texture().1,
+                                resolve_target: None,
+                                ops: Operations {
+                                    load: LoadOp::Clear(MODEL_DEPTH_CLEAR),
+                                    store: StoreOp::Store,
+                                },
+                            }),
+                        ],
+                        depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
+                            view: &self.shared_resources.depth_texture().1,
+                            depth_ops: Some(Operations {
+                                load: LoadOp::Clear(1.0),
+                                store: StoreOp::Store,
+                            }),
+                            stencil_ops: None,
+                        }),
+                        occlusion_query_set: None,
+                        timestamp_writes: None,
+                    });
 
-                for draw in self.non_opaque_draws.values() {
-                    render_pass.draw_indexed(
-                        draw.first_index..(draw.first_index + draw.index_count),
-                        draw.base_vertex,
-                        draw.first_instance..(draw.first_instance + draw.instance_count),
+                    render_pass.set_pipeline(&self.global_resources.game_pipeline);
+                    render_pass.set_bind_group(
+                        0,
+                        &self.render_resources.game_resources.bind_group,
+                        &[],
                     );
+                    render_pass.set_vertex_buffer(
+                        1,
+                        self.render_resources
+                            .game_resources
+                            .instance_buffer
+                            .slice(..),
+                    );
+                    render_pass.set_vertex_buffer(0, self.global_resources.vertex_buffer.slice(..));
+                    render_pass.set_index_buffer(
+                        self.global_resources.index_buffer.slice(..),
+                        IndexFormat::Uint16,
+                    );
+
+                    if !self.opaque_draws.is_empty() {
+                        let len = *self.opaque_draws.last_entry().unwrap().key() + 1;
+
+                        // Because non-opaque draws leave holes in the opaque draws, we need to do this.
+                        let groups = self
+                            .non_opaque_draws
+                            .keys()
+                            .cloned()
+                            .chain([len])
+                            .scan(0, |state, v| {
+                                let prev = *state;
+                                *state = v + 1;
+
+                                if prev == v {
+                                    Some(None)
+                                } else {
+                                    Some(Some((prev, v)))
+                                }
+                            })
+                            .flatten()
+                            .collect::<Vec<_>>();
+
+                        const BYTE_SIZE: BufferAddress =
+                            size_of::<DrawIndexedIndirectArgs>() as BufferAddress;
+
+                        for (start, end) in groups {
+                            if start < len && end <= len && start != end {
+                                render_pass.multi_draw_indexed_indirect(
+                                    &self.render_resources.game_resources.indirect_buffer,
+                                    start as BufferAddress * BYTE_SIZE,
+                                    end - start,
+                                );
+                            }
+                        }
+                    }
+
+                    for draw in self.non_opaque_draws.values() {
+                        render_pass.draw_indexed(
+                            draw.first_index..(draw.first_index + draw.index_count),
+                            draw.base_vertex,
+                            draw.first_instance..(draw.first_instance + draw.instance_count),
+                        );
+                    }
                 }
             }
         }
@@ -1153,6 +1194,10 @@ impl Renderer {
         self.gpu
             .queue
             .submit([custom_gui_commands, encoder.finish()]);
+
+        for mut belt in game_staging_belts.into_iter().flatten() {
+            belt.recall();
+        }
 
         if let Some(buffer) = screenshot_buffer {
             {

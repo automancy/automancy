@@ -1,12 +1,15 @@
-use std::sync::Arc;
 use std::{collections::BTreeMap, mem};
+use std::{num::NonZero, sync::Arc};
 
 use bytemuck::Pod;
 use ordermap::OrderMap;
-use wgpu::util::DrawIndexedIndirectArgs;
 use wgpu::{
     util::{backend_bits_from_env, power_preference_from_env, BufferInitDescriptor, DeviceExt},
-    InstanceFlags, PipelineCompilationOptions,
+    BufferAddress, InstanceFlags, PipelineCompilationOptions, COPY_BUFFER_ALIGNMENT,
+};
+use wgpu::{
+    util::{DrawIndexedIndirectArgs, StagingBelt},
+    CommandEncoder,
 };
 use wgpu::{AdapterInfo, Surface};
 use wgpu::{
@@ -45,914 +48,8 @@ pub const MODEL_DEPTH_FORMAT: TextureFormat = TextureFormat::R32Float;
 pub const SCREENSHOT_FORMAT: TextureFormat = TextureFormat::Rgba8UnormSrgb;
 pub const NORMAL_FORMAT: TextureFormat = TextureFormat::Rgba16Float;
 
-pub fn init_gpu_resources(
-    device: &Device,
-    config: &SurfaceConfiguration,
-    resource_man: &ResourceManager,
-    vertices: Vec<Vertex>,
-    indices: Vec<u16>,
-) -> (SharedResources, RenderResources, GlobalResources) {
-    let game_shader = device.create_shader_module(ShaderModuleDescriptor {
-        label: Some("Game Shader"),
-        source: ShaderSource::Wgsl(resource_man.shaders["game"].to_string().into()),
-    });
-
-    let combine_shader = device.create_shader_module(ShaderModuleDescriptor {
-        label: Some("Combine Shader"),
-        source: ShaderSource::Wgsl(resource_man.shaders["combine"].to_string().into()),
-    });
-
-    let fxaa_shader = device.create_shader_module(ShaderModuleDescriptor {
-        label: Some("FXAA Shader"),
-        source: ShaderSource::Wgsl(resource_man.shaders["fxaa"].to_string().into()),
-    });
-
-    let post_processing_shader = device.create_shader_module(ShaderModuleDescriptor {
-        label: Some("Post Processing Shader"),
-        source: ShaderSource::Wgsl(resource_man.shaders["post_processing"].to_string().into()),
-    });
-
-    let intermediate_shader = device.create_shader_module(ShaderModuleDescriptor {
-        label: Some("Intermediate Shader"),
-        source: ShaderSource::Wgsl(resource_man.shaders["intermediate"].to_string().into()),
-    });
-
-    let vertex_buffer = device.create_buffer_init(&BufferInitDescriptor {
-        label: Some("Vertex Buffer"),
-        contents: bytemuck::cast_slice(vertices.as_slice()),
-        usage: BufferUsages::VERTEX,
-    });
-
-    let index_buffer = device.create_buffer_init(&BufferInitDescriptor {
-        label: Some("Index Buffer"),
-        contents: bytemuck::cast_slice(indices.as_slice()),
-        usage: BufferUsages::INDEX,
-    });
-
-    let filtering_sampler = device.create_sampler(&SamplerDescriptor {
-        address_mode_u: AddressMode::ClampToEdge,
-        address_mode_v: AddressMode::ClampToEdge,
-        address_mode_w: AddressMode::ClampToEdge,
-        mag_filter: FilterMode::Linear,
-        min_filter: FilterMode::Linear,
-        ..Default::default()
-    });
-
-    let nonfiltering_sampler = device.create_sampler(&SamplerDescriptor {
-        address_mode_u: AddressMode::ClampToEdge,
-        address_mode_v: AddressMode::ClampToEdge,
-        address_mode_w: AddressMode::ClampToEdge,
-        mag_filter: FilterMode::Nearest,
-        min_filter: FilterMode::Nearest,
-        ..Default::default()
-    });
-
-    let repeating_sampler = device.create_sampler(&SamplerDescriptor {
-        address_mode_u: AddressMode::Repeat,
-        address_mode_v: AddressMode::Repeat,
-        address_mode_w: AddressMode::Repeat,
-        mag_filter: FilterMode::Nearest,
-        min_filter: FilterMode::Nearest,
-        ..Default::default()
-    });
-
-    let post_processing_bind_group_layout_uniform =
-        device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            entries: &[BindGroupLayoutEntry {
-                binding: 0,
-                visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Buffer {
-                    ty: BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-            label: Some("post_processing_bind_group_layout_uniform"),
-        });
-
-    let post_processing_bind_group_layout_textures =
-        device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            entries: &[
-                BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::Filtering),
-                    count: None,
-                },
-                BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
-                    count: None,
-                },
-                BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
-                    count: None,
-                },
-                BindGroupLayoutEntry {
-                    binding: 3,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: TextureViewDimension::D2,
-                        sample_type: TextureSampleType::Float { filterable: true },
-                    },
-                    count: None,
-                },
-                BindGroupLayoutEntry {
-                    binding: 4,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: TextureViewDimension::D2,
-                        sample_type: TextureSampleType::Float { filterable: false },
-                    },
-                    count: None,
-                },
-                BindGroupLayoutEntry {
-                    binding: 5,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: TextureViewDimension::D2,
-                        sample_type: TextureSampleType::Float { filterable: false },
-                    },
-                    count: None,
-                },
-            ],
-            label: Some("post_processing_bind_group_layout_textures"),
-        });
-
-    let game_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-        entries: &[
-            BindGroupLayoutEntry {
-                binding: 0,
-                visibility: ShaderStages::VERTEX_FRAGMENT,
-                ty: BindingType::Buffer {
-                    ty: BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-            BindGroupLayoutEntry {
-                binding: 1,
-                visibility: ShaderStages::VERTEX,
-                ty: BindingType::Buffer {
-                    ty: BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-            BindGroupLayoutEntry {
-                binding: 2,
-                visibility: ShaderStages::VERTEX,
-                ty: BindingType::Buffer {
-                    ty: BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-            BindGroupLayoutEntry {
-                binding: 3,
-                visibility: ShaderStages::VERTEX,
-                ty: BindingType::Buffer {
-                    ty: BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-        ],
-        label: Some("game_bind_group_layout"),
-    });
-
-    let game_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
-        label: Some("Game Render Pipeline Layout"),
-        bind_group_layouts: &[&game_bind_group_layout],
-        push_constant_ranges: &[],
-    });
-
-    let game_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
-        label: Some("Game Render Pipeline"),
-        layout: Some(&game_pipeline_layout),
-        vertex: VertexState {
-            module: &game_shader,
-            entry_point: "vs_main",
-            buffers: &[Vertex::desc(), GpuInstance::desc()],
-            compilation_options: PipelineCompilationOptions::default(),
-        },
-        fragment: Some(FragmentState {
-            module: &game_shader,
-            entry_point: "fs_main",
-            targets: &[
-                Some(ColorTargetState {
-                    format: config.format,
-                    blend: Some(BlendState::PREMULTIPLIED_ALPHA_BLENDING),
-                    write_mask: ColorWrites::ALL,
-                }),
-                Some(ColorTargetState {
-                    format: NORMAL_FORMAT,
-                    blend: None,
-                    write_mask: ColorWrites::COLOR,
-                }),
-                Some(ColorTargetState {
-                    format: MODEL_DEPTH_FORMAT,
-                    blend: None,
-                    write_mask: ColorWrites::ALL,
-                }),
-            ],
-            compilation_options: PipelineCompilationOptions::default(),
-        }),
-        primitive: PrimitiveState {
-            topology: PrimitiveTopology::TriangleList,
-            front_face: FrontFace::Ccw,
-            cull_mode: None,
-            ..Default::default()
-        },
-        depth_stencil: Some(DepthStencilState {
-            format: DEPTH_FORMAT,
-            depth_write_enabled: true,
-            depth_compare: CompareFunction::Less,
-            stencil: Default::default(),
-            bias: Default::default(),
-        }),
-        multisample: MultisampleState {
-            count: 1,
-            mask: !0,
-            alpha_to_coverage_enabled: false,
-        },
-        multiview: None,
-        cache: None,
-    });
-
-    let game_resources = {
-        let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Game Uniform Buffer"),
-            contents: bytemuck::cast_slice(&[GameUBO::default()]),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
-
-        let matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Game Matrix Data Buffer"),
-            contents: &vec![0; mem::size_of::<MatrixData>() * 524288],
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-        });
-
-        let animation_matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Game Animation Matrix Data Buffer"),
-            contents: &vec![0; mem::size_of::<AnimationMatrixData>() * 524288],
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-        });
-
-        let world_matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Game World Matrix Data Buffer"),
-            contents: &vec![0; mem::size_of::<WorldMatrixData>()],
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-        });
-
-        let bind_group = device.create_bind_group(&BindGroupDescriptor {
-            layout: &game_bind_group_layout,
-            entries: &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: uniform_buffer.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: matrix_data_buffer.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 2,
-                    resource: animation_matrix_data_buffer.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 3,
-                    resource: world_matrix_data_buffer.as_entire_binding(),
-                },
-            ],
-            label: Some("game_bind_group"),
-        });
-
-        GameResources {
-            instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
-                label: None,
-                contents: &[],
-                usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
-            }),
-            indirect_buffer: device.create_buffer_init(&BufferInitDescriptor {
-                label: None,
-                contents: &[],
-                usage: BufferUsages::INDIRECT | BufferUsages::COPY_DST,
-            }),
-            matrix_data_buffer,
-            animation_matrix_data_buffer,
-            world_matrix_data_buffer,
-            uniform_buffer,
-            bind_group,
-        }
-    };
-
-    let overlay_objects_resources = {
-        let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Overlay Objects Uniform Buffer"),
-            contents: bytemuck::cast_slice(&[GameUBO::default()]),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
-
-        let matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Overlay Objects Matrix Data Buffer"),
-            contents: &vec![0; mem::size_of::<MatrixData>() * 256],
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-        });
-
-        let world_matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Overlay Objects World Matrix Data Buffer"),
-            contents: &vec![0; mem::size_of::<WorldMatrixData>() * 256],
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-        });
-
-        let bind_group = device.create_bind_group(&BindGroupDescriptor {
-            layout: &game_bind_group_layout,
-            entries: &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: uniform_buffer.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: matrix_data_buffer.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 2,
-                    resource: game_resources
-                        .animation_matrix_data_buffer
-                        .as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 3,
-                    resource: world_matrix_data_buffer.as_entire_binding(),
-                },
-            ],
-            label: Some("overlay_objects_bind_group"),
-        });
-
-        OverlayObjectsResources {
-            instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
-                label: None,
-                contents: &[],
-                usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
-            }),
-            indirect_buffer: device.create_buffer_init(&BufferInitDescriptor {
-                label: None,
-                contents: &[],
-                usage: BufferUsages::INDIRECT | BufferUsages::COPY_DST,
-            }),
-            matrix_data_buffer,
-            world_matrix_data_buffer,
-            uniform_buffer,
-            bind_group,
-        }
-    };
-
-    let gui_resources = {
-        let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Gui Uniform Buffer"),
-            contents: bytemuck::cast_slice(&[GameUBO::default()]),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
-
-        const MATRIX_DATA_SIZE: usize = 4096;
-        let matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Gui Matrix Data Buffer"),
-            contents: &vec![0; mem::size_of::<MatrixData>() * MATRIX_DATA_SIZE],
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-        });
-
-        let animation_matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Gui Animation Matrix Data Buffer"),
-            contents: &vec![0; mem::size_of::<AnimationMatrixData>() * MATRIX_DATA_SIZE],
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-        });
-
-        let world_matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Gui World Matrix Data Buffer"),
-            contents: &vec![0; mem::size_of::<WorldMatrixData>() * MATRIX_DATA_SIZE],
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-        });
-
-        let bind_group = device.create_bind_group(&BindGroupDescriptor {
-            layout: &game_bind_group_layout,
-            entries: &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: uniform_buffer.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: matrix_data_buffer.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 2,
-                    resource: animation_matrix_data_buffer.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 3,
-                    resource: world_matrix_data_buffer.as_entire_binding(),
-                },
-            ],
-            label: Some("gui_bind_group"),
-        });
-
-        let post_processing_uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: None,
-            contents: bytemuck::cast_slice(&[PostProcessingUBO {
-                flags: 0,
-                ..Default::default()
-            }]),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
-
-        let post_processing_bind_group_uniform = device.create_bind_group(&BindGroupDescriptor {
-            label: None,
-            layout: &post_processing_bind_group_layout_uniform,
-            entries: &[BindGroupEntry {
-                binding: 0,
-                resource: post_processing_uniform_buffer.as_entire_binding(),
-            }],
-        });
-
-        GuiResources {
-            opaques_instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
-                label: None,
-                contents: &[],
-                usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
-            }),
-            non_opaques_instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
-                label: None,
-                contents: &[],
-                usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
-            }),
-            indirect_buffer: device.create_buffer_init(&BufferInitDescriptor {
-                label: None,
-                contents: &[],
-                usage: BufferUsages::INDIRECT | BufferUsages::COPY_DST,
-            }),
-            uniform_buffer,
-            matrix_data_buffer,
-            animation_matrix_data_buffer,
-            world_matrix_data_buffer,
-            bind_group,
-
-            color_texture: None,
-            depth_texture: None,
-            model_depth_texture: None,
-            normal_texture: None,
-
-            post_processing_uniform_buffer,
-            post_processing_bind_group_uniform,
-            post_processing_bind_group_textures: None,
-
-            post_processing_texture: None,
-            antialiasing_bind_group: None,
-
-            present_texture: None,
-        }
-    };
-
-    let combine_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-        entries: &[
-            BindGroupLayoutEntry {
-                binding: 0,
-                visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Texture {
-                    multisampled: false,
-                    view_dimension: TextureViewDimension::D2,
-                    sample_type: TextureSampleType::Float { filterable: true },
-                },
-                count: None,
-            },
-            BindGroupLayoutEntry {
-                binding: 1,
-                visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Sampler(SamplerBindingType::Filtering),
-                count: None,
-            },
-            BindGroupLayoutEntry {
-                binding: 2,
-                visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Texture {
-                    multisampled: false,
-                    view_dimension: TextureViewDimension::D2,
-                    sample_type: TextureSampleType::Float { filterable: true },
-                },
-                count: None,
-            },
-            BindGroupLayoutEntry {
-                binding: 3,
-                visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Sampler(SamplerBindingType::Filtering),
-                count: None,
-            },
-        ],
-        label: Some("combine_bind_group_layout"),
-    });
-
-    let combine_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
-        label: Some("Combine Render Pipeline Layout"),
-        bind_group_layouts: &[&combine_bind_group_layout],
-        push_constant_ranges: &[],
-    });
-
-    let combine_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
-        label: Some("Combine Render Pipeline"),
-        layout: Some(&combine_pipeline_layout),
-        vertex: VertexState {
-            module: &combine_shader,
-            entry_point: "vs_main",
-            buffers: &[],
-            compilation_options: PipelineCompilationOptions::default(),
-        },
-        fragment: Some(FragmentState {
-            module: &combine_shader,
-            entry_point: "fs_main",
-            targets: &[Some(ColorTargetState {
-                format: config.format,
-                blend: None,
-                write_mask: ColorWrites::ALL,
-            })],
-            compilation_options: PipelineCompilationOptions::default(),
-        }),
-        primitive: PrimitiveState {
-            topology: PrimitiveTopology::TriangleList,
-            front_face: FrontFace::Ccw,
-            ..Default::default()
-        },
-        depth_stencil: None,
-        multisample: MultisampleState {
-            count: 1,
-            mask: !0,
-            alpha_to_coverage_enabled: false,
-        },
-        multiview: None,
-        cache: None,
-    });
-
-    let fxaa_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-        entries: &[
-            BindGroupLayoutEntry {
-                binding: 0,
-                visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Texture {
-                    multisampled: false,
-                    view_dimension: TextureViewDimension::D2,
-                    sample_type: TextureSampleType::Float { filterable: true },
-                },
-                count: None,
-            },
-            BindGroupLayoutEntry {
-                binding: 1,
-                visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Sampler(SamplerBindingType::Filtering),
-                count: None,
-            },
-        ],
-        label: Some("antialiasing_bind_group_layout"),
-    });
-
-    let fxaa_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
-        label: Some("Antialiasing Render Pipeline Layout"),
-        bind_group_layouts: &[&fxaa_bind_group_layout],
-        push_constant_ranges: &[],
-    });
-
-    let fxaa_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
-        label: Some("FXAA Render Pipeline"),
-        layout: Some(&fxaa_pipeline_layout),
-        vertex: VertexState {
-            module: &fxaa_shader,
-            entry_point: "vs_main",
-            buffers: &[],
-            compilation_options: PipelineCompilationOptions::default(),
-        },
-        fragment: Some(FragmentState {
-            module: &fxaa_shader,
-            entry_point: "fs_main",
-            targets: &[Some(ColorTargetState {
-                format: config.format,
-                blend: None,
-                write_mask: ColorWrites::ALL,
-            })],
-            compilation_options: PipelineCompilationOptions::default(),
-        }),
-        primitive: PrimitiveState {
-            topology: PrimitiveTopology::TriangleList,
-            front_face: FrontFace::Ccw,
-            cull_mode: None,
-            ..Default::default()
-        },
-        depth_stencil: None,
-        multisample: MultisampleState {
-            count: 1,
-            mask: !0,
-            alpha_to_coverage_enabled: false,
-        },
-        multiview: None,
-        cache: None,
-    });
-
-    let (post_processing_resources, post_processing_pipeline) = {
-        let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Post Processing Uniform Buffer"),
-            contents: bytemuck::cast_slice(&[PostProcessingUBO::default()]),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
-
-        let bind_group_uniform = device.create_bind_group(&BindGroupDescriptor {
-            label: None,
-            layout: &post_processing_bind_group_layout_uniform,
-            entries: &[BindGroupEntry {
-                binding: 0,
-                resource: uniform_buffer.as_entire_binding(),
-            }],
-        });
-
-        let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
-            label: Some("Post Processing Render Pipeline Layout"),
-            bind_group_layouts: &[
-                &post_processing_bind_group_layout_textures,
-                &post_processing_bind_group_layout_uniform,
-            ],
-            push_constant_ranges: &[],
-        });
-
-        let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
-            label: Some("Post Processing Render Pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: VertexState {
-                module: &post_processing_shader,
-                entry_point: "vs_main",
-                buffers: &[],
-                compilation_options: PipelineCompilationOptions::default(),
-            },
-            fragment: Some(FragmentState {
-                module: &post_processing_shader,
-                entry_point: "fs_main",
-                targets: &[Some(ColorTargetState {
-                    format: config.format,
-                    blend: None,
-                    write_mask: ColorWrites::ALL,
-                })],
-                compilation_options: PipelineCompilationOptions::default(),
-            }),
-            primitive: PrimitiveState {
-                topology: PrimitiveTopology::TriangleList,
-                front_face: FrontFace::Ccw,
-                cull_mode: None,
-                ..Default::default()
-            },
-            depth_stencil: None,
-            multisample: MultisampleState {
-                count: 1,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            multiview: None,
-            cache: None,
-        });
-
-        (
-            PostProcessingResources {
-                uniform_buffer,
-                bind_group_uniform,
-            },
-            pipeline,
-        )
-    };
-
-    let intermediate_bind_group_layout =
-        device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            label: None,
-            entries: &[
-                BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Float { filterable: true },
-                        view_dimension: TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                    count: None,
-                },
-                BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::Filtering),
-                    count: None,
-                },
-                BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: ShaderStages::VERTEX_FRAGMENT,
-                    ty: BindingType::Buffer {
-                        ty: BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-            ],
-        });
-
-    let intermediate_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
-        label: Some("Intermediate Render Pipeline Layout"),
-        bind_group_layouts: &[&intermediate_bind_group_layout],
-        push_constant_ranges: &[],
-    });
-
-    let screenshot_uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
-        label: Some("Screenshot Uniform Buffer"),
-        contents: bytemuck::cast_slice(&[IntermediateUBO::default()]),
-        usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-    });
-    let screenshot_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
-        label: Some("Screenshot Render Pipeline"),
-        layout: Some(&intermediate_pipeline_layout),
-        vertex: VertexState {
-            module: &intermediate_shader,
-            entry_point: "vs_main",
-            buffers: &[],
-            compilation_options: PipelineCompilationOptions::default(),
-        },
-        fragment: Some(FragmentState {
-            module: &intermediate_shader,
-            entry_point: "fs_main",
-            targets: &[Some(ColorTargetState {
-                format: SCREENSHOT_FORMAT,
-                blend: None,
-                write_mask: ColorWrites::ALL,
-            })],
-            compilation_options: PipelineCompilationOptions::default(),
-        }),
-        primitive: PrimitiveState {
-            topology: PrimitiveTopology::TriangleList,
-            front_face: FrontFace::Ccw,
-            cull_mode: None,
-            ..Default::default()
-        },
-        depth_stencil: None,
-        multisample: MultisampleState {
-            count: 1,
-            mask: !0,
-            alpha_to_coverage_enabled: false,
-        },
-        multiview: None,
-        cache: None,
-    });
-
-    let present_uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
-        label: Some("Present Uniform Buffer"),
-        contents: bytemuck::cast_slice(&[IntermediateUBO::default()]),
-        usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-    });
-    let present_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
-        label: Some("Present Pipeline"),
-        layout: Some(&intermediate_pipeline_layout),
-        vertex: VertexState {
-            module: &intermediate_shader,
-            entry_point: "vs_main",
-            buffers: &[],
-            compilation_options: PipelineCompilationOptions::default(),
-        },
-        fragment: Some(FragmentState {
-            module: &intermediate_shader,
-            entry_point: "fs_main",
-            targets: &[Some(ColorTargetState {
-                format: config.format,
-                blend: Some(BlendState::PREMULTIPLIED_ALPHA_BLENDING),
-                write_mask: ColorWrites::ALL,
-            })],
-            compilation_options: PipelineCompilationOptions::default(),
-        }),
-        primitive: PrimitiveState {
-            topology: PrimitiveTopology::TriangleList,
-            front_face: FrontFace::Ccw,
-            cull_mode: None,
-            ..Default::default()
-        },
-        depth_stencil: None,
-        multisample: MultisampleState {
-            count: 1,
-            mask: !0,
-            alpha_to_coverage_enabled: false,
-        },
-        multiview: None,
-        cache: None,
-    });
-
-    let multisampled_present_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
-        label: Some("Present Pipeline"),
-        layout: Some(&intermediate_pipeline_layout),
-        vertex: VertexState {
-            module: &intermediate_shader,
-            entry_point: "vs_main",
-            buffers: &[],
-            compilation_options: PipelineCompilationOptions::default(),
-        },
-        fragment: Some(FragmentState {
-            module: &intermediate_shader,
-            entry_point: "fs_main",
-            targets: &[Some(ColorTargetState {
-                format: config.format,
-                blend: Some(BlendState::PREMULTIPLIED_ALPHA_BLENDING),
-                write_mask: ColorWrites::ALL,
-            })],
-            compilation_options: PipelineCompilationOptions::default(),
-        }),
-        primitive: PrimitiveState {
-            topology: PrimitiveTopology::TriangleList,
-            front_face: FrontFace::Ccw,
-            cull_mode: None,
-            ..Default::default()
-        },
-        depth_stencil: None,
-        multisample: MultisampleState {
-            count: 4, // TODO this is a magic value!
-            mask: !0,
-            alpha_to_coverage_enabled: false,
-        },
-        multiview: None,
-        cache: None,
-    });
-
-    let mut shared = SharedResources {
-        game_texture: None,
-        gui_texture: None,
-        gui_texture_resolve: None,
-        normal_texture: None,
-        depth_texture: None,
-        model_depth_texture: None,
-
-        game_post_processing_bind_group: None,
-        game_post_processing_texture: None,
-        game_antialiasing_bind_group: None,
-        game_antialiasing_texture: None,
-
-        overlay_depth_texture: None,
-
-        first_combine_bind_group: None,
-        first_combine_texture: None,
-
-        present_bind_group: None,
-        screenshot_bind_group: None,
-    };
-
-    let render = RenderResources {
-        overlay_objects_resources,
-        game_resources,
-        gui_resources: Some(gui_resources),
-        post_processing_resources,
-    };
-
-    let global = GlobalResources {
-        vertex_buffer,
-        index_buffer,
-
-        game_shader,
-        combine_shader,
-        intermediate_shader,
-
-        game_pipeline,
-
-        intermediate_bind_group_layout,
-        screenshot_uniform_buffer,
-        screenshot_pipeline,
-        present_uniform_buffer,
-        present_pipeline,
-        multisampled_present_pipeline,
-
-        post_processing_pipeline,
-        post_processing_bind_group_layout_uniform,
-        post_processing_bind_group_layout_textures,
-
-        fxaa_pipeline,
-        fxaa_bind_group_layout,
-
-        combine_pipeline,
-        combine_bind_group_layout,
-
-        filtering_sampler,
-        nonfiltering_sampler,
-        repeating_sampler,
-    };
-
-    shared.create(device, config, &global);
-
-    (shared, render, global)
+fn align_to_copy_alignment(add: BufferAddress) -> BufferAddress {
+    add + (COPY_BUFFER_ALIGNMENT - (add % COPY_BUFFER_ALIGNMENT))
 }
 
 fn ordered_map_write_to_buffer<K, V>(data: &OrderMap<K, V>) -> Vec<u8>
@@ -1001,41 +98,69 @@ where
     queue.write_buffer(buffer, 0, &map_write_to_buffer(data));
 }
 
+#[must_use]
 pub fn update_buffer_with_changes<V>(
-    queue: &Queue,
+    encoder: &mut CommandEncoder,
+    device: &Device,
     buffer: &Buffer,
     changes: &[u32],
     data: &BTreeMap<u32, V>,
-) where
+) -> Option<StagingBelt>
+where
     V: Pod + Default,
 {
     debug_assert!(changes.windows(2).all(|v| v[0] < v[1]));
 
     let byte_size = size_of::<V>();
 
-    for batch in changes.linear_group_by(|a, b| b - a == 1) {
-        let updates = batch
-            .iter()
-            .map(|i| data.get(i).cloned().unwrap_or_default())
-            .collect::<Vec<_>>();
+    let entire_size = changes.len();
+    if let Some(max_batch) = changes
+        .linear_group_by(|a, b| b - a == 1)
+        .map(|v| v.len())
+        .max()
+    {
+        // TODO test a good multiplier for the size
+        let mut belt = StagingBelt::new(align_to_copy_alignment(
+            (byte_size * entire_size / 4).max(byte_size * max_batch) as BufferAddress,
+        ));
 
-        if !updates.is_empty() {
-            queue.write_buffer(
-                buffer,
-                (byte_size * batch[0] as usize) as u64,
-                bytemuck::cast_slice(&updates),
-            );
+        for batch in changes.linear_group_by(|a, b| b - a == 1) {
+            if !batch.is_empty() {
+                let mut view = belt.write_buffer(
+                    encoder,
+                    buffer,
+                    (byte_size * batch[0] as usize) as BufferAddress,
+                    unsafe { NonZero::new_unchecked((byte_size * batch.len()) as BufferAddress) },
+                    device,
+                );
+                for (idx, v) in batch.iter().map(|i| data.get(i)).enumerate() {
+                    match v {
+                        Some(v) => view[(byte_size * idx)..(byte_size * (idx + 1))]
+                            .copy_from_slice(bytemuck::bytes_of(v)),
+                        None => view[(byte_size * idx)..(byte_size * (idx + 1))]
+                            .copy_from_slice(bytemuck::bytes_of(&V::default())),
+                    }
+                }
+            }
         }
+
+        belt.finish();
+
+        return Some(belt);
     }
+
+    None
 }
 
+#[must_use]
 pub fn resize_update_buffer_with_changes<V>(
+    encoder: &mut CommandEncoder,
     device: &Device,
-    queue: &Queue,
     buffer: &mut Buffer,
     changes: &[u32],
     data: &BTreeMap<u32, V>,
-) where
+) -> Option<StagingBelt>
+where
     V: Pod + Default,
 {
     debug_assert!(changes.windows(2).all(|v| v[0] < v[1]));
@@ -1054,8 +179,10 @@ pub fn resize_update_buffer_with_changes<V>(
             usage,
         });
     } else {
-        update_buffer_with_changes(queue, buffer, changes, data);
+        return update_buffer_with_changes(encoder, device, buffer, changes, data);
     }
+
+    None
 }
 
 pub fn resize_update_buffer<V>(device: &Device, queue: &Queue, buffer: &mut Buffer, data: &[V])
@@ -1085,13 +212,14 @@ pub fn clear_buffer(device: &Device, buffer: &mut Buffer) {
     });
 }
 
+#[must_use]
 pub fn update_indirect_buffer(
+    encoder: &mut CommandEncoder,
     device: &Device,
-    queue: &Queue,
     buffer: &mut Buffer,
     changes: &[u32],
     data: &BTreeMap<u32, DrawIndexedIndirectArgs>,
-) {
+) -> Option<StagingBelt> {
     debug_assert!(changes.windows(2).all(|v| v[0] < v[1]));
 
     const BYTE_SIZE: usize = size_of::<DrawIndexedIndirectArgs>();
@@ -1103,8 +231,8 @@ pub fn update_indirect_buffer(
         let usage = buffer.usage();
 
         let mut vec = Vec::<u8>::with_capacity(BYTE_SIZE * size);
-        for v in data.values() {
-            vec.extend(v.as_bytes());
+        for i in 0..=max_index {
+            vec.extend(data.get(&i).cloned().unwrap_or_default().as_bytes());
         }
 
         *buffer = device.create_buffer_init(&BufferInitDescriptor {
@@ -1113,28 +241,46 @@ pub fn update_indirect_buffer(
             usage,
         });
     } else {
-        let updates = changes
-            .iter()
-            .flat_map(|i| data.get(i).cloned().map(|v| (*i, v)))
-            .collect::<Vec<_>>();
+        let entire_size = changes.len();
+        if let Some(max_batch) = changes
+            .linear_group_by(|a, b| b - a == 1)
+            .map(|v| v.len())
+            .max()
+        {
+            // TODO test a good multiplier for the size
+            let mut belt = StagingBelt::new(align_to_copy_alignment(
+                (BYTE_SIZE * entire_size / 4).max(BYTE_SIZE * max_batch) as BufferAddress,
+            ));
 
-        if !updates.is_empty() {
-            for batch in updates.linear_group_by(|a, b| b.0 - a.0 == 1) {
-                let i = batch[0].0;
-                let v = batch
-                    .iter()
-                    .flat_map(|v| v.1.as_bytes())
-                    .cloned()
-                    .collect::<Vec<_>>();
-
-                queue.write_buffer(
-                    buffer,
-                    (BYTE_SIZE * i as usize) as u64,
-                    bytemuck::cast_slice(&v),
-                );
+            for batch in changes.linear_group_by(|a, b| b - a == 1) {
+                if !batch.is_empty() {
+                    let mut view = belt.write_buffer(
+                        encoder,
+                        buffer,
+                        (BYTE_SIZE * batch[0] as usize) as BufferAddress,
+                        unsafe {
+                            NonZero::new_unchecked((BYTE_SIZE * batch.len()) as BufferAddress)
+                        },
+                        device,
+                    );
+                    for (idx, v) in batch.iter().map(|i| data.get(i)).enumerate() {
+                        match v {
+                            Some(v) => view[(BYTE_SIZE * idx)..(BYTE_SIZE * (idx + 1))]
+                                .copy_from_slice(v.as_bytes()),
+                            None => view[(BYTE_SIZE * idx)..(BYTE_SIZE * (idx + 1))]
+                                .copy_from_slice(DrawIndexedIndirectArgs::default().as_bytes()),
+                        }
+                    }
+                }
             }
+
+            belt.finish();
+
+            return Some(belt);
         }
     }
+
+    None
 }
 
 pub fn create_texture_and_view(
@@ -1214,7 +360,6 @@ pub struct GameResources {
 
 pub struct OverlayObjectsResources {
     pub instance_buffer: Buffer,
-    pub indirect_buffer: Buffer,
     pub uniform_buffer: Buffer,
     pub matrix_data_buffer: Buffer,
     pub world_matrix_data_buffer: Buffer,
@@ -1223,9 +368,7 @@ pub struct OverlayObjectsResources {
 
 #[derive(OptionGetter)]
 pub struct GuiResources {
-    pub opaques_instance_buffer: Buffer,
-    pub non_opaques_instance_buffer: Buffer,
-    pub indirect_buffer: Buffer,
+    pub instance_buffer: Buffer,
     pub uniform_buffer: Buffer,
     pub matrix_data_buffer: Buffer,
     pub animation_matrix_data_buffer: Buffer,
@@ -1738,6 +881,901 @@ impl SharedResources {
     }
 }
 
+pub fn init_gpu_resources(
+    device: &Device,
+    config: &SurfaceConfiguration,
+    resource_man: &ResourceManager,
+    vertices: Vec<Vertex>,
+    indices: Vec<u16>,
+) -> (SharedResources, RenderResources, GlobalResources) {
+    let game_shader = device.create_shader_module(ShaderModuleDescriptor {
+        label: Some("Game Shader"),
+        source: ShaderSource::Wgsl(resource_man.shaders["game"].to_string().into()),
+    });
+
+    let combine_shader = device.create_shader_module(ShaderModuleDescriptor {
+        label: Some("Combine Shader"),
+        source: ShaderSource::Wgsl(resource_man.shaders["combine"].to_string().into()),
+    });
+
+    let fxaa_shader = device.create_shader_module(ShaderModuleDescriptor {
+        label: Some("FXAA Shader"),
+        source: ShaderSource::Wgsl(resource_man.shaders["fxaa"].to_string().into()),
+    });
+
+    let post_processing_shader = device.create_shader_module(ShaderModuleDescriptor {
+        label: Some("Post Processing Shader"),
+        source: ShaderSource::Wgsl(resource_man.shaders["post_processing"].to_string().into()),
+    });
+
+    let intermediate_shader = device.create_shader_module(ShaderModuleDescriptor {
+        label: Some("Intermediate Shader"),
+        source: ShaderSource::Wgsl(resource_man.shaders["intermediate"].to_string().into()),
+    });
+
+    let vertex_buffer = device.create_buffer_init(&BufferInitDescriptor {
+        label: Some("Vertex Buffer"),
+        contents: bytemuck::cast_slice(vertices.as_slice()),
+        usage: BufferUsages::VERTEX,
+    });
+
+    let index_buffer = device.create_buffer_init(&BufferInitDescriptor {
+        label: Some("Index Buffer"),
+        contents: bytemuck::cast_slice(indices.as_slice()),
+        usage: BufferUsages::INDEX,
+    });
+
+    let filtering_sampler = device.create_sampler(&SamplerDescriptor {
+        address_mode_u: AddressMode::ClampToEdge,
+        address_mode_v: AddressMode::ClampToEdge,
+        address_mode_w: AddressMode::ClampToEdge,
+        mag_filter: FilterMode::Linear,
+        min_filter: FilterMode::Linear,
+        ..Default::default()
+    });
+
+    let nonfiltering_sampler = device.create_sampler(&SamplerDescriptor {
+        address_mode_u: AddressMode::ClampToEdge,
+        address_mode_v: AddressMode::ClampToEdge,
+        address_mode_w: AddressMode::ClampToEdge,
+        mag_filter: FilterMode::Nearest,
+        min_filter: FilterMode::Nearest,
+        ..Default::default()
+    });
+
+    let repeating_sampler = device.create_sampler(&SamplerDescriptor {
+        address_mode_u: AddressMode::Repeat,
+        address_mode_v: AddressMode::Repeat,
+        address_mode_w: AddressMode::Repeat,
+        mag_filter: FilterMode::Nearest,
+        min_filter: FilterMode::Nearest,
+        ..Default::default()
+    });
+
+    let post_processing_bind_group_layout_uniform =
+        device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+            entries: &[BindGroupLayoutEntry {
+                binding: 0,
+                visibility: ShaderStages::FRAGMENT,
+                ty: BindingType::Buffer {
+                    ty: BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+            label: Some("post_processing_bind_group_layout_uniform"),
+        });
+
+    let post_processing_bind_group_layout_textures =
+        device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+            entries: &[
+                BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Sampler(SamplerBindingType::Filtering),
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Texture {
+                        multisampled: false,
+                        view_dimension: TextureViewDimension::D2,
+                        sample_type: TextureSampleType::Float { filterable: true },
+                    },
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Texture {
+                        multisampled: false,
+                        view_dimension: TextureViewDimension::D2,
+                        sample_type: TextureSampleType::Float { filterable: false },
+                    },
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 5,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Texture {
+                        multisampled: false,
+                        view_dimension: TextureViewDimension::D2,
+                        sample_type: TextureSampleType::Float { filterable: false },
+                    },
+                    count: None,
+                },
+            ],
+            label: Some("post_processing_bind_group_layout_textures"),
+        });
+
+    let game_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+        entries: &[
+            BindGroupLayoutEntry {
+                binding: 0,
+                visibility: ShaderStages::VERTEX_FRAGMENT,
+                ty: BindingType::Buffer {
+                    ty: BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            BindGroupLayoutEntry {
+                binding: 1,
+                visibility: ShaderStages::VERTEX,
+                ty: BindingType::Buffer {
+                    ty: BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            BindGroupLayoutEntry {
+                binding: 2,
+                visibility: ShaderStages::VERTEX,
+                ty: BindingType::Buffer {
+                    ty: BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            BindGroupLayoutEntry {
+                binding: 3,
+                visibility: ShaderStages::VERTEX,
+                ty: BindingType::Buffer {
+                    ty: BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+        ],
+        label: Some("game_bind_group_layout"),
+    });
+
+    let game_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+        label: Some("Game Render Pipeline Layout"),
+        bind_group_layouts: &[&game_bind_group_layout],
+        push_constant_ranges: &[],
+    });
+
+    let game_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+        label: Some("Game Render Pipeline"),
+        layout: Some(&game_pipeline_layout),
+        vertex: VertexState {
+            module: &game_shader,
+            entry_point: "vs_main",
+            buffers: &[Vertex::desc(), GpuInstance::desc()],
+            compilation_options: PipelineCompilationOptions::default(),
+        },
+        fragment: Some(FragmentState {
+            module: &game_shader,
+            entry_point: "fs_main",
+            targets: &[
+                Some(ColorTargetState {
+                    format: config.format,
+                    blend: Some(BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                    write_mask: ColorWrites::ALL,
+                }),
+                Some(ColorTargetState {
+                    format: NORMAL_FORMAT,
+                    blend: None,
+                    write_mask: ColorWrites::COLOR,
+                }),
+                Some(ColorTargetState {
+                    format: MODEL_DEPTH_FORMAT,
+                    blend: None,
+                    write_mask: ColorWrites::ALL,
+                }),
+            ],
+            compilation_options: PipelineCompilationOptions::default(),
+        }),
+        primitive: PrimitiveState {
+            topology: PrimitiveTopology::TriangleList,
+            front_face: FrontFace::Ccw,
+            cull_mode: None,
+            ..Default::default()
+        },
+        depth_stencil: Some(DepthStencilState {
+            format: DEPTH_FORMAT,
+            depth_write_enabled: true,
+            depth_compare: CompareFunction::Less,
+            stencil: Default::default(),
+            bias: Default::default(),
+        }),
+        multisample: MultisampleState {
+            count: 1,
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        },
+        multiview: None,
+        cache: None,
+    });
+
+    let game_resources = {
+        let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Game Uniform Buffer"),
+            contents: bytemuck::cast_slice(&[GameUBO::default()]),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+
+        let matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Game Matrix Data Buffer"),
+            contents: &vec![0; mem::size_of::<MatrixData>() * 524288],
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+        });
+
+        let animation_matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Game Animation Matrix Data Buffer"),
+            contents: &vec![0; mem::size_of::<AnimationMatrixData>() * 524288],
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+        });
+
+        let world_matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Game World Matrix Data Buffer"),
+            contents: &vec![0; mem::size_of::<WorldMatrixData>()],
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+        });
+
+        let bind_group = device.create_bind_group(&BindGroupDescriptor {
+            layout: &game_bind_group_layout,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: matrix_data_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: animation_matrix_data_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 3,
+                    resource: world_matrix_data_buffer.as_entire_binding(),
+                },
+            ],
+            label: Some("game_bind_group"),
+        });
+
+        GameResources {
+            instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
+                label: None,
+                contents: &[],
+                usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
+            }),
+            indirect_buffer: device.create_buffer_init(&BufferInitDescriptor {
+                label: None,
+                contents: &[],
+                usage: BufferUsages::INDIRECT | BufferUsages::COPY_DST,
+            }),
+            matrix_data_buffer,
+            animation_matrix_data_buffer,
+            world_matrix_data_buffer,
+            uniform_buffer,
+            bind_group,
+        }
+    };
+
+    let overlay_objects_resources = {
+        let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Overlay Objects Uniform Buffer"),
+            contents: bytemuck::cast_slice(&[GameUBO::default()]),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+
+        let matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Overlay Objects Matrix Data Buffer"),
+            contents: &vec![0; mem::size_of::<MatrixData>() * 256],
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+        });
+
+        let world_matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Overlay Objects World Matrix Data Buffer"),
+            contents: &vec![0; mem::size_of::<WorldMatrixData>() * 256],
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+        });
+
+        let bind_group = device.create_bind_group(&BindGroupDescriptor {
+            layout: &game_bind_group_layout,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: matrix_data_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: game_resources
+                        .animation_matrix_data_buffer
+                        .as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 3,
+                    resource: world_matrix_data_buffer.as_entire_binding(),
+                },
+            ],
+            label: Some("overlay_objects_bind_group"),
+        });
+
+        OverlayObjectsResources {
+            instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
+                label: None,
+                contents: &[],
+                usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
+            }),
+            matrix_data_buffer,
+            world_matrix_data_buffer,
+            uniform_buffer,
+            bind_group,
+        }
+    };
+
+    let gui_resources = {
+        let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Gui Uniform Buffer"),
+            contents: bytemuck::cast_slice(&[GameUBO::default()]),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+
+        const MATRIX_DATA_SIZE: usize = 4096;
+        let matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Gui Matrix Data Buffer"),
+            contents: &vec![0; mem::size_of::<MatrixData>() * MATRIX_DATA_SIZE],
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+        });
+
+        let animation_matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Gui Animation Matrix Data Buffer"),
+            contents: &vec![0; mem::size_of::<AnimationMatrixData>() * MATRIX_DATA_SIZE],
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+        });
+
+        let world_matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Gui World Matrix Data Buffer"),
+            contents: &vec![0; mem::size_of::<WorldMatrixData>() * MATRIX_DATA_SIZE],
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+        });
+
+        let bind_group = device.create_bind_group(&BindGroupDescriptor {
+            layout: &game_bind_group_layout,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: matrix_data_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: animation_matrix_data_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 3,
+                    resource: world_matrix_data_buffer.as_entire_binding(),
+                },
+            ],
+            label: Some("gui_bind_group"),
+        });
+
+        let post_processing_uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: None,
+            contents: bytemuck::cast_slice(&[PostProcessingUBO {
+                flags: 0,
+                ..Default::default()
+            }]),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+
+        let post_processing_bind_group_uniform = device.create_bind_group(&BindGroupDescriptor {
+            label: None,
+            layout: &post_processing_bind_group_layout_uniform,
+            entries: &[BindGroupEntry {
+                binding: 0,
+                resource: post_processing_uniform_buffer.as_entire_binding(),
+            }],
+        });
+
+        GuiResources {
+            instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
+                label: None,
+                contents: &[],
+                usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
+            }),
+            uniform_buffer,
+            matrix_data_buffer,
+            animation_matrix_data_buffer,
+            world_matrix_data_buffer,
+            bind_group,
+
+            color_texture: None,
+            depth_texture: None,
+            model_depth_texture: None,
+            normal_texture: None,
+
+            post_processing_uniform_buffer,
+            post_processing_bind_group_uniform,
+            post_processing_bind_group_textures: None,
+
+            post_processing_texture: None,
+            antialiasing_bind_group: None,
+
+            present_texture: None,
+        }
+    };
+
+    let combine_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+        entries: &[
+            BindGroupLayoutEntry {
+                binding: 0,
+                visibility: ShaderStages::FRAGMENT,
+                ty: BindingType::Texture {
+                    multisampled: false,
+                    view_dimension: TextureViewDimension::D2,
+                    sample_type: TextureSampleType::Float { filterable: true },
+                },
+                count: None,
+            },
+            BindGroupLayoutEntry {
+                binding: 1,
+                visibility: ShaderStages::FRAGMENT,
+                ty: BindingType::Sampler(SamplerBindingType::Filtering),
+                count: None,
+            },
+            BindGroupLayoutEntry {
+                binding: 2,
+                visibility: ShaderStages::FRAGMENT,
+                ty: BindingType::Texture {
+                    multisampled: false,
+                    view_dimension: TextureViewDimension::D2,
+                    sample_type: TextureSampleType::Float { filterable: true },
+                },
+                count: None,
+            },
+            BindGroupLayoutEntry {
+                binding: 3,
+                visibility: ShaderStages::FRAGMENT,
+                ty: BindingType::Sampler(SamplerBindingType::Filtering),
+                count: None,
+            },
+        ],
+        label: Some("combine_bind_group_layout"),
+    });
+
+    let combine_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+        label: Some("Combine Render Pipeline Layout"),
+        bind_group_layouts: &[&combine_bind_group_layout],
+        push_constant_ranges: &[],
+    });
+
+    let combine_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+        label: Some("Combine Render Pipeline"),
+        layout: Some(&combine_pipeline_layout),
+        vertex: VertexState {
+            module: &combine_shader,
+            entry_point: "vs_main",
+            buffers: &[],
+            compilation_options: PipelineCompilationOptions::default(),
+        },
+        fragment: Some(FragmentState {
+            module: &combine_shader,
+            entry_point: "fs_main",
+            targets: &[Some(ColorTargetState {
+                format: config.format,
+                blend: None,
+                write_mask: ColorWrites::ALL,
+            })],
+            compilation_options: PipelineCompilationOptions::default(),
+        }),
+        primitive: PrimitiveState {
+            topology: PrimitiveTopology::TriangleList,
+            front_face: FrontFace::Ccw,
+            ..Default::default()
+        },
+        depth_stencil: None,
+        multisample: MultisampleState {
+            count: 1,
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        },
+        multiview: None,
+        cache: None,
+    });
+
+    let fxaa_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+        entries: &[
+            BindGroupLayoutEntry {
+                binding: 0,
+                visibility: ShaderStages::FRAGMENT,
+                ty: BindingType::Texture {
+                    multisampled: false,
+                    view_dimension: TextureViewDimension::D2,
+                    sample_type: TextureSampleType::Float { filterable: true },
+                },
+                count: None,
+            },
+            BindGroupLayoutEntry {
+                binding: 1,
+                visibility: ShaderStages::FRAGMENT,
+                ty: BindingType::Sampler(SamplerBindingType::Filtering),
+                count: None,
+            },
+        ],
+        label: Some("antialiasing_bind_group_layout"),
+    });
+
+    let fxaa_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+        label: Some("Antialiasing Render Pipeline Layout"),
+        bind_group_layouts: &[&fxaa_bind_group_layout],
+        push_constant_ranges: &[],
+    });
+
+    let fxaa_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+        label: Some("FXAA Render Pipeline"),
+        layout: Some(&fxaa_pipeline_layout),
+        vertex: VertexState {
+            module: &fxaa_shader,
+            entry_point: "vs_main",
+            buffers: &[],
+            compilation_options: PipelineCompilationOptions::default(),
+        },
+        fragment: Some(FragmentState {
+            module: &fxaa_shader,
+            entry_point: "fs_main",
+            targets: &[Some(ColorTargetState {
+                format: config.format,
+                blend: None,
+                write_mask: ColorWrites::ALL,
+            })],
+            compilation_options: PipelineCompilationOptions::default(),
+        }),
+        primitive: PrimitiveState {
+            topology: PrimitiveTopology::TriangleList,
+            front_face: FrontFace::Ccw,
+            cull_mode: None,
+            ..Default::default()
+        },
+        depth_stencil: None,
+        multisample: MultisampleState {
+            count: 1,
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        },
+        multiview: None,
+        cache: None,
+    });
+
+    let (post_processing_resources, post_processing_pipeline) = {
+        let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Post Processing Uniform Buffer"),
+            contents: bytemuck::cast_slice(&[PostProcessingUBO::default()]),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+
+        let bind_group_uniform = device.create_bind_group(&BindGroupDescriptor {
+            label: None,
+            layout: &post_processing_bind_group_layout_uniform,
+            entries: &[BindGroupEntry {
+                binding: 0,
+                resource: uniform_buffer.as_entire_binding(),
+            }],
+        });
+
+        let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+            label: Some("Post Processing Render Pipeline Layout"),
+            bind_group_layouts: &[
+                &post_processing_bind_group_layout_textures,
+                &post_processing_bind_group_layout_uniform,
+            ],
+            push_constant_ranges: &[],
+        });
+
+        let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+            label: Some("Post Processing Render Pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: VertexState {
+                module: &post_processing_shader,
+                entry_point: "vs_main",
+                buffers: &[],
+                compilation_options: PipelineCompilationOptions::default(),
+            },
+            fragment: Some(FragmentState {
+                module: &post_processing_shader,
+                entry_point: "fs_main",
+                targets: &[Some(ColorTargetState {
+                    format: config.format,
+                    blend: None,
+                    write_mask: ColorWrites::ALL,
+                })],
+                compilation_options: PipelineCompilationOptions::default(),
+            }),
+            primitive: PrimitiveState {
+                topology: PrimitiveTopology::TriangleList,
+                front_face: FrontFace::Ccw,
+                cull_mode: None,
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview: None,
+            cache: None,
+        });
+
+        (
+            PostProcessingResources {
+                uniform_buffer,
+                bind_group_uniform,
+            },
+            pipeline,
+        )
+    };
+
+    let intermediate_bind_group_layout =
+        device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+            label: None,
+            entries: &[
+                BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Texture {
+                        sample_type: TextureSampleType::Float { filterable: true },
+                        view_dimension: TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Sampler(SamplerBindingType::Filtering),
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: ShaderStages::VERTEX_FRAGMENT,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
+        });
+
+    let intermediate_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+        label: Some("Intermediate Render Pipeline Layout"),
+        bind_group_layouts: &[&intermediate_bind_group_layout],
+        push_constant_ranges: &[],
+    });
+
+    let screenshot_uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
+        label: Some("Screenshot Uniform Buffer"),
+        contents: bytemuck::cast_slice(&[IntermediateUBO::default()]),
+        usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+    });
+    let screenshot_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+        label: Some("Screenshot Render Pipeline"),
+        layout: Some(&intermediate_pipeline_layout),
+        vertex: VertexState {
+            module: &intermediate_shader,
+            entry_point: "vs_main",
+            buffers: &[],
+            compilation_options: PipelineCompilationOptions::default(),
+        },
+        fragment: Some(FragmentState {
+            module: &intermediate_shader,
+            entry_point: "fs_main",
+            targets: &[Some(ColorTargetState {
+                format: SCREENSHOT_FORMAT,
+                blend: None,
+                write_mask: ColorWrites::ALL,
+            })],
+            compilation_options: PipelineCompilationOptions::default(),
+        }),
+        primitive: PrimitiveState {
+            topology: PrimitiveTopology::TriangleList,
+            front_face: FrontFace::Ccw,
+            cull_mode: None,
+            ..Default::default()
+        },
+        depth_stencil: None,
+        multisample: MultisampleState {
+            count: 1,
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        },
+        multiview: None,
+        cache: None,
+    });
+
+    let present_uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
+        label: Some("Present Uniform Buffer"),
+        contents: bytemuck::cast_slice(&[IntermediateUBO::default()]),
+        usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+    });
+    let present_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+        label: Some("Present Pipeline"),
+        layout: Some(&intermediate_pipeline_layout),
+        vertex: VertexState {
+            module: &intermediate_shader,
+            entry_point: "vs_main",
+            buffers: &[],
+            compilation_options: PipelineCompilationOptions::default(),
+        },
+        fragment: Some(FragmentState {
+            module: &intermediate_shader,
+            entry_point: "fs_main",
+            targets: &[Some(ColorTargetState {
+                format: config.format,
+                blend: Some(BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                write_mask: ColorWrites::ALL,
+            })],
+            compilation_options: PipelineCompilationOptions::default(),
+        }),
+        primitive: PrimitiveState {
+            topology: PrimitiveTopology::TriangleList,
+            front_face: FrontFace::Ccw,
+            cull_mode: None,
+            ..Default::default()
+        },
+        depth_stencil: None,
+        multisample: MultisampleState {
+            count: 1,
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        },
+        multiview: None,
+        cache: None,
+    });
+
+    let multisampled_present_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+        label: Some("Present Pipeline"),
+        layout: Some(&intermediate_pipeline_layout),
+        vertex: VertexState {
+            module: &intermediate_shader,
+            entry_point: "vs_main",
+            buffers: &[],
+            compilation_options: PipelineCompilationOptions::default(),
+        },
+        fragment: Some(FragmentState {
+            module: &intermediate_shader,
+            entry_point: "fs_main",
+            targets: &[Some(ColorTargetState {
+                format: config.format,
+                blend: Some(BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                write_mask: ColorWrites::ALL,
+            })],
+            compilation_options: PipelineCompilationOptions::default(),
+        }),
+        primitive: PrimitiveState {
+            topology: PrimitiveTopology::TriangleList,
+            front_face: FrontFace::Ccw,
+            cull_mode: None,
+            ..Default::default()
+        },
+        depth_stencil: None,
+        multisample: MultisampleState {
+            count: 4, // TODO this is a magic value!
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        },
+        multiview: None,
+        cache: None,
+    });
+
+    let mut shared = SharedResources {
+        game_texture: None,
+        gui_texture: None,
+        gui_texture_resolve: None,
+        normal_texture: None,
+        depth_texture: None,
+        model_depth_texture: None,
+
+        game_post_processing_bind_group: None,
+        game_post_processing_texture: None,
+        game_antialiasing_bind_group: None,
+        game_antialiasing_texture: None,
+
+        overlay_depth_texture: None,
+
+        first_combine_bind_group: None,
+        first_combine_texture: None,
+
+        present_bind_group: None,
+        screenshot_bind_group: None,
+    };
+
+    let render = RenderResources {
+        overlay_objects_resources,
+        game_resources,
+        gui_resources: Some(gui_resources),
+        post_processing_resources,
+    };
+
+    let global = GlobalResources {
+        vertex_buffer,
+        index_buffer,
+
+        game_shader,
+        combine_shader,
+        intermediate_shader,
+
+        game_pipeline,
+
+        intermediate_bind_group_layout,
+        screenshot_uniform_buffer,
+        screenshot_pipeline,
+        present_uniform_buffer,
+        present_pipeline,
+        multisampled_present_pipeline,
+
+        post_processing_pipeline,
+        post_processing_bind_group_layout_uniform,
+        post_processing_bind_group_layout_textures,
+
+        fxaa_pipeline,
+        fxaa_bind_group_layout,
+
+        combine_pipeline,
+        combine_bind_group_layout,
+
+        filtering_sampler,
+        nonfiltering_sampler,
+        repeating_sampler,
+    };
+
+    shared.create(device, config, &global);
+
+    (shared, render, global)
+}
+
 pub struct Gpu {
     vsync: bool,
 
@@ -1808,7 +1846,8 @@ impl Gpu {
         let (device, queue) = adapter
             .request_device(
                 &DeviceDescriptor {
-                    required_features: Features::MULTI_DRAW_INDIRECT,
+                    required_features: Features::INDIRECT_FIRST_INSTANCE
+                        | Features::MULTI_DRAW_INDIRECT,
                     // WebGL doesn't support all of wgpu's features, so if
                     // we're building for the web we'll have to disable some.
                     required_limits: if cfg!(target_arch = "wasm32") {

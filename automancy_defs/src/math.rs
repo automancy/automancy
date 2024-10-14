@@ -160,14 +160,15 @@ pub fn get_screen_world_bounding_vec(size: (Float, Float), camera_pos: Vec3) -> 
 /// Gets the culling range from the camera's position
 pub fn get_culling_range(size: (Float, Float), camera_pos: Vec3) -> TileBounds {
     let (bound_min, bound_max) = get_screen_world_bounding_vec(size, camera_pos);
-    let bound_center = (bound_max - bound_min) / 2.0 + bound_min;
 
-    let min = HEX_GRID_LAYOUT.world_pos_to_hex(bound_min);
-    let max = HEX_GRID_LAYOUT.world_pos_to_hex(bound_max);
+    let size = bound_max - bound_min;
+    let bound_center = size / 2.0 + bound_min;
+
+    let size = HEX_GRID_LAYOUT.world_pos_to_hex((size / 2.0).ceil());
 
     TileBounds::new(
         HEX_GRID_LAYOUT.world_pos_to_hex(bound_center).into(),
-        max.unsigned_distance_to(min),
+        size.ulength(),
     )
 }
 
