@@ -1,10 +1,10 @@
 use tokio::sync::oneshot;
 
-use automancy_defs::colors;
 use automancy_defs::glam::{vec2, FloatExt};
 use automancy_defs::id::Id;
 use automancy_defs::math::{Float, Matrix4};
 use automancy_defs::rendering::InstanceData;
+use automancy_defs::{colors, id::TileId};
 use automancy_resources::{
     data::{Data, DataMap},
     format::Formattable,
@@ -21,7 +21,8 @@ use crate::GameState;
 
 use super::{
     center_col, col, hover_tip, interactive, label, row, scroll_horizontal_bar_alignment,
-    ui_game_object, viewport_constrained, RoundRect, LARGE_ICON_SIZE, MEDIUM_ICON_SIZE,
+    ui_game_object, viewport_constrained, RoundRect, UiGameObjectType, LARGE_ICON_SIZE,
+    MEDIUM_ICON_SIZE,
 };
 
 fn tile_hover_z_angle(elapsed: Float, hovered: bool) -> Float {
@@ -65,16 +66,14 @@ fn has_category_item(state: &mut GameState, game_data: &mut DataMap, id: Id) -> 
     }
 }
 
-/*
-
 /// Draws the tile selection.
 fn draw_tile_selection(
     state: &mut GameState,
     game_data: &mut DataMap,
-    selection_send: &mut Option<oneshot::Sender<Id>>,
+    selection_send: &mut Option<oneshot::Sender<TileId>>,
     current_category: Option<Id>,
     size: Float,
-) -> Option<(Id, bool)> {
+) -> Option<(TileId, bool)> {
     let world_matrix = IconMode::Tile.world_matrix();
 
     let has_item = if let Some(category) = current_category {
@@ -112,8 +111,6 @@ fn draw_tile_selection(
 
         let active = is_default_tile || has_item;
 
-        let model = state.resource_man.tile_model_or_missing(*id);
-
         let hover_anim_active = use_state(|| false);
 
         let rotate = Matrix4::from_rotation_x(tile_hover_z_angle(
@@ -129,11 +126,10 @@ fn draw_tile_selection(
 
         let response = interactive(|| {
             ui_game_object(
-                InstanceData::default()
-                    .with_model_matrix(rotate)
-                    .with_color_offset(color_offset),
-                model,
+                InstanceData::default().with_color_offset(color_offset),
+                UiGameObjectType::Tile(*id, DataMap::default()),
                 vec2(size, size),
+                Some(rotate),
                 Some(world_matrix),
             );
         });
@@ -158,7 +154,7 @@ fn draw_tile_selection(
 pub fn tile_selections(
     state: &mut GameState,
     game_data: &mut DataMap,
-    selection_send: oneshot::Sender<Id>,
+    selection_send: oneshot::Sender<TileId>,
 ) {
     let world_matrix = IconMode::Tile.world_matrix();
     let model_matrix = IconMode::Tile.model_matrix();
@@ -180,13 +176,14 @@ pub fn tile_selections(
 
                                     let category = state.resource_man.registry.categories[id];
                                     let model =
-                                        state.resource_man.tile_model_or_missing(category.icon);
+                                        state.resource_man.model_or_missing_tile(&category.icon);
 
                                     let response = interactive(|| {
                                         ui_game_object(
-                                            InstanceData::default().with_model_matrix(model_matrix),
-                                            model,
+                                            InstanceData::default(),
+                                            UiGameObjectType::Model(model),
                                             vec2(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE),
+                                            Some(model_matrix),
                                             Some(world_matrix),
                                         );
                                     });
@@ -259,4 +256,3 @@ pub fn tile_selections(
         }
     });
 }
- */

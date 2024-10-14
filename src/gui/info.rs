@@ -1,19 +1,16 @@
-use ractor::rpc::CallResult;
-
-use automancy_defs::{colors, id::TileId, stack::ItemStack};
-use automancy_resources::data::Data;
+use automancy_defs::{colors, glam::vec2, id::TileId, rendering::InstanceData};
+use automancy_resources::{data::DataMap, types::IconMode};
 use winit::keyboard::{Key, NamedKey};
 use yakui::{
     widgets::{Absolute, Layer, Pad},
     Alignment, Dim2, Pivot,
 };
 
-use crate::tile_entity::TileEntityMsg;
 use crate::GameState;
 
 use super::{
-    col, col_align_end, colored_label, colored_sized_text, group, item::draw_item, label, row,
-    window_box, LABEL_SIZE, PADDING_LARGE, SMALL_ICON_SIZE,
+    col, col_align_end, colored_label, colored_sized_text, group, label, row, ui_game_object,
+    window_box, UiGameObjectType, LABEL_SIZE, LARGE_ICON_SIZE, PADDING_LARGE,
 };
 
 #[track_caller]
@@ -108,15 +105,14 @@ fn rest_of_the_info(state: &mut GameState) {
     });
 }
 
-fn tile_icon(state: &mut GameState, id: TileId) {
-    /*
+fn tile_icon(id: TileId) {
     ui_game_object(
         InstanceData::default(),
-        state.resource_man.tile_model_or_missing(id),
+        UiGameObjectType::Tile(id, DataMap::default()),
         vec2(LARGE_ICON_SIZE, LARGE_ICON_SIZE),
         Some(IconMode::Tile.model_matrix()),
         Some(IconMode::Tile.world_matrix()),
-    ); */
+    );
 }
 
 /// Draws the info GUI.
@@ -132,7 +128,7 @@ pub fn info_ui(state: &mut GameState) {
                     || {
                         colored_label(&state.camera.pointing_at.to_string(), colors::DARK_GRAY);
 
-                        let Some((tile, entity)) =
+                        let Some((tile, _entity)) =
                             state.loop_store.pointing_cache.blocking_lock().clone()
                         else {
                             label(
@@ -141,7 +137,7 @@ pub fn info_ui(state: &mut GameState) {
                                     .tile_name(TileId(state.resource_man.registry.none)),
                             );
 
-                            tile_icon(state, TileId(state.resource_man.registry.none));
+                            tile_icon(TileId(state.resource_man.registry.none));
 
                             rest_of_the_info(state);
 
@@ -150,35 +146,7 @@ pub fn info_ui(state: &mut GameState) {
 
                         label(&state.resource_man.tile_name(tile));
 
-                        let Ok(CallResult::Success(data)) = state
-                            .tokio
-                            .block_on(entity.call(TileEntityMsg::GetData, None))
-                        else {
-                            tile_icon(state, tile);
-
-                            rest_of_the_info(state);
-
-                            return;
-                        };
-
-                        tile_icon(state, tile);
-
-                        if let Some(Data::Inventory(inventory)) =
-                            data.get(state.resource_man.registry.data_ids.buffer)
-                        {
-                            for (id, amount) in inventory.iter() {
-                                draw_item(
-                                    &state.resource_man,
-                                    || {},
-                                    ItemStack {
-                                        id: *id,
-                                        amount: *amount,
-                                    },
-                                    SMALL_ICON_SIZE,
-                                    true,
-                                );
-                            }
-                        }
+                        tile_icon(tile);
 
                         rest_of_the_info(state);
                     },

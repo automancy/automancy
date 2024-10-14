@@ -153,7 +153,7 @@ impl Data {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct DataMap(BTreeMap<Id, Data>);
 
 impl IntoIterator for DataMap {

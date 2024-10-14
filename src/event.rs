@@ -197,7 +197,10 @@ fn render(
                         renderer.gpu.window.inner_size(),
                     );
                     renderer.reset_buffers();
-                    state.game.send_message(GameSystemMessage::ResetVisibility);
+                    state
+                        .game
+                        .send_message(GameSystemMessage::ResetVisibility)
+                        .unwrap();
                 }
                 Err(SurfaceError::OutOfMemory) => {
                     return state.tokio.block_on(shutdown_graceful(
@@ -318,7 +321,7 @@ pub fn on_event(
                     );
                     state.camera.update_pos(
                         window::window_size_double(&state.renderer.as_ref().unwrap().gpu.window),
-                        state.loop_store.elapsed.as_secs_f64(),
+                        state.loop_store.elapsed.as_secs_f32(),
                     );
 
                     state.loop_store.frame_start = Some(now);
@@ -340,7 +343,10 @@ pub fn on_event(
                         *size,
                     );
                     renderer.reset_buffers();
-                    state.game.send_message(GameSystemMessage::ResetVisibility);
+                    state
+                        .game
+                        .send_message(GameSystemMessage::ResetVisibility)
+                        .unwrap();
 
                     return Ok(false);
                 }
@@ -410,7 +416,7 @@ pub fn on_event(
             && state.gui_state.already_placed_at != Some(state.camera.pointing_at)
         {
             if let Some(id) = state.gui_state.selected_tile_id {
-                place_tile(TileId(id), state.camera.pointing_at, state)?;
+                place_tile(id, state.camera.pointing_at, state)?;
             }
         }
 

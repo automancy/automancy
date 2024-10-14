@@ -27,8 +27,8 @@ use super::{
     button, centered_horizontal, col, group, heading, inactive_button, interactive,
     item::draw_item, label, list_row, movable, row, scroll_horizontal, scroll_vertical,
     scroll_vertical_bar_alignment, ui_game_object, util::take_item_animation, window_box,
-    PositionRecord, RoundRect, DIVIER_HEIGHT, DIVIER_THICKNESS, MEDIUM_ICON_SIZE, PADDING_MEDIUM,
-    SMALL_ICON_SIZE, TINY_ICON_SIZE,
+    PositionRecord, RoundRect, UiGameObjectType, DIVIER_HEIGHT, DIVIER_THICKNESS, MEDIUM_ICON_SIZE,
+    PADDING_MEDIUM, SMALL_ICON_SIZE, TINY_ICON_SIZE,
 };
 
 const PUZZLE_HEX_GRID_LAYOUT: HexLayout = HexLayout {
@@ -103,8 +103,8 @@ fn research_selection(state: &mut GameState, game_data: &mut DataMap) {
                 while let Some(idx) = visitor.next(&state.resource_man.registry.researches) {
                     let research = &state.resource_man.registry.researches[idx];
                     let icon = match research.icon_mode {
-                        IconMode::Item => state.resource_man.model_or_missing_item(research.icon),
-                        IconMode::Tile => state.resource_man.model_or_missing_tile(research.icon),
+                        IconMode::Tile => state.resource_man.model_or_missing_tile(&research.icon),
+                        IconMode::Item => state.resource_man.model_or_missing_item(&research.icon),
                     };
 
                     if let Some(prev) = research.depends_on {
@@ -117,7 +117,7 @@ fn research_selection(state: &mut GameState, game_data: &mut DataMap) {
                         centered_horizontal(|| {
                             ui_game_object(
                                 InstanceData::default(),
-                                icon,
+                                UiGameObjectType::Model(icon),
                                 vec2(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE),
                                 Some(research.icon_mode.model_matrix()),
                                 Some(research.icon_mode.world_matrix()),
@@ -226,7 +226,9 @@ fn research_board_tiles(
                     || {
                         ui_game_object(
                             InstanceData::default(),
-                            state.resource_man.model_or_puzzle_space(ModelId(id)),
+                            UiGameObjectType::Model(
+                                state.resource_man.model_or_puzzle_space(&ModelId(id)),
+                            ),
                             PUZZLE_HEX_GRID_LAYOUT.hex_size * 2.0,
                             None,
                             Some(IconMode::Item.world_matrix()),
@@ -396,9 +398,7 @@ fn research_puzzle(state: &mut GameState, game_data: &mut DataMap) -> Option<Vec
 
             if !completed && clicked {
                 if let Some(min) = board_pos {
-                    let p = state.input_handler.main_pos.as_vec2()
-                        - min
-                        - PUZZLE_HEX_GRID_LAYOUT.hex_size;
+                    let p = state.input_handler.main_pos - min - PUZZLE_HEX_GRID_LAYOUT.hex_size;
 
                     let p = TileCoord::from(PUZZLE_HEX_GRID_LAYOUT.world_pos_to_hex(p));
 
@@ -599,13 +599,13 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                                                 let reset = interactive(|| {
                                                     ui_game_object(
                                                         InstanceData::default(),
-                                                        ModelId(
+                                                        UiGameObjectType::Model(ModelId(
                                                             state
                                                                 .resource_man
                                                                 .registry
                                                                 .model_ids
                                                                 .puzzle_space,
-                                                        ),
+                                                        )),
                                                         PUZZLE_HEX_GRID_LAYOUT.hex_size * 2.0,
                                                         Some(IconMode::Item.model_matrix()),
                                                         Some(IconMode::Item.world_matrix()),
@@ -628,11 +628,13 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                                                     let select = interactive(|| {
                                                         ui_game_object(
                                                             InstanceData::default(),
-                                                            state
-                                                                .resource_man
-                                                                .model_or_missing_item(ModelId(
-                                                                    *id,
-                                                                )),
+                                                            UiGameObjectType::Model(
+                                                                state
+                                                                    .resource_man
+                                                                    .model_or_missing_item(
+                                                                        &ModelId(*id),
+                                                                    ),
+                                                            ),
                                                             PUZZLE_HEX_GRID_LAYOUT.hex_size * 2.0,
                                                             Some(IconMode::Item.model_matrix()),
                                                             Some(IconMode::Item.world_matrix()),

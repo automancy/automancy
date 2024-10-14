@@ -248,7 +248,11 @@ impl Actor for GameSystem {
                         let loading = false;
                         let unloading = true;
 
-                        TileEntityMsg::CollectRenderCommands(reply, loading, unloading)
+                        TileEntityMsg::CollectRenderCommands {
+                            reply,
+                            loading,
+                            unloading,
+                        }
                     },
                     None,
                 )
@@ -352,7 +356,11 @@ impl Actor for GameSystem {
                                     .is_some_and(|v| v.is_in_bounds(*coord))
                                     && !culling_range.is_in_bounds(*coord);
 
-                                TileEntityMsg::CollectRenderCommands(reply, loading, unloading)
+                                TileEntityMsg::CollectRenderCommands {
+                                    reply,
+                                    loading,
+                                    unloading,
+                                }
                             },
                             None,
                         )
@@ -739,7 +747,11 @@ async fn remove_tile(
 
         let mut commands = tile_entity
             .call(
-                |reply| TileEntityMsg::CollectRenderCommands(reply, false, true),
+                |reply| TileEntityMsg::CollectRenderCommands {
+                    reply,
+                    loading: false,
+                    unloading: true,
+                },
                 None,
             )
             .await
@@ -821,7 +833,11 @@ async fn insert_new_tile(
 
     let mut new_tile_render = tile_entity
         .call(
-            |reply| TileEntityMsg::CollectRenderCommands(reply, true, false),
+            |reply| TileEntityMsg::CollectRenderCommands {
+                reply,
+                loading: true,
+                unloading: false,
+            },
             None,
         )
         .await

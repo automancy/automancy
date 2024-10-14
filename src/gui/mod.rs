@@ -10,19 +10,25 @@ use winit::{event_loop::ActiveEventLoop, window::Window};
 use yakui_wgpu::YakuiWgpu;
 use yakui_winit::YakuiWinit;
 
-use automancy_defs::id::{Id, TileId};
-use automancy_defs::math::Vec2;
-use automancy_defs::math::{Float, Matrix4, FAR, HEX_GRID_LAYOUT};
-use automancy_defs::{colors, math, window};
+use automancy_defs::{colors, math, rendering::make_line, window};
 use automancy_defs::{coord::TileCoord, glam::vec2};
 use automancy_defs::{glam::vec3, log};
-use automancy_resources::data::Data;
-use automancy_resources::data::DataMap;
+use automancy_defs::{id::ModelId, math::Vec2};
+use automancy_defs::{
+    id::{Id, TileId},
+    rendering::InstanceData,
+};
+use automancy_defs::{
+    math::{Float, Matrix4, FAR, HEX_GRID_LAYOUT},
+    rendering::GameMatrix,
+};
+use automancy_resources::rhai_render::RenderCommand;
+use automancy_resources::{data::DataMap, ResourceManager};
 use yakui::{font::Fonts, Yakui};
 
-use crate::input::ActionType;
-use crate::renderer::YakuiRenderResources;
+use crate::renderer::{Renderer, YakuiRenderResources};
 use crate::GameState;
+use crate::{input::ActionType, tile_entity::collect_render_commands};
 
 mod components;
 
@@ -101,7 +107,9 @@ pub struct GuiState {
     pub tile_selection_category: Option<Id>,
 
     /// the currently selected tile.
-    pub selected_tile_id: Option<Id>,
+    pub selected_tile_id: Option<TileId>,
+    /// the currently selected tile's model ids.
+    pub selected_tile_render_cache: Option<(TileId, Vec<ModelId>)>,
     /// the last placed tile, to prevent repeatedly sending place requests
     pub already_placed_at: Option<TileCoord>,
     /// the tile that has its config menu open.
@@ -113,6 +121,7 @@ pub struct GuiState {
     /// the stored initial cursor position, for moving/copying tiles
     pub paste_from: Option<TileCoord>,
     pub paste_content: Vec<(TileCoord, TileId, Option<DataMap>)>,
+    pub paste_content_render_cache: HashMap<TileCoord, Option<(TileId, Vec<ModelId>)>>,
 
     pub tile_config_ui_position: Vec2,
     pub player_ui_position: Vec2,
@@ -137,6 +146,7 @@ impl Default for GuiState {
             tile_selection_category: Default::default(),
 
             selected_tile_id: Default::default(),
+            selected_tile_render_cache: Default::default(),
             already_placed_at: Default::default(),
             config_open_at: Default::default(),
 
@@ -144,6 +154,7 @@ impl Default for GuiState {
             grouped_tiles: Default::default(),
             paste_from: Default::default(),
             paste_content: Default::default(),
+            paste_content_render_cache: HashMap::new(),
 
             tile_config_ui_position: vec2(0.1, 0.1), // TODO make default pos screen center?
             player_ui_position: vec2(0.1, 0.1),
@@ -269,6 +280,77 @@ impl TextFieldState {
     }
 }
 
+pub fn render_overlay_cached(
+    resource_man: &ResourceManager,
+    renderer: &mut Renderer,
+    tile_id: Option<TileId>,
+    mut data: DataMap,
+    cache: &mut Option<(TileId, Vec<ModelId>)>,
+    model_matrix: Matrix4,
+    world_matrix: Matrix4,
+) {
+    if let Some(tile_id) = tile_id {
+        let mut transforms = HashMap::new();
+
+        let cached_tile_id = cache.as_ref().map(|v| v.0);
+
+        if cached_tile_id != Some(tile_id) {
+            if let Some(commands) = collect_render_commands(
+                resource_man,
+                tile_id,
+                TileCoord::ZERO,
+                &mut data,
+                &mut HashSet::default(),
+                true,
+                false,
+            ) {
+                transforms = commands
+                    .iter()
+                    .flat_map(|v| match v {
+                        RenderCommand::Transform {
+                            model,
+                            model_matrix,
+                            ..
+                        } => Some((*model, *model_matrix)),
+                        _ => None,
+                    })
+                    .collect::<HashMap<_, _>>();
+
+                let models = commands
+                    .into_iter()
+                    .flat_map(|v| match v {
+                        RenderCommand::Track { model, .. } => Some(model),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>();
+
+                *cache = Some((tile_id, models));
+            }
+        }
+
+        if let Some((.., models)) = &cache {
+            for model in models {
+                let transform = transforms.remove(model).unwrap_or_default();
+
+                let (model, (meshes, ..)) = resource_man.mesh_or_missing_tile_mesh(model);
+
+                for mesh in meshes.iter().flatten() {
+                    renderer.overlay_instances.push((
+                        InstanceData::default().with_alpha(0.6),
+                        model,
+                        GameMatrix::<true>::new(
+                            transform * model_matrix,
+                            world_matrix,
+                            mesh.matrix,
+                        ),
+                        mesh.index,
+                    ));
+                }
+            }
+        }
+    }
+}
+
 pub fn render_ui(
     state: &mut GameState,
     result: &mut anyhow::Result<bool>,
@@ -286,7 +368,6 @@ pub fn render_ui(
                         let mut lock = map_info.blocking_lock();
                         let game_data = &mut lock.data;
 
-                        /*
                         let (selection_send, selection_recv) = oneshot::channel();
 
                         // tile_selections
@@ -300,7 +381,7 @@ pub fn render_ui(
                             } else {
                                 state.gui_state.selected_tile_id = Some(id);
                             }
-                        } */
+                        }
 
                         player::player(state, game_data);
 
@@ -314,34 +395,35 @@ pub fn render_ui(
                         state.camera.get_pos(),
                     );
 
-                    if let Some(id) = state.gui_state.selected_tile_id {
-                        /*
-                        state.renderer.as_mut().unwrap().overlay_instances.push((
-                            InstanceData::default().with_alpha(0.6).with_model_matrix(
-                                Matrix4::from_translation(vec3(
-                                    cursor_pos.x as Float,
-                                    cursor_pos.y as Float,
-                                    FAR,
-                                )),
-                            ),
-                            state.resource_man.tile_model_or_missing(id),
-                            (),
-                        )) */
-                    }
+                    render_overlay_cached(
+                        &state.resource_man,
+                        state.renderer.as_mut().unwrap(),
+                        state.gui_state.selected_tile_id,
+                        DataMap::default(),
+                        &mut state.gui_state.selected_tile_render_cache,
+                        Matrix4::from_translation(vec3(
+                            cursor_pos.x as Float,
+                            cursor_pos.y as Float,
+                            FAR,
+                        )),
+                        state.camera.get_matrix(),
+                    );
 
                     if let Some((coord, ..)) = state.gui_state.linking_tile {
-                        /*
                         state.renderer.as_mut().unwrap().overlay_instances.push((
-                            InstanceData::default()
-                                .with_color_offset(colors::RED.to_linear())
-                                .with_model_matrix(make_line(
+                            InstanceData::default().with_color_offset(colors::RED.to_linear()),
+                            ModelId(state.resource_man.registry.model_ids.cube1x1),
+                            GameMatrix::<true>::new(
+                                make_line(
                                     HEX_GRID_LAYOUT.hex_to_world_pos(*coord),
-                                    cursor_pos.truncate().as_vec2(),
+                                    cursor_pos.truncate(),
                                     FAR,
-                                )),
-                            state.resource_man.registry.model_ids.cube1x1,
-                            (),
-                        )); */
+                                ),
+                                state.camera.get_matrix(),
+                                Matrix4::IDENTITY,
+                            ),
+                            0,
+                        ));
                     }
                 }
             }
@@ -387,53 +469,46 @@ pub fn render_ui(
 
     if let Some(start) = state.gui_state.paste_from {
         if start != state.camera.pointing_at {
-            /*
             state.renderer.as_mut().unwrap().overlay_instances.push((
-                InstanceData::default()
-                    .with_color_offset(colors::LIGHT_BLUE.to_linear())
-                    .with_model_matrix(make_line(
+                InstanceData::default().with_color_offset(colors::LIGHT_BLUE.to_linear()),
+                ModelId(state.resource_man.registry.model_ids.cube1x1),
+                GameMatrix::<true>::new(
+                    make_line(
                         HEX_GRID_LAYOUT.hex_to_world_pos(*start),
                         HEX_GRID_LAYOUT.hex_to_world_pos(*state.camera.pointing_at),
                         FAR,
-                    )),
-                state.resource_man.registry.model_ids.cube1x1,
-                (),
-            )); */
+                    ),
+                    state.camera.get_matrix(),
+                    Matrix4::IDENTITY,
+                ),
+                0,
+            ));
         }
 
         let diff = state.camera.pointing_at - start;
 
         for (coord, id, data) in &state.gui_state.paste_content {
-            let coord = *coord + diff;
-            let p = HEX_GRID_LAYOUT.hex_to_world_pos(*coord);
+            let model_matrix = {
+                let coord = *coord + diff;
+                let p = HEX_GRID_LAYOUT.hex_to_world_pos(*coord);
 
-            let mut model_matrix = Matrix4::from_translation(vec3(p.x, p.y, FAR));
+                Matrix4::from_translation(vec3(p.x, p.y, FAR))
+            };
 
-            if let Some(data) = data {
-                let rotate = Matrix4::from_rotation_z(
-                    data.get(state.resource_man.registry.data_ids.direction)
-                        .and_then(|direction| {
-                            if let Data::Coord(direction) = direction {
-                                math::tile_direction_to_angle(*direction)
-                            } else {
-                                None
-                            }
-                        })
-                        .unwrap_or(0.0)
-                        .to_radians(),
-                );
-
-                model_matrix *= rotate;
-            }
-
-            /*
-            state.renderer.as_mut().unwrap().overlay_instances.push((
-                InstanceData::default()
-                    .with_alpha(0.5)
-                    .with_model_matrix(model_matrix),
-                state.resource_man.tile_model_or_missing(*id),
-                (),
-            )); */
+            let cache = state
+                .gui_state
+                .paste_content_render_cache
+                .entry(*coord)
+                .or_default();
+            render_overlay_cached(
+                &state.resource_man,
+                state.renderer.as_mut().unwrap(),
+                Some(*id),
+                data.clone().unwrap_or_default(),
+                cache,
+                model_matrix,
+                state.camera.get_matrix(),
+            );
         }
     }
 

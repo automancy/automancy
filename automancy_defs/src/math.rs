@@ -1,8 +1,6 @@
-#![allow(unused_qualifications)]
+use std::f32::consts::PI;
 
-use std::f64::consts::PI;
-
-use glam::{dvec2, dvec3, dvec4, vec2, DQuat};
+use glam::{vec2, vec3, vec4};
 use hexx::{HexLayout, HexOrientation};
 
 use crate::coord::{TileBounds, TileCoord};
@@ -31,34 +29,22 @@ pub type Matrix4 = glam::Mat4;
 
 pub type Quaternion = glam::Quat;
 
-pub type Double = f64;
-
-pub type DVec2 = glam::DVec2;
-pub type DVec3 = glam::DVec3;
-pub type DVec4 = glam::DVec4;
-
-pub type DMatrix2 = glam::DMat2;
-pub type DMatrix3 = glam::DMat3;
-pub type DMatrix4 = glam::DMat4;
-
-pub type DQuaternion = glam::DQuat;
-
 #[inline]
-pub fn z_near() -> Double {
+pub fn z_near() -> Float {
     0.1
 }
 
 #[inline]
-pub fn z_far() -> Double {
+pub fn z_far() -> Float {
     100.0
 }
 
 #[inline]
-pub fn fov() -> Double {
+pub fn fov() -> Float {
     PI / 2.0
 }
 
-pub fn camera_angle(z: Double) -> Double {
+pub fn camera_angle(z: Float) -> Float {
     // TODO magic values
     let max = 6.5;
 
@@ -71,19 +57,19 @@ pub fn camera_angle(z: Double) -> Double {
     }
 }
 
-fn projection(aspect: Double) -> DMatrix4 {
-    DMatrix4::perspective_lh(fov(), aspect, z_near(), z_far())
+fn projection(aspect: Float) -> Matrix4 {
+    Matrix4::perspective_lh(fov(), aspect, z_near(), z_far())
 }
 
-fn camera_view(pos: DVec3) -> DMatrix4 {
-    DMatrix4::look_to_rh(
+fn camera_view(pos: Vec3) -> Matrix4 {
+    Matrix4::look_to_rh(
         pos,
-        DQuat::from_rotation_x(camera_angle(pos.z)) * dvec3(0.0, 0.0, 1.0),
-        dvec3(0.0, 1.0, 0.0),
+        Quaternion::from_rotation_x(camera_angle(pos.z)) * vec3(0.0, 0.0, 1.0),
+        vec3(0.0, 1.0, 0.0),
     )
 }
 
-pub fn camera_matrix(pos: DVec3, aspect: Double) -> DMatrix4 {
+pub fn camera_matrix(pos: Vec3, aspect: Float) -> Matrix4 {
     let projection = projection(aspect);
     let view = camera_view(pos);
 
@@ -102,22 +88,22 @@ pub fn lerp_coords_to_pixel(a: TileCoord, b: TileCoord, t: Float) -> Vec2 {
 
 /// Converts screen space coordinates into normalized coordinates.
 #[inline]
-pub fn screen_to_normalized((width, height): (Double, Double), c: DVec2) -> DVec2 {
-    let size = dvec2(width, height) * 0.5;
+pub fn screen_to_normalized((width, height): (Float, Float), c: Vec2) -> Vec2 {
+    let size = vec2(width, height) * 0.5;
 
-    let c = dvec2(c.x, c.y);
+    let c = vec2(c.x, c.y);
     let c = c - size;
     let c = c / size;
 
-    dvec2(c.x, c.y)
+    vec2(c.x, c.y)
 }
 
 /// Gets the hex position being pointed at.
 #[inline]
 pub fn main_pos_to_fract_hex(
-    (width, height): (Double, Double),
-    main_pos: DVec2,
-    camera_pos: DVec3,
+    (width, height): (Float, Float),
+    main_pos: Vec2,
+    camera_pos: Vec3,
 ) -> Vec2 {
     let p = screen_to_world((width, height), main_pos, camera_pos);
 
@@ -126,7 +112,7 @@ pub fn main_pos_to_fract_hex(
 
 /// Converts screen coordinates to world coordinates.
 #[inline]
-pub fn screen_to_world((width, height): (Double, Double), pos: DVec2, camera_pos: DVec3) -> DVec3 {
+pub fn screen_to_world((width, height): (Float, Float), pos: Vec2, camera_pos: Vec3) -> Vec3 {
     let pos = screen_to_normalized((width, height), pos);
 
     normalized_to_world((width, height), pos, camera_pos)
@@ -135,36 +121,35 @@ pub fn screen_to_world((width, height): (Double, Double), pos: DVec2, camera_pos
 /// Converts normalized screen coordinates to world coordinates.
 #[inline]
 pub fn normalized_to_world(
-    (width, height): (Double, Double),
-    normalized: DVec2,
-    camera_pos: DVec3,
-) -> DVec3 {
+    (width, height): (Float, Float),
+    normalized: Vec2,
+    camera_pos: Vec3,
+) -> Vec3 {
     let aspect = width / height;
 
-    let matrix =
-        camera_view(dvec3(0.0, 0.0, camera_pos.z)).inverse() * projection(aspect).inverse();
+    let matrix = camera_view(vec3(0.0, 0.0, camera_pos.z)).inverse() * projection(aspect).inverse();
 
-    let pos = dvec4(normalized.x, normalized.y, -1.0, 1.0);
+    let pos = vec4(normalized.x, normalized.y, -1.0, 1.0);
     let pos = matrix * pos;
     let pos = pos.truncate() / pos.w;
 
-    let end = dvec4(normalized.x, normalized.y, 1.0, 1.0);
+    let end = vec4(normalized.x, normalized.y, 1.0, 1.0);
     let end = matrix * end;
     let end = end.truncate() / end.w;
 
     let ray = (end - pos).normalize();
-    let normal = dvec3(0.0, 0.0, -1.0);
+    let normal = vec3(0.0, 0.0, -1.0);
     let d = -camera_pos.dot(normal) / ray.dot(normal);
     let p = ray * d;
 
     p + camera_pos
 }
 
-pub fn get_screen_world_bounding_vec(size: (Double, Double), camera_pos: DVec3) -> (DVec2, DVec2) {
-    let a = normalized_to_world(size, dvec2(-1.0, -1.0), camera_pos).truncate();
-    let b = normalized_to_world(size, dvec2(-1.0, 1.0), camera_pos).truncate();
-    let c = normalized_to_world(size, dvec2(1.0, -1.0), camera_pos).truncate();
-    let d = normalized_to_world(size, dvec2(1.0, 1.0), camera_pos).truncate();
+pub fn get_screen_world_bounding_vec(size: (Float, Float), camera_pos: Vec3) -> (Vec2, Vec2) {
+    let a = normalized_to_world(size, vec2(-1.0, -1.0), camera_pos).truncate();
+    let b = normalized_to_world(size, vec2(-1.0, 1.0), camera_pos).truncate();
+    let c = normalized_to_world(size, vec2(1.0, -1.0), camera_pos).truncate();
+    let d = normalized_to_world(size, vec2(1.0, 1.0), camera_pos).truncate();
 
     let min = a.min(b).min(c.min(d));
     let max = a.max(b).max(c.max(d));
@@ -173,15 +158,16 @@ pub fn get_screen_world_bounding_vec(size: (Double, Double), camera_pos: DVec3) 
 }
 
 /// Gets the culling range from the camera's position
-pub fn get_culling_range(size: (Double, Double), camera_pos: DVec3) -> TileBounds {
+pub fn get_culling_range(size: (Float, Float), camera_pos: Vec3) -> TileBounds {
     let (bound_min, bound_max) = get_screen_world_bounding_vec(size, camera_pos);
-    let bound_size = (bound_max - bound_min) / 2.0;
+    let bound_center = (bound_max - bound_min) / 2.0 + bound_min;
+
+    let min = HEX_GRID_LAYOUT.world_pos_to_hex(bound_min);
+    let max = HEX_GRID_LAYOUT.world_pos_to_hex(bound_max);
 
     TileBounds::new(
-        HEX_GRID_LAYOUT
-            .world_pos_to_hex(camera_pos.truncate().as_vec2())
-            .into(),
-        bound_size.x.max(bound_size.y) as u32,
+        HEX_GRID_LAYOUT.world_pos_to_hex(bound_center).into(),
+        max.unsigned_distance_to(min),
     )
 }
 

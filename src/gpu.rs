@@ -291,78 +291,6 @@ pub fn init_gpu_resources(
         cache: None,
     });
 
-    let overlay_objects_resources = {
-        let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Overlay Objects Uniform Buffer"),
-            contents: bytemuck::cast_slice(&[GameUBO::default()]),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
-
-        let matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Overlay Objects Matrix Data Buffer"),
-            contents: &vec![0; mem::size_of::<MatrixData>() * 1024],
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-        });
-
-        let animation_matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Overlay Objects Animation Matrix Data Buffer"),
-            contents: &vec![0; mem::size_of::<AnimationMatrixData>() * 256],
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-        });
-
-        let world_matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Overlay Objects World Matrix Data Buffer"),
-            contents: &vec![0; mem::size_of::<WorldMatrixData>() * 256],
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-        });
-
-        let bind_group = device.create_bind_group(&BindGroupDescriptor {
-            layout: &game_bind_group_layout,
-            entries: &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: uniform_buffer.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: matrix_data_buffer.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 2,
-                    resource: animation_matrix_data_buffer.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 3,
-                    resource: world_matrix_data_buffer.as_entire_binding(),
-                },
-            ],
-            label: Some("overlay_objects_bind_group"),
-        });
-
-        OverlayObjectsResources {
-            opaques_instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
-                label: None,
-                contents: &[],
-                usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
-            }),
-            non_opaques_instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
-                label: None,
-                contents: &[],
-                usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
-            }),
-            indirect_buffer: device.create_buffer_init(&BufferInitDescriptor {
-                label: None,
-                contents: &[],
-                usage: BufferUsages::INDIRECT | BufferUsages::COPY_DST,
-            }),
-            matrix_data_buffer,
-            animation_matrix_data_buffer,
-            world_matrix_data_buffer,
-            uniform_buffer,
-            bind_group,
-        }
-    };
-
     let game_resources = {
         let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Game Uniform Buffer"),
@@ -424,6 +352,68 @@ pub fn init_gpu_resources(
             }),
             matrix_data_buffer,
             animation_matrix_data_buffer,
+            world_matrix_data_buffer,
+            uniform_buffer,
+            bind_group,
+        }
+    };
+
+    let overlay_objects_resources = {
+        let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Overlay Objects Uniform Buffer"),
+            contents: bytemuck::cast_slice(&[GameUBO::default()]),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+
+        let matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Overlay Objects Matrix Data Buffer"),
+            contents: &vec![0; mem::size_of::<MatrixData>() * 256],
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+        });
+
+        let world_matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Overlay Objects World Matrix Data Buffer"),
+            contents: &vec![0; mem::size_of::<WorldMatrixData>() * 256],
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+        });
+
+        let bind_group = device.create_bind_group(&BindGroupDescriptor {
+            layout: &game_bind_group_layout,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: matrix_data_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: game_resources
+                        .animation_matrix_data_buffer
+                        .as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 3,
+                    resource: world_matrix_data_buffer.as_entire_binding(),
+                },
+            ],
+            label: Some("overlay_objects_bind_group"),
+        });
+
+        OverlayObjectsResources {
+            instance_buffer: device.create_buffer_init(&BufferInitDescriptor {
+                label: None,
+                contents: &[],
+                usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
+            }),
+            indirect_buffer: device.create_buffer_init(&BufferInitDescriptor {
+                label: None,
+                contents: &[],
+                usage: BufferUsages::INDIRECT | BufferUsages::COPY_DST,
+            }),
+            matrix_data_buffer,
             world_matrix_data_buffer,
             uniform_buffer,
             bind_group,
@@ -1223,12 +1213,10 @@ pub struct GameResources {
 }
 
 pub struct OverlayObjectsResources {
-    pub opaques_instance_buffer: Buffer,
-    pub non_opaques_instance_buffer: Buffer,
+    pub instance_buffer: Buffer,
     pub indirect_buffer: Buffer,
     pub uniform_buffer: Buffer,
     pub matrix_data_buffer: Buffer,
-    pub animation_matrix_data_buffer: Buffer,
     pub world_matrix_data_buffer: Buffer,
     pub bind_group: BindGroup,
 }

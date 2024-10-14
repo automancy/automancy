@@ -15,7 +15,9 @@ use yakui::{
 
 use crate::{game::TAKE_ITEM_ANIMATION_SPEED, GameState};
 
-use super::{col, group, radio, scroll_vertical, textbox, ui_game_object, TextField};
+use super::{
+    col, group, radio, scroll_vertical, textbox, ui_game_object, TextField, UiGameObjectType,
+};
 
 pub fn pad_y(top: f32, bottom: f32) -> Pad {
     let mut pad = Pad::ZERO;
@@ -152,7 +154,7 @@ pub fn take_item_animation(state: &mut GameState, id: Id, dst_rect: Rect) {
                 Layer::new().show(|| {
                     ui_game_object(
                         InstanceData::default(),
-                        state.resource_man.item_model_or_missing(id),
+                        UiGameObjectType::Model(state.resource_man.item_model_or_missing(&id)),
                         size,
                         None,
                         Some(IconMode::Item.world_matrix()),

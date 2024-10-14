@@ -7,7 +7,7 @@ use std::{collections::VecDeque, ops::Mul};
 use arboard::{Clipboard, ImageData};
 use hashbrown::{HashMap, HashSet};
 use image::{EncodableLayout, RgbaImage};
-use ordermap::{OrderMap, OrderSet};
+use ordermap::OrderMap;
 use tokio::sync::oneshot;
 use wgpu::{
     util::DrawIndexedIndirectArgs, BufferAddress, BufferDescriptor, BufferUsages, Color,
@@ -18,14 +18,14 @@ use wgpu::{
 };
 use wgpu::{CommandBuffer, StoreOp};
 
-use automancy_defs::id::Id;
 use automancy_defs::math::Matrix4;
 use automancy_defs::rendering::{GameUBO, InstanceData};
 use automancy_defs::{
     coord::TileCoord,
     math::{Vec2, Vec4},
-    rendering::{AnimationMatrixData, FIX_COORD},
+    rendering::AnimationMatrixData,
 };
+use automancy_defs::{id::Id, rendering::GameMatrix};
 use automancy_defs::{id::ModelId, math::Vec3};
 use automancy_defs::{id::RenderTagId, rendering::PostProcessingUBO};
 use automancy_defs::{
@@ -37,16 +37,27 @@ use automancy_resources::ResourceManager;
 use yakui::{Rect, UVec2};
 use yakui_wgpu::SurfaceInfo;
 
-use crate::gpu::{
-    GlobalResources, Gpu, GuiResources, RenderResources, SharedResources, MODEL_DEPTH_CLEAR,
-    NORMAL_CLEAR, SCREENSHOT_FORMAT,
-};
 use crate::GameState;
 use crate::{
     game::GameSystemMessage,
     gui::{GameElementPaint, Gui},
 };
 use crate::{gpu, gui};
+use crate::{
+    gpu::{
+        GlobalResources, Gpu, GuiResources, RenderResources, SharedResources, MODEL_DEPTH_CLEAR,
+        NORMAL_CLEAR, SCREENSHOT_FORMAT,
+    },
+    gui::UiGameObjectType,
+};
+
+pub type OverlayInstance = (InstanceData, ModelId, GameMatrix<true>, usize);
+pub type GuiInstance = (
+    UiGameObjectType,
+    InstanceData,
+    GameMatrix<false>,
+    (usize, Vec2),
+);
 
 pub type InstanceMap = BTreeMap<u32, GpuInstance>;
 pub type DrawInfoMap = BTreeMap<u32, DrawIndexedIndirectArgs>;
@@ -56,7 +67,7 @@ pub type AnimationCache = HashMap<ModelId, HashMap<usize, Matrix4>>;
 pub type AnimationMatrixDataMap = OrderMap<(ModelId, usize), AnimationMatrixData>;
 
 pub struct YakuiRenderResources {
-    pub instances: Option<Vec<(ModelId, InstanceData, (Matrix4, Matrix4), (usize, Vec2))>>,
+    pub instances: Option<Vec<GuiInstance>>,
 
     pub resource_man: Arc<ResourceManager>,
     pub global_resources: Arc<GlobalResources>,
@@ -79,8 +90,7 @@ enum ObjectType {
     NonOpaque,
 }
 
-const HELLO_THIS_IS_A_SPECIAL_CASE_BECAUSE_WE_ONLY_USE_EXACTLY_ONE_WORLD_MATRIX_IN_WORLD_LOL: u32 =
-    0;
+const WE_ONLY_USE_1_WORLD_MATRIX_IN_GAME_LOL: u32 = 0;
 
 pub struct Renderer {
     pub gpu: Gpu,
@@ -88,12 +98,15 @@ pub struct Renderer {
     pub render_resources: RenderResources,
     pub global_resources: Arc<GlobalResources>,
 
+    pub overlay_instances: Vec<OverlayInstance>,
+
     pub tile_tints: HashMap<TileCoord, Vec4>,
-    pub overlay_instances: Vec<(InstanceData, Id, ())>,
+    last_tile_tints: HashMap<TileCoord, Vec4>,
 
     pub take_item_animations: HashMap<Id, VecDeque<(Instant, Rect)>>,
 
     object_ids: OrderMap<(TileCoord, RenderTagId, ModelId, usize), ObjectType>,
+    coord_to_keys: HashMap<TileCoord, HashSet<(RenderTagId, ModelId, usize)>>,
 
     instances: InstanceMap,
     opaque_draws: DrawInfoMap,
@@ -115,6 +128,7 @@ pub struct Renderer {
 impl Renderer {
     pub fn reset_buffers(&mut self) {
         self.object_ids.clear();
+        self.coord_to_keys.clear();
 
         self.instances = Default::default();
         gpu::clear_buffer(
@@ -144,11 +158,13 @@ impl Renderer {
             global_resources,
 
             tile_tints: Default::default(),
+            last_tile_tints: Default::default(),
             overlay_instances: Default::default(),
 
             take_item_animations: Default::default(),
 
             object_ids: Default::default(),
+            coord_to_keys: Default::default(),
 
             instances: Default::default(),
             opaque_draws: Default::default(),
@@ -221,8 +237,8 @@ pub fn render(state: &mut GameState, screenshotting: bool) -> Result<(), Surface
 
     renderer.animation_cache.clear();
 
+    let last_tile_tints = mem::take(&mut renderer.last_tile_tints);
     let tile_tints = mem::take(&mut renderer.tile_tints);
-    let mut overlay_instances = mem::take(&mut renderer.overlay_instances);
 
     let camera_pos = state.camera.get_pos();
     let culling_range = state.camera.culling_range;
@@ -251,179 +267,195 @@ pub fn render(state: &mut GameState, screenshotting: bool) -> Result<(), Surface
             for command in commands {
                 match command {
                     RenderCommand::Untrack { tag, model } => {
-                        if let Some((meshes, ..)) = state.resource_man.all_models.get(&model) {
-                            for mesh in meshes.iter().flatten() {
-                                let swapping_index =
-                                    renderer.object_ids.last_entry().map(|v| v.index());
+                        let (model, (meshes, ..)) =
+                            state.resource_man.mesh_or_missing_tile_mesh(&model);
 
-                                let swapping_type =
-                                    renderer.object_ids.last_entry().map(|v| *v.get());
+                        for mesh in meshes.iter().flatten() {
+                            let swapping_index =
+                                renderer.object_ids.last_entry().map(|v| v.index());
 
-                                let (removed_index, .., removed_type) = renderer
-                                    .object_ids
-                                    .swap_remove_full(&(coord, tag, model, mesh.index))
-                                    .expect("render object id wasn't tracked");
+                            let swapping_type = renderer.object_ids.last_entry().map(|v| *v.get());
 
-                                let swapping_index = swapping_index.unwrap_or(removed_index);
-                                let swapping_type = swapping_type.unwrap_or(removed_type);
+                            let (removed_index, .., removed_type) = renderer
+                                .object_ids
+                                .swap_remove_full(&(coord, tag, model, mesh.index))
+                                .expect("render object id wasn't tracked");
 
-                                let removed_index: u32 = removed_index.try_into().unwrap();
-                                let swapping_index: u32 = swapping_index.try_into().unwrap();
+                            let swapping_index = swapping_index.unwrap_or(removed_index);
+                            let swapping_type = swapping_type.unwrap_or(removed_type);
 
-                                {
-                                    let opaque = removed_type == ObjectType::Opaque;
+                            let removed_index: u32 = removed_index.try_into().unwrap();
+                            let swapping_index: u32 = swapping_index.try_into().unwrap();
 
-                                    let draws = if opaque {
-                                        &mut renderer.opaque_draws
-                                    } else {
-                                        &mut renderer.non_opaque_draws
-                                    };
-
-                                    renderer
-                                        .matrix_data_map
-                                        .remove(&removed_index)
-                                        .expect("matrix data wasn't tracked");
-                                    matrix_data_changes.insert(removed_index);
-
-                                    renderer
-                                        .instances
-                                        .remove(&removed_index)
-                                        .expect("instance data wasn't tracked");
-                                    instances_changes.insert(removed_index);
-
-                                    draws
-                                        .remove(&removed_index)
-                                        .expect("draw data wasn't tracked");
-                                    //draw_changes.insert(removed_index);
-                                }
-
-                                if swapping_index != removed_index {
-                                    let opaque = swapping_type == ObjectType::Opaque;
-
-                                    let draws = if opaque {
-                                        &mut renderer.opaque_draws
-                                    } else {
-                                        &mut renderer.non_opaque_draws
-                                    };
-
-                                    {
-                                        let matrix = renderer
-                                            .matrix_data_map
-                                            .remove(&swapping_index)
-                                            .unwrap();
-
-                                        matrix_data_changes.insert(swapping_index);
-                                        assert!(renderer
-                                            .matrix_data_map
-                                            .insert(removed_index, matrix)
-                                            .is_none());
-                                    }
-                                    {
-                                        let mut instance =
-                                            renderer.instances.remove(&swapping_index).unwrap();
-                                        instances_changes.insert(swapping_index);
-
-                                        instance.matrix_index = removed_index;
-                                        assert!(renderer
-                                            .instances
-                                            .insert(removed_index, instance)
-                                            .is_none());
-                                    }
-                                    {
-                                        let mut draw = draws.remove(&swapping_index).unwrap();
-                                        //draw_changes.insert(swapping_index);
-
-                                        draw.first_instance = removed_index;
-
-                                        assert!(draws.insert(removed_index, draw).is_none());
-                                    }
-                                }
+                            if let Some(keys) = renderer.coord_to_keys.get_mut(&coord) {
+                                assert!(
+                                    keys.remove(&(tag, model, mesh.index)),
+                                    "key set in 'coord to keys map' didn't have this key"
+                                );
                             }
-                        }
-                    }
-                    RenderCommand::Track { tag, model } => {
-                        if let Some((meshes, ..)) = state.resource_man.all_models.get(&model) {
-                            for mesh in meshes.iter().flatten() {
-                                let draws = if mesh.opaque {
+
+                            {
+                                let opaque = removed_type == ObjectType::Opaque;
+
+                                let draws = if opaque {
                                     &mut renderer.opaque_draws
                                 } else {
                                     &mut renderer.non_opaque_draws
                                 };
 
-                                if !renderer
-                                    .animation_matrix_data_map
-                                    .contains_key(&(model, mesh.index))
-                                {
-                                    renderer.animation_matrix_data_map.insert(
-                                        (model, mesh.index),
-                                        AnimationMatrixData::default(),
-                                    );
-                                }
-                                let animation_matrix_index = renderer
-                                    .animation_matrix_data_map
-                                    .get_index_of(&(model, mesh.index))
-                                    .unwrap();
+                                renderer
+                                    .matrix_data_map
+                                    .remove(&removed_index)
+                                    .expect("matrix data wasn't tracked");
+                                matrix_data_changes.insert(removed_index);
 
-                                let (index, prev_id_slot) = renderer.object_ids.insert_full(
-                                    (coord, tag, model, mesh.index),
-                                    if mesh.opaque {
-                                        ObjectType::Opaque
-                                    } else {
-                                        ObjectType::NonOpaque
-                                    },
-                                );
-                                assert!(
-                                    prev_id_slot.is_none(),
-                                    "render object id was already tracked"
-                                );
-                                let index: u32 = index.try_into().unwrap();
+                                renderer
+                                    .instances
+                                    .remove(&removed_index)
+                                    .expect("instance data wasn't tracked");
+                                instances_changes.insert(removed_index);
 
-                                assert!(
-                                    renderer
-                                        .matrix_data_map
-                                        .insert(index, MatrixData::default())
-                                        .is_none(),
-                                    "matrix data was already tracked",
-                                );
-                                matrix_data_changes.insert(index);
-
-                                assert!(
-                                    renderer.instances
-                                        .insert(
-                                            index,
-                                            GpuInstance {
-                                                matrix_index: index,
-                                                animation_matrix_index: animation_matrix_index as u32,
-                                                world_matrix_index: HELLO_THIS_IS_A_SPECIAL_CASE_BECAUSE_WE_ONLY_USE_EXACTLY_ONE_WORLD_MATRIX_IN_WORLD_LOL,
-                                                color_offset: [0.0; 4],
-                                                alpha: 1.0,
-                                            },
-                                        )
-                                        .is_none(),
-                                    "instance data was already tracked",
-                                );
-                                instances_changes.insert(index);
-
-                                let index_range =
-                                    &state.resource_man.all_index_ranges[&model][&mesh.index];
-
-                                assert!(
-                                    draws
-                                        .insert(
-                                            index,
-                                            DrawIndexedIndirectArgs {
-                                                first_index: index_range.pos,
-                                                index_count: index_range.count,
-                                                base_vertex: index_range.base_vertex,
-                                                instance_count: 1,
-                                                first_instance: index,
-                                            },
-                                        )
-                                        .is_none(),
-                                    "draw data was already tracked",
-                                );
-                                //draw_changes.insert(index);
+                                draws
+                                    .remove(&removed_index)
+                                    .expect("draw data wasn't tracked");
+                                //draw_changes.insert(removed_index);
                             }
+
+                            if swapping_index != removed_index {
+                                let opaque = swapping_type == ObjectType::Opaque;
+
+                                let draws = if opaque {
+                                    &mut renderer.opaque_draws
+                                } else {
+                                    &mut renderer.non_opaque_draws
+                                };
+
+                                {
+                                    let matrix =
+                                        renderer.matrix_data_map.remove(&swapping_index).unwrap();
+
+                                    matrix_data_changes.insert(swapping_index);
+                                    assert!(renderer
+                                        .matrix_data_map
+                                        .insert(removed_index, matrix)
+                                        .is_none());
+                                }
+                                {
+                                    let mut instance =
+                                        renderer.instances.remove(&swapping_index).unwrap();
+                                    instances_changes.insert(swapping_index);
+
+                                    instance.matrix_index = removed_index;
+                                    assert!(renderer
+                                        .instances
+                                        .insert(removed_index, instance)
+                                        .is_none());
+                                }
+                                {
+                                    let mut draw = draws.remove(&swapping_index).unwrap();
+                                    //draw_changes.insert(swapping_index);
+
+                                    draw.first_instance = removed_index;
+
+                                    assert!(draws.insert(removed_index, draw).is_none());
+                                }
+                            }
+                        }
+                    }
+                    RenderCommand::Track { tag, model } => {
+                        let (model, (meshes, ..)) =
+                            state.resource_man.mesh_or_missing_tile_mesh(&model);
+
+                        for mesh in meshes.iter().flatten() {
+                            let draws = if mesh.opaque {
+                                &mut renderer.opaque_draws
+                            } else {
+                                &mut renderer.non_opaque_draws
+                            };
+
+                            if !renderer
+                                .animation_matrix_data_map
+                                .contains_key(&(model, mesh.index))
+                            {
+                                renderer
+                                    .animation_matrix_data_map
+                                    .insert((model, mesh.index), AnimationMatrixData::default());
+                            }
+                            let animation_matrix_index = renderer
+                                .animation_matrix_data_map
+                                .get_index_of(&(model, mesh.index))
+                                .unwrap();
+
+                            let (index, prev_id_slot) = renderer.object_ids.insert_full(
+                                (coord, tag, model, mesh.index),
+                                if mesh.opaque {
+                                    ObjectType::Opaque
+                                } else {
+                                    ObjectType::NonOpaque
+                                },
+                            );
+                            assert!(
+                                prev_id_slot.is_none(),
+                                "render object id was already tracked"
+                            );
+                            let index: u32 = index.try_into().unwrap();
+
+                            assert!(
+                                renderer
+                                    .coord_to_keys
+                                    .entry(coord)
+                                    .or_default()
+                                    .insert((tag, model, mesh.index)),
+                                "coord to keys map already has the same key"
+                            );
+
+                            assert!(
+                                renderer
+                                    .matrix_data_map
+                                    .insert(index, MatrixData::default())
+                                    .is_none(),
+                                "matrix data was already tracked",
+                            );
+                            matrix_data_changes.insert(index);
+
+                            assert!(
+                                renderer
+                                    .instances
+                                    .insert(
+                                        index,
+                                        GpuInstance {
+                                            matrix_index: index,
+                                            animation_matrix_index: animation_matrix_index as u32,
+                                            world_matrix_index:
+                                                WE_ONLY_USE_1_WORLD_MATRIX_IN_GAME_LOL,
+                                            color_offset: [0.0; 4],
+                                            alpha: 1.0,
+                                        },
+                                    )
+                                    .is_none(),
+                                "instance data was already tracked",
+                            );
+                            instances_changes.insert(index);
+
+                            let index_range =
+                                &state.resource_man.all_index_ranges[&model][&mesh.index];
+
+                            assert!(
+                                draws
+                                    .insert(
+                                        index,
+                                        DrawIndexedIndirectArgs {
+                                            first_index: index_range.pos,
+                                            index_count: index_range.count,
+                                            base_vertex: index_range.base_vertex,
+                                            instance_count: 1,
+                                            first_instance: index,
+                                        },
+                                    )
+                                    .is_none(),
+                                "draw data was already tracked",
+                            );
+                            //draw_changes.insert(index);
                         }
                     }
                     RenderCommand::Transform {
@@ -431,19 +463,20 @@ pub fn render(state: &mut GameState, screenshotting: bool) -> Result<(), Surface
                         model,
                         model_matrix,
                     } => {
-                        if let Some((meshes, ..)) = state.resource_man.all_models.get(&model) {
-                            for mesh in meshes.iter().flatten() {
-                                if let Some(index) = renderer
-                                    .object_ids
-                                    .get_index_of(&(coord, tag, model, mesh.index))
-                                {
-                                    let index: u32 = index.try_into().unwrap();
+                        let (model, (meshes, ..)) =
+                            state.resource_man.mesh_or_missing_tile_mesh(&model);
 
-                                    if let Some(matrix) = renderer.matrix_data_map.get_mut(&index) {
-                                        *matrix = MatrixData::new(model_matrix, mesh.matrix);
+                        for mesh in meshes.iter().flatten() {
+                            if let Some(index) = renderer
+                                .object_ids
+                                .get_index_of(&(coord, tag, model, mesh.index))
+                            {
+                                let index: u32 = index.try_into().unwrap();
 
-                                        matrix_data_changes.insert(index);
-                                    }
+                                if let Some(matrix) = renderer.matrix_data_map.get_mut(&index) {
+                                    *matrix = MatrixData::new(model_matrix, mesh.matrix);
+
+                                    matrix_data_changes.insert(index);
                                 }
                             }
                         }
@@ -451,15 +484,6 @@ pub fn render(state: &mut GameState, screenshotting: bool) -> Result<(), Surface
                 }
             }
         }
-    }
-
-    for (model, _) in renderer.animation_matrix_data_map.keys() {
-        try_add_animation(
-            &state.resource_man,
-            state.start_instant,
-            *model,
-            &mut renderer.animation_cache,
-        );
     }
 
     #[cfg(debug_assertions)]
@@ -480,6 +504,27 @@ pub fn render(state: &mut GameState, screenshotting: bool) -> Result<(), Surface
         }
     }
 
+    let overlay_instances = mem::take(&mut renderer.overlay_instances);
+    for (_, model, _, mesh_index) in &overlay_instances {
+        if !renderer
+            .animation_matrix_data_map
+            .contains_key(&(*model, *mesh_index))
+        {
+            renderer
+                .animation_matrix_data_map
+                .insert((*model, *mesh_index), AnimationMatrixData::default());
+        }
+    }
+
+    for (model, _) in renderer.animation_matrix_data_map.keys() {
+        try_add_animation(
+            &state.resource_man,
+            state.start_instant,
+            *model,
+            &mut renderer.animation_cache,
+        );
+    }
+
     for (&model, anim) in &renderer.animation_cache {
         for (&mesh_id, &matrix) in anim {
             if let Some(data) = renderer
@@ -487,6 +532,46 @@ pub fn render(state: &mut GameState, screenshotting: bool) -> Result<(), Surface
                 .get_mut(&(model, mesh_id))
             {
                 data.animation_matrix = matrix.to_cols_array_2d();
+            }
+        }
+    }
+
+    {
+        for (coord, _) in last_tile_tints {
+            if tile_tints.contains_key(&coord) {
+                continue;
+            };
+
+            let Some(keys) = renderer.coord_to_keys.get(&coord) else {
+                continue;
+            };
+
+            for &key in keys {
+                let index = renderer
+                    .object_ids
+                    .get_index_of(&(coord, key.0, key.1, key.2))
+                    .unwrap();
+                let index: u32 = index.try_into().unwrap();
+
+                renderer.instances.get_mut(&index).unwrap().color_offset = [0.0; 4];
+                instances_changes.insert(index);
+            }
+        }
+
+        for (coord, tint) in &tile_tints {
+            let Some(keys) = renderer.coord_to_keys.get(coord) else {
+                continue;
+            };
+
+            for &key in keys {
+                let index = renderer
+                    .object_ids
+                    .get_index_of(&(*coord, key.0, key.1, key.2))
+                    .unwrap();
+                let index: u32 = index.try_into().unwrap();
+
+                renderer.instances.get_mut(&index).unwrap().color_offset = tint.to_array();
+                instances_changes.insert(index);
             }
         }
     }
@@ -499,14 +584,16 @@ pub fn render(state: &mut GameState, screenshotting: bool) -> Result<(), Surface
     let r = renderer.inner_render(
         state.resource_man.clone(),
         state.gui.as_mut().unwrap(),
-        camera_pos.as_vec3(),
-        state.camera.get_matrix().as_mat4(),
+        camera_pos,
+        state.camera.get_matrix(),
         instances_changes,
         matrix_data_changes,
+        overlay_instances,
         screenshotting,
     );
 
     gui::reset_custom_paint_state();
+    renderer.last_tile_tints = tile_tints;
 
     r
 }
@@ -520,6 +607,7 @@ impl Renderer {
         camera_matrix: Matrix4,
         instances_changes: Vec<u32>,
         matrix_data_changes: Vec<u32>,
+        overlay_instances: Vec<OverlayInstance>,
         screenshotting: bool,
     ) -> Result<(), SurfaceError> {
         let size = self.gpu.window.inner_size();
@@ -619,9 +707,7 @@ impl Renderer {
                         .game_resources
                         .world_matrix_data_buffer,
                     0,
-                    bytemuck::cast_slice(&[WorldMatrixData {
-                        world_matrix: (FIX_COORD * camera_matrix).to_cols_array_2d(),
-                    }]),
+                    bytemuck::cast_slice(&[WorldMatrixData::new(camera_matrix)]),
                 );
 
                 self.gpu.queue.write_buffer(
@@ -674,35 +760,7 @@ impl Renderer {
             }
         }
 
-        /*
         {
-            let IndirectInstanceDrawData {
-                opaques,
-                non_opaques,
-                matrix_data,
-                world_matrix_data,
-                draw_data,
-            } = overlay_game_data;
-
-            gpu::update_instance_buffer(
-                &self.gpu.device,
-                &self.gpu.queue,
-                &mut self
-                    .render_resources
-                    .overlay_objects_resources
-                    .opaques_instance_buffer,
-                &opaques,
-            );
-            gpu::update_instance_buffer(
-                &self.gpu.device,
-                &self.gpu.queue,
-                &mut self
-                    .render_resources
-                    .overlay_objects_resources
-                    .non_opaques_instance_buffer,
-                &non_opaques,
-            );
-
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Overlay Objects Render Pass"),
                 color_attachments: &[
@@ -743,14 +801,32 @@ impl Renderer {
                 timestamp_writes: None,
             });
 
-            if !(draw_data.opaques.is_empty() && draw_data.non_opaques.is_empty()) {
-                self.gpu.queue.write_buffer(
-                    &self
+            if !overlay_instances.is_empty() {
+                gpu::resize_update_buffer(
+                    &self.gpu.device,
+                    &self.gpu.queue,
+                    &mut self
                         .render_resources
                         .overlay_objects_resources
-                        .uniform_buffer,
-                    0,
-                    bytemuck::cast_slice(&[GameUBO::new(camera_pos, None)]),
+                        .instance_buffer,
+                    &overlay_instances
+                        .iter()
+                        .enumerate()
+                        .map(|(idx, (v, model_id, _, mesh_index))| {
+                            let animation_index = self
+                                .animation_matrix_data_map
+                                .get_index_of(&(*model_id, *mesh_index))
+                                .unwrap();
+
+                            GpuInstance {
+                                color_offset: v.color_offset,
+                                alpha: v.alpha,
+                                matrix_index: idx as u32,
+                                world_matrix_index: idx as u32,
+                                animation_matrix_index: animation_index as u32,
+                            }
+                        })
+                        .collect::<Vec<_>>(),
                 );
                 self.gpu.queue.write_buffer(
                     &self
@@ -758,7 +834,12 @@ impl Renderer {
                         .overlay_objects_resources
                         .matrix_data_buffer,
                     0,
-                    bytemuck::cast_slice(matrix_data.into_iter().collect::<Vec<_>>().as_slice()),
+                    bytemuck::cast_slice(
+                        &overlay_instances
+                            .iter()
+                            .map(|v| MatrixData::new(v.2.model_matrix(), v.2.mesh_matrix()))
+                            .collect::<Vec<_>>(),
+                    ),
                 );
                 self.gpu.queue.write_buffer(
                     &self
@@ -767,8 +848,19 @@ impl Renderer {
                         .world_matrix_data_buffer,
                     0,
                     bytemuck::cast_slice(
-                        world_matrix_data.into_iter().collect::<Vec<_>>().as_slice(),
+                        &overlay_instances
+                            .iter()
+                            .map(|v| WorldMatrixData::new(v.2.world_matrix()))
+                            .collect::<Vec<_>>(),
                     ),
+                );
+                self.gpu.queue.write_buffer(
+                    &self
+                        .render_resources
+                        .overlay_objects_resources
+                        .uniform_buffer,
+                    0,
+                    bytemuck::cast_slice(&[GameUBO::new(camera_pos, None)]),
                 );
 
                 render_pass.set_pipeline(&self.global_resources.game_pipeline);
@@ -777,43 +869,32 @@ impl Renderer {
                     &self.render_resources.overlay_objects_resources.bind_group,
                     &[],
                 );
+                render_pass.set_vertex_buffer(
+                    1,
+                    self.render_resources
+                        .overlay_objects_resources
+                        .instance_buffer
+                        .slice(..),
+                );
                 render_pass.set_vertex_buffer(0, self.global_resources.vertex_buffer.slice(..));
                 render_pass.set_index_buffer(
                     self.global_resources.index_buffer.slice(..),
                     IndexFormat::Uint16,
                 );
 
-                render_pass.set_vertex_buffer(
-                    1,
-                    self.render_resources
-                        .overlay_objects_resources
-                        .opaques_instance_buffer
-                        .slice(..),
-                );
-                for (draw, _) in draw_data.opaques.iter() {
-                    render_pass.draw_indexed(
-                        draw.first_index..(draw.first_index + draw.index_count),
-                        draw.base_vertex,
-                        draw.first_instance..(draw.first_instance + draw.instance_count),
-                    );
-                }
+                for (i, (_, model, _, mesh_index)) in overlay_instances.into_iter().enumerate() {
+                    let i = i as u32;
 
-                render_pass.set_vertex_buffer(
-                    1,
-                    self.render_resources
-                        .overlay_objects_resources
-                        .non_opaques_instance_buffer
-                        .slice(..),
-                );
-                for (draw, _) in draw_data.non_opaques.iter() {
+                    let range = &resource_man.all_index_ranges[&model][&mesh_index];
+
                     render_pass.draw_indexed(
-                        draw.first_index..(draw.first_index + draw.index_count),
-                        draw.base_vertex,
-                        draw.first_instance..(draw.first_instance + draw.instance_count),
+                        range.pos..(range.pos + range.count),
+                        range.base_vertex,
+                        i..(i + 1),
                     );
                 }
             }
-        } */
+        }
 
         {
             self.gpu.queue.write_buffer(

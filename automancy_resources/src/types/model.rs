@@ -5,10 +5,13 @@ use std::{fs::read_to_string, mem};
 use hashbrown::HashMap;
 use serde::Deserialize;
 
-use automancy_defs::id::{Id, ModelId};
-use automancy_defs::rendering::load_gltf_model;
 use automancy_defs::rendering::Vertex;
+use automancy_defs::rendering::{load_gltf_model, Animation};
 use automancy_defs::{gltf, log};
+use automancy_defs::{
+    id::{Id, ModelId},
+    rendering::Mesh,
+};
 
 use crate::{load_recursively, ResourceManager, RON_EXT};
 
@@ -26,38 +29,55 @@ struct Raw {
 }
 
 impl ResourceManager {
-    pub fn model_or_missing_tile(&self, id: ModelId) -> ModelId {
-        if self.all_models.contains_key(&id) {
-            id
+    pub fn model_or_missing_tile(&self, id: &ModelId) -> ModelId {
+        if self.all_models.contains_key(id) {
+            *id
         } else {
             ModelId(self.registry.model_ids.tile_missing)
         }
     }
 
-    pub fn model_or_missing_item(&self, id: ModelId) -> ModelId {
-        if self.all_models.contains_key(&id) {
-            id
+    pub fn model_or_missing_item(&self, id: &ModelId) -> ModelId {
+        if self.all_models.contains_key(id) {
+            *id
         } else {
             ModelId(self.registry.model_ids.item_missing)
         }
     }
 
-    pub fn model_or_puzzle_space(&self, id: ModelId) -> ModelId {
-        if self.all_models.contains_key(&id) {
-            id
+    pub fn model_or_puzzle_space(&self, id: &ModelId) -> ModelId {
+        if self.all_models.contains_key(id) {
+            *id
         } else {
             ModelId(self.registry.model_ids.puzzle_space)
         }
     }
 
-    pub fn item_model_or_missing(&self, id: Id) -> ModelId {
-        if let Some(def) = self.registry.items.get(&id) {
+    pub fn item_model_or_missing(&self, id: &Id) -> ModelId {
+        if let Some(def) = self.registry.items.get(id) {
             if self.all_models.contains_key(&def.model) {
                 return def.model;
             }
         }
 
         ModelId(self.registry.model_ids.item_missing)
+    }
+
+    pub fn mesh_or_missing_tile_mesh(
+        &self,
+        id: &ModelId,
+    ) -> (ModelId, &(Vec<Option<Mesh>>, Vec<Animation>)) {
+        self.all_models
+            .get(id)
+            .map(|v| (*id, v))
+            .unwrap_or_else(|| {
+                (
+                    ModelId(self.registry.model_ids.tile_missing),
+                    self.all_models
+                        .get(&ModelId(self.registry.model_ids.tile_missing))
+                        .expect("'missing tile' model is missing from namespace core"),
+                )
+            })
     }
 
     fn load_model(&mut self, file: &Path, namespace: &str) -> anyhow::Result<()> {

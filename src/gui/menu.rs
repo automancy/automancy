@@ -434,13 +434,6 @@ pub fn options_menu_item(state: &mut GameState, menu: OptionsMenuState) {
                 label("Language:");
 
                 label("TODO: UNIMPLEMENTED");
-                /*
-                state.options.gui.font = selection_box(
-                    state.resource_man.fonts.keys().cloned().map(Some),
-                    state.options.gui.font.clone(),
-                    &|font| font.clone().unwrap_or_default(),
-                );
-                 */
             });
         }
         OptionsMenuState::Controls => {}

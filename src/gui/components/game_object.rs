@@ -1,13 +1,18 @@
-use std::{cell::Cell, time::Instant};
+use std::{
+    cell::{Cell, RefCell},
+    time::Instant,
+};
 
 use automancy_defs::{
-    id::ModelId,
+    coord::TileCoord,
+    id::{ModelId, TileId},
     math::Matrix4,
     rendering::{
-        AnimationMatrixData, GameUBO, GpuInstance, InstanceData, IntermediateUBO, MatrixData,
-        WorldMatrixData, FIX_COORD,
+        AnimationMatrixData, GameMatrix, GameUBO, GpuInstance, InstanceData, IntermediateUBO,
+        MatrixData, WorldMatrixData,
     },
 };
+use automancy_resources::{data::DataMap, rhai_render::RenderCommand};
 use crunch::{Item, Rotation};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt, DrawIndexedIndirectArgs},
@@ -26,6 +31,7 @@ use yakui_wgpu::CallbackTrait;
 use crate::{
     gpu::{self, MODEL_DEPTH_CLEAR, NORMAL_CLEAR},
     renderer::{try_add_animation, YakuiRenderResources},
+    tile_entity::collect_render_commands,
 };
 
 thread_local! {
@@ -43,11 +49,17 @@ pub fn reset_custom_paint_state() {
     SHOULD_RERENDER.set(false);
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
+pub enum UiGameObjectType {
+    Tile(TileId, DataMap),
+    Model(ModelId),
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct GameObject {
-    instance: InstanceData,
-    model: ModelId,
     index: usize,
+    instance: InstanceData,
+    ty: UiGameObjectType,
     size: Vec2,
     model_matrix: Matrix4,
     world_matrix: Matrix4,
@@ -55,18 +67,18 @@ pub struct GameObject {
 
 pub fn ui_game_object(
     instance: InstanceData,
-    model: ModelId,
+    ty: UiGameObjectType,
     size: Vec2,
     model_matrix: Option<Matrix4>,
     world_matrix: Option<Matrix4>,
 ) -> Response<()> {
-    GameObject::new(instance, model, size, model_matrix, world_matrix).show()
+    GameObject::new(instance, ty, size, model_matrix, world_matrix).show()
 }
 
 impl GameObject {
     pub fn new(
         instance: InstanceData,
-        model: ModelId,
+        ty: UiGameObjectType,
         size: Vec2,
         model_matrix: Option<Matrix4>,
         world_matrix: Option<Matrix4>,
@@ -75,7 +87,7 @@ impl GameObject {
 
         let result = Self {
             instance,
-            model,
+            ty,
             index,
             size,
             model_matrix: model_matrix.unwrap_or_default(),
@@ -103,23 +115,13 @@ pub struct GameElementPaint {
 }
 
 impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
-    fn prepare(
-        &mut self,
-        YakuiRenderResources {
-            resource_man,
-            animation_cache,
-            instances,
-            ..
-        }: &mut YakuiRenderResources,
-    ) {
-        let props = self.props;
-        let start_instant = START_INSTANT.get().unwrap();
-        try_add_animation(resource_man, start_instant, props.model, animation_cache);
+    fn prepare(&mut self, YakuiRenderResources { instances, .. }: &mut YakuiRenderResources) {
+        let props = &self.props;
 
         instances.as_mut().unwrap().push((
-            props.model,
+            props.ty.clone(),
             props.instance,
-            (props.model_matrix, props.world_matrix),
+            GameMatrix::<false>::new(props.model_matrix, props.world_matrix),
             (props.index, props.size),
         ));
     }
@@ -144,6 +146,7 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
         }: &mut YakuiRenderResources,
     ) {
         let gui_resources = gui_resources.as_mut().unwrap();
+        let start_instant = START_INSTANT.get().unwrap();
 
         if let Some(instances) = instances.take() {
             let items = instances
@@ -166,7 +169,6 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
 
             let mut opaque_draw_info = opaque_draw_info.as_mut().unwrap();
             let mut non_opaque_draw_info = non_opaque_draw_info.as_mut().unwrap();
-
             let animation_matrix_data_map = animation_matrix_data_map.as_mut().unwrap();
 
             if SHOULD_RERENDER.get() {
@@ -181,13 +183,36 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                 non_opaque_draw_info.clear();
                 animation_matrix_data_map.clear();
 
-                for (model, instance, (model_matrix, world_matrix), (rect_index, _)) in
-                    instances.into_iter()
-                {
-                    if let Some((meshes, _)) = resource_man.all_models.get(&model) {
-                        world_matrix_data.push(WorldMatrixData {
-                            world_matrix: (FIX_COORD * world_matrix).to_cols_array_2d(),
-                        });
+                for (ty, instance, game_matrix, (rect_index, _)) in instances.into_iter() {
+                    let models = match ty {
+                        UiGameObjectType::Tile(tile_id, mut data) => {
+                            if let Some(commands) = collect_render_commands(
+                                resource_man,
+                                tile_id,
+                                TileCoord::ZERO,
+                                &mut data,
+                                &mut Default::default(),
+                                true,
+                                false,
+                            ) {
+                                commands
+                                    .into_iter()
+                                    .flat_map(|v| match v {
+                                        RenderCommand::Track { model, .. } => Some(model),
+                                        _ => None,
+                                    })
+                                    .collect::<Vec<_>>()
+                            } else {
+                                vec![]
+                            }
+                        }
+                        UiGameObjectType::Model(model_id) => vec![model_id],
+                    };
+
+                    for model in models {
+                        let (model, (meshes, ..)) = resource_man.mesh_or_missing_tile_mesh(&model);
+
+                        world_matrix_data.push(WorldMatrixData::new(game_matrix.world_matrix()));
 
                         for mesh in meshes.iter().flatten() {
                             let buffer = if mesh.opaque {
@@ -205,7 +230,8 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                             let (animation_matrix_index, ..) = animation_matrix_data_map
                                 .insert_full((model, mesh.index), AnimationMatrixData::default());
 
-                            matrix_data.push(MatrixData::new(model_matrix, mesh.matrix));
+                            matrix_data
+                                .push(MatrixData::new(game_matrix.model_matrix(), mesh.matrix));
 
                             buffer.push(GpuInstance {
                                 matrix_index: (matrix_data.len() - 1) as u32,
@@ -276,14 +302,16 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
                 }
             }
 
-            for ((model, mesh_id), data) in animation_matrix_data_map.iter_mut() {
-                let matrix = animation_cache
-                    .get(model)
-                    .and_then(|anim| anim.get(mesh_id))
-                    .copied()
-                    .unwrap_or_default();
+            for (model, _) in animation_matrix_data_map.keys() {
+                try_add_animation(resource_man, start_instant, *model, animation_cache);
+            }
 
-                data.animation_matrix = matrix.to_cols_array_2d();
+            for (&model, anim) in animation_cache.iter() {
+                for (&mesh_id, &matrix) in anim {
+                    if let Some(data) = animation_matrix_data_map.get_mut(&(model, mesh_id)) {
+                        data.animation_matrix = matrix.to_cols_array_2d();
+                    }
+                }
             }
 
             gpu::ordered_map_update_buffer(
@@ -532,7 +560,7 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
 
 #[derive(Debug, Clone)]
 pub struct GameElementWidget {
-    props: Cell<Option<GameObject>>,
+    props: RefCell<Option<GameObject>>,
     clip: Cell<Rect>,
 }
 
@@ -542,17 +570,19 @@ impl Widget for GameElementWidget {
 
     fn new() -> Self {
         Self {
-            props: Cell::default(),
+            props: RefCell::default(),
             clip: Cell::new(Rect::ZERO),
         }
     }
 
     fn update(&mut self, props: Self::Props<'_>) -> Self::Response {
-        let old = self.props.replace(props);
+        let old = self.props.get_mut();
 
-        if !SHOULD_RERENDER.get() && old != props {
+        if !SHOULD_RERENDER.get() && old != &props {
             SHOULD_RERENDER.set(true);
         }
+
+        *old = props;
     }
 
     fn layout(
@@ -560,7 +590,7 @@ impl Widget for GameElementWidget {
         _ctx: yakui::widget::LayoutContext<'_>,
         constraints: yakui::Constraints,
     ) -> yakui::Vec2 {
-        if let Some(paint) = self.props.get() {
+        if let Some(paint) = &*self.props.borrow() {
             constraints.constrain(paint.size)
         } else {
             constraints.min
@@ -597,7 +627,7 @@ impl Widget for GameElementWidget {
         }
 
         if let Some(layer) = ctx.paint.layers_mut().current_mut() {
-            let mut props = self.props.get().unwrap();
+            let mut props = self.props.borrow().clone().unwrap();
             props.size *= ctx.layout.scale_factor();
 
             let paint = Box::new(GameElementPaint {

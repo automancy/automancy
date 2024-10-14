@@ -25,8 +25,6 @@ pub fn make_line(a: Vec2, b: Vec2, z: Float) -> Matrix4 {
         * Matrix4::from_scale(vec3(d.max(0.001), 0.1, LINE_DEPTH))
 }
 
-// vertex
-
 pub type VertexPos = [Float; 3];
 pub type VertexColor = [Float; 4];
 pub type RawMat4 = [[Float; 4]; 4];
@@ -56,9 +54,8 @@ impl Vertex {
     }
 }
 
-// instance
-
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialOrd, PartialEq, Zeroable, Pod)]
 pub struct InstanceData {
     pub color_offset: VertexColor,
     pub alpha: Float,
@@ -96,6 +93,53 @@ impl InstanceData {
     }
 }
 
+pub struct GameMatrix<const HAS_MESH_MATRIX: bool> {
+    model_matrix: Matrix4,
+    world_matrix: Matrix4,
+    mesh_matrix: Option<Matrix4>,
+}
+
+impl GameMatrix<true> {
+    pub fn new(
+        model_matrix: Matrix4,
+        world_matrix: Matrix4,
+        mesh_matrix: Matrix4,
+    ) -> GameMatrix<true> {
+        GameMatrix {
+            model_matrix,
+            world_matrix,
+            mesh_matrix: Some(mesh_matrix),
+        }
+    }
+
+    pub fn model_matrix(&self) -> Matrix4 {
+        self.model_matrix
+    }
+    pub fn world_matrix(&self) -> Matrix4 {
+        self.world_matrix
+    }
+    pub fn mesh_matrix(&self) -> Matrix4 {
+        unsafe { self.mesh_matrix.unwrap_unchecked() }
+    }
+}
+
+impl GameMatrix<false> {
+    pub fn new(model_matrix: Matrix4, world_matrix: Matrix4) -> GameMatrix<false> {
+        GameMatrix {
+            model_matrix,
+            world_matrix,
+            mesh_matrix: None,
+        }
+    }
+
+    pub fn model_matrix(&self) -> Matrix4 {
+        self.model_matrix
+    }
+    pub fn world_matrix(&self) -> Matrix4 {
+        self.world_matrix
+    }
+}
+
 const RAW_IDENTITY_3: RawMat3 = [
     [1.0, 0.0, 0.0, 0.0],
     [0.0, 1.0, 0.0, 0.0],
@@ -108,6 +152,13 @@ const RAW_IDENTITY_4: RawMat4 = [
     [0.0, 0.0, 1.0, 0.0],
     [0.0, 0.0, 0.0, 1.0],
 ];
+
+static FIX_COORD: Matrix4 = Matrix4::from_cols(
+    vec4(1.0, 0.0, 0.0, 0.0),
+    vec4(0.0, -1.0, 0.0, 0.0),
+    vec4(0.0, 0.0, 1.0, 0.0),
+    vec4(0.0, 0.0, 0.0, 1.0),
+);
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialOrd, Zeroable, Pod, ByteHash, ByteEq)]
@@ -166,7 +217,15 @@ impl Default for AnimationMatrixData {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialOrd, Zeroable, Pod, ByteHash, ByteEq)]
 pub struct WorldMatrixData {
-    pub world_matrix: RawMat4,
+    world_matrix: RawMat4,
+}
+
+impl WorldMatrixData {
+    pub fn new(matrix: Matrix4) -> Self {
+        Self {
+            world_matrix: (FIX_COORD * matrix).to_cols_array_2d(),
+        }
+    }
 }
 
 impl Default for WorldMatrixData {
@@ -188,13 +247,6 @@ pub struct GpuInstance {
     pub world_matrix_index: u32,
 }
 
-pub static FIX_COORD: Matrix4 = Matrix4::from_cols(
-    vec4(1.0, 0.0, 0.0, 0.0),
-    vec4(0.0, -1.0, 0.0, 0.0),
-    vec4(0.0, 0.0, 1.0, 0.0),
-    vec4(0.0, 0.0, 0.0, 1.0),
-);
-
 impl GpuInstance {
     pub fn desc() -> VertexBufferLayout<'static> {
         static ATTRIBUTES: &[VertexAttribute] = &vertex_attr_array![
@@ -212,8 +264,6 @@ impl GpuInstance {
         }
     }
 }
-
-// UBO
 
 pub static DEFAULT_LIGHT_COLOR: VertexColor = [1.0; 4];
 
@@ -272,8 +322,6 @@ impl Default for IntermediateUBO {
         }
     }
 }
-
-// model
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Animation {

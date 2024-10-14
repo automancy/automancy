@@ -60,6 +60,7 @@ fn takeable_items(
     state: &mut GameState,
     game_data: &mut DataMap,
     mut buffer: Inventory,
+    buffer_id: Id,
     tile_entity: ActorRef<TileEntityMsg>,
 ) {
     let Data::Inventory(inventory) = game_data
@@ -115,7 +116,7 @@ fn takeable_items(
     if dirty {
         tile_entity
             .send_message(TileEntityMsg::SetDataValue(
-                state.resource_man.registry.data_ids.buffer,
+                buffer_id,
                 Data::Inventory(buffer),
             ))
             .unwrap();
@@ -285,16 +286,11 @@ fn rhai_ui(
             if new_dir != current_dir {
                 if let Some(coord) = new_dir {
                     tile_entity
-                        .send_message(TileEntityMsg::SetDataValue(
-                            state.resource_man.registry.data_ids.direction,
-                            Data::Coord(coord),
-                        ))
+                        .send_message(TileEntityMsg::SetDataValue(id, Data::Coord(coord)))
                         .unwrap();
                 } else {
                     tile_entity
-                        .send_message(TileEntityMsg::RemoveData(
-                            state.resource_man.registry.data_ids.direction, // TODO ermmmmm these are hardcoded..
-                        ))
+                        .send_message(TileEntityMsg::RemoveData(id))
                         .unwrap();
                 }
             }
@@ -360,7 +356,7 @@ fn rhai_ui(
         RhaiUiUnit::Inventory { id, empty_text } => {
             col(|| {
                 if let Some(Data::Inventory(inventory)) = data.get(id).cloned() {
-                    takeable_items(state, game_data, inventory, tile_entity.clone());
+                    takeable_items(state, game_data, inventory, id, tile_entity.clone());
                 } else {
                     label(&state.resource_man.gui_str(empty_text));
                 }

@@ -21,25 +21,28 @@ use crate::game::{GameSystemMessage, TickUnit};
 use crate::tile_entity::TileEntityMsg::*;
 
 fn run_tile_function<Result: 'static, const SIZE: usize>(
-    entity: &TileEntity,
-    state: &mut TileEntityState,
+    resource_man: &ResourceManager,
+    id: TileId,
+    coord: TileCoord,
+    data: &mut DataMap,
+    field_changes: &mut HashSet<Id>,
     (ast, function_id): &FunctionInfo,
     args: [(&'static str, Dynamic); SIZE],
     function: &'static str,
 ) -> Option<Result> {
-    let tile_def = entity.resource_man.registry.tiles.get(&entity.id)?;
-
-    let mut rhai_state = Dynamic::from(state.data.clone());
+    let tile_def = resource_man.registry.tiles.get(&id)?;
+    let mut rhai_state = Dynamic::from(data.clone());
 
     let mut input = rhai::Map::from([
-        ("coord".into(), Dynamic::from(entity.coord)),
-        ("id".into(), Dynamic::from(entity.id)),
+        ("coord".into(), Dynamic::from(coord)),
+        ("id".into(), Dynamic::from(id)),
         ("random".into(), Dynamic::from_int(random())),
         ("setup".into(), Dynamic::from(tile_def.data.clone())),
     ]);
+
     input.extend(args.into_iter().map(|(k, v)| (k.into(), v)));
 
-    let result = entity.resource_man.engine.call_fn_with_options::<Dynamic>(
+    let result = resource_man.engine.call_fn_with_options::<Dynamic>(
         rhai_call_options(&mut rhai_state),
         &mut Scope::new(),
         ast,
@@ -51,19 +54,19 @@ fn run_tile_function<Result: 'static, const SIZE: usize>(
         let new_data = rhai_state.cast::<DataMap>();
 
         for k in new_data.keys().cloned() {
-            if state.data.get(k).is_none() {
-                state.field_changes.insert(k);
+            if data.get(k).is_none() {
+                field_changes.insert(k);
             }
         }
 
-        for (k, v) in mem::take(&mut state.data) {
+        for (k, v) in mem::take(data) {
             let new_v = new_data.get(k);
             if new_v.is_none() || new_v.is_some_and(|new| new != &v) {
-                state.field_changes.insert(k);
+                field_changes.insert(k);
             }
         }
 
-        state.data = new_data;
+        *data = new_data;
     }
 
     match result {
@@ -73,6 +76,51 @@ fn run_tile_function<Result: 'static, const SIZE: usize>(
             None
         }
     }
+}
+
+pub fn collect_render_commands(
+    resource_man: &ResourceManager,
+    id: TileId,
+    coord: TileCoord,
+    data: &mut DataMap,
+    field_changes: &mut HashSet<Id>,
+    loading: bool,
+    unloading: bool,
+) -> Option<Vec<RenderCommand>> {
+    let tile_def = resource_man.registry.tiles.get(&id)?;
+
+    if let Some(function) = tile_def
+        .function
+        .as_ref()
+        .and_then(|v| resource_man.functions.get(v))
+    {
+        let last_changes = mem::take(field_changes);
+
+        if let Some(result) = run_tile_function(
+            resource_man,
+            id,
+            coord,
+            data,
+            field_changes,
+            function,
+            [
+                ("field_changes", Dynamic::from_iter(last_changes)),
+                ("loading", Dynamic::from_bool(loading)),
+                ("unloading", Dynamic::from_bool(unloading)),
+            ],
+            "tile_render",
+        ) as Option<rhai::Array>
+        {
+            return Some(
+                result
+                    .into_iter()
+                    .flat_map(|v| v.try_cast::<RenderCommand>())
+                    .collect::<Vec<_>>(),
+            );
+        }
+    }
+
+    None
 }
 
 #[derive(Debug, Clone)]
@@ -130,7 +178,11 @@ pub enum TileEntityMsg {
         requested_from_id: TileId,
         requested_from_coord: TileCoord,
     },
-    CollectRenderCommands(RpcReplyPort<Vec<RenderCommand>>, bool, bool),
+    CollectRenderCommands {
+        reply: RpcReplyPort<Vec<RenderCommand>>,
+        loading: bool,
+        unloading: bool,
+    },
     SetData(DataMap),
     SetDataValue(Id, Data),
     RemoveData(Id),
@@ -277,8 +329,11 @@ impl TileEntity {
             .and_then(|v| self.resource_man.functions.get(v))
         {
             if let Some(result) = run_tile_function(
-                self,
-                state,
+                &self.resource_man,
+                self.id,
+                self.coord,
+                &mut state.data,
+                &mut state.field_changes,
                 function,
                 [
                     ("source_coord", Dynamic::from(source_coord)),
@@ -339,9 +394,16 @@ impl Actor for TileEntity {
                     .as_ref()
                     .and_then(|v| self.resource_man.functions.get(v))
                 {
-                    if let Some(result) =
-                        run_tile_function(self, state, function, [], "handle_tick")
-                    {
+                    if let Some(result) = run_tile_function(
+                        &self.resource_man,
+                        self.id,
+                        self.coord,
+                        &mut state.data,
+                        &mut state.field_changes,
+                        function,
+                        [],
+                        "handle_tick",
+                    ) {
                         self.handle_rhai_result(state, result);
                     }
                 }
@@ -376,8 +438,11 @@ impl Actor for TileEntity {
                     .and_then(|v| self.resource_man.functions.get(v))
                 {
                     let _: Option<()> = run_tile_function(
-                        self,
-                        state,
+                        &self.resource_man,
+                        self.id,
+                        self.coord,
+                        &mut state.data,
+                        &mut state.field_changes,
                         function,
                         [("transferred", Dynamic::from(result))],
                         "handle_transaction_result",
@@ -401,8 +466,11 @@ impl Actor for TileEntity {
                     .and_then(|v| self.resource_man.functions.get(v))
                 {
                     if let Some(result) = run_tile_function(
-                        self,
-                        state,
+                        &self.resource_man,
+                        self.id,
+                        self.coord,
+                        &mut state.data,
+                        &mut state.field_changes,
                         function,
                         [
                             ("requested_from_coord", Dynamic::from(requested_from_coord)),
@@ -427,49 +495,39 @@ impl Actor for TileEntity {
                     .as_ref()
                     .and_then(|v| self.resource_man.functions.get(v))
                 {
-                    if let Some(result) =
-                        run_tile_function(self, state, function, [], "tile_config")
-                    {
+                    if let Some(result) = run_tile_function(
+                        &self.resource_man,
+                        self.id,
+                        self.coord,
+                        &mut state.data,
+                        &mut state.field_changes,
+                        function,
+                        [],
+                        "tile_config",
+                    ) {
                         reply.send(Some(result))?;
                     } else {
                         reply.send(None)?;
                     }
                 }
             }
-            CollectRenderCommands(reply, loading, unloading) => {
-                let tile_def = self
-                    .resource_man
-                    .registry
-                    .tiles
-                    .get(&self.id)
-                    .ok_or(Box::new(TileEntityError::NonExistent(self.coord)))?;
-
-                if let Some(function) = tile_def
-                    .function
-                    .as_ref()
-                    .and_then(|v| self.resource_man.functions.get(v))
-                {
-                    let field_changes = mem::take(&mut state.field_changes);
-
-                    if let Some(result) = run_tile_function(
-                        self,
-                        state,
-                        function,
-                        [
-                            ("field_changes", Dynamic::from_iter(field_changes)),
-                            ("loading", Dynamic::from_bool(loading)),
-                            ("unloading", Dynamic::from_bool(unloading)),
-                        ],
-                        "tile_render",
-                    ) as Option<rhai::Array>
-                    {
-                        reply.send(
-                            result
-                                .into_iter()
-                                .flat_map(|v| v.try_cast::<RenderCommand>())
-                                .collect(),
-                        )?;
-                    }
+            CollectRenderCommands {
+                reply,
+                loading,
+                unloading,
+            } => {
+                if let Some(commands) = collect_render_commands(
+                    &self.resource_man,
+                    self.id,
+                    self.coord,
+                    &mut state.data,
+                    &mut state.field_changes,
+                    loading,
+                    unloading,
+                ) {
+                    reply.send(commands)?;
+                } else {
+                    reply.send(vec![])?;
                 }
             }
             SetData(data) => {

@@ -5,7 +5,7 @@ use std::path::Path;
 use hashbrown::HashMap;
 use serde::Deserialize;
 
-use automancy_defs::id::{Id, TileId};
+use automancy_defs::id::{Id, ModelId, TileId};
 
 use crate::{load_recursively, ResourceManager, RON_EXT};
 
@@ -13,7 +13,7 @@ use crate::{load_recursively, ResourceManager, RON_EXT};
 pub struct CategoryDef {
     pub id: Id,
     pub ord: i32,
-    pub icon: Id,
+    pub icon: ModelId,
     pub item: Option<Id>,
 }
 
@@ -33,7 +33,7 @@ impl ResourceManager {
 
         let id = Id::parse(&v.id, &mut self.interner, Some(namespace)).unwrap();
         let ord = v.ord;
-        let icon = Id::parse(&v.icon, &mut self.interner, Some(namespace)).unwrap();
+        let icon = ModelId(Id::parse(&v.icon, &mut self.interner, Some(namespace)).unwrap());
         let item = v
             .item
             .map(|v| Id::parse(&v, &mut self.interner, Some(namespace)).unwrap());
