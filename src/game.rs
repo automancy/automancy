@@ -412,7 +412,7 @@ impl Actor for GameSystem {
                             return Ok(());
                         }
 
-                        let place_result = insert_new_tile(
+                        let old_tile = insert_new_tile(
                             self.resource_man.clone(),
                             myself.clone(),
                             map,
@@ -424,25 +424,20 @@ impl Actor for GameSystem {
                         )
                         .await;
 
-                        if place_result.is_none() {
-                            if let Some(reply) = reply {
-                                reply.send(PlaceTileResponse::Ignored)?;
-                            }
-                            return Ok(());
-                        }
-
-                        if let Some(old_tile) = place_result {
-                            if let Some(reply) = reply {
+                        if let Some(reply) = reply {
+                            if let (Some(_), ..) = &old_tile {
                                 if id == TileId(self.resource_man.registry.none) {
                                     reply.send(PlaceTileResponse::Removed)?;
                                 } else {
                                     reply.send(PlaceTileResponse::Placed)?;
                                 }
+                            } else {
+                                reply.send(PlaceTileResponse::Placed)?;
                             }
+                        }
 
+                        if let (Some(id), data) = old_tile {
                             if record {
-                                let (id, data) = old_tile;
-
                                 state.undo_steps.push_back(vec![PlaceTile {
                                     coord,
                                     id,
@@ -534,7 +529,7 @@ impl Actor for GameSystem {
 
                         for (coord, id, data) in tiles {
                             if place_over || map.tiles.get(&coord).is_none() {
-                                if let Some((old_id, old_data)) = insert_new_tile(
+                                if let (Some(old_id), old_data) = insert_new_tile(
                                     self.resource_man.clone(),
                                     myself.clone(),
                                     map,
@@ -781,7 +776,7 @@ async fn insert_new_tile(
     coord: TileCoord,
     tile_id: TileId,
     data: Option<DataMap>,
-) -> Option<(TileId, Option<DataMap>)> {
+) -> (Option<TileId>, Option<DataMap>) {
     let mut skip = false;
 
     {
@@ -803,19 +798,26 @@ async fn insert_new_tile(
     }
 
     if skip {
-        return None;
+        return (None, None);
     }
 
-    let (old_id, old_data, mut cleanup) =
-        remove_tile(&resource_man, map, tile_entities, coord).await?;
+    let mut old_id = None;
+    let mut old_data = None;
 
-    cleanup_render_commands
-        .entry(coord)
-        .or_default()
-        .append(&mut cleanup);
+    if let Some((id, data, mut cleanup)) =
+        remove_tile(&resource_man, map, tile_entities, coord).await
+    {
+        cleanup_render_commands
+            .entry(coord)
+            .or_default()
+            .append(&mut cleanup);
 
-    if tile_id == TileId(resource_man.registry.none) {
-        return Some((old_id, old_data));
+        if tile_id == TileId(resource_man.registry.none) {
+            return (Some(id), data);
+        }
+
+        old_id = Some(id);
+        old_data = data;
     }
 
     let tile_entity = new_tile(resource_man.clone(), game, coord, tile_id).await;
@@ -823,7 +825,7 @@ async fn insert_new_tile(
     if let Some(data) = data {
         tile_entity
             .send_message(TileEntityMsg::SetData(data))
-            .ok()?;
+            .unwrap();
     }
 
     untrack_none(
@@ -852,7 +854,7 @@ async fn insert_new_tile(
     tile_entities.insert(coord, tile_entity);
     map.tiles.insert(coord, tile_id);
 
-    Some((old_id, old_data))
+    (old_id, old_data)
 }
 
 fn inner_tick(state: &mut GameSystemState) {
