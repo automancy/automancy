@@ -12,12 +12,12 @@ use thiserror::Error;
 use types::item::ItemDef;
 use walkdir::WalkDir;
 
-use automancy_defs::log;
 use automancy_defs::rendering::{Animation, Mesh};
 use automancy_defs::{
     chrono::{DateTime, Local},
     id::SharedStr,
 };
+use automancy_defs::{coord::TileCoord, log};
 use automancy_defs::{id::ModelId, kira::sound::static_sound::StaticSoundData};
 use automancy_defs::{id::TileId, kira::track::TrackHandle};
 use automancy_defs::{
@@ -195,15 +195,24 @@ pub fn rhai_call_options(state: &mut Dynamic) -> CallFnOptions {
         .bind_this_ptr(state)
 }
 
-pub fn rhai_log_err(called_func: &str, function_id: &str, err: &rhai::EvalAltResult) {
+pub fn rhai_log_err(
+    called_func: &str,
+    function_id: &str,
+    err: &rhai::EvalAltResult,
+    coord: Option<TileCoord>,
+) {
+    let coord = coord
+        .map(|v| v.to_minimal_string())
+        .unwrap_or_else(|| "(no coord available)".to_string());
+
     match err {
         rhai::EvalAltResult::ErrorFunctionNotFound(name, ..) => {
             if name != called_func {
-                log::error!("In {function_id}, {called_func}: {err}");
+                log::error!("At {coord}, In {function_id}, {called_func}: {err}");
             }
         }
         _ => {
-            log::error!("In {function_id}, {called_func}: {err}");
+            log::error!("At {coord}, In {function_id}, {called_func}: {err}");
         }
     }
 }

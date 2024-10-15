@@ -72,7 +72,7 @@ fn run_tile_function<Result: 'static, const SIZE: usize>(
     match result {
         Ok(result) => result.try_cast::<Result>(),
         Err(err) => {
-            rhai_log_err(function, function_id, &err);
+            rhai_log_err(function, function_id, &err, Some(coord));
             None
         }
     }
