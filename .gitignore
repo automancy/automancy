@@ -17,3 +17,7 @@ rhai
 
 .direnv
 result
+
+/flamegraph.svg
+/perf.data
+/perf.data.old
