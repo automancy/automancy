@@ -1,0 +1,26 @@
+[package]
+name = "automancy_resources"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+
+[dependencies]
+automancy_macros = { workspace = true }
+automancy_defs = { workspace = true }
+
+yakui = { workspace = true }
+
+serde = { workspace = true }
+ron = { workspace = true }
+
+log = { workspace = true }
+
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+walkdir = { workspace = true }
+hashbrown = { workspace = true }
+
+rhai = { workspace = true }
+
+interpolator = { version = "0.5.0", features = ["number"] }
+petgraph = "0.6.5"

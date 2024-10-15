@@ -1,4 +1,4 @@
 #!/bin/sh
 
 cargo run -p build_script
-cargo run --features build-binary $1
+cargo run -p automancy $1

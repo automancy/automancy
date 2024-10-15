@@ -1,17 +1,22 @@
-[package]
-authors = [
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[workspace]
+package.version = "0.1.0"
+package.authors = [
     "Madeline Sparkles <madeline@mouse.lgbt>",
     "Mae Rosaline <mae@maestoso.online>",
 ]
-name = "automancy"
-version = "0.1.0"
-edition = "2021"
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-
-[[bin]]
-name = "automancy"
-required-features = ["build-binary"]
+package.edition = "2021"
+resolver = "2"
+members = [
+    "build_script",
+    "crates/automancy_defs",
+    "crates/automancy_macros",
+    "crates/automancy_resources",
+    "crates/automancy_system",
+    "crates/automancy_ui",
+    "crates/lib",
+    "crates/main",
+]
 
 
 [profile.dev]
@@ -39,16 +44,15 @@ lto = "fat"          # turn on Link-Time Optimizations
 codegen-units = 1    # trade compile time with maximum optimization
 
 
-[workspace]
-members = [
-    "build_script",
-    "automancy_defs",
-    "automancy_macros",
-    "automancy_resources",
-]
-
-
 [workspace.dependencies]
+automancy_defs = { path = "crates/automancy_defs" }
+automancy_macros = { path = "crates/automancy_macros" }
+automancy_resources = { path = "crates/automancy_resources" }
+automancy_system = { path = "crates/automancy_system" }
+automancy_ui = { path = "crates/automancy_ui" }
+automancy_lib = { path = "crates/lib" }
+
+
 serde = { version = "1", features = ["derive"] }
 ron = "0.8.1"
 
@@ -59,14 +63,20 @@ winit = { version = "0.30.3", features = ["serde"] }
 yakui = { git = "https://github.com/SecondHalfGames/yakui.git", default-features = false }
 yakui-winit = { git = "https://github.com/SecondHalfGames/yakui.git" }
 yakui-wgpu = { git = "https://github.com/SecondHalfGames/yakui.git" }
+cosmic-text = "0.12.0"
 
 log = "0.4"
 
 anyhow = "1"
 thiserror = "1"
 walkdir = "2.5.0"
-hashbrown = { version = "0.15.0", features = ["serde", "rayon"] }
+hashbrown = { version = "0.15.0", features = ["serde", "rayon", "inline-more"] }
 bytemuck = "1.19.0"
+image = "0.25.1"
+uuid = "1.10.0"
+fuzzy-matcher = "0.3.7"
+crunch = "0.5.3"
+
 
 rhai = { version = "1.19.0", features = [
     "sync",
@@ -79,70 +89,12 @@ rhai = { version = "1.19.0", features = [
     "internals",
 ] }
 
-
-[dependencies]
-serde = { workspace = true }
-ron = { workspace = true }
-
-wgpu = { workspace = true }
-
-yakui = { workspace = true }
-yakui-wgpu = { workspace = true }
-yakui-winit = { workspace = true }
-
-log = { workspace = true }
-
-winit = { workspace = true }
-
-anyhow = { workspace = true }
-thiserror = { workspace = true }
-walkdir = { workspace = true }
-hashbrown = { workspace = true }
-bytemuck = { workspace = true }
-
-rhai = { workspace = true }
-
-automancy_macros = { path = "automancy_macros" }
-automancy_defs = { path = "automancy_defs" }
-automancy_resources = { path = "automancy_resources" }
-
-enum-map = "2.7.3"
-arraydeque = "0.5.1"
-fuzzy-matcher = "0.3.7"
-arboard = "3.4.0"
-ordermap = "0.5.3"
-
-rand = "0.8.5"
-uuid = "1.9.1"
-
-image = "0.25.1"
-zstd = "0.13.1"
-
-async-trait = "0.1.83"
 ractor = "0.12.2"
-rayon = "1.10.0"
 tokio = { version = "1", features = ["full"] }
-open = "5.2.0"
-cosmic-text = "0.12.0"
-crunch = "0.5.3"
+rayon = "1.10.0"
 
-
-color-eyre = { version = "0.6.3", optional = true }
-env_logger = { version = "0.11.3", optional = true }
-rfd = { version = "0.15.0", optional = true }
-human-panic = { version = "2.0.0", optional = true }
-strip-ansi-escapes = { version = "0.2.0", optional = true }
 
 [patch."https://github.com/SecondHalfGames/yakui.git"]
 yakui = { git = "https://github.com/automancy/yakui.git" }
 yakui-wgpu = { git = "https://github.com/automancy/yakui.git" }
 yakui-winit = { git = "https://github.com/automancy/yakui.git" }
-
-[features]
-build-binary = [
-    "env_logger",
-    "rfd",
-    "human-panic",
-    "color-eyre",
-    "strip-ansi-escapes",
-]

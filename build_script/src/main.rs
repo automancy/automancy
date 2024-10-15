@@ -6,7 +6,6 @@ use std::process::{Command, Stdio};
 use std::str;
 use std::str::FromStr;
 use std::thread;
-
 use walkdir::WalkDir;
 
 fn load_recursively(path: &Path, extension: &OsStr) -> Vec<PathBuf> {

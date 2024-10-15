@@ -1,0 +1,19 @@
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[package]
+name = "automancy"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+
+
+[dependencies]
+automancy_lib = { workspace = true }
+
+image = { workspace = true }
+
+
+color-eyre = "0.6.3"
+env_logger = "0.11.3"
+rfd = "0.15.0"
+human-panic = "2.0.0"
+strip-ansi-escapes = "0.2.0"

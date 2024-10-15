@@ -1,0 +1,32 @@
+[package]
+name = "automancy_ui"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+
+[dependencies]
+automancy_macros = { workspace = true }
+automancy_defs = { workspace = true }
+automancy_resources = { workspace = true }
+automancy_system = { workspace = true }
+
+serde = { workspace = true }
+ron = { workspace = true }
+
+wgpu = { workspace = true }
+
+winit = { workspace = true }
+
+yakui = { workspace = true }
+yakui-wgpu = { workspace = true }
+yakui-winit = { workspace = true }
+cosmic-text = { workspace = true }
+crunch = { workspace = true }
+
+log = { workspace = true }
+
+hashbrown = { workspace = true }
+
+rhai = { workspace = true }
+
+tokio = { workspace = true }

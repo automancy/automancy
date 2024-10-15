@@ -1,0 +1,15 @@
+[package]
+name = "automancy_macros"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+
+[lib]
+proc-macro = true
+
+[dependencies]
+automancy_defs = { workspace = true }
+
+syn = "2.0.68"
+proc-macro2 = "1.0.86"
+quote = "1.0.36"

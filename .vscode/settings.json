@@ -1,8 +1,12 @@
 {
     "rust-analyzer.linkedProjects": ["./Cargo.toml"],
 
-    "rust-analyzer.imports.granularity.group": "crate",
+    "rust-analyzer.imports.granularity.group": "module",
     "rust-analyzer.imports.granularity.enforce": true,
+    "rust-analyzer.imports.group.enable": true,
+    "rust-analyzer.imports.preferPrelude": true,
+    "rust-analyzer.imports.merge.glob": true,
+    "rust-analyzer.imports.preferNoStd": true,
 
     "rust-analyzer.assist.expressionFillDefault": "default",
     "rust-analyzer.check.command": "clippy",

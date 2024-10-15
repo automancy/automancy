@@ -1,0 +1,44 @@
+[package]
+name = "automancy_system"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+
+[dependencies]
+automancy_macros = { workspace = true }
+automancy_defs = { workspace = true }
+automancy_resources = { workspace = true }
+
+serde = { workspace = true }
+ron = { workspace = true }
+
+wgpu = { workspace = true }
+
+yakui = { workspace = true }
+yakui-wgpu = { workspace = true }
+yakui-winit = { workspace = true }
+cosmic-text = { workspace = true }
+
+log = { workspace = true }
+
+winit = { workspace = true }
+
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+walkdir = { workspace = true }
+hashbrown = { workspace = true }
+bytemuck = { workspace = true }
+uuid = { workspace = true }
+fuzzy-matcher = { workspace = true }
+
+rhai = { workspace = true }
+
+ractor = { workspace = true }
+tokio = { workspace = true }
+rayon = { workspace = true }
+
+zstd = "0.13.1"
+async-trait = "0.1.83"
+arraydeque = "0.5.1"
+enum-map = "2.7.3"
+rand = "0.8.5"
