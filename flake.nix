@@ -37,7 +37,7 @@
           nativeBuildInputs = with pkgs; [ pkg-config blender makeBinaryWrapper ];
           inherit buildInputs;
 
-          cargoBuildOptions = prev: prev ++ [ "--features build-binary" ];
+          cargoBuildOptions = prev: prev ++ [ "--package automancy" ];
 
           postInstall = ''
             wrapProgram "$out/bin/automancy" \
