@@ -1,7 +1,7 @@
+use std::mem;
 use std::sync::Arc;
 use std::time::Instant;
 use std::{borrow::Cow, collections::BTreeMap};
-use std::{collections::BTreeSet, mem};
 use std::{collections::VecDeque, ops::Mul};
 
 use arboard::{Clipboard, ImageData};
