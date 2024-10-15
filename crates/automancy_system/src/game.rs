@@ -207,7 +207,13 @@ impl Actor for GameSystem {
                     },
                     None,
                 )
-                .await;
+                .await
+                .map(|commands| {
+                    commands
+                        .into_iter()
+                        .flat_map(|(k, v)| Some(k).zip(v))
+                        .collect()
+                });
 
                 match commands {
                     Ok(mut commands) => {
@@ -313,7 +319,13 @@ impl Actor for GameSystem {
                             },
                             None,
                         )
-                        .await;
+                        .await
+                        .map(|commands| {
+                            commands
+                                .into_iter()
+                                .flat_map(|(k, v)| Some(k).zip(v))
+                                .collect()
+                        });
 
                         match commands {
                             Ok(mut commands) => {
@@ -700,7 +712,8 @@ async fn remove_tile(
             )
             .await
             .unwrap()
-            .unwrap();
+            .unwrap()
+            .unwrap_or_default();
 
         track_none(&mut commands, resource_man, coord);
 
@@ -793,7 +806,8 @@ async fn insert_new_tile(
         )
         .await
         .unwrap()
-        .unwrap();
+        .unwrap()
+        .unwrap_or_default();
 
     cleanup_render_commands
         .entry(coord)

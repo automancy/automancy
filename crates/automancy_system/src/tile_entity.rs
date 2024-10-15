@@ -86,6 +86,10 @@ pub fn collect_render_commands(
     loading: bool,
     unloading: bool,
 ) -> Option<Vec<RenderCommand>> {
+    if !loading && !unloading && field_changes.is_empty() {
+        return None;
+    }
+
     let tile_def = resource_man.registry.tiles.get(&id)?;
 
     if let Some(function) = tile_def
@@ -178,7 +182,7 @@ pub enum TileEntityMsg {
         requested_from_coord: TileCoord,
     },
     CollectRenderCommands {
-        reply: RpcReplyPort<Vec<RenderCommand>>,
+        reply: RpcReplyPort<Option<Vec<RenderCommand>>>,
         loading: bool,
         unloading: bool,
     },
@@ -515,7 +519,7 @@ impl Actor for TileEntity {
                 loading,
                 unloading,
             } => {
-                if let Some(commands) = collect_render_commands(
+                reply.send(collect_render_commands(
                     &self.resource_man,
                     self.id,
                     self.coord,
@@ -523,11 +527,7 @@ impl Actor for TileEntity {
                     &mut state.field_changes,
                     loading,
                     unloading,
-                ) {
-                    reply.send(commands)?;
-                } else {
-                    reply.send(vec![])?;
-                }
+                ))?;
             }
             SetData(data) => {
                 state.field_changes.extend(data.keys());
