@@ -8,13 +8,6 @@ options.ron
 misc_options.ron
 rhai
 
-*.gltf
-*.glb
-*.blend1
-*.cap
-
-**/items/**/*.blend
-
 .direnv
 result
 
