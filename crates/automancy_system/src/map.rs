@@ -295,6 +295,8 @@ impl GameMap {
 
             info_writer.flush().unwrap();
             map_encoder.do_finish().unwrap();
+
+            log::info!("Saved map {}", self.opt);
         }
 
         Ok(())

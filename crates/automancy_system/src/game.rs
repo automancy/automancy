@@ -263,8 +263,6 @@ impl Actor for GameSystem {
                 if let Some(map) = &state.map {
                     map.save(&self.resource_man.interner, &state.tile_entities)
                         .await?;
-
-                    log::info!("Saved map {}", map.opt);
                 }
                 reply.send(())?;
             }
