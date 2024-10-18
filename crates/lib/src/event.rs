@@ -167,11 +167,6 @@ fn render(
                         &renderer.global_resources,
                         renderer.gpu.window.inner_size(),
                     );
-                    renderer.reset_buffers();
-                    state
-                        .game
-                        .send_message(GameSystemMessage::ResetVisibility)
-                        .unwrap();
                 }
                 Err(SurfaceError::OutOfMemory) => {
                     return state.tokio.block_on(shutdown_graceful(
@@ -313,11 +308,6 @@ pub fn on_event(
                         &renderer.global_resources,
                         *size,
                     );
-                    renderer.reset_buffers();
-                    state
-                        .game
-                        .send_message(GameSystemMessage::ResetVisibility)
-                        .unwrap();
 
                     return Ok(false);
                 }

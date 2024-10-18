@@ -7,7 +7,7 @@ pub use interpolator::Formattable;
 #[derive(Debug, Clone)]
 pub struct FormatContext<'a>(HashMap<&'a str, Formattable<'a>>);
 
-impl<'a> Context for FormatContext<'a> {
+impl Context for FormatContext<'_> {
     fn get(&self, key: &str) -> Option<Formattable> {
         self.0.get(key).cloned()
     }

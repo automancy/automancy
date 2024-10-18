@@ -52,61 +52,51 @@ pub struct GameSystemState {
     undo_steps: ArrayDeque<Vec<GameSystemMessage>, UNDO_CACHE_SIZE, Wrapping>,
 
     cleanup_render_commands: HashMap<TileCoord, Vec<RenderCommand>>,
-    last_culling_range: Option<TileBounds>,
+    last_culling_range: TileBounds,
 }
 
 pub static COULD_NOT_LOAD_ANYTHING: &str = "??? main menu is corrupted and couldn't be emptied!";
 
-fn track_none(v: &mut Vec<RenderCommand>, resource_man: &ResourceManager, coord: TileCoord) {
-    v.push(RenderCommand::Track {
-        tag: RenderTagId(resource_man.registry.data_ids.none_tile_render_tag),
-        model: ModelId(resource_man.registry.model_ids.tile_none),
-    });
-    v.push(RenderCommand::Transform {
-        tag: RenderTagId(resource_man.registry.data_ids.none_tile_render_tag),
-        model: ModelId(resource_man.registry.model_ids.tile_none),
-        model_matrix: coord.as_translation(),
-    })
+fn track_none(resource_man: &ResourceManager, coord: TileCoord) -> [RenderCommand; 2] {
+    [
+        RenderCommand::Track {
+            tag: RenderTagId(resource_man.registry.data_ids.none_tile_render_tag),
+            model: ModelId(resource_man.registry.model_ids.tile_none),
+        },
+        RenderCommand::Transform {
+            tag: RenderTagId(resource_man.registry.data_ids.none_tile_render_tag),
+            model: ModelId(resource_man.registry.model_ids.tile_none),
+            model_matrix: coord.as_translation(),
+        },
+    ]
 }
 
-fn untrack_none(v: &mut Vec<RenderCommand>, resource_man: &ResourceManager) {
-    v.push(RenderCommand::Untrack {
+fn untrack_none(resource_man: &ResourceManager) -> [RenderCommand; 1] {
+    [RenderCommand::Untrack {
         tag: RenderTagId(resource_man.registry.data_ids.none_tile_render_tag),
         model: ModelId(resource_man.registry.model_ids.tile_none),
-    });
+    }]
 }
 
 fn fill_map_with_none(
     resource_man: &ResourceManager,
-    culling_range: Option<TileBounds>,
-    last_culling_range: Option<TileBounds>,
+    culling_range: TileBounds,
+    last_culling_range: TileBounds,
     commands: &mut HashMap<TileCoord, Vec<RenderCommand>>,
 ) {
-    if let Some(culling_range) = culling_range {
-        for coord in culling_range.all_coords() {
-            let coord = TileCoord::from(coord);
+    if culling_range == last_culling_range {
+        return;
+    }
 
-            if !commands.contains_key(&coord)
-                && !last_culling_range.is_some_and(|v| v.is_in_bounds(*coord))
-            {
-                let v = commands.entry(coord).or_default();
-
-                track_none(v, resource_man, coord);
-            }
+    for coord in culling_range.into_iter() {
+        if !commands.contains_key(&coord) && !last_culling_range.contains(coord) {
+            commands.insert(coord, track_none(resource_man, coord).to_vec());
         }
     }
 
-    if let Some(last_culling_range) = last_culling_range {
-        for coord in last_culling_range.all_coords() {
-            let coord = TileCoord::from(coord);
-
-            if !commands.contains_key(&coord)
-                && !culling_range.is_some_and(|v| v.is_in_bounds(*coord))
-            {
-                let v = commands.entry(coord).or_default();
-
-                untrack_none(v, resource_man);
-            }
+    for coord in last_culling_range.into_iter() {
+        if !commands.contains_key(&coord) && !culling_range.contains(coord) {
+            commands.insert(coord, untrack_none(resource_man).to_vec());
         }
     }
 }
@@ -124,7 +114,6 @@ pub enum GameSystemMessage {
     /// tick the tiles once
     Tick,
     StopTicking,
-    ResetVisibility,
 
     /// load a map
     LoadMap(LoadMapOption, RpcReplyPort<bool>),
@@ -196,14 +185,15 @@ impl Actor for GameSystem {
     ) -> Result<(), ActorProcessingErr> {
         match message {
             LoadMap(opt, reply) => {
-                let last_culling_range = state.last_culling_range.take();
+                let last_culling_range = state.last_culling_range;
+                state.last_culling_range = TileBounds::Empty;
 
                 let commands = multi_call_iter(
                     &state.tile_entities,
                     |reply, coord| TileEntityMsg::CollectRenderCommands {
                         reply,
                         loading: false,
-                        unloading: last_culling_range.is_some_and(|v| v.is_in_bounds(*coord)),
+                        unloading: last_culling_range.contains(coord),
                     },
                     None,
                 )
@@ -219,7 +209,7 @@ impl Actor for GameSystem {
                     Ok(mut commands) => {
                         fill_map_with_none(
                             &self.resource_man,
-                            None,
+                            TileBounds::Empty,
                             last_culling_range,
                             &mut commands,
                         );
@@ -280,9 +270,6 @@ impl Actor for GameSystem {
             StopTicking => {
                 state.stopped = true;
             }
-            ResetVisibility => {
-                state.last_culling_range = None;
-            }
 
             rest => {
                 if state.stopped {
@@ -298,16 +285,16 @@ impl Actor for GameSystem {
                         culling_range,
                         reply,
                     } => {
-                        let last_culling_range = state.last_culling_range.replace(culling_range);
+                        let last_culling_range = state.last_culling_range;
+                        state.last_culling_range = culling_range;
 
                         let commands = multi_call_iter(
                             &state.tile_entities,
                             |reply, coord| {
-                                let loading = culling_range.is_in_bounds(*coord)
-                                    && !last_culling_range.is_some_and(|v| v.is_in_bounds(*coord));
-                                let unloading = last_culling_range
-                                    .is_some_and(|v| v.is_in_bounds(*coord))
-                                    && !culling_range.is_in_bounds(*coord);
+                                let loading = culling_range.contains(coord)
+                                    && !last_culling_range.contains(coord);
+                                let unloading = last_culling_range.contains(coord)
+                                    && !culling_range.contains(coord);
 
                                 TileEntityMsg::CollectRenderCommands {
                                     reply,
@@ -329,7 +316,7 @@ impl Actor for GameSystem {
                             Ok(mut commands) => {
                                 fill_map_with_none(
                                     &self.resource_man,
-                                    Some(culling_range),
+                                    culling_range,
                                     last_culling_range,
                                     &mut commands,
                                 );
@@ -713,7 +700,7 @@ async fn remove_tile(
             .unwrap()
             .unwrap_or_default();
 
-        track_none(&mut commands, resource_man, coord);
+        commands.extend_from_slice(&track_none(resource_man, coord));
 
         tile_entity
             .stop_and_wait(Some("Removed from game".to_string()), None)
@@ -788,10 +775,10 @@ async fn insert_new_tile(
             .unwrap();
     }
 
-    untrack_none(
-        cleanup_render_commands.entry(coord).or_default(),
-        &resource_man,
-    );
+    cleanup_render_commands
+        .entry(coord)
+        .or_default()
+        .extend_from_slice(&untrack_none(&resource_man));
 
     let mut new_tile_render = tile_entity
         .call(

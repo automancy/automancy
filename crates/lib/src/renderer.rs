@@ -119,25 +119,6 @@ pub struct GameRenderer {
 }
 
 impl GameRenderer {
-    pub fn reset_buffers(&mut self) {
-        self.object_ids.clear();
-        self.coord_to_keys.clear();
-
-        self.instances = Default::default();
-        gpu::clear_buffer(
-            &self.gpu.device,
-            &mut self.render_resources.game_resources.instance_buffer,
-        );
-
-        self.opaque_draws = Default::default();
-
-        self.non_opaque_draws = Default::default();
-
-        self.matrix_data_map = Default::default();
-
-        self.animation_cache = Default::default();
-    }
-
     pub fn new(
         gpu: Gpu,
         shared_resources: SharedResources,
@@ -1112,7 +1093,7 @@ impl GameRenderer {
         }
 
         fn size_align(size: u32, alignment: u32) -> u32 {
-            ((size + alignment - 1) / alignment) * alignment
+            size.div_ceil(alignment) * alignment
         }
 
         let block_size = output.texture.format().block_copy_size(None).unwrap();

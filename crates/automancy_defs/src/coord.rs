@@ -83,8 +83,6 @@ impl Display for TileCoord {
     }
 }
 
-/// TileCoord math
-
 impl Add for TileCoord {
     type Output = Self;
 
@@ -126,20 +124,18 @@ impl Neg for TileCoord {
 }
 
 /// Represents a tile's position.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub struct TileBounds(HexBounds);
-
-impl Default for TileBounds {
-    fn default() -> Self {
-        TileBounds::new(TileCoord::ZERO, 0)
-    }
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub enum TileBounds {
+    #[default]
+    Empty,
+    Hex(HexBounds),
 }
 
 impl TileBounds {
     #[inline]
     #[must_use]
     pub const fn new(center: TileCoord, radius: u32) -> Self {
-        Self(HexBounds {
+        Self::Hex(HexBounds {
             center: center.0,
             radius,
         })
@@ -151,6 +147,33 @@ impl TileBounds {
         let center = (min + max) / 2;
         let radius = center.unsigned_distance_to(*max) / 2;
         Self::new(center, radius)
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn radius(&self) -> u32 {
+        match self {
+            TileBounds::Empty => 0,
+            TileBounds::Hex(v) => v.radius,
+        }
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn center(&self) -> TileCoord {
+        match self {
+            TileBounds::Empty => TileCoord::ZERO,
+            TileBounds::Hex(v) => TileCoord(v.center),
+        }
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn contains(&self, coord: TileCoord) -> bool {
+        match self {
+            TileBounds::Empty => false,
+            TileBounds::Hex(v) => v.is_in_bounds(*coord),
+        }
     }
 }
 
@@ -169,23 +192,9 @@ impl FromIterator<TileCoord> for TileBounds {
     }
 }
 
-impl Deref for TileBounds {
-    type Target = HexBounds;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
 impl From<HexBounds> for TileBounds {
     fn from(value: HexBounds) -> Self {
-        Self(value)
-    }
-}
-
-impl From<TileBounds> for HexBounds {
-    fn from(value: TileBounds) -> Self {
-        value.0
+        Self::Hex(value)
     }
 }
 
@@ -200,10 +209,11 @@ pub struct ExactSizeCoordIterator {
 
 impl ExactSizeCoordIterator {
     pub fn new(bounds: TileBounds) -> Self {
-        let radius = bounds.radius as TileUnit;
+        let radius = bounds.radius() as TileUnit;
+
         Self {
             bounds,
-            count: (3 * bounds.radius * (bounds.radius + 1) + 1) as usize,
+            count: (3 * bounds.radius() * (bounds.radius() + 1) + 1) as usize,
             radius,
             x: -radius,
             y: None,
@@ -215,6 +225,10 @@ impl Iterator for ExactSizeCoordIterator {
     type Item = TileCoord;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if self.count == 0 {
+            return None;
+        }
+
         self.count = self.count.saturating_sub(1);
 
         let y = self
@@ -225,7 +239,7 @@ impl Iterator for ExactSizeCoordIterator {
             return None;
         }
 
-        let result = Some(TileCoord::from(self.bounds.center) + TileCoord::new(self.x, *y));
+        let result = Some(self.bounds.center() + TileCoord::new(self.x, *y));
         *y += 1;
 
         if *y > min(self.radius, self.radius - self.x) {

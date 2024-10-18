@@ -66,6 +66,6 @@ pub(crate) fn register_coord_stuff(engine: &mut Engine) {
             TileBounds::from_iter(v.into_iter().map(|v| v.0))
         })
         .register_fn("contains", |v: &mut TileBounds, coord: TileCoord| -> bool {
-            v.is_in_bounds(*coord)
+            v.contains(coord)
         });
 }

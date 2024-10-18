@@ -204,7 +204,7 @@ pub fn map_menu(state: &mut GameState) {
                                                     .ui_state
                                                     .text_field
                                                     .get(TextField::MapRenaming)
-                                                    .clone_from(&map_name);
+                                                    .clone_from(map_name);
                                                 state.ui_state.renaming_map =
                                                     Some(map_name.clone());
                                             }
