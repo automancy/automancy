@@ -15,7 +15,7 @@ use wgpu::{
     util::{DrawIndexedIndirectArgs, StagingBelt},
     CommandEncoder,
 };
-use wgpu::{AdapterInfo, Surface};
+use wgpu::{AdapterInfo, Face, Surface};
 use wgpu::{
     AddressMode, Backends, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout,
     BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType, BlendState,
@@ -1106,7 +1106,7 @@ pub fn init_gpu_resources(
         primitive: PrimitiveState {
             topology: PrimitiveTopology::TriangleList,
             front_face: FrontFace::Ccw,
-            cull_mode: None,
+            cull_mode: Some(Face::Back),
             ..Default::default()
         },
         depth_stencil: Some(DepthStencilState {
@@ -1472,7 +1472,6 @@ pub fn init_gpu_resources(
         primitive: PrimitiveState {
             topology: PrimitiveTopology::TriangleList,
             front_face: FrontFace::Ccw,
-            cull_mode: None,
             ..Default::default()
         },
         depth_stencil: None,
@@ -1532,7 +1531,6 @@ pub fn init_gpu_resources(
             primitive: PrimitiveState {
                 topology: PrimitiveTopology::TriangleList,
                 front_face: FrontFace::Ccw,
-                cull_mode: None,
                 ..Default::default()
             },
             depth_stencil: None,
@@ -1620,7 +1618,6 @@ pub fn init_gpu_resources(
         primitive: PrimitiveState {
             topology: PrimitiveTopology::TriangleList,
             front_face: FrontFace::Ccw,
-            cull_mode: None,
             ..Default::default()
         },
         depth_stencil: None,
@@ -1660,7 +1657,6 @@ pub fn init_gpu_resources(
         primitive: PrimitiveState {
             topology: PrimitiveTopology::TriangleList,
             front_face: FrontFace::Ccw,
-            cull_mode: None,
             ..Default::default()
         },
         depth_stencil: None,
@@ -1695,7 +1691,6 @@ pub fn init_gpu_resources(
         primitive: PrimitiveState {
             topology: PrimitiveTopology::TriangleList,
             front_face: FrontFace::Ccw,
-            cull_mode: None,
             ..Default::default()
         },
         depth_stencil: None,
