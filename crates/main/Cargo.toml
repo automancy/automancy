@@ -17,3 +17,10 @@ env_logger = "0.11.3"
 rfd = "0.15.0"
 human-panic = "2.0.0"
 strip-ansi-escapes = "0.2.0"
+
+# tracy version v0.11.0
+tracing-tracy = "=0.11.1"
+tracy-client = "=0.17.1"
+
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }

@@ -20,20 +20,15 @@ members = [
 
 
 [profile.dev]
-debug = 0
-strip = "debuginfo"
 opt-level = 3
 lto = "off"
 panic = "abort"
 
 [profile.dev.package."*"]
-debug = 0
-strip = "debuginfo"
 opt-level = 3
 
 [profile.release]
-debug = 0
-strip = "debuginfo"
+debug = true
 lto = "off"
 panic = "abort"
 

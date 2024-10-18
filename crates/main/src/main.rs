@@ -4,7 +4,6 @@ use automancy_lib::*;
 use camera::GameCamera;
 use color_eyre::config::HookBuilder;
 use cosmic_text::fontdb::Source;
-use env_logger::Env;
 use game::{GameSystem, GameSystemMessage, TICK_INTERVAL};
 use glam::uvec2;
 use gpu::Gpu;
@@ -25,6 +24,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::{env, fs, panic};
 use tokio::runtime::Runtime;
+use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
+use tracing_subscriber::EnvFilter;
+use tracing_tracy::DefaultConfig;
 use ui_state::UiState;
 use uuid::Uuid;
 use winit::{
@@ -385,13 +387,11 @@ impl ApplicationHandler for Automancy {
         let fps_limit = self.fps_limit.unwrap_or(0);
 
         if fps_limit != 0 {
-            let frame_time;
-
-            if fps_limit >= 250 {
-                frame_time = Duration::ZERO;
+            let frame_time = if fps_limit >= 250 {
+                Duration::ZERO
             } else {
-                frame_time = Duration::from_secs_f64(1.0 / fps_limit as f64);
-            }
+                Duration::from_secs_f64(1.0 / fps_limit as f64)
+            };
 
             let elapsed = self.state.loop_store.frame_start.unwrap().elapsed();
             if elapsed < frame_time {
@@ -411,10 +411,17 @@ impl ApplicationHandler for Automancy {
 fn main() -> anyhow::Result<()> {
     env::set_var("RUST_BACKTRACE", "full");
 
-    env_logger::Builder::from_env(
-        Env::default().default_filter_or("info,wgpu_core::device::resource=warn"),
-    )
-    .init();
+    {
+        let filter = "info,wgpu_core::device::resource=warn";
+
+        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(filter)).init();
+
+        tracing::subscriber::set_global_default({
+            tracing_subscriber::registry()
+                .with(tracing_tracy::TracyLayer::new(DefaultConfig::default()))
+                .with(EnvFilter::from_env(filter))
+        })?;
+    }
 
     {
         let eyre = HookBuilder::blank()
