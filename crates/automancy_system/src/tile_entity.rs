@@ -25,7 +25,7 @@ fn run_tile_function<Result: 'static, const SIZE: usize>(
     coord: TileCoord,
     data: &mut DataMap,
     field_changes: &mut HashSet<Id>,
-    (ast, function_id): &FunctionInfo,
+    (ast, metadata): &FunctionInfo,
     args: [(&'static str, Dynamic); SIZE],
     function: &'static str,
 ) -> Option<Result> {
@@ -71,7 +71,7 @@ fn run_tile_function<Result: 'static, const SIZE: usize>(
     match result {
         Ok(result) => result.try_cast::<Result>(),
         Err(err) => {
-            rhai_log_err(function, function_id, &err, Some(coord));
+            rhai_log_err(function, &metadata.str_id, &err, Some(coord));
             None
         }
     }
@@ -86,17 +86,23 @@ pub fn collect_render_commands(
     loading: bool,
     unloading: bool,
 ) -> Option<Vec<RenderCommand>> {
-    if !loading && !unloading && field_changes.is_empty() {
-        return None;
-    }
-
     let tile_def = resource_man.registry.tiles.get(&id)?;
 
-    if let Some(function) = tile_def
+    if let Some(function @ (_, metadata)) = tile_def
         .function
         .as_ref()
         .and_then(|v| resource_man.functions.get(v))
     {
+        if !loading
+            && !unloading
+            && !metadata
+                .render_listening_to_fields
+                .iter()
+                .all(|v| field_changes.contains(v))
+        {
+            return None;
+        }
+
         let last_changes = mem::take(field_changes);
 
         if let Some(result) = run_tile_function(

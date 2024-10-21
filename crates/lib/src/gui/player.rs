@@ -274,7 +274,7 @@ fn research_puzzle(state: &mut GameState, game_data: &mut DataMap) -> Option<Vec
     }
 
     let mut board_pos = None;
-    if let Some(((ast, function_id), setup)) = state
+    if let Some(((ast, metadata), setup)) = state
         .ui_state
         .selected_research
         .and_then(|id| state.resource_man.get_research(id))
@@ -293,7 +293,7 @@ fn research_puzzle(state: &mut GameState, game_data: &mut DataMap) -> Option<Vec
             );
 
             if let Err(err) = result {
-                rhai_log_err("pre_setup", function_id, &err, None)
+                rhai_log_err("pre_setup", &metadata.str_id, &err, None)
             }
 
             (rhai_state.take().cast::<DataMap>(), true)
@@ -329,7 +329,7 @@ fn research_puzzle(state: &mut GameState, game_data: &mut DataMap) -> Option<Vec
                         }
                     }
                 }
-                Err(err) => rhai_log_err("evaluate", function_id, &err, None),
+                Err(err) => rhai_log_err("evaluate", &metadata.str_id, &err, None),
             }
         }
 
@@ -360,7 +360,7 @@ fn research_puzzle(state: &mut GameState, game_data: &mut DataMap) -> Option<Vec
                     state.ui_state.selected_research_puzzle_tile = None;
                 }
                 Err(err) => {
-                    rhai_log_err("selection_at_coord", function_id, &err, None);
+                    rhai_log_err("selection_at_coord", &metadata.str_id, &err, None);
                     state.ui_state.research_puzzle_selections = None;
                 }
             }

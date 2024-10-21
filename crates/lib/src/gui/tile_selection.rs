@@ -41,7 +41,7 @@ fn tile_hover_z_angle(elapsed: Float, hovered: bool) -> Float {
     s.modify(|v| {
         let lerped = v.lerp(target, elapsed);
 
-        lerped.clamp(v.min(target), v.max(target))
+        lerped.clamp(v.min(target + 0.01), v.max(target - 0.01))
     });
 
     r

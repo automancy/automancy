@@ -4,6 +4,7 @@ use automancy_defs::{
     id::{Id, IdRaw, TileId},
     stack::ItemStack,
 };
+use hashbrown::HashSet;
 use rhai::{ImmutableString, Module, Scope};
 use std::ffi::OsStr;
 use std::path::Path;
@@ -54,6 +55,11 @@ pub enum OnFailAction {
     RemoveTile,
     RemoveAllData,
     RemoveData(Id),
+}
+
+pub struct FunctionMetadata {
+    pub str_id: String,
+    pub render_listening_to_fields: HashSet<Id>,
 }
 
 impl ResourceManager {
@@ -113,12 +119,12 @@ impl ResourceManager {
                             .register_static_module(name.clone(), module.into());
                     }
                     Err(err) => {
-                        log::error!("Could not register library function! Error: {err:?}");
+                        log::error!("Could not register library function {name}! Error: {err:?}");
                         continue;
                     }
                 }
 
-                log::info!("Registered library function with Name '{name}' !");
+                log::info!("Registered library function with name '{name}'!");
             }
         }
 
@@ -168,12 +174,30 @@ impl ResourceManager {
                     );
                 }
 
-                log::info!("Registered source function with ID '{str_id}' ({id:?}) !");
+                let ast = self.engine.compile_file_with_scope(&scope, file)?;
 
-                self.functions.insert(
-                    id,
-                    (self.engine.compile_file_with_scope(&scope, file)?, str_id),
+                let render_listening_to_fields = self.engine.call_fn::<rhai::Array>(
+                    &mut Scope::new(),
+                    &ast,
+                    "render_listening_to_fields",
+                    (),
                 );
+                if render_listening_to_fields.is_err() {
+                    log::info!("Source function '{str_id}' does not have a function called 'render_listening_to_fields', which means it will NOT listen to any field changes!")
+                }
+
+                let metadata = FunctionMetadata {
+                    str_id: str_id.clone(),
+                    render_listening_to_fields: render_listening_to_fields
+                        .unwrap_or_default()
+                        .into_iter()
+                        .flat_map(|v| v.try_cast::<Id>())
+                        .collect(),
+                };
+
+                self.functions.insert(id, (ast, metadata));
+
+                log::info!("Registered source function with ID '{str_id}'!");
             }
         }
 

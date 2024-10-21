@@ -24,6 +24,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::time::SystemTime;
 use thiserror::Error;
+use types::function::FunctionMetadata;
 use types::item::ItemDef;
 use walkdir::WalkDir;
 
@@ -46,7 +47,7 @@ pub mod rhai_tile;
 pub mod rhai_ui;
 pub mod rhai_utils;
 
-pub type FunctionInfo = (AST, String);
+pub type FunctionInfo = (AST, FunctionMetadata);
 
 pub static RESOURCES_PATH: &str = "resources";
 
