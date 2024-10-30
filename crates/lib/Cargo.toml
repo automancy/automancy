@@ -44,3 +44,4 @@ tokio = { workspace = true }
 ordermap = "0.5.3"
 arboard = "3.4.1"
 open = "5.2.0"
+range-set-blaze = "0.1.16"

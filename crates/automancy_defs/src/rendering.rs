@@ -237,7 +237,6 @@ impl Default for WorldMatrixData {
 #[derive(Clone, Copy, Debug, Default, PartialOrd, Zeroable, Pod, ByteHash, ByteEq)]
 pub struct GpuInstance {
     pub color_offset: VertexColor,
-    // TODO i think this isn't really used?? and it doesnt work anyway
     pub alpha: Float,
     pub matrix_index: u32,
     pub animation_matrix_index: u32,

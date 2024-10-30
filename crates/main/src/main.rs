@@ -24,9 +24,6 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::{env, fs, panic};
 use tokio::runtime::Runtime;
-use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
-use tracing_subscriber::EnvFilter;
-use tracing_tracy::DefaultConfig;
 use ui_state::UiState;
 use uuid::Uuid;
 use winit::{
@@ -416,11 +413,18 @@ fn main() -> anyhow::Result<()> {
 
         env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(filter)).init();
 
-        tracing::subscriber::set_global_default({
-            tracing_subscriber::registry()
-                .with(tracing_tracy::TracyLayer::new(DefaultConfig::default()))
-                .with(EnvFilter::from_env(filter))
-        })?;
+        #[cfg(debug_assertions)]
+        {
+            use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
+            use tracing_subscriber::EnvFilter;
+            use tracing_tracy::DefaultConfig;
+
+            tracing::subscriber::set_global_default({
+                tracing_subscriber::registry()
+                    .with(tracing_tracy::TracyLayer::new(DefaultConfig::default()))
+                    .with(EnvFilter::from_env(filter))
+            })?;
+        }
     }
 
     {

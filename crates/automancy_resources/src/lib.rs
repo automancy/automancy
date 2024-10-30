@@ -112,7 +112,7 @@ pub struct ResourceManager {
     pub ordered_tiles: Vec<TileId>,
     pub ordered_items: Vec<Id>,
     pub ordered_categories: Vec<Id>,
-    pub all_models: HashMap<ModelId, (Vec<Option<Mesh>>, Vec<Animation>)>,
+    pub all_meshes_anims: HashMap<ModelId, (Vec<Option<Mesh>>, Vec<Animation>)>,
     pub all_index_ranges: HashMap<ModelId, HashMap<usize, IndexRange>>,
 }
 
@@ -183,7 +183,7 @@ impl ResourceManager {
             ordered_items: vec![],
             ordered_categories: vec![],
             all_index_ranges: Default::default(),
-            all_models: Default::default(),
+            all_meshes_anims: Default::default(),
         }
     }
 }

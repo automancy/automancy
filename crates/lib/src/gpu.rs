@@ -5,15 +5,12 @@ use automancy_macros::OptionGetter;
 use automancy_resources::ResourceManager;
 use bytemuck::Pod;
 use ordermap::OrderMap;
-use std::{collections::BTreeMap, mem};
+use std::mem;
 use std::{num::NonZero, sync::Arc};
+use wgpu::{util::StagingBelt, CommandEncoder};
 use wgpu::{
     util::{backend_bits_from_env, power_preference_from_env, BufferInitDescriptor, DeviceExt},
     BufferAddress, InstanceFlags, PipelineCompilationOptions, COPY_BUFFER_ALIGNMENT,
-};
-use wgpu::{
-    util::{DrawIndexedIndirectArgs, StagingBelt},
-    CommandEncoder,
 };
 use wgpu::{AdapterInfo, Face, Surface};
 use wgpu::{
@@ -72,42 +69,21 @@ where
     queue.write_buffer(buffer, 0, &ordered_map_write_to_buffer(data));
 }
 
-fn map_write_to_buffer<V>(data: &BTreeMap<u32, V>) -> Vec<u8>
-where
-    V: Pod + Default,
-{
-    let mut init_buffer = vec![];
-
-    let max_index = data.keys().cloned().max().unwrap_or_default();
-
-    for i in 0..=max_index {
-        init_buffer.extend_from_slice(bytemuck::bytes_of(
-            &data.get(&i).cloned().unwrap_or_default(),
-        ));
-    }
-
-    init_buffer
-}
-
-pub fn map_update_buffer<V>(queue: &Queue, buffer: &Buffer, data: &BTreeMap<u32, V>)
-where
-    V: Pod + Default,
-{
-    queue.write_buffer(buffer, 0, &map_write_to_buffer(data));
-}
-
 #[must_use]
 pub fn update_buffer_with_changes<V>(
     encoder: &mut CommandEncoder,
     device: &Device,
     buffer: &Buffer,
-    changes: &[u32],
-    data: &BTreeMap<u32, V>,
+    changes: &[usize],
+    data: &[V],
 ) -> Option<StagingBelt>
 where
     V: Pod + Default,
 {
     debug_assert!(changes.windows(2).all(|v| v[0] < v[1]));
+    if data.is_empty() {
+        return None;
+    }
 
     let byte_size = size_of::<V>();
 
@@ -124,21 +100,23 @@ where
 
         for batch in changes.linear_group_by(|a, b| b - a == 1) {
             if !batch.is_empty() {
+                let start = batch[0];
+                if start >= data.len() {
+                    continue;
+                }
+                let end = (start + batch.len()).min(data.len());
+
+                let size = end - start;
+
                 let mut view = belt.write_buffer(
                     encoder,
                     buffer,
-                    (byte_size * batch[0] as usize) as BufferAddress,
-                    unsafe { NonZero::new_unchecked((byte_size * batch.len()) as BufferAddress) },
+                    (byte_size * start) as BufferAddress,
+                    unsafe { NonZero::new_unchecked((byte_size * size) as BufferAddress) },
                     device,
                 );
-                for (idx, v) in batch.iter().map(|i| data.get(i)).enumerate() {
-                    match v {
-                        Some(v) => view[(byte_size * idx)..(byte_size * (idx + 1))]
-                            .copy_from_slice(bytemuck::bytes_of(v)),
-                        None => view[(byte_size * idx)..(byte_size * (idx + 1))]
-                            .copy_from_slice(bytemuck::bytes_of(&V::default())),
-                    }
-                }
+
+                view.copy_from_slice(bytemuck::cast_slice(&data[start..end]))
             }
         }
 
@@ -155,8 +133,8 @@ pub fn resize_update_buffer_with_changes<V>(
     encoder: &mut CommandEncoder,
     device: &Device,
     buffer: &mut Buffer,
-    changes: &[u32],
-    data: &BTreeMap<u32, V>,
+    changes: &[usize],
+    data: &[V],
 ) -> Option<StagingBelt>
 where
     V: Pod + Default,
@@ -166,14 +144,14 @@ where
     let byte_size = size_of::<V>();
 
     let max_index = changes.last().cloned().unwrap_or_default();
-    let size = max_index as usize + 1;
+    let size = max_index + 1;
 
     if (buffer.size() as usize) < byte_size * size {
         let usage = buffer.usage();
 
         *buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: None,
-            contents: &map_write_to_buffer(data),
+            contents: bytemuck::cast_slice(data),
             usage,
         });
     } else {
@@ -208,77 +186,6 @@ pub fn clear_buffer(device: &Device, buffer: &mut Buffer) {
         contents: &[],
         usage,
     });
-}
-
-#[must_use]
-pub fn update_indirect_buffer(
-    encoder: &mut CommandEncoder,
-    device: &Device,
-    buffer: &mut Buffer,
-    changes: &[u32],
-    data: &BTreeMap<u32, DrawIndexedIndirectArgs>,
-) -> Option<StagingBelt> {
-    debug_assert!(changes.windows(2).all(|v| v[0] < v[1]));
-
-    const BYTE_SIZE: usize = size_of::<DrawIndexedIndirectArgs>();
-
-    let max_index = changes.last().cloned().unwrap_or_default();
-    let size = max_index as usize + 1;
-
-    if (buffer.size() as usize) < BYTE_SIZE * size {
-        let usage = buffer.usage();
-
-        let mut vec = Vec::<u8>::with_capacity(BYTE_SIZE * size);
-        for i in 0..=max_index {
-            vec.extend(data.get(&i).cloned().unwrap_or_default().as_bytes());
-        }
-
-        *buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: None,
-            contents: &vec,
-            usage,
-        });
-    } else {
-        let entire_size = changes.len();
-        if let Some(max_batch) = changes
-            .linear_group_by(|a, b| b - a == 1)
-            .map(|v| v.len())
-            .max()
-        {
-            // TODO test a good multiplier for the size
-            let mut belt = StagingBelt::new(align_to_copy_alignment(
-                (BYTE_SIZE * entire_size / 4).max(BYTE_SIZE * max_batch) as BufferAddress,
-            ));
-
-            for batch in changes.linear_group_by(|a, b| b - a == 1) {
-                if !batch.is_empty() {
-                    let mut view = belt.write_buffer(
-                        encoder,
-                        buffer,
-                        (BYTE_SIZE * batch[0] as usize) as BufferAddress,
-                        unsafe {
-                            NonZero::new_unchecked((BYTE_SIZE * batch.len()) as BufferAddress)
-                        },
-                        device,
-                    );
-                    for (idx, v) in batch.iter().map(|i| data.get(i)).enumerate() {
-                        match v {
-                            Some(v) => view[(BYTE_SIZE * idx)..(BYTE_SIZE * (idx + 1))]
-                                .copy_from_slice(v.as_bytes()),
-                            None => view[(BYTE_SIZE * idx)..(BYTE_SIZE * (idx + 1))]
-                                .copy_from_slice(DrawIndexedIndirectArgs::default().as_bytes()),
-                        }
-                    }
-                }
-            }
-
-            belt.finish();
-
-            return Some(belt);
-        }
-    }
-
-    None
 }
 
 pub fn create_texture_and_view(
@@ -348,7 +255,6 @@ pub fn make_fxaa_bind_group(
 
 pub struct GameResources {
     pub instance_buffer: Buffer,
-    pub indirect_buffer: Buffer,
     pub uniform_buffer: Buffer,
     pub matrix_data_buffer: Buffer,
     pub animation_matrix_data_buffer: Buffer,
@@ -1179,11 +1085,6 @@ pub fn init_gpu_resources(
                 contents: &[],
                 usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
             }),
-            indirect_buffer: device.create_buffer_init(&BufferInitDescriptor {
-                label: None,
-                contents: &[],
-                usage: BufferUsages::INDIRECT | BufferUsages::COPY_DST,
-            }),
             matrix_data_buffer,
             animation_matrix_data_buffer,
             world_matrix_data_buffer,
@@ -1839,8 +1740,7 @@ impl Gpu {
         let (device, queue) = adapter
             .request_device(
                 &DeviceDescriptor {
-                    required_features: Features::INDIRECT_FIRST_INSTANCE
-                        | Features::MULTI_DRAW_INDIRECT,
+                    required_features: Features::INDIRECT_FIRST_INSTANCE,
                     // WebGL doesn't support all of wgpu's features, so if
                     // we're building for the web we'll have to disable some.
                     required_limits: if cfg!(target_arch = "wasm32") {

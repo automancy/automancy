@@ -36,6 +36,7 @@ rhai = { workspace = true }
 ractor = { workspace = true }
 tokio = { workspace = true }
 rayon = { workspace = true }
+
 async-trait = "0.1.83"
 arraydeque = "0.5.1"
 enum-map = "2.7.3"

@@ -14,7 +14,7 @@ pub fn debugger(state: &mut GameState) {
     let functions = state.resource_man.functions.len();
     let scripts = state.resource_man.registry.scripts.len();
     let audio = state.resource_man.audio.len();
-    let meshes = state.resource_man.all_models.len();
+    let meshes = state.resource_man.all_meshes_anims.len();
 
     let Some((info, map_name)) = &state.loop_store.map_info else {
         return;

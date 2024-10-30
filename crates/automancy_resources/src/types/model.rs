@@ -27,7 +27,7 @@ struct Raw {
 
 impl ResourceManager {
     pub fn model_or_missing_tile(&self, id: &ModelId) -> ModelId {
-        if self.all_models.contains_key(id) {
+        if self.all_meshes_anims.contains_key(id) {
             *id
         } else {
             ModelId(self.registry.model_ids.tile_missing)
@@ -35,7 +35,7 @@ impl ResourceManager {
     }
 
     pub fn model_or_missing_item(&self, id: &ModelId) -> ModelId {
-        if self.all_models.contains_key(id) {
+        if self.all_meshes_anims.contains_key(id) {
             *id
         } else {
             ModelId(self.registry.model_ids.item_missing)
@@ -43,7 +43,7 @@ impl ResourceManager {
     }
 
     pub fn model_or_puzzle_space(&self, id: &ModelId) -> ModelId {
-        if self.all_models.contains_key(id) {
+        if self.all_meshes_anims.contains_key(id) {
             *id
         } else {
             ModelId(self.registry.model_ids.puzzle_space)
@@ -52,7 +52,7 @@ impl ResourceManager {
 
     pub fn item_model_or_missing(&self, id: &Id) -> ModelId {
         if let Some(def) = self.registry.items.get(id) {
-            if self.all_models.contains_key(&def.model) {
+            if self.all_meshes_anims.contains_key(&def.model) {
                 return def.model;
             }
         }
@@ -64,13 +64,13 @@ impl ResourceManager {
         &self,
         id: &ModelId,
     ) -> (ModelId, &(Vec<Option<Mesh>>, Vec<Animation>)) {
-        self.all_models
+        self.all_meshes_anims
             .get(id)
             .map(|v| (*id, v))
             .unwrap_or_else(|| {
                 (
                     ModelId(self.registry.model_ids.tile_missing),
-                    self.all_models
+                    self.all_meshes_anims
                         .get(&ModelId(self.registry.model_ids.tile_missing))
                         .expect("'missing tile' model is missing from namespace core"),
                 )
@@ -90,7 +90,7 @@ impl ResourceManager {
 
         let id = Id::parse(&v.id, &mut self.interner, Some(namespace)).unwrap();
 
-        self.all_models
+        self.all_meshes_anims
             .insert(ModelId(id), load_gltf_model(document, buffers));
 
         Ok(())
@@ -111,19 +111,21 @@ impl ResourceManager {
         let mut indices = HashMap::new();
 
         let mut base_vertex_count = 0;
-        self.all_models.iter_mut().for_each(|(id, (model, _))| {
-            model.iter_mut().flatten().for_each(|mesh| {
-                indices.entry(*id).or_insert_with(Vec::new).push((
-                    mesh.index,
-                    mem::take(&mut mesh.indices),
-                    base_vertex_count,
-                ));
+        self.all_meshes_anims
+            .iter_mut()
+            .for_each(|(id, (model, _))| {
+                model.iter_mut().flatten().for_each(|mesh| {
+                    indices.entry(*id).or_insert_with(Vec::new).push((
+                        mesh.index,
+                        mem::take(&mut mesh.indices),
+                        base_vertex_count,
+                    ));
 
-                base_vertex_count += mesh.vertices.len() as i32;
+                    base_vertex_count += mesh.vertices.len() as i32;
 
-                vertices.append(&mut mesh.vertices);
+                    vertices.append(&mut mesh.vertices);
+                });
             });
-        });
 
         let mut offset_count = 0;
 

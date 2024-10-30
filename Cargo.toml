@@ -84,7 +84,7 @@ rhai = { version = "1.19.0", features = [
     "internals",
 ] }
 
-ractor = "0.12.2"
+ractor = "0.13.0"
 tokio = { version = "1", features = ["full"] }
 rayon = "1.10.0"
 
