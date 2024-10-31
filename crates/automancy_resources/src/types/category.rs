@@ -6,11 +6,14 @@ use std::ffi::OsStr;
 use std::fs::read_to_string;
 use std::path::Path;
 
+use super::IconMode;
+
 #[derive(Debug, Clone, Copy)]
 pub struct CategoryDef {
     pub id: Id,
     pub ord: i32,
-    pub icon: ModelId,
+    pub icon: Id,
+    pub icon_mode: IconMode,
     pub item: Option<Id>,
 }
 
@@ -19,6 +22,7 @@ struct Raw {
     pub id: String,
     pub ord: i32,
     pub icon: String,
+    pub icon_mode: IconMode,
     pub item: Option<String>,
 }
 
@@ -30,7 +34,8 @@ impl ResourceManager {
 
         let id = Id::parse(&v.id, &mut self.interner, Some(namespace)).unwrap();
         let ord = v.ord;
-        let icon = ModelId(Id::parse(&v.icon, &mut self.interner, Some(namespace)).unwrap());
+        let icon = Id::parse(&v.icon, &mut self.interner, Some(namespace)).unwrap();
+        let icon_mode = v.icon_mode;
         let item = v
             .item
             .map(|v| Id::parse(&v, &mut self.interner, Some(namespace)).unwrap());
@@ -41,6 +46,7 @@ impl ResourceManager {
                 id,
                 ord,
                 icon,
+                icon_mode,
                 item,
             },
         );

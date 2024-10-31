@@ -1,6 +1,6 @@
 use crate::GameState;
 use automancy_defs::glam::{vec2, FloatExt};
-use automancy_defs::id::Id;
+use automancy_defs::id::{Id, ModelId};
 use automancy_defs::math::{Float, Matrix4};
 use automancy_defs::rendering::InstanceData;
 use automancy_defs::{colors, id::TileId};
@@ -172,13 +172,23 @@ pub fn tile_selections(
                                     }
 
                                     let category = state.resource_man.registry.categories[id];
-                                    let model =
-                                        state.resource_man.model_or_missing_tile(&category.icon);
+
+                                    let ty = match category.icon_mode {
+                                        IconMode::Item => UiGameObjectType::Model(
+                                            state
+                                                .resource_man
+                                                .model_or_missing_item(&ModelId(category.icon)),
+                                        ),
+                                        IconMode::Tile => UiGameObjectType::Tile(
+                                            TileId(category.icon),
+                                            DataMap::default(),
+                                        ),
+                                    };
 
                                     let response = interactive(|| {
                                         ui_game_object(
                                             InstanceData::default(),
-                                            UiGameObjectType::Model(model),
+                                            ty,
                                             vec2(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE),
                                             Some(model_matrix),
                                             Some(world_matrix),
