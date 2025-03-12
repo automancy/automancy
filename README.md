@@ -1,40 +1,55 @@
 # automancy!
 
-_A game about automation, hexagons and magic; and there's no Conveyor Belts._
+### -- TBD: Insert some more detailed description here --
 
-You're in a world... a plane, more like, and you're a sort of, Demigod who doesn't have a form. Your goal? Make yourself less lonely. There's seemingly infinite amount of resources just under the plane, but you cannot make sense of their usage and properties... yet.
+### -- Game is WIP. --
 
-Research your way through the mystifying colours, and create the stuff of your dreams- gold, energy, lil' hexagonal creatures, and, most importantly- Factories!
-
-Perhaps, you'd be the magnificent "automancer"... if you so choose to call yourself. It's not like anyone else is around, heh?...
-
-**_Game's WIP._**
+-- NEW PREVIEW IMPENDING --
 
 ---
 
-Tech used: Rust, wgpu, ractor, yakui, Rhai
+## ~ All the special credits ~
 
-Lead dev(s): Madeline Sparkles, Mae Rosaline
+### Tech's
 
----
+*automancy! is built on the shoulders of giants!*
 
-< NEW PREVIEW IMPENDING >
+Some of the major techs used:
+- Rust (for the coding)
+- wgpu (for the rendering)
+- ractor (for the game's async handling)
+    - Consequently: tokio
+- yakui (for the GUI)
+- Rhai (for the scripting)
+    - TBD: we're switching to wasm
+- Blender (for the modelling)
+- Rusty Object Notation - 'ron' (for the definition files)
 
----
+### Folk's
 
-Links:
+*automancy! is a collaborative effort!*
 
-- Fedi(Mastodon): https://gamedev.lgbt/@automancy
+Major programmers:
+- Madeline Sparkles
+- Mae Rosaline
+
+Major modellers:
+- Madeline Sparkles
+- :c
+
+Major SFX designers:
+- Madeline Sparkles
+- :c
+
+## ~ All the links ~
+
 - Git: https://github.com/automancy/automancy
 - Discord: https://discord.gg/ee9XebxNaa
+- Bluesky (Madeline Sparkles): [@mouse.lgbt](https://bsky.app/profile/mouse.lgbt)
 
-## Development Notes
+---
 
-**_Run `run.sh` to run the game._**
-
-**_Alternatively, run `cargo run -p build_script` before running the game._**
-
-**_There should be a VSCode configuration in the project, run "Run automancy" to run the project._**
+## ~ Dev Notes ~
 
 ### Designers
 
@@ -53,22 +68,33 @@ criteria:
 
 **Use either Vertex Paint or a material with only the base color (they get turned into vertex colors)**
 
-### Scripts
+### Scripts, aka How to Make The Game Real
 
-[WIP]
+-- WIP: VERY volatile and subject to change, do not doc this for now. --
 
-### Software
+### Programmers
 
-The rendering is single-threaded, the game logic is run with an actor system on top of a Tokio runtime.
+#### The Standard™️ Operational®️ Procedure©️
+
+- **Run `run.sh` to run the game.**
+    - Alternatively, run `cargo run -p build_script` before running the game.
+      This will build all the resources.
+      TBD: discussion of this wrt `mancie`?
+
+#### On Async
+
+The rendering is single-threaded, the game logic is run with an actor system (ractor) on top of a Tokio runtime.
 
 "Scripts" are called "functions" as the name is taken in-game by what would otherwise be called "recipes."
-
 - The weird terminology comes from the fact that "recipes" doesn't make sense for machines.
+- TBD: rename?? this is sometimes stupidly hard to accomodate for because brainfarts. just don't call them functions or smth
 
-#### Write all tile logic within functions
+#### Write all tile logic in script-side
 
-If you can't feasibly do that, _implement more handling in source code, and then write the logic in functions._
+If you can't feasibly do that, *implement more handling in source code, and then write the logic.*
+
+The "game" executable is supposed to be an engine, one very specialised to run hexagonal automation games. Today's hard-coded logic will become tomorrow's headache.
 
 ### Translators
 
-[WIP]
+-- WIP: we need a good way to define arbitrary languages and an easier way to write them. currently they are an absolute pain in the ass to write. --
