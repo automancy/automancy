@@ -1,12 +1,15 @@
-use automancy_system::game::COULD_NOT_LOAD_ANYTHING;
-use automancy_system::map::{self, GameMap, LoadMapOption};
-use automancy_system::ui_state::{PopupState, Screen, TextField};
-use automancy_system::{game_load_map, GameLoadResult};
-
-use crate::event::refresh_maps;
-use crate::GameState;
-use automancy_ui::{button, label, row, textbox, window};
 use std::fs;
+
+use automancy_system::{
+    GameLoadResult,
+    game::COULD_NOT_LOAD_ANYTHING,
+    game_load_map,
+    map::{self, GameMap, LoadMapOption},
+    ui_state::{PopupState, Screen, TextField},
+};
+use automancy_ui::{button, label, row, textbox, window};
+
+use crate::{GameState, event::refresh_maps};
 
 pub fn invalid_name_popup(state: &mut GameState) {
     window(

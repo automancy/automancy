@@ -1,0 +1,30 @@
+[package]
+name = "automancy_data"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+
+[dependencies]
+# logging
+log = { workspace = true }
+
+# parsing / data mangling / math / files
+approx = { workspace = true }
+bytemuck = { workspace = true }
+const-hex = { workspace = true }
+hexx = { workspace = true }
+serde = { workspace = true }
+serde_tuple = { workspace = true }
+vek = { workspace = true }
+
+# specialized data storage types
+hashbrown = { workspace = true }
+string-interner = { workspace = true }
+
+# utils
+futures = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+ron = { workspace = true }

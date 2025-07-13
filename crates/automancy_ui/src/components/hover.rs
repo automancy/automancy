@@ -1,12 +1,15 @@
-use crate::clamp_percentage_to_viewport;
-use crate::RoundRect;
-use automancy_defs::colors;
 use std::cell::Cell;
+
+use automancy_data::colors;
 use yakui::{
-    util::widget_children,
-    widget::{LayoutContext, Widget},
     Alignment, Constraints, Dim2, Flow, Response, Vec2,
+    event::{EventInterest, EventResponse, WidgetEvent},
+    layout::{AbstractClipRect, ClipLogic},
+    util::widget_children,
+    widget::{EventContext, LayoutContext, Widget},
 };
+
+use crate::RoundRect;
 
 #[derive(Debug, Default)]
 pub struct Hover {}
@@ -26,6 +29,7 @@ impl Hover {
 pub struct HoverWidget {
     props: Hover,
     pos: Cell<Vec2>,
+    mouse_pos: Cell<Option<Vec2>>,
 }
 
 pub type HoverResponse = ();
@@ -38,6 +42,7 @@ impl Widget for HoverWidget {
         Self {
             props: Hover::new(),
             pos: Cell::default(),
+            mouse_pos: Cell::default(),
         }
     }
 
@@ -46,13 +51,33 @@ impl Widget for HoverWidget {
     }
 
     fn flow(&self) -> Flow {
-        Flow::Absolute {
+        Flow::Relative {
             anchor: Alignment::new(self.pos.get().x, self.pos.get().y),
             offset: Dim2::ZERO,
         }
     }
 
+    fn event_interest(&self) -> EventInterest {
+        EventInterest::MOUSE_ALL
+    }
+
+    fn event(&mut self, _ctx: EventContext<'_>, event: &WidgetEvent) -> EventResponse {
+        if let WidgetEvent::MouseMoved(v) = event {
+            self.mouse_pos.set(*v)
+        }
+
+        EventResponse::Bubble
+    }
+
     fn layout(&self, mut ctx: LayoutContext<'_>, _constraints: Constraints) -> Vec2 {
+        ctx.layout.set_clip_logic(
+            ctx.dom,
+            ClipLogic::Contain {
+                it: AbstractClipRect::LayoutRect,
+                parent: AbstractClipRect::ParentClip,
+            },
+        );
+
         let node = ctx.dom.get_current();
 
         let mut size = Vec2::ZERO;
@@ -60,13 +85,9 @@ impl Widget for HoverWidget {
             size = size.max(ctx.calculate_layout(child, Constraints::none()));
         }
 
-        if let Some(pos) = ctx.input.get_mouse_position(ctx.layout) {
+        if let Some(pos) = self.mouse_pos.get() {
             let pos = pos + Vec2::new(10.0, 0.0);
-            self.pos.set(clamp_percentage_to_viewport(
-                size,
-                pos / ctx.layout.viewport().size(),
-                ctx.layout.viewport(),
-            ));
+            self.pos.set(pos);
         }
 
         size

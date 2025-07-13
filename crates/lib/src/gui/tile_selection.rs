@@ -1,34 +1,27 @@
-use crate::GameState;
-use automancy_defs::glam::{vec2, FloatExt};
-use automancy_defs::id::{Id, ModelId};
-use automancy_defs::math::{Float, Matrix4};
-use automancy_defs::rendering::InstanceData;
-use automancy_defs::{colors, id::TileId};
+use automancy_data::{
+    colors,
+    id::{Id, ModelId, TileId},
+    math::{Float, Matrix4, vec2},
+    rendering::Instance,
+};
 use automancy_resources::{
-    data::{Data, DataMap},
-    format::Formattable,
+    generic::{Data, DataMap},
     types::IconMode,
 };
 use automancy_system::util::{is_research_unlocked, should_category_show};
 use automancy_ui::{
-    center_col, col, hover_tip, interactive, label, row, scroll_horizontal_bar_alignment,
-    ui_game_object, viewport_constrained, RoundRect, UiGameObjectType, LARGE_ICON_SIZE,
-    MEDIUM_ICON_SIZE,
+    GameObjectType, LARGE_ICON_SIZE, MEDIUM_ICON_SIZE, RoundRect, center_col, col, hover_tip,
+    interactive, label, row, scroll_horizontal_bar_alignment, ui_game_object,
 };
+use interpolator::Formattable;
 use tokio::sync::oneshot;
-use yakui::{
-    use_state,
-    widgets::{Absolute, Layer},
-    Alignment, Dim2, Pivot, Vec2,
-};
+use yakui::{Alignment, Dim2, Pivot, Vec2, reflow, use_state, widgets::Layer};
+
+use crate::GameState;
 
 fn tile_hover_z_angle(elapsed: Float, hovered: bool) -> Float {
     fn angle(hovered: bool) -> Float {
-        if hovered {
-            0.5
-        } else {
-            0.0
-        }
+        if hovered { 0.5 } else { 0.0 }
     }
 
     //TODO extract this
@@ -123,9 +116,9 @@ fn draw_tile_selection(
 
         let response = interactive(|| {
             ui_game_object(
-                InstanceData::default().with_color_offset(color_offset),
-                UiGameObjectType::Tile(*id, DataMap::default()),
-                vec2(size, size),
+                Instance::default().with_color_offset(color_offset),
+                GameObjectType::Tile(*id, DataMap::default()),
+                Vec2::new(size, size),
                 Some(rotate),
                 Some(world_matrix),
             );
@@ -160,8 +153,11 @@ pub fn tile_selections(
     let mut hovered_tile = None;
 
     Layer::new().show(|| {
-        Absolute::new(Alignment::BOTTOM_CENTER, Pivot::BOTTOM_CENTER, Dim2::ZERO).show(|| {
-            viewport_constrained(|| {
+        reflow(
+            Alignment::BOTTOM_CENTER,
+            Pivot::BOTTOM_CENTER,
+            Dim2::ZERO,
+            || {
                 center_col(|| {
                     RoundRect::new(8.0, colors::BACKGROUND_1).show_children(|| {
                         scroll_horizontal_bar_alignment(Vec2::ZERO, Vec2::INFINITY, None, || {
@@ -174,12 +170,12 @@ pub fn tile_selections(
                                     let category = state.resource_man.registry.categories[id];
 
                                     let ty = match category.icon_mode {
-                                        IconMode::Item => UiGameObjectType::Model(
+                                        IconMode::Item => GameObjectType::Model(
                                             state
                                                 .resource_man
                                                 .model_or_missing_item(&ModelId(category.icon)),
                                         ),
-                                        IconMode::Tile => UiGameObjectType::Tile(
+                                        IconMode::Tile => GameObjectType::Tile(
                                             TileId(category.icon),
                                             DataMap::default(),
                                         ),
@@ -187,9 +183,9 @@ pub fn tile_selections(
 
                                     let response = interactive(|| {
                                         ui_game_object(
-                                            InstanceData::default(),
+                                            Instance::default(),
                                             ty,
-                                            vec2(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE),
+                                            Vec2::new(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE),
                                             Some(model_matrix),
                                             Some(world_matrix),
                                         );
@@ -221,8 +217,8 @@ pub fn tile_selections(
                         });
                     });
                 });
-            });
-        });
+            },
+        );
     });
 
     Layer::new().show(|| {

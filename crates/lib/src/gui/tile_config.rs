@@ -1,30 +1,26 @@
-use crate::GameState;
-use automancy_defs::id::Id;
-use automancy_defs::{colors, coord::TileCoord, stack::ItemStack};
-use automancy_resources::rhai_ui::RhaiUiUnit;
-use automancy_resources::{
-    data::{Data, DataMap},
-    inventory::Inventory,
-};
-use automancy_system::tile_entity::TileEntityMsg;
-use automancy_system::ui_state::TextField;
-use automancy_ui::{
-    button, center_col, center_row, col, group, info_tip, interactive, label, list_col, movable,
-    num_input, row, scroll_vertical_bar_alignment, selectable_symbol_button, selection_button,
-    slider, spaced_col, spaced_row, symbol, symbol_button, window_box, PositionRecord,
-    MEDIUM_ICON_SIZE, PADDING_MEDIUM, PADDING_XSMALL, SMALL_ICON_SIZE,
-};
-use ractor::rpc::CallResult;
-use ractor::ActorRef;
 use std::time::Instant;
+
+use automancy_data::{colors, coord::TileCoord, id::Id, stack::ItemStack};
+use automancy_resources::{
+    generic::{Data, DataMap},
+    inventory::Inventory,
+    rhai_ui::RhaiUiUnit,
+};
+use automancy_system::{tile_entity::TileEntityMsg, ui_state::TextField};
+use automancy_ui::{
+    MEDIUM_ICON_SIZE, PADDING_MEDIUM, PADDING_XSMALL, PositionRecord, SMALL_ICON_SIZE, button,
+    center_col, center_row, col, group, info_tip, interactive, label, list_col, movable, num_input,
+    row, scroll_vertical_bar_alignment, selectable_symbol_button, selection_button, slider,
+    spaced_col, spaced_row, symbol, symbol_button, window_box,
+};
+use ractor::{ActorRef, rpc::CallResult};
 use yakui::{
-    constrained,
+    Constraints, Rect, Vec2, constrained,
     widgets::{Layer, Pad},
-    Constraints, Rect, Vec2,
 };
 
-use super::item::draw_item;
-use super::util::searchable_id;
+use super::{item::draw_item, util::searchable_id};
+use crate::GameState;
 
 /// Draws the direction selector.
 fn add_direction(target_coord: &mut Option<TileCoord>, n: u8) {
@@ -208,7 +204,6 @@ fn rhai_ui(
 
             num_input(
                 &mut new_amount,
-                false,
                 0..=max,
                 |v| v.parse().ok(),
                 |v| {

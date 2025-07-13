@@ -1,14 +1,14 @@
-use crate::parse_literal;
-use proc_macro2::TokenStream;
-use proc_macro2::{Literal, Span};
+use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
 use syn::Ident;
+
+use crate::parse_literal;
 
 /// # Examples
 ///
 /// ```
 /// use automancy_macros::IdReg;
-/// use automancy_defs::id::Id;
+/// use automancy_data::id::Id;
 ///
 /// #[derive(IdReg)]
 /// pub struct FooIds {
@@ -85,14 +85,14 @@ pub fn derive_id_reg(item: TokenStream) -> TokenStream {
         .zip(names)
         .flat_map(|((field, namespace), name)| {
             quote! {
-                #field: automancy_defs::id::IdRaw::new(#namespace, #name).to_id(interner),
+                #field: automancy_data::id::deserialize::StrId::new(#namespace, #name).into_id(interner, None).unwrap(),
             }
         })
         .collect::<TokenStream>();
 
     quote! {
         impl #name {
-            pub fn new(interner: &mut automancy_defs::id::Interner) -> Self {
+            pub fn new(interner: &mut automancy_data::id::Interner) -> Self {
                 Self {
                     #items
                 }
