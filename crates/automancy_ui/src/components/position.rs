@@ -1,5 +1,6 @@
 use std::cell::Cell;
-use yakui::{util::widget_children, widget::Widget, Rect, Response, Vec2};
+
+use yakui::{Rect, Response, Vec2, util::widget_children, widget::Widget};
 
 #[derive(Debug, Default)]
 pub struct PositionRecord {}

@@ -1,7 +1,9 @@
-use crate::{interactive, label_text, symbol};
-use automancy_defs::colors;
 use std::cell::Cell;
+
+use automancy_data::colors;
 use yakui::widgets::Text;
+
+use crate::{interactive, label_text, symbol};
 
 thread_local! {
     pub static HOVER_TIP: Cell<Option<Text>> = Cell::default();

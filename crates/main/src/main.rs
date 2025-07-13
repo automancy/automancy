@@ -1,55 +1,83 @@
 #![windows_subsystem = "windows"]
-use automancy_lib::*;
+use std::{
+    env,
+    fmt::Write,
+    fs,
+    fs::File,
+    panic,
+    path::Path,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
-use camera::GameCamera;
+use automancy_data::math::Vec2;
+use automancy_game::{
+    actor::{TICK_INTERVAL, game::GameActor, map::GameMapId, message::GameMsg},
+    input::{camera::GameCamera, handler::InputHandler},
+    persistent::options::{GameOptions, MiscOptions},
+    resources::{RESOURCES_PATH, ResourceManager, global},
+    state::{AutomancyGameState, event::EventLoopStorage, ui::UiState},
+};
+use automancy_lib::{render::AutomancyRendering, *};
+use automancy_rendering::renderer::AutomancyRenderState;
 use color_eyre::config::HookBuilder;
-use cosmic_text::fontdb::Source;
-use game::{GameSystem, GameSystemMessage, TICK_INTERVAL};
-use glam::uvec2;
-use gpu::Gpu;
-use input::InputHandler;
-use kira::manager::{AudioManager, AudioManagerSettings};
-use kira::track::{TrackBuilder, TrackHandle};
-use kira::tween::Tween;
-use map::LoadMapOption;
-use options::{GameOptions, MiscOptions};
+use kira::{
+    AudioManager, AudioManagerSettings, Tween,
+    track::{TrackBuilder, TrackHandle},
+};
 use ractor::Actor;
-use renderer::GameRenderer;
-use rendering::Vertex;
 use rfd::{MessageButtons, MessageDialog, MessageLevel};
-use std::fmt::Write;
-use std::fs::File;
-use std::path::Path;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-use std::{env, fs, panic};
 use tokio::runtime::Runtime;
-use ui_state::UiState;
 use uuid::Uuid;
 use winit::{
     application::ApplicationHandler,
-    event::{DeviceEvent, DeviceId, WindowEvent},
+    dpi::PhysicalSize,
+    event::{DeviceEvent, DeviceId, Event, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
-    window::WindowId,
+    window::{Window, WindowId},
 };
-use winit::{dpi::PhysicalSize, window::Window};
-use winit::{
-    event::Event,
-    window::{Fullscreen, Icon},
-};
-use yakui::paint::{Texture, TextureFilter};
 
 pub static LOGO: &[u8] = include_bytes!("logo.png");
 
-/// Initialize the Resource Manager system, and loads all the resources in all namespaces.
-fn load_resources(
-    selected_language: &str,
-    track: TrackHandle,
-) -> (Arc<ResourceManager>, Vec<Vertex>, Vec<u16>) {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AutomancyGameLoadResult {
+    Loaded,
+    LoadedMainMenu,
+    Failed,
+}
+
+fn game_load_map(state: &mut AutomancyGameState, id: GameMapId) -> AutomancyGameLoadResult {
+    let success = match state.tokio.block_on(
+        state
+            .game
+            .call(|reply| GameMsg::LoadMap(id.clone(), reply), None),
+    ) {
+        Ok(v) => v.unwrap(),
+        Err(_) => false,
+    };
+
+    if success {
+        state.loop_store.map_info = state
+            .tokio
+            .block_on(state.game.call(GameMsg::GetMapIdAndData, None))
+            .unwrap()
+            .unwrap();
+
+        AutomancyGameLoadResult::Loaded
+    } else if id != GameMapId::MainMenu {
+        game_load_map(state, GameMapId::MainMenu)
+    } else {
+        log::warn!("Loading empty map as fallback.");
+        game_load_map(state, GameMapId::Empty)
+    }
+}
+
+/// Initialize the ResourceManager, and loads all the resources in all namespaces.
+fn load_resources(lang: &str, track: TrackHandle) -> Arc<ResourceManager> {
     let mut resource_man = ResourceManager::new(track);
 
     fs::read_dir(RESOURCES_PATH)
-        .expect("The resources folder doesn't exist- this is very wrong")
+        .expect("the resources folder needs to exist and be readable")
         .flatten()
         .map(|v| v.path())
         .filter(|v| v.is_dir())
@@ -57,48 +85,18 @@ fn load_resources(
             let namespace = dir.file_name().unwrap().to_str().unwrap().trim();
             log::info!("Loading namespace {namespace}...");
 
-            resource_man
-                .load_models(&dir, namespace)
-                .expect("Error loading models");
-
-            resource_man.load_audio(&dir).expect("Error loading audio");
-
-            resource_man
-                .load_tiles(&dir, namespace)
-                .expect("Error loading tiles");
-
-            resource_man
-                .load_items(&dir, namespace)
-                .expect("Error loading items");
-
-            resource_man
-                .load_tags(&dir, namespace)
-                .expect("Error loading tags");
-            resource_man
-                .load_categories(&dir, namespace)
-                .expect("Error loading categories");
-
-            resource_man
-                .load_scripts(&dir, namespace)
-                .expect("Error loading scripts");
-
-            resource_man
-                .load_translates(&dir, namespace, selected_language)
-                .expect("Error loading translates");
-
-            resource_man
-                .load_shaders(&dir)
-                .expect("Error loading shaders");
-
-            resource_man.load_fonts(&dir).expect("Error loading fonts");
-
-            resource_man
-                .load_functions(&dir, namespace)
-                .expect("Error loading functions");
-
-            resource_man
-                .load_researches(&dir, namespace)
-                .expect("Error loading researches");
+            resource_man.load_models(&dir, namespace).unwrap();
+            resource_man.load_audio(&dir).unwrap();
+            resource_man.load_tiles(&dir, namespace).unwrap();
+            resource_man.load_items(&dir, namespace).unwrap();
+            resource_man.load_tags(&dir, namespace).unwrap();
+            resource_man.load_categories(&dir, namespace).unwrap();
+            resource_man.load_recipes(&dir, namespace).unwrap();
+            resource_man.load_translates(&dir, namespace, lang).unwrap();
+            resource_man.load_shaders(&dir).unwrap();
+            resource_man.load_fonts(&dir).unwrap();
+            resource_man.load_scripts(&dir, namespace).unwrap();
+            resource_man.load_researches(&dir, namespace).unwrap();
 
             log::info!("Loaded namespace {namespace}.");
         });
@@ -111,50 +109,51 @@ fn load_resources(
         .write_to_dir("rhai")
         .unwrap();
 
-    resource_man.compile_researches();
     resource_man.ordered_tiles();
     resource_man.ordered_items();
+    resource_man.compile_researches();
     resource_man.compile_categories();
 
-    let (vertices, indices) = resource_man.compile_models();
-
-    (Arc::new(resource_man), vertices, indices)
+    Arc::new(resource_man)
 }
 
-/// Gets the game icon.
-fn get_icon() -> Icon {
+fn get_window_icon() -> winit::window::Icon {
     let image = image::load_from_memory(LOGO).unwrap().to_rgba8();
     let width = image.width();
     let height = image.height();
 
     let samples = image.into_flat_samples().samples;
-    Icon::from_rgba(samples, width, height).unwrap()
+    winit::window::Icon::from_rgba(samples, width, height).unwrap()
 }
 
-fn write_msg<P: AsRef<Path>>(buffer: &mut impl Write, file_path: P) -> std::fmt::Result {
-    writeln!(buffer, "Well, this is embarrassing.\n")?;
+fn write_crash_msg<P: AsRef<Path>>(buffer: &mut impl Write, file_path: P) -> std::fmt::Result {
+    writeln!(buffer, "Well, this is embarrassing.")?;
     writeln!(
         buffer,
-        "automancy had a problem and crashed. To help us diagnose the problem you can send us a crash report.\n"
+        "automancy! had a problem and crashed. To help us diagnose the problem, you can send us a crash report."
     )?;
+
+    writeln!(buffer)?;
+
     writeln!(
         buffer,
-        "We have generated a report file at\nfile://{}\n\nSubmit an issue or tag us on Fedi/Discord and include the report as an attachment.\n",
+        "The game has generated a report at file://{} for more information,",
         file_path.as_ref().display(),
     )?;
-
-    writeln!(buffer, "- Git: https://github.com/automancy/automancy")?;
-    writeln!(buffer, "- Fedi(Mastodon): https://gamedev.lgbt/@automancy")?;
-    writeln!(buffer, "- Discord: https://discord.gg/ee9XebxNaa")?;
-
     writeln!(
         buffer,
-        "\nAlternatively, send an email to the main developer Madeline Sparkles (madeline@mouse.lgbt) directly.\n"
+        "submit an issue on the Git repository or tag us in the Discord server, and include the report as an attachment:"
     )?;
+    writeln!(buffer, "- Git: https://github.com/automancy/automancy")?;
+    writeln!(buffer, "- Discord: https://discord.gg/ee9XebxNaa")?;
+    writeln!(buffer, "Alternatively, send an Email to these addresses:")?;
+    writeln!(buffer, "- Madeline Sparkles (madeline@mouse.lgbt)")?;
+
+    writeln!(buffer)?;
 
     writeln!(
         buffer,
-        "We take privacy seriously, and do not perform any automated error collection. In order to improve the software, we rely on people to submit reports.\n"
+        "We take privacy seriously, and do not perform any kinds of automated error collection. In order to improve the game, we rely on people to submit reports."
     )?;
     writeln!(buffer, "Thank you kindly!")?;
 
@@ -162,78 +161,75 @@ fn write_msg<P: AsRef<Path>>(buffer: &mut impl Write, file_path: P) -> std::fmt:
 }
 
 struct Automancy {
-    state: GameState,
-    window: Option<Arc<Window>>,
-    fps_limit: Option<i32>,
+    game_state: AutomancyGameState,
+    render_state: AutomancyRenderState,
+    render: Option<AutomancyRendering>,
     closed: bool,
 }
 
 impl Automancy {
     fn try_sync_options(&mut self) {
-        if !self.state.options.synced {
+        if !self.game_state.options.synced {
             {
                 let font = self
-                    .state
+                    .game_state
                     .resource_man
                     .fonts
                     .get(
                         &self
-                            .state
+                            .game_state
                             .options
                             .gui
-                            .get_font(&self.state.resource_man)
-                            .expect("no fonts loaded!"),
+                            .get_font(&self.game_state.resource_man)
+                            .expect("the specified font should be loaded"),
                     )
                     .or_else(|| {
-                        self.state
+                        self.game_state
                             .options
                             .gui
-                            .set_font(&self.state.resource_man, None);
+                            .set_font(&self.game_state.resource_man, None);
 
-                        self.state.resource_man.fonts.values().next()
+                        self.game_state.resource_man.fonts.values().next()
                     })
-                    .expect("no fonts loaded! at all! put one in there!");
+                    .expect("no fonts loaded at all, at least one font needs to be present");
 
-                self.state.gui.as_mut().unwrap().set_font(
+                /*
+                self.game_state.gui.as_mut().unwrap().set_font(
                     SYMBOLS_FONT_KEY,
                     &font.name,
                     Source::Binary(font.data.clone()),
                 );
+                 */
             }
 
-            self.state
+            self.game_state
                 .audio_man
                 .main_track()
-                .set_volume(self.state.options.audio.sfx_volume, Tween::default());
+                .set_volume(self.game_state.options.audio.sfx_volume, Tween::default());
 
-            self.state
-                .renderer
+            self.render
                 .as_mut()
                 .unwrap()
-                .gpu
-                .set_vsync(self.state.options.graphics.fps_limit == 0);
+                .res
+                .set_vsync(self.game_state.options.graphics.fps_limit == 0);
 
-            self.fps_limit = Some(self.state.options.graphics.fps_limit);
-
-            if self.state.options.graphics.fullscreen {
-                self.state
-                    .renderer
+            if self.game_state.options.graphics.fullscreen {
+                self.render
                     .as_ref()
                     .unwrap()
-                    .gpu
+                    .res
                     .window
-                    .set_fullscreen(Some(Fullscreen::Borderless(None)));
+                    .set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
             } else {
-                self.state
-                    .renderer
+                self.render
                     .as_ref()
                     .unwrap()
-                    .gpu
+                    .res
                     .window
                     .set_fullscreen(None);
             }
 
-            self.state.options.synced = true;
+            self.game_state.options.synced = true;
 
             log::info!("Synced options!");
         }
@@ -247,80 +243,57 @@ impl ApplicationHandler for Automancy {
 
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         log::info!("Creating window...");
-        let icon = get_icon();
-
+        let icon = get_window_icon();
         let window_attributes = Window::default_attributes()
             .with_title("automancy")
             .with_window_icon(Some(icon))
             .with_min_inner_size(PhysicalSize::new(200, 200));
-
-        self.window = Some(Arc::new(
-            event_loop
-                .create_window(window_attributes)
-                .expect("Failed to open window"),
-        ));
+        let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
         log::info!("Window created.");
 
-        let gpu = self.state.tokio.block_on(Gpu::new(
-            self.window.as_ref().unwrap().clone(),
-            self.state.options.graphics.fps_limit == 0,
-        ));
-
         log::info!("Setting up rendering...");
-        let (shared_resources, render_resources, global_resources) = gpu::init_gpu_resources(
-            &gpu.device,
-            &gpu.config,
-            &self.state.resource_man,
-            self.state.vertices_init.take().unwrap(),
-            self.state.indices_init.take().unwrap(),
-        );
-        let global_resources = Arc::new(global_resources);
-        let renderer = GameRenderer::new(
-            gpu,
-            shared_resources,
-            render_resources,
-            global_resources.clone(),
-        );
+        self.render = Some(self.game_state.tokio.block_on(AutomancyRendering::new(
+            &self.game_state.resource_man,
+            &self.render_state,
+            window.clone(),
+        )));
         log::info!("Render setup.");
 
         log::info!("Setting up gui...");
+        /* TODO reimpl
         let mut gui = GameGui::new(
             &renderer.gpu.device,
             &renderer.gpu.queue,
             &renderer.gpu.window,
         );
-
         gui.window.set_automatic_scale_factor(false);
         gui.yak.set_scale_factor(
-            (renderer.gpu.window.scale_factor() * self.state.options.graphics.ui_scale.to_f64())
-                as f32,
+            (renderer.gpu.window.scale_factor()
+                * self.game_state.options.graphics.ui_scale.to_f64()) as f32,
         );
 
         gui.fonts.insert(
             SYMBOLS_FONT_KEY.to_string(),
             cosmic_text::fontdb::Source::Binary(Arc::from(&SYMBOLS_FONT)),
         );
-        for (name, font) in self.state.resource_man.fonts.iter() {
+        for (name, font) in self.game_state.resource_man.fonts.iter() {
             gui.fonts.insert(
                 name.clone(),
                 cosmic_text::fontdb::Source::Binary(font.data.clone()),
             );
         }
+         */
         log::info!("Gui setup.");
 
         let logo = image::load_from_memory(LOGO).unwrap();
-        let mut logo = Texture::new(
+        let mut logo = yakui::paint::Texture::new(
             yakui::paint::TextureFormat::Rgba8Srgb,
-            uvec2(logo.width(), logo.height()),
+            yakui::UVec2::new(logo.width(), logo.height()),
             logo.into_bytes(),
         );
-        logo.mag_filter = TextureFilter::Linear;
-        logo.min_filter = TextureFilter::Linear;
-        let logo = gui.yak.add_texture(logo);
-
-        self.state.logo = Some(logo);
-        self.state.gui = Some(gui);
-        self.state.renderer = Some(renderer);
+        logo.mag_filter = yakui::paint::TextureFilter::Linear;
+        logo.min_filter = yakui::paint::TextureFilter::Linear;
+        // TODO reimpl let logo = gui.yak.add_texture(logo);
 
         self.try_sync_options();
     }
@@ -332,23 +305,25 @@ impl ApplicationHandler for Automancy {
         event: WindowEvent,
     ) {
         if !self.closed {
+            /*  TODO reimpl
             let consumed = {
-                let gui = self.state.gui.as_mut().unwrap();
+                let gui = self.game_state.gui.as_mut().unwrap();
                 gui.window.handle_window_event(&mut gui.yak, &event)
             };
 
             if consumed {
                 return;
             }
+            */
 
-            match event::on_event(
-                &mut self.state,
+            match integration::on_event(
                 event_loop,
+                &mut self.game_state,
+                &mut self.render_state,
+                self.render.as_mut().unwrap(),
                 Event::WindowEvent { window_id, event },
             ) {
-                Ok(closed) => {
-                    self.closed = closed;
-                }
+                Ok(_) => {}
                 Err(e) => {
                     log::warn!("Window event error: {e}");
                 }
@@ -365,14 +340,14 @@ impl ApplicationHandler for Automancy {
         event: DeviceEvent,
     ) {
         if !self.closed {
-            match event::on_event(
-                &mut self.state,
+            match integration::on_event(
                 event_loop,
+                &mut self.game_state,
+                &mut self.render_state,
+                self.render.as_mut().unwrap(),
                 Event::DeviceEvent { device_id, event },
             ) {
-                Ok(closed) => {
-                    self.closed = closed;
-                }
+                Ok(()) => {}
                 Err(e) => {
                     log::warn!("Device event error: {e}");
                 }
@@ -381,7 +356,7 @@ impl ApplicationHandler for Automancy {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        let fps_limit = self.fps_limit.unwrap_or(0);
+        let fps_limit = self.game_state.options.graphics.fps_limit;
 
         if fps_limit != 0 {
             let frame_time = if fps_limit >= 250 {
@@ -390,7 +365,7 @@ impl ApplicationHandler for Automancy {
                 Duration::from_secs_f64(1.0 / fps_limit as f64)
             };
 
-            let elapsed = self.state.loop_store.frame_start.unwrap().elapsed();
+            let elapsed = self.game_state.loop_store.frame_start.unwrap().elapsed();
             if elapsed < frame_time {
                 let time_left = frame_time - elapsed;
 
@@ -401,22 +376,31 @@ impl ApplicationHandler for Automancy {
             event_loop.set_control_flow(ControlFlow::Poll);
         }
 
-        self.window.as_ref().unwrap().request_redraw();
+        self.render.as_ref().unwrap().res.window.request_redraw();
     }
 }
 
 fn main() -> anyhow::Result<()> {
-    env::set_var("RUST_BACKTRACE", "full");
+    // SAFETY: we are on the main thread
+    unsafe {
+        env::set_var("RUST_BACKTRACE", "full");
+    }
 
     {
         let filter = "info,wgpu_core::device::resource=warn";
 
-        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(filter)).init();
+        let mut builder =
+            env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(filter));
+        if let Ok(file) = env::var("LOG_FILE") {
+            let file = Box::new(File::create(file).expect("log file needs to created"));
+
+            builder.target(env_logger::Target::Pipe(file));
+        }
+        builder.init();
 
         #[cfg(debug_assertions)]
         {
-            use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
-            use tracing_subscriber::EnvFilter;
+            use tracing_subscriber::{EnvFilter, prelude::__tracing_subscriber_SubscriberExt};
             use tracing_tracy::DefaultConfig;
 
             tracing::subscriber::set_global_default({
@@ -458,33 +442,23 @@ fn main() -> anyhow::Result<()> {
                 file_path
             };
 
-            if let Some(location) = info.location() {
-                if !["src/game.rs", "src/tile_entity.rs"].contains(&location.file()) {
-                    let message = {
-                        let mut message = String::new();
-                        _ = write_msg(&mut message, &file_path);
+            {
+                let mut message = String::new();
+                _ = write_crash_msg(&mut message, &file_path);
 
-                        message
-                    };
+                eprintln!("\n{}", message);
 
-                    {
-                        eprintln!("\n\n\n{}\n\n\n", message);
-
-                        _ = MessageDialog::new()
-                            .set_level(MessageLevel::Error)
-                            .set_buttons(MessageButtons::Ok)
-                            .set_title("automancy crash dialog")
-                            .set_description(message)
-                            .show();
-                    }
-                }
+                _ = MessageDialog::new()
+                    .set_level(MessageLevel::Error)
+                    .set_buttons(MessageButtons::Ok)
+                    .set_title("automancy crash dialog")
+                    .set_description(message)
+                    .show();
             }
         }));
     }
 
-    let event_loop = EventLoop::new()?;
-
-    let mut state = {
+    let mut game_state = {
         let tokio = Runtime::new().unwrap();
 
         log::info!("Initializing audio backend...");
@@ -500,20 +474,22 @@ fn main() -> anyhow::Result<()> {
 
         let misc_options = MiscOptions::load();
 
-        let (resource_man, vertices, indices) = load_resources(&misc_options.language, track);
-        RESOURCE_MAN.write().unwrap().replace(resource_man.clone());
+        let resource_man = load_resources(&misc_options.language, track);
+        global::set_resource_man(resource_man.clone());
         log::info!("Loaded resources.");
 
         let options = GameOptions::load(&resource_man);
         let input_handler = InputHandler::new(&options);
 
         let mut loop_store = EventLoopStorage::default();
-        let camera = GameCamera::new((1.0, 1.0)); // dummy value
+        let camera = GameCamera::new(
+            Vec2::one(), // dummy value
+        );
 
         log::info!("Creating game...");
         let (game, game_handle) = tokio.block_on(Actor::spawn(
             Some("game".to_string()),
-            GameSystem {
+            GameActor {
                 resource_man: resource_man.clone(),
             },
             (),
@@ -521,53 +497,53 @@ fn main() -> anyhow::Result<()> {
         {
             let game = game.clone();
             tokio.spawn(async move {
-                game.send_interval(TICK_INTERVAL, || GameSystemMessage::Tick);
+                game.send_interval(TICK_INTERVAL, || GameMsg::Tick);
             });
         }
         log::info!("Game created.");
 
         let start_instant = Instant::now();
-        ui_game_object::init_custom_paint_state(start_instant);
+        // TODO reimpl ui_game_object::init_custom_paint_state(start_instant);
         loop_store.frame_start = Some(start_instant);
 
-        GameState {
-            ui_state: UiState::default(),
-            options,
-            misc_options,
+        AutomancyGameState {
             resource_man,
-            input_handler,
             loop_store,
+            ui_state: UiState::default(),
+            input_handler,
+            audio_man,
+            camera,
+
             tokio,
             game,
-            camera,
-            audio_man,
-            start_instant,
-
-            gui: None,
-            renderer: None,
-            screenshotting: false,
-
-            logo: Default::default(),
-            input_hints: Default::default(),
-            puzzle_state: Default::default(),
-
             game_handle: Some(game_handle),
 
-            vertices_init: Some(vertices),
-            indices_init: Some(indices),
+            options,
+            misc_options,
+
+            start_instant,
+
+            input_hints: Default::default(),
+            puzzle_state: Default::default(),
         }
     };
 
+    log::info!("Loading rendering resources...");
+    let mut render_state = AutomancyRenderState::default();
+    render_state.model_man.load_models(&game_state.resource_man);
+    log::info!("Loaded rendering resources.");
+
     // load the main menu
-    game_load_map_inner(&mut state, LoadMapOption::MainMenu);
+    game_load_map(&mut game_state, GameMapId::MainMenu);
 
     let mut automancy = Automancy {
-        state,
-        window: None,
-        fps_limit: None,
+        game_state,
+        render_state,
+        render: None,
         closed: false,
     };
 
+    let event_loop = EventLoop::new()?;
     event_loop.run_app(&mut automancy)?;
 
     Ok(())

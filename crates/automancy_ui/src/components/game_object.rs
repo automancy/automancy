@@ -1,47 +1,50 @@
-use automancy_defs::{
+use std::cell::{Cell, RefCell};
+
+use automancy_data::{
     id::{ModelId, TileId},
     math::Matrix4,
-    rendering::InstanceData,
+    rendering::Instance,
 };
-use automancy_resources::data::DataMap;
-use std::cell::{Cell, RefCell};
-use wgpu::{BindGroup, Buffer};
-use yakui::{
-    paint::{CustomPaintCall, PaintCall},
-    util::widget,
-    widget::Widget,
-    Rect, Response, Vec2,
-};
+use automancy_resources::generic::DataMap;
+use yakui::{paint::PaintCall, util::widget, widget::Widget, Rect, Response, Vec2};
 
-thread_local! {
-    static INDEX_COUNTER: Cell<usize> = const { Cell::new(0) };
-    pub static SHOULD_RERENDER: Cell<bool> = const { Cell::new(true) };
-}
-
-pub fn reset_custom_paint_state() {
-    INDEX_COUNTER.replace(0);
-    SHOULD_RERENDER.set(false);
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum UiGameObjectType {
-    Tile(TileId, DataMap),
-    Model(ModelId),
-}
+use crate::custom::{mark_rerender, should_rerender, CustomRenderer, RenderObject};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct GameObject {
-    pub index: usize,
-    pub instance: InstanceData,
-    pub ty: UiGameObjectType,
+    pub instance: Instance,
+    pub ty: GameObjectType,
     pub size: Vec2,
     pub model_matrix: Matrix4,
     pub world_matrix: Matrix4,
 }
 
+impl GameObject {
+    pub fn new(
+        instance: Instance,
+        ty: GameObjectType,
+        size: Vec2,
+        model_matrix: Option<Matrix4>,
+        world_matrix: Option<Matrix4>,
+    ) -> Self {
+        Self {
+            instance,
+            ty,
+            size,
+            model_matrix: model_matrix.unwrap_or_default(),
+            world_matrix: world_matrix.unwrap_or_default(),
+        }
+    }
+
+    #[track_caller]
+    pub fn show(self) -> Response<()> {
+        widget::<GameObjectWidget>(Some(self))
+    }
+}
+
 pub fn ui_game_object(
-    instance: InstanceData,
-    ty: UiGameObjectType,
+    instance: Instance,
+    ty: GameObjectType,
     size: Vec2,
     model_matrix: Option<Matrix4>,
     world_matrix: Option<Matrix4>,
@@ -49,52 +52,13 @@ pub fn ui_game_object(
     GameObject::new(instance, ty, size, model_matrix, world_matrix).show()
 }
 
-impl GameObject {
-    pub fn new(
-        instance: InstanceData,
-        ty: UiGameObjectType,
-        size: Vec2,
-        model_matrix: Option<Matrix4>,
-        world_matrix: Option<Matrix4>,
-    ) -> Self {
-        let index = INDEX_COUNTER.get();
-
-        let result = Self {
-            instance,
-            ty,
-            index,
-            size,
-            model_matrix: model_matrix.unwrap_or_default(),
-            world_matrix: world_matrix.unwrap_or_default(),
-        };
-
-        INDEX_COUNTER.set(index + 1);
-
-        result
-    }
-
-    #[track_caller]
-    pub fn show(self) -> Response<()> {
-        widget::<GameElementWidget>(Some(self))
-    }
-}
-
-#[derive(Debug)]
-pub struct GameElementPaint {
-    pub props: GameObject,
-    pub clip_offset: Vec2,
-    pub clip_scale: Vec2,
-    pub present_uniform: Option<Buffer>,
-    pub present_bind_group: Option<BindGroup>,
-}
-
 #[derive(Debug, Clone)]
-pub struct GameElementWidget {
+pub struct GameObjectWidget {
     props: RefCell<Option<GameObject>>,
     clip: Cell<Rect>,
 }
 
-impl Widget for GameElementWidget {
+impl Widget for GameObjectWidget {
     type Props<'a> = Option<GameObject>;
     type Response = ();
 
@@ -108,8 +72,8 @@ impl Widget for GameElementWidget {
     fn update(&mut self, props: Self::Props<'_>) -> Self::Response {
         let old = self.props.get_mut();
 
-        if !SHOULD_RERENDER.get() && old != &props {
-            SHOULD_RERENDER.set(true);
+        if old != &props && !should_rerender() {
+            mark_rerender();
         }
 
         *old = props;
@@ -128,9 +92,7 @@ impl Widget for GameElementWidget {
     }
 
     fn paint(&self, ctx: yakui::widget::PaintContext<'_>) {
-        let paint_clip = ctx.paint.get_current_clip();
-
-        if let Some(clip) = paint_clip {
+        if let Some(clip) = ctx.layout.get(ctx.dom.current()).map(|v| v.clip) {
             self.clip.set(clip);
         }
 
@@ -156,22 +118,20 @@ impl Widget for GameElementWidget {
             clip_offset = (sign + Vec2::ONE) * (Vec2::ONE - clip_scale) * rect.size();
         }
 
-        if let Some(layer) = ctx.paint.layers_mut().current_mut() {
+        if let Some(layer) = ctx.paint.layers.current_mut() {
             let mut props = self.props.borrow().clone().unwrap();
             props.size *= ctx.layout.scale_factor();
 
-            let paint = Box::new(GameElementPaint {
-                props,
-                clip_scale,
-                clip_offset,
-                present_bind_group: None,
-                present_uniform: None,
-            });
+            let id =
+                ctx.dom
+                    .get_global_or_init(CustomRenderer::init)
+                    .add(RenderObject::GameObject(GameObjectPaint {
+                        props,
+                        clip_scale,
+                        clip_offset,
+                    }));
 
-            layer.calls.push((
-                PaintCall::Custom(CustomPaintCall { callback: paint }),
-                Some(inside),
-            ));
+            layer.calls.push((inside, PaintCall::User(id)));
         }
     }
 }
