@@ -1,34 +1,33 @@
-use crate::inventory::{Inventory, InventoryRaw};
-use automancy_defs::{
-    coord::{TileBounds, TileCoord, TileUnit},
-    resolve_map_id_of, resolve_map_v_id,
-    stack::{ItemAmount, ItemStack},
-    try_parse_ids,
-};
-use automancy_defs::{glam::IVec2, try_parse_map_id_of};
-use automancy_defs::{hex, try_parse_map_v_id};
-use automancy_defs::{
-    hexx::{Hex, OffsetHexMode},
-    parse_ids, parse_map_id_of, parse_map_v_id,
-};
-use automancy_defs::{
-    id::{Id, Interner},
-    resolve_ids,
-};
-use hashbrown::{HashMap, HashSet};
-use rhai::Dynamic;
-use serde::{Deserialize, Serialize};
 use std::{
     any::TypeId,
     collections::{
-        btree_map::{self, Entry},
         BTreeMap,
+        btree_map::{self, Entry},
     },
 };
+
+use automancy_defs::{
+    coord::{TileBounds, TileCoord, TileUnit},
+    id::{Id, Interner},
+    math::IVec2,
+    parse_ids, parse_map_id_of, parse_map_v_id, resolve_ids, resolve_map_id_of, resolve_map_v_id,
+    stack::{ItemAmount, ItemStack},
+    try_parse_ids, try_parse_map_id_of, try_parse_map_v_id,
+};
+use hashbrown::{HashMap, HashSet};
+use hexx::{Hex, HexOrientation, OffsetHexMode};
+use rhai::Dynamic;
+use serde::{Deserialize, Serialize};
 use yakui::Color;
 
+use crate::inventory::{Inventory, InventoryRaw};
+
 fn offset_to_tile(a: [TileUnit; 2]) -> TileCoord {
-    TileCoord::from(Hex::from_offset_coordinates(a, OffsetHexMode::EvenRows))
+    TileCoord::from(Hex::from_offset_coordinates(
+        a,
+        OffsetHexMode::Even,
+        HexOrientation::Pointy,
+    ))
 }
 
 /// Represents the data a tile entity holds. This data is given to functions.
@@ -133,7 +132,7 @@ impl Data {
             Data::SetId(v) => DataRaw::SetId(resolve_ids(v.iter().cloned(), interner)),
             Data::Amount(v) => DataRaw::Amount(*v),
             Data::Bool(v) => DataRaw::Bool(*v),
-            Data::Color(v) => DataRaw::Color(hex::encode([v.r, v.g, v.b, v.a])),
+            Data::Color(v) => DataRaw::Color(const_hex::encode([v.r, v.g, v.b, v.a])),
             Data::TileBounds(v) => DataRaw::TileBounds(*v),
             Data::TileMap(v) => {
                 DataRaw::TileMap(resolve_map_v_id(v.iter().map(|(a, b)| (*a, *b)), interner))
@@ -289,7 +288,7 @@ impl DataRaw {
             DataRaw::Amount(v) => Data::Amount(*v),
             DataRaw::Bool(v) => Data::Bool(*v),
             DataRaw::Color(v) => {
-                let mut color = hex::decode(v).ok()?.into_iter();
+                let mut color = const_hex::decode(v).ok()?.into_iter();
                 Data::Color(Color {
                     r: color.next()?,
                     g: color.next()?,

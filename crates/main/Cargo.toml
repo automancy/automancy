@@ -1,26 +1,28 @@
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [package]
 name = "automancy"
 version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
 
-
 [dependencies]
 automancy_lib = { workspace = true }
 
+# logging
+color-eyre = "0.6.5"
+env_logger = "0.11.8"
+human-panic = "2.0.3"
+strip-ansi-escapes = "0.2.1"
+
+# parsing / data mangling / math / files
 image = { workspace = true }
 
+# user input / user interface
+rfd = "0.15.4"
 
-color-eyre = "0.6.3"
-env_logger = "0.11.3"
-rfd = "0.15.0"
-human-panic = "2.0.0"
-strip-ansi-escapes = "0.2.0"
+[dev-dependencies]
+# tracy version v0.12.2
+tracing-tracy = "=0.11.4"
+tracy-client = "=0.18.2"
 
-# tracy version v0.11.0
-tracing-tracy = "=0.11.1"
-tracy-client = "=0.17.1"
-
-tracing = "0.1.40"
-tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }

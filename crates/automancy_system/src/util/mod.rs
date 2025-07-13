@@ -1,6 +1,8 @@
 use automancy_defs::id::Id;
-use automancy_resources::data::{Data, DataMap};
-use automancy_resources::ResourceManager;
+use automancy_resources::{
+    ResourceManager,
+    data::{Data, DataMap},
+};
 use hashbrown::HashSet;
 
 pub mod actor;

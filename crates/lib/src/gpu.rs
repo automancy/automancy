@@ -1,33 +1,30 @@
-use automancy_defs::rendering::{AnimationMatrixData, GameUBO, GpuInstance, MatrixData, Vertex};
-use automancy_defs::rendering::{PostProcessingUBO, WorldMatrixData};
-use automancy_defs::{rendering::IntermediateUBO, slice_group_by::GroupBy};
+use std::{mem, num::NonZero, sync::Arc};
+
+use automancy_defs::rendering::{
+    AnimationMatrixData, GameUBO, GpuInstance, IntermediateUBO, MatrixData, PostProcessingUBO,
+    Vertex, WorldMatrixData,
+};
 use automancy_macros::OptionGetter;
 use automancy_resources::ResourceManager;
 use bytemuck::Pod;
 use ordermap::OrderMap;
-use std::mem;
-use std::{num::NonZero, sync::Arc};
-use wgpu::{util::StagingBelt, CommandEncoder};
+use slice_group_by::GroupBy;
 use wgpu::{
-    util::{backend_bits_from_env, power_preference_from_env, BufferInitDescriptor, DeviceExt},
-    BufferAddress, InstanceFlags, PipelineCompilationOptions, COPY_BUFFER_ALIGNMENT,
+    AdapterInfo, AddressMode, Backends, BindGroup, BindGroupDescriptor, BindGroupEntry,
+    BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType,
+    BlendState, Buffer, BufferAddress, BufferBindingType, BufferUsages, COPY_BUFFER_ALIGNMENT,
+    Color, ColorTargetState, ColorWrites, CommandEncoder, CompareFunction, DepthStencilState,
+    Device, DeviceDescriptor, Extent3d, Face, Features, FilterMode, FragmentState, FrontFace,
+    Instance, InstanceDescriptor, InstanceFlags, Limits, MultisampleState,
+    PipelineCompilationOptions, PipelineLayoutDescriptor, PowerPreference, PresentMode,
+    PrimitiveState, PrimitiveTopology, Queue, RenderPipeline, RenderPipelineDescriptor,
+    RequestAdapterOptions, Sampler, SamplerBindingType, SamplerDescriptor, ShaderModule,
+    ShaderModuleDescriptor, ShaderSource, ShaderStages, Surface, SurfaceConfiguration, Texture,
+    TextureDescriptor, TextureDimension, TextureFormat, TextureSampleType, TextureUsages,
+    TextureView, TextureViewDescriptor, TextureViewDimension, VertexState,
+    util::{BufferInitDescriptor, DeviceExt, StagingBelt},
 };
-use wgpu::{AdapterInfo, Face, Surface};
-use wgpu::{
-    AddressMode, Backends, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout,
-    BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType, BlendState,
-    Buffer, BufferBindingType, BufferUsages, Color, ColorTargetState, ColorWrites, CompareFunction,
-    DepthStencilState, Device, DeviceDescriptor, Extent3d, Features, FilterMode, FragmentState,
-    FrontFace, Instance, InstanceDescriptor, Limits, MultisampleState, PipelineLayoutDescriptor,
-    PowerPreference, PresentMode, PrimitiveState, PrimitiveTopology, Queue, RenderPipeline,
-    RenderPipelineDescriptor, RequestAdapterOptions, Sampler, SamplerBindingType,
-    SamplerDescriptor, ShaderModule, ShaderModuleDescriptor, ShaderSource, ShaderStages,
-    SurfaceConfiguration, Texture, TextureDescriptor, TextureDimension, TextureFormat,
-    TextureSampleType, TextureUsages, TextureView, TextureViewDescriptor, TextureViewDimension,
-    VertexState,
-};
-use winit::dpi::PhysicalSize;
-use winit::window::Window;
+use winit::{dpi::PhysicalSize, window::Window};
 use yakui::UVec2;
 
 pub const NORMAL_CLEAR: Color = Color::TRANSPARENT;
@@ -983,13 +980,13 @@ pub fn init_gpu_resources(
         layout: Some(&game_pipeline_layout),
         vertex: VertexState {
             module: &game_shader,
-            entry_point: "vs_main",
+            entry_point: None,
             buffers: &[Vertex::desc(), GpuInstance::desc()],
             compilation_options: PipelineCompilationOptions::default(),
         },
         fragment: Some(FragmentState {
             module: &game_shader,
-            entry_point: "fs_main",
+            entry_point: None,
             targets: &[
                 Some(ColorTargetState {
                     format: config.format,
@@ -1294,13 +1291,13 @@ pub fn init_gpu_resources(
         layout: Some(&combine_pipeline_layout),
         vertex: VertexState {
             module: &combine_shader,
-            entry_point: "vs_main",
+            entry_point: None,
             buffers: &[],
             compilation_options: PipelineCompilationOptions::default(),
         },
         fragment: Some(FragmentState {
             module: &combine_shader,
-            entry_point: "fs_main",
+            entry_point: None,
             targets: &[Some(ColorTargetState {
                 format: config.format,
                 blend: None,
@@ -1356,13 +1353,13 @@ pub fn init_gpu_resources(
         layout: Some(&fxaa_pipeline_layout),
         vertex: VertexState {
             module: &fxaa_shader,
-            entry_point: "vs_main",
+            entry_point: None,
             buffers: &[],
             compilation_options: PipelineCompilationOptions::default(),
         },
         fragment: Some(FragmentState {
             module: &fxaa_shader,
-            entry_point: "fs_main",
+            entry_point: None,
             targets: &[Some(ColorTargetState {
                 format: config.format,
                 blend: None,
@@ -1415,13 +1412,13 @@ pub fn init_gpu_resources(
             layout: Some(&pipeline_layout),
             vertex: VertexState {
                 module: &post_processing_shader,
-                entry_point: "vs_main",
+                entry_point: None,
                 buffers: &[],
                 compilation_options: PipelineCompilationOptions::default(),
             },
             fragment: Some(FragmentState {
                 module: &post_processing_shader,
-                entry_point: "fs_main",
+                entry_point: None,
                 targets: &[Some(ColorTargetState {
                     format: config.format,
                     blend: None,
@@ -1502,13 +1499,13 @@ pub fn init_gpu_resources(
         layout: Some(&intermediate_pipeline_layout),
         vertex: VertexState {
             module: &intermediate_shader,
-            entry_point: "vs_main",
+            entry_point: None,
             buffers: &[],
             compilation_options: PipelineCompilationOptions::default(),
         },
         fragment: Some(FragmentState {
             module: &intermediate_shader,
-            entry_point: "fs_main",
+            entry_point: None,
             targets: &[Some(ColorTargetState {
                 format: SCREENSHOT_FORMAT,
                 blend: None,
@@ -1541,13 +1538,13 @@ pub fn init_gpu_resources(
         layout: Some(&intermediate_pipeline_layout),
         vertex: VertexState {
             module: &intermediate_shader,
-            entry_point: "vs_main",
+            entry_point: None,
             buffers: &[],
             compilation_options: PipelineCompilationOptions::default(),
         },
         fragment: Some(FragmentState {
             module: &intermediate_shader,
-            entry_point: "fs_main",
+            entry_point: None,
             targets: &[Some(ColorTargetState {
                 format: config.format,
                 blend: Some(BlendState::PREMULTIPLIED_ALPHA_BLENDING),
@@ -1575,13 +1572,13 @@ pub fn init_gpu_resources(
         layout: Some(&intermediate_pipeline_layout),
         vertex: VertexState {
             module: &intermediate_shader,
-            entry_point: "vs_main",
+            entry_point: None,
             buffers: &[],
             compilation_options: PipelineCompilationOptions::default(),
         },
         fragment: Some(FragmentState {
             module: &intermediate_shader,
-            entry_point: "fs_main",
+            entry_point: None,
             targets: &[Some(ColorTargetState {
                 format: config.format,
                 blend: Some(BlendState::PREMULTIPLIED_ALPHA_BLENDING),
@@ -1720,7 +1717,7 @@ impl Gpu {
         // The instance is a handle to our GPU
         // Backends::all => Vulkan + Metal + DX12 + Browser WebGPU
         let instance = Instance::new(InstanceDescriptor {
-            backends: backend_bits_from_env().unwrap_or(Backends::all()),
+            backends: Backends::from_env().unwrap_or(Backends::all()),
             flags: InstanceFlags::default(),
             ..Default::default()
         });
@@ -1729,7 +1726,7 @@ impl Gpu {
 
         let adapter = instance
             .request_adapter(&RequestAdapterOptions {
-                power_preference: power_preference_from_env()
+                power_preference: PowerPreference::from_env()
                     .unwrap_or(PowerPreference::HighPerformance),
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,

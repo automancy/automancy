@@ -1,11 +1,12 @@
+use std::ops::{Add, Neg, Sub};
+
 use automancy_defs::{
     coord::{TileBounds, TileCoord, TileUnit},
-    math::tile_direction_to_angle,
+    id::Id,
+    math::{Matrix4, tile_direction_to_angle},
 };
-use automancy_defs::{id::Id, math::Matrix4};
 use hashbrown::HashMap;
 use rhai::{Dynamic, Engine, Module};
-use std::ops::{Add, Neg, Sub};
 
 pub(crate) fn register_coord_stuff(engine: &mut Engine) {
     let mut module = Module::new();

@@ -1,27 +1,23 @@
+use std::{
+    cell::{Cell, RefCell},
+    collections::BTreeMap,
+};
+
 use automancy_defs::{
     id::{ModelId, TileId},
     math::Matrix4,
     rendering::InstanceData,
 };
 use automancy_resources::data::DataMap;
-use std::cell::{Cell, RefCell};
 use wgpu::{BindGroup, Buffer};
 use yakui::{
-    paint::{CustomPaintCall, PaintCall},
+    Rect, Response, Vec2,
+    paint::{PaintCall, PaintLayer, UserPaintCallId},
     util::widget,
     widget::Widget,
-    Rect, Response, Vec2,
 };
 
-thread_local! {
-    static INDEX_COUNTER: Cell<usize> = const { Cell::new(0) };
-    pub static SHOULD_RERENDER: Cell<bool> = const { Cell::new(true) };
-}
-
-pub fn reset_custom_paint_state() {
-    INDEX_COUNTER.replace(0);
-    SHOULD_RERENDER.set(false);
-}
+use crate::custom::{mark_rerender, new_user_paint_id, should_rerender};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum UiGameObjectType {
@@ -31,7 +27,6 @@ pub enum UiGameObjectType {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct GameObject {
-    pub index: usize,
     pub instance: InstanceData,
     pub ty: UiGameObjectType,
     pub size: Vec2,
@@ -57,20 +52,13 @@ impl GameObject {
         model_matrix: Option<Matrix4>,
         world_matrix: Option<Matrix4>,
     ) -> Self {
-        let index = INDEX_COUNTER.get();
-
-        let result = Self {
+        Self {
             instance,
             ty,
-            index,
             size,
             model_matrix: model_matrix.unwrap_or_default(),
             world_matrix: world_matrix.unwrap_or_default(),
-        };
-
-        INDEX_COUNTER.set(index + 1);
-
-        result
+        }
     }
 
     #[track_caller]
@@ -79,7 +67,7 @@ impl GameObject {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GameElementPaint {
     pub props: GameObject,
     pub clip_offset: Vec2,
@@ -108,8 +96,8 @@ impl Widget for GameElementWidget {
     fn update(&mut self, props: Self::Props<'_>) -> Self::Response {
         let old = self.props.get_mut();
 
-        if !SHOULD_RERENDER.get() && old != &props {
-            SHOULD_RERENDER.set(true);
+        if !should_rerender() && old != &props {
+            mark_rerender();
         }
 
         *old = props;
@@ -128,9 +116,7 @@ impl Widget for GameElementWidget {
     }
 
     fn paint(&self, ctx: yakui::widget::PaintContext<'_>) {
-        let paint_clip = ctx.paint.get_current_clip();
-
-        if let Some(clip) = paint_clip {
+        if let Some(clip) = ctx.layout.get(ctx.dom.current()).map(|v| v.clip) {
             self.clip.set(clip);
         }
 
@@ -156,22 +142,36 @@ impl Widget for GameElementWidget {
             clip_offset = (sign + Vec2::ONE) * (Vec2::ONE - clip_scale) * rect.size();
         }
 
-        if let Some(layer) = ctx.paint.layers_mut().current_mut() {
+        if let Some(layer) = ctx.paint.layers.current_mut() {
             let mut props = self.props.borrow().clone().unwrap();
             props.size *= ctx.layout.scale_factor();
 
-            let paint = Box::new(GameElementPaint {
-                props,
-                clip_scale,
-                clip_offset,
-                present_bind_group: None,
-                present_uniform: None,
-            });
-
-            layer.calls.push((
-                PaintCall::Custom(CustomPaintCall { callback: paint }),
-                Some(inside),
-            ));
+            ctx.dom.get_global_or_init(GameObjectRenderer::default).add(
+                layer,
+                GameElementPaint {
+                    props,
+                    clip_scale,
+                    clip_offset,
+                    present_bind_group: None,
+                    present_uniform: None,
+                },
+                inside,
+            );
         }
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+struct GameObjectRenderer {
+    objects: BTreeMap<UserPaintCallId, GameElementPaint>,
+}
+
+impl GameObjectRenderer {
+    pub fn add(&mut self, layer: &mut PaintLayer, object: GameElementPaint, clip: Rect) {
+        let id = new_user_paint_id();
+
+        self.objects.insert(id, object);
+
+        layer.calls.push((clip, PaintCall::User(id)));
     }
 }

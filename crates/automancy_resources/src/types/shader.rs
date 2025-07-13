@@ -1,7 +1,10 @@
-use crate::{LoadResourceError, ResourceManager, COULD_NOT_GET_FILE_STEM, SHADER_EXT};
-use std::ffi::OsStr;
-use std::fs::{read_dir, read_to_string};
-use std::path::Path;
+use std::{
+    ffi::OsStr,
+    fs::{read_dir, read_to_string},
+    path::Path,
+};
+
+use crate::{COULD_NOT_GET_FILE_STEM, LoadResourceError, ResourceManager, SHADER_EXT};
 
 impl ResourceManager {
     pub fn load_shaders(&mut self, dir: &Path) -> anyhow::Result<()> {

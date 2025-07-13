@@ -31,20 +31,40 @@ mod textbox;
 mod tip;
 mod util;
 
-pub use self::button::*;
-pub use self::checkbox::*;
-pub use self::container::*;
-pub use self::game_object::*;
-pub use self::hover::*;
-pub use self::interactive::*;
-pub use self::layout::*;
-pub use self::movable::*;
-pub use self::position::*;
-pub use self::scrollable::*;
-pub use self::select::*;
-pub use self::shapes::*;
-pub use self::slider::*;
-pub use self::text::*;
-pub use self::textbox::*;
-pub use self::tip::*;
-pub use self::util::*;
+pub use self::{
+    button::*, checkbox::*, container::*, game_object::*, hover::*, interactive::*, layout::*,
+    movable::*, position::*, scrollable::*, select::*, shapes::*, slider::*, text::*, textbox::*,
+    tip::*, util::*,
+};
+
+pub mod custom {
+    use core::cell::Cell;
+
+    use yakui::paint::UserPaintCallId;
+
+    thread_local! {
+        static PAINT_CALL_ID_COUNTER: Cell<UserPaintCallId> = const { Cell::new(0) };
+        static SHOULD_RERENDER: Cell<bool> = const { Cell::new(true) };
+    }
+
+    pub fn reset_paint_state() {
+        PAINT_CALL_ID_COUNTER.replace(0);
+        SHOULD_RERENDER.set(false);
+    }
+
+    pub fn mark_rerender() {
+        SHOULD_RERENDER.set(true);
+    }
+
+    pub fn should_rerender() -> bool {
+        SHOULD_RERENDER.get()
+    }
+
+    pub fn new_user_paint_id() -> UserPaintCallId {
+        let id = PAINT_CALL_ID_COUNTER.get();
+
+        PAINT_CALL_ID_COUNTER.set(id + 1);
+
+        id
+    }
+}

@@ -1,6 +1,7 @@
-use crate::RESOURCE_MAN;
 use automancy_defs::id::{Id, TileId};
 use rhai::{Dynamic, Engine};
+
+use crate::RESOURCE_MAN;
 
 pub(crate) fn register_resources(engine: &mut Engine) {
     engine.register_fn("as_script", |id: Id| {

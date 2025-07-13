@@ -1,6 +1,6 @@
+use winit::{dpi::PhysicalSize, window::Window};
+
 use crate::math::Float;
-use winit::dpi::PhysicalSize;
-use winit::window::Window;
 
 pub fn window_size_double(window: &Window) -> (Float, Float) {
     let PhysicalSize { width, height } = window.inner_size();

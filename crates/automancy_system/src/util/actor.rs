@@ -1,7 +1,7 @@
-use hashbrown::HashMap;
-use ractor::rpc::CallResult;
-use ractor::{concurrency, ActorRef, Message, MessagingErr, RpcReplyPort};
 use std::{hash::Hash, time::Duration};
+
+use hashbrown::HashMap;
+use ractor::{ActorRef, Message, MessagingErr, RpcReplyPort, concurrency, rpc::CallResult};
 
 pub async fn multi_call_iter<Key, TMessage, TReply, TMsgBuilder>(
     actors: &HashMap<Key, ActorRef<TMessage>>,

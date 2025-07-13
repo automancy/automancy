@@ -1,13 +1,11 @@
-use rhai::plugin::*;
-use rhai::Module;
-use rhai::{exported_module, Engine};
+use rhai::{Engine, Module, exported_module, plugin::*};
 
 #[export_module]
 mod utils {
     use automancy_defs::{id::Id, stack::ItemStack};
     use rhai::Array;
 
-    use crate::{types::item::ItemDef, RESOURCE_MAN};
+    use crate::{RESOURCE_MAN, types::item::ItemDef};
 
     pub fn item_match(id: Id, other: Id) -> bool {
         crate::item_match(RESOURCE_MAN.read().unwrap().as_ref().unwrap(), id, other)

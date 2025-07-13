@@ -1,10 +1,8 @@
-use rhai::{exported_module, Engine};
+use rhai::{Engine, exported_module};
 
 mod tile_stuff {
     use automancy_defs::{coord::TileCoord, id::Id, stack::ItemStack};
-
-    use rhai::plugin::*;
-    use rhai::Module;
+    use rhai::{Module, plugin::*};
 
     use crate::types::function::{OnFailAction, TileResult, TileTransactionResult};
 

@@ -1,18 +1,21 @@
-use crate::types::tag::TagDef;
-use crate::types::tile::TileDef;
-use crate::types::{
-    item::ItemDef,
-    script::{InstructionsDef, ScriptDef},
-};
-use crate::{data::DataMap, inventory::Inventory};
 use automancy_defs::{
     coord::TileCoord,
-    id::{ModelId, TileId},
-    stack::ItemStack,
+    id::{Id, ModelId, TileId},
+    stack::{ItemAmount, ItemStack},
 };
-use automancy_defs::{id::Id, stack::ItemAmount};
 use hashbrown::{HashMap, HashSet};
 use rhai::{Dynamic, Engine};
+
+use crate::{
+    data::DataMap,
+    inventory::Inventory,
+    types::{
+        item::ItemDef,
+        script::{InstructionsDef, ScriptDef},
+        tag::TagDef,
+        tile::TileDef,
+    },
+};
 
 pub(crate) fn register_data_stuff(engine: &mut Engine) {
     engine

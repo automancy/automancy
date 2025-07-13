@@ -1,18 +1,21 @@
-use crate::GameState;
-use automancy_defs::glam::vec3;
-use automancy_defs::id::ModelId;
-use automancy_defs::rendering::InstanceData;
-use automancy_defs::{colors, math, rendering::make_line, window};
 use automancy_defs::{
-    math::{Float, Matrix4, FAR, HEX_GRID_LAYOUT},
-    rendering::GameMatrix,
+    colors,
+    id::ModelId,
+    math,
+    math::{FAR, Float, HEX_GRID_LAYOUT, Matrix4, vec3},
+    rendering::{GameMatrix, InstanceData, make_line},
+    window,
 };
 use automancy_resources::data::DataMap;
-use automancy_system::input::ActionType;
-use automancy_system::ui_state::{PopupState, Screen};
+use automancy_system::{
+    input::ActionType,
+    ui_state::{PopupState, Screen},
+};
 use tokio::sync::oneshot;
 use util::render_overlay_cached;
 use winit::event_loop::ActiveEventLoop;
+
+use crate::GameState;
 
 pub mod debug;
 pub mod error;

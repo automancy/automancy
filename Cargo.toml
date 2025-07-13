@@ -1,11 +1,5 @@
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
 [workspace]
-package.version = "0.1.0"
-package.authors = [
-    "Madeline Sparkles <madeline@mouse.lgbt>",
-    "Mae Rosaline <mae@maestoso.online>",
-]
-package.edition = "2021"
 resolver = "2"
 members = [
     "build_script",
@@ -18,62 +12,63 @@ members = [
     "crates/main",
 ]
 
-
-[profile.dev]
-opt-level = 3
-lto = "off"
-panic = "abort"
-
-[profile.dev.package."*"]
-opt-level = 3
-
-[profile.release]
-debug = true
-lto = "off"
-panic = "abort"
-
-[profile.release-bin]
-inherits = "release"
-opt-level = "z"      # optimize for size
-lto = "fat"          # turn on Link-Time Optimizations
-codegen-units = 1    # trade compile time with maximum optimization
-
+[workspace.package]
+version = "0.1.0"
+authors = [
+    "Madeline Sparkles <madeline@mouse.lgbt>",
+    "Mae Rosaline <mae@maestoso.online>",
+]
+edition = "2024"
 
 [workspace.dependencies]
 automancy_defs = { path = "crates/automancy_defs" }
+automancy_lib = { path = "crates/lib" }
 automancy_macros = { path = "crates/automancy_macros" }
 automancy_resources = { path = "crates/automancy_resources" }
 automancy_system = { path = "crates/automancy_system" }
 automancy_ui = { path = "crates/automancy_ui" }
-automancy_lib = { path = "crates/lib" }
 
+# logging
+log = "0.4.27"
 
-serde = { version = "1", features = ["derive"] }
-ron = "0.8.1"
-
-wgpu = { version = "22.0.0", features = ["serde"] }
-
-winit = { version = "0.30.3", features = ["serde"] }
-
-yakui = { git = "https://github.com/SecondHalfGames/yakui.git", default-features = false }
-yakui-winit = { git = "https://github.com/SecondHalfGames/yakui.git" }
-yakui-wgpu = { git = "https://github.com/SecondHalfGames/yakui.git" }
-cosmic-text = "0.12.0"
-
-log = "0.4"
-
-anyhow = "1"
-thiserror = "1"
-walkdir = "2.5.0"
-hashbrown = { version = "0.15.0", features = ["serde", "rayon", "inline-more"] }
-bytemuck = "1.19.0"
-image = "0.25.1"
-uuid = "1.10.0"
-fuzzy-matcher = "0.3.7"
+# parsing / data mangling / math / files
+bytemuck = "1.23.1"
+const-hex = "1.14.1"
 crunch = "0.5.3"
+gltf = "1.4.1"
+hexx = { git = "https://github.com/automancy/hexx.git", features = ["serde"] }
+image = "0.25.6"
+ron = { version = "0.10" }
+serde = { version = "1.0", features = ["derive"] }
+uuid = "1.17.0"
+zstd = "0.13"
 
+# specialized data storage types
+arraydeque = "0.5.1"
+enum-map = "2.7.3"
+hashbrown = { version = "0.15.4", features = ["serde", "rayon", "inline-more"] }
+ordermap = "0.5.8"
+petgraph = "0.8.2"
+range-set-blaze = "0.3.0"
+string-interner = { git = "https://github.com/automancy/string-interner" }
 
-rhai = { version = "1.19.0", features = [
+# rendering / windowing
+wgpu = { version = "26.0.0", features = ["serde"] }
+winit = { version = "0.30", features = ["serde"] }
+
+# user input / user interface
+arboard = "3.6.0"
+cosmic-text = "0.14.2"
+kira = "0.10.8"
+open = "5.3.2"
+yakui = { git = "https://github.com/SecondHalfGames/yakui.git", default-features = false }
+yakui-wgpu = { git = "https://github.com/SecondHalfGames/yakui.git" }
+yakui-winit = { git = "https://github.com/SecondHalfGames/yakui.git" }
+
+# scripting / game logic / async runtime
+ractor = "0.15.6"
+rayon = "1.10.0"
+rhai = { version = "1.22.2", features = [
     "sync",
     "no_time",
     "no_custom_syntax",
@@ -83,11 +78,34 @@ rhai = { version = "1.19.0", features = [
     "metadata",
     "internals",
 ] }
+tokio = { version = "1.46.1", features = ["full"] }
 
-ractor = "0.13.0"
-tokio = { version = "1", features = ["full"] }
-rayon = "1.10.0"
+# utils
+anyhow = "1.0.98"
+chrono = "0.4.41"
+fuzzy-matcher = "0.3.7"
+interpolator = { version = "0.5.0", features = ["number"] }
+rand = "0.9.1"
+slice-group-by = "0.3.1"
+thiserror = "2.0.12"
+walkdir = "2.5.0"
 
+[profile.dev]
+opt-level = 1
+codegen-units = 2048
+package."*".opt-level = 3
+
+[profile.staging]
+inherits = "dev"
+opt-level = 3
+codegen-units = 32
+
+[profile.release]
+debug = true
+codegen-units = 1
+package."*".opt-level = "s" # optimize for size
+opt-level = "s"             # optimize for size
+lto = "fat"                 # turn on Link-Time Optimizations
 
 [patch."https://github.com/SecondHalfGames/yakui.git"]
 yakui = { git = "https://github.com/automancy/yakui.git" }

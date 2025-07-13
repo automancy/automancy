@@ -1,17 +1,19 @@
-use crate::{LoadResourceError, ResourceManager, FONT_EXT};
-use automancy_defs::{
-    log,
-    ttf_parser::{
-        name::Names,
-        name_id::{FAMILY, TYPOGRAPHIC_FAMILY},
-        Face, Language,
-    },
+use std::{
+    ffi::OsStr,
+    fs::{File, read_dir},
+    io::Read,
+    path::Path,
+    sync::Arc,
 };
-use std::ffi::OsStr;
-use std::fs::{read_dir, File};
-use std::io::Read;
-use std::path::Path;
-use std::sync::Arc;
+
+use log;
+use ttf_parser::{
+    Face, Language,
+    name::Names,
+    name_id::{FAMILY, TYPOGRAPHIC_FAMILY},
+};
+
+use crate::{FONT_EXT, LoadResourceError, ResourceManager};
 
 pub struct Font {
     pub name: String,

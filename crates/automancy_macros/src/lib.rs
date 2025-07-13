@@ -1,9 +1,8 @@
-use proc_macro2::Span;
-use proc_macro2::{Literal, TokenStream, TokenTree};
-use quote::{quote, ToTokens};
+use proc_macro2::{Literal, Span, TokenStream, TokenTree};
+use quote::{ToTokens, quote};
 use syn::{
-    parse::Parse, token::Comma, Attribute, ExprClosure, ExprLit, Ident, Meta, Pat, PatReference,
-    Token, Type, TypeInfer, TypeReference,
+    Attribute, ExprClosure, ExprLit, Ident, Meta, Pat, PatReference, Token, Type, TypeInfer,
+    TypeReference, parse::Parse, token::Comma,
 };
 
 fn parse_ident(attr: &Attribute) -> Vec<Ident> {

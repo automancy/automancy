@@ -1,10 +1,8 @@
+use std::{fmt::Display, hash::Hash, ops::Deref, sync::Arc};
+
 use bytemuck::{Pod, Zeroable};
 use serde::{Deserialize, Serialize};
-use std::ops::Deref;
-use std::sync::Arc;
-use std::{fmt::Display, hash::Hash};
-use string_interner::backend::StringBackend;
-use string_interner::{StringInterner, Symbol};
+use string_interner::{StringInterner, Symbol, backend::StringBackend};
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SharedStr(Arc<str>);

@@ -1,16 +1,15 @@
-use crate::{load_recursively, ResourceManager, RON_EXT};
-use automancy_defs::rendering::Vertex;
-use automancy_defs::rendering::{load_gltf_model, Animation};
-use automancy_defs::{gltf, log};
+use std::{ffi::OsStr, fs::read_to_string, mem, path::Path};
+
 use automancy_defs::{
     id::{Id, ModelId},
-    rendering::Mesh,
+    rendering::{Animation, Mesh, Vertex, load_gltf_model},
 };
+use gltf;
 use hashbrown::HashMap;
+use log;
 use serde::Deserialize;
-use std::ffi::OsStr;
-use std::path::Path;
-use std::{fs::read_to_string, mem};
+
+use crate::{RON_EXT, ResourceManager, load_recursively};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct IndexRange {

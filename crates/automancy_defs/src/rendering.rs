@@ -1,13 +1,16 @@
-use crate::math::{direction_to_angle, Float, Matrix3, Matrix4, Quaternion, Vec2, Vec3};
+use std::{f32::consts::PI, mem::size_of};
+
 use bytemuck::{ByteEq, ByteHash, Pod, Zeroable};
 use glam::{vec3, vec4};
 use gltf::{
-    animation::{util::ReadOutputs, Interpolation},
     Document,
+    animation::{Interpolation, util::ReadOutputs},
+    buffer::Data,
+    scene::Transform,
 };
-use gltf::{buffer::Data, scene::Transform};
-use std::{f32::consts::PI, mem::size_of};
-use wgpu::{vertex_attr_array, BufferAddress, VertexAttribute, VertexBufferLayout, VertexStepMode};
+use wgpu::{BufferAddress, VertexAttribute, VertexBufferLayout, VertexStepMode, vertex_attr_array};
+
+use crate::math::{Float, Matrix3, Matrix4, Quaternion, Vec2, Vec3, direction_to_angle};
 
 pub const LINE_DEPTH: Float = 0.075;
 

@@ -1,8 +1,10 @@
-use automancy_defs::math::Float;
-use automancy_defs::rendering::InstanceData;
-use automancy_defs::{glam::vec2, stack::ItemStack};
-use automancy_resources::{types::IconMode, ResourceManager};
-use automancy_ui::{center_row, label, ui_game_object, UiGameObjectType};
+use automancy_defs::{
+    math::{Float, vec2},
+    rendering::InstanceData,
+    stack::ItemStack,
+};
+use automancy_resources::{ResourceManager, types::IconMode};
+use automancy_ui::{UiGameObjectType, center_row, label, ui_game_object};
 
 /// Draws an Item's icon.
 pub fn draw_item(

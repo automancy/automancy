@@ -1,4 +1,5 @@
-use crate::{load_recursively, ResourceManager, FUNCTION_EXT};
+use std::{ffi::OsStr, path::Path};
+
 use automancy_defs::{
     coord::TileCoord,
     id::{Id, IdRaw, TileId},
@@ -6,8 +7,8 @@ use automancy_defs::{
 };
 use hashbrown::HashSet;
 use rhai::{ImmutableString, Module, Scope};
-use std::ffi::OsStr;
-use std::path::Path;
+
+use crate::{FUNCTION_EXT, ResourceManager, load_recursively};
 
 #[derive(Debug, Clone)]
 pub enum TileResult {
@@ -183,7 +184,9 @@ impl ResourceManager {
                     (),
                 );
                 if render_listening_to_fields.is_err() {
-                    log::info!("Source function '{str_id}' does not have a function called 'render_listening_to_fields', which means it will NOT listen to any field changes!")
+                    log::info!(
+                        "Source function '{str_id}' does not have a function called 'render_listening_to_fields', which means it will NOT listen to any field changes!"
+                    )
                 }
 
                 let metadata = FunctionMetadata {

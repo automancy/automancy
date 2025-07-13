@@ -1,8 +1,8 @@
-use crate::{LoadResourceError, ResourceManager, AUDIO_EXT, COULD_NOT_GET_FILE_STEM};
-use automancy_defs::kira::sound::static_sound::StaticSoundData;
-use std::ffi::OsStr;
-use std::fs::read_dir;
-use std::path::Path;
+use std::{ffi::OsStr, fs::read_dir, path::Path};
+
+use kira::sound::static_sound::StaticSoundData;
+
+use crate::{AUDIO_EXT, COULD_NOT_GET_FILE_STEM, LoadResourceError, ResourceManager};
 
 impl ResourceManager {
     pub fn load_audio(&mut self, dir: &Path) -> anyhow::Result<()> {

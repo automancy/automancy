@@ -1,6 +1,16 @@
 #![windows_subsystem = "windows"]
-use automancy_lib::*;
+use std::{
+    env,
+    fmt::Write,
+    fs,
+    fs::File,
+    panic,
+    path::Path,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
+use automancy_lib::*;
 use camera::GameCamera;
 use color_eyre::config::HookBuilder;
 use cosmic_text::fontdb::Source;
@@ -8,34 +18,26 @@ use game::{GameSystem, GameSystemMessage, TICK_INTERVAL};
 use glam::uvec2;
 use gpu::Gpu;
 use input::InputHandler;
-use kira::manager::{AudioManager, AudioManagerSettings};
-use kira::track::{TrackBuilder, TrackHandle};
-use kira::tween::Tween;
+use kira::{
+    manager::{AudioManager, AudioManagerSettings},
+    track::{TrackBuilder, TrackHandle},
+    tween::Tween,
+};
 use map::LoadMapOption;
 use options::{GameOptions, MiscOptions};
 use ractor::Actor;
 use renderer::GameRenderer;
 use rendering::Vertex;
 use rfd::{MessageButtons, MessageDialog, MessageLevel};
-use std::fmt::Write;
-use std::fs::File;
-use std::path::Path;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-use std::{env, fs, panic};
 use tokio::runtime::Runtime;
 use ui_state::UiState;
 use uuid::Uuid;
 use winit::{
     application::ApplicationHandler,
-    event::{DeviceEvent, DeviceId, WindowEvent},
+    dpi::PhysicalSize,
+    event::{DeviceEvent, DeviceId, Event, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
-    window::WindowId,
-};
-use winit::{dpi::PhysicalSize, window::Window};
-use winit::{
-    event::Event,
-    window::{Fullscreen, Icon},
+    window::{Fullscreen, Icon, Window, WindowId},
 };
 use yakui::paint::{Texture, TextureFilter};
 
@@ -415,8 +417,7 @@ fn main() -> anyhow::Result<()> {
 
         #[cfg(debug_assertions)]
         {
-            use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
-            use tracing_subscriber::EnvFilter;
+            use tracing_subscriber::{EnvFilter, prelude::__tracing_subscriber_SubscriberExt};
             use tracing_tracy::DefaultConfig;
 
             tracing::subscriber::set_global_default({

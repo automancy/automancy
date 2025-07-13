@@ -1,8 +1,9 @@
-use crate::GameState;
 use automancy_defs::colors::BACKGROUND_3;
-use automancy_ui::{col, label, movable, window, DIVIER_HEIGHT, DIVIER_THICKNESS};
+use automancy_ui::{DIVIER_HEIGHT, DIVIER_THICKNESS, col, label, movable, window};
 use ron::ser::PrettyConfig;
 use yakui::{divider, widgets::Layer};
+
+use crate::GameState;
 
 /// Draws the debug menu (F3).
 pub fn debugger(state: &mut GameState) {

@@ -1,6 +1,7 @@
+use std::ops::Mul;
+
 use automancy_defs::math::Matrix4;
 use rhai::{Engine, Module};
-use std::ops::Mul;
 
 pub(crate) fn register_math_stuff(engine: &mut Engine) {
     let mut module = Module::new();

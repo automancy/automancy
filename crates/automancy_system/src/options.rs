@@ -1,14 +1,17 @@
-use crate::input::{get_default_keymap, KeyAction};
+use std::{
+    fs::{File, read_to_string},
+    io::Write,
+    mem,
+    path::Path,
+};
+
 use automancy_resources::ResourceManager;
 use hashbrown::HashMap;
 use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
-use std::{
-    fs::{read_to_string, File},
-    path::Path,
-};
-use std::{io::Write, mem};
 use winit::keyboard::Key;
+
+use crate::input::{KeyAction, get_default_keymap};
 
 static OPTIONS_PATH: &str = "options.ron";
 static MISC_OPTIONS_PATH: &str = "misc_options.ron";

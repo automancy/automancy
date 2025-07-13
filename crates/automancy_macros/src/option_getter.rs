@@ -1,7 +1,7 @@
+use proc_macro2::{Ident, Span, TokenStream};
+use quote::{ToTokens, format_ident, quote};
+
 use crate::parse_ident;
-use proc_macro2::TokenStream;
-use proc_macro2::{Ident, Span};
-use quote::{format_ident, quote, ToTokens};
 
 pub fn derive_option_getter(item: TokenStream) -> TokenStream {
     let ast: syn::DeriveInput = syn::parse2(item).unwrap();

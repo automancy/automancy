@@ -1,25 +1,31 @@
-use crate::GameState;
-use crate::{gui, renderer};
-use automancy_defs::id::Id;
-use automancy_defs::{coord::TileCoord, id::TileId};
-use automancy_defs::{log, window};
+use std::{
+    fs, mem,
+    sync::atomic::Ordering,
+    time::{Instant, SystemTime},
+};
+
+use automancy_defs::{
+    coord::TileCoord,
+    id::{Id, TileId},
+    window,
+};
 use automancy_resources::data::Data;
-use automancy_system::game::{GameSystemMessage, PlaceTileResponse};
-use automancy_system::input::{self, ActionType};
-use automancy_system::map::{GameMap, LoadMapOption, MAP_PATH};
-use automancy_system::tile_entity::{TileEntityMsg, TileEntityWithId};
-use automancy_system::ui_state::{Screen, TextField};
-use ractor::rpc::CallResult;
-use ractor::ActorRef;
-use std::sync::atomic::Ordering;
-use std::time::{Instant, SystemTime};
-use std::{fs, mem};
+use automancy_system::{
+    game::{GameSystemMessage, PlaceTileResponse},
+    input::{self, ActionType},
+    map::{GameMap, LoadMapOption, MAP_PATH},
+    tile_entity::{TileEntityMsg, TileEntityWithId},
+    ui_state::{Screen, TextField},
+};
+use ractor::{ActorRef, rpc::CallResult};
 use tokio::task::JoinHandle;
 use wgpu::SurfaceError;
 use winit::{
     event::{Event, WindowEvent},
     event_loop::ActiveEventLoop,
 };
+
+use crate::{GameState, gui, renderer};
 
 /// Refreshes the list of maps on the filesystem. Should be done every time the list of maps could have changed (on map creation/delete and on game load).
 pub fn refresh_maps(state: &mut GameState) {
@@ -42,9 +48,9 @@ pub fn refresh_maps(state: &mut GameState) {
         .map_infos_cache
         .sort_by(|a, b| a.1.cmp(&b.1));
     state.loop_store.map_infos_cache.sort_by(|a, b| {
-        a.0 .1
+        a.0.1
             .unwrap_or(SystemTime::UNIX_EPOCH)
-            .cmp(&b.0 .1.unwrap_or(SystemTime::UNIX_EPOCH))
+            .cmp(&b.0.1.unwrap_or(SystemTime::UNIX_EPOCH))
     });
     state.loop_store.map_infos_cache.reverse();
 }

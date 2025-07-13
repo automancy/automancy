@@ -1,25 +1,32 @@
-use crate::map::{GameMap, MapInfo, TileEntities};
-use crate::tile_entity::{TileEntity, TileEntityMsg};
-use crate::{game::GameSystemMessage::*, map::LoadMapOption};
-use crate::{tile_entity::TileEntityError, util::actor::multi_call_iter};
+use std::{
+    mem,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+
 use arraydeque::{ArrayDeque, Wrapping};
-use automancy_defs::id::{Id, ModelId, RenderTagId};
 use automancy_defs::{
     coord::{TileBounds, TileCoord},
-    id::TileId,
+    id::{Id, ModelId, RenderTagId, TileId},
 };
-use automancy_resources::types::function::OnFailAction;
-use automancy_resources::ResourceManager;
 use automancy_resources::{
+    ResourceManager,
     data::{Data, DataMap},
     rhai_render::RenderCommand,
+    types::function::OnFailAction,
 };
 use hashbrown::HashMap;
-use ractor::rpc::CallResult;
-use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort, SupervisionEvent};
-use std::time::{Duration, Instant};
-use std::{mem, sync::Arc};
+use ractor::{
+    Actor, ActorProcessingErr, ActorRef, RpcReplyPort, SupervisionEvent, rpc::CallResult,
+};
 use tokio::sync::Mutex;
+
+use crate::{
+    game::GameSystemMessage::*,
+    map::{GameMap, LoadMapOption, MapInfo, TileEntities},
+    tile_entity::{TileEntity, TileEntityError, TileEntityMsg},
+    util::actor::multi_call_iter,
+};
 
 /// Game ticks per second
 pub const TPS: u64 = 60;
@@ -163,7 +170,6 @@ pub struct GameSystem {
     pub resource_man: Arc<ResourceManager>,
 }
 
-#[async_trait::async_trait]
 impl Actor for GameSystem {
     type Msg = GameSystemMessage;
     type State = GameSystemState;
@@ -338,14 +344,14 @@ impl Actor for GameSystem {
                         record,
                         reply,
                     } => {
-                        if let Some(old_id) = map.tiles.get(&coord) {
-                            if *old_id == id {
-                                if let Some(reply) = reply {
-                                    reply.send(PlaceTileResponse::Ignored)?;
-                                }
-
-                                return Ok(());
+                        if let Some(old_id) = map.tiles.get(&coord)
+                            && *old_id == id
+                        {
+                            if let Some(reply) = reply {
+                                reply.send(PlaceTileResponse::Ignored)?;
                             }
+
+                            return Ok(());
                         }
 
                         if id == TileId(self.resource_man.registry.none)
@@ -382,16 +388,16 @@ impl Actor for GameSystem {
                             }
                         }
 
-                        if let (Some(id), data) = old_tile {
-                            if record {
-                                state.undo_steps.push_back(vec![PlaceTile {
-                                    coord,
-                                    id,
-                                    record: false,
-                                    reply: None,
-                                    data,
-                                }]);
-                            }
+                        if let (Some(id), data) = old_tile
+                            && record
+                        {
+                            state.undo_steps.push_back(vec![PlaceTile {
+                                coord,
+                                id,
+                                record: false,
+                                reply: None,
+                                data,
+                            }]);
                         }
                     }
                     GetTile(coord, reply) => {
@@ -474,8 +480,8 @@ impl Actor for GameSystem {
                         let mut old = vec![];
 
                         for (coord, id, data) in tiles {
-                            if place_over || map.tiles.get(&coord).is_none() {
-                                if let (Some(old_id), old_data) = insert_new_tile(
+                            if (place_over || map.tiles.get(&coord).is_none())
+                                && let (Some(old_id), old_data) = insert_new_tile(
                                     self.resource_man.clone(),
                                     myself.clone(),
                                     map,
@@ -486,19 +492,18 @@ impl Actor for GameSystem {
                                     data,
                                 )
                                 .await
-                                {
-                                    if let Some(mut old_data) = old_data {
-                                        old.push((
-                                            coord,
-                                            old_id,
-                                            Some(copy_auxiliary_data(
-                                                &self.resource_man,
-                                                &mut old_data,
-                                            )),
-                                        ));
-                                    } else {
-                                        old.push((coord, old_id, None));
-                                    }
+                            {
+                                if let Some(mut old_data) = old_data {
+                                    old.push((
+                                        coord,
+                                        old_id,
+                                        Some(copy_auxiliary_data(
+                                            &self.resource_man,
+                                            &mut old_data,
+                                        )),
+                                    ));
+                                } else {
+                                    old.push((coord, old_id, None));
                                 }
                             }
                         }
@@ -616,22 +621,18 @@ pub fn try_category(resource_man: &ResourceManager, id: TileId, category_item: i
         .tiles
         .get(&id)
         .and_then(|tile| tile.category)
-    {
-        if Data::Bool(false)
+        && Data::Bool(false)
             == *resource_man.registry.tiles[&id]
                 .data
                 .get(resource_man.registry.data_ids.default_tile)
                 .unwrap_or(&Data::Bool(false))
-        {
-            if let Some(item) = resource_man
-                .registry
-                .categories
-                .get(&category)
-                .and_then(|v| v.item)
-            {
-                category_item(item);
-            }
-        }
+        && let Some(item) = resource_man
+            .registry
+            .categories
+            .get(&category)
+            .and_then(|v| v.item)
+    {
+        category_item(item);
     }
 }
 
@@ -827,9 +828,7 @@ pub fn tick(state: &mut GameSystemState) {
 
     if tick_time >= MAX_ALLOWED_TICK_INTERVAL {
         log::warn!(
-            "Tick took longer than allowed maximum! tick_time: {:?}, maximum: {:?}",
-            tick_time,
-            MAX_ALLOWED_TICK_INTERVAL
+            "Tick took longer than allowed maximum! tick_time: {tick_time:?}, maximum: {MAX_ALLOWED_TICK_INTERVAL:?}"
         );
     }
 }

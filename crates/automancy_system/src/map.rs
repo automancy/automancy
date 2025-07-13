@@ -1,26 +1,34 @@
-use crate::game;
-use crate::game::GameSystemMessage;
-use crate::tile_entity::TileEntityMsg;
-use automancy_defs::id::{Id, Interner};
-use automancy_defs::{coord::TileCoord, id::TileId};
+use std::{
+    fmt,
+    fmt::Debug,
+    fs,
+    fs::File,
+    io,
+    io::{BufReader, Write},
+    path::PathBuf,
+    sync::Arc,
+    time::SystemTime,
+};
+
+use automancy_defs::{
+    coord::TileCoord,
+    id::{Id, Interner, TileId},
+};
 use automancy_resources::{
+    ResourceManager,
     data::{DataMap, DataMapRaw},
     error::push_err,
-    format::Formattable,
+    format::FormatContext,
 };
-use automancy_resources::{format::FormatContext, ResourceManager};
 use hashbrown::HashMap;
+use interpolator::Formattable;
 use ractor::ActorRef;
 use ron::error::SpannedResult;
 use serde::{Deserialize, Serialize};
-use std::io::{BufReader, BufWriter};
-use std::time::SystemTime;
-use std::{fmt, fs::File};
-use std::{fmt::Debug, io::Write};
-use std::{fs, path::PathBuf};
-use std::{io, sync::Arc};
 use tokio::sync::Mutex;
 use zstd::{Decoder, Encoder};
+
+use crate::{game, game::GameSystemMessage, ron_options, tile_entity::TileEntityMsg};
 
 pub static MAP_PATH: &str = "map";
 pub static MAP_EXT: &str = "zst";
@@ -45,7 +53,7 @@ pub enum LoadMapOption {
 impl fmt::Display for LoadMapOption {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            LoadMapOption::FromSave(v) => f.write_fmt(format_args!("Map {}", v)),
+            LoadMapOption::FromSave(v) => f.write_fmt(format_args!("Map {v}")),
             LoadMapOption::MainMenu => f.write_str("<main menu>"),
             LoadMapOption::Debug => f.write_str("<debug map>"),
         }
@@ -247,16 +255,10 @@ impl GameMap {
         if let Some(path) = GameMap::path(&self.opt) {
             fs::create_dir_all(path)?;
 
-            let info = Self::info(&self.opt).unwrap();
-            let info = File::create(info).unwrap();
+            let mut info_file = File::create(Self::info(&self.opt).unwrap()).unwrap();
 
-            let mut info_writer = BufWriter::with_capacity(INFO_BUFFER_SIZE, info);
-
-            let map = Self::map(&self.opt).unwrap();
-            let map = File::create(map).unwrap();
-
-            let map_writer = BufWriter::with_capacity(MAP_BUFFER_SIZE, map);
-            let mut map_encoder = Encoder::new(map_writer, 0).unwrap();
+            let map_file = File::create(Self::map(&self.opt).unwrap()).unwrap();
+            let mut map_encoder = Encoder::new(map_file, 0).unwrap();
 
             let mut map_raw = MapRaw {
                 tiles: vec![],
@@ -282,18 +284,20 @@ impl GameMap {
                 }
             }
 
-            ron::ser::to_writer(
-                &mut info_writer,
-                &MapInfoRaw {
-                    data: self.info.lock().await.data.to_raw(interner),
-                    tile_count: self.tiles.len() as u32,
-                },
-            )
-            .unwrap();
+            ron_options()
+                .to_io_writer(
+                    &mut info_file,
+                    &MapInfoRaw {
+                        data: self.info.lock().await.data.to_raw(interner),
+                        tile_count: self.tiles.len() as u32,
+                    },
+                )
+                .unwrap();
+            info_file.flush().unwrap();
 
-            ron::ser::to_writer(&mut map_encoder, &map_raw).unwrap();
-
-            info_writer.flush().unwrap();
+            ron_options()
+                .to_io_writer(&mut map_encoder, &map_raw)
+                .unwrap();
             map_encoder.do_finish().unwrap();
 
             log::info!("Saved map {}", self.opt);

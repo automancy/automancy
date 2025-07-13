@@ -1,8 +1,8 @@
-use crate::parse_literal;
-use proc_macro2::TokenStream;
-use proc_macro2::{Literal, Span};
+use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
 use syn::Ident;
+
+use crate::parse_literal;
 
 /// # Examples
 ///

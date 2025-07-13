@@ -1,4 +1,10 @@
-use crate::{format::FormatContext, ResourceManager, RON_EXT};
+use std::{
+    ffi::OsStr,
+    fmt::Debug,
+    fs::{read_dir, read_to_string},
+    path::Path,
+};
+
 use automancy_defs::{
     id::{Id, SharedStr, TileId},
     parse_map_id_str,
@@ -6,9 +12,8 @@ use automancy_defs::{
 use hashbrown::HashMap;
 use interpolator::Formattable;
 use serde::Deserialize;
-use std::fs::{read_dir, read_to_string};
-use std::path::Path;
-use std::{ffi::OsStr, fmt::Debug};
+
+use crate::{RON_EXT, ResourceManager, format::FormatContext};
 
 #[derive(Debug, Default, Clone)]
 pub struct TranslateDef {

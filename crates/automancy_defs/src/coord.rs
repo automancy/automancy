@@ -1,9 +1,13 @@
-use crate::math::{Matrix4, FAR, HEX_GRID_LAYOUT};
+use std::{
+    cmp::{max, min},
+    fmt::{Display, Formatter},
+    ops::{Add, Deref, Div, Mul, Neg, Sub},
+};
+
 use hexx::{EdgeDirection, Hex, HexBounds};
 use serde::{Deserialize, Serialize};
-use std::cmp::{max, min};
-use std::fmt::{Display, Formatter};
-use std::ops::{Add, Deref, Div, Mul, Neg, Sub};
+
+use crate::math::{FAR, HEX_GRID_LAYOUT, Matrix4};
 
 /// The type of number that will be stored in a tile's coordinates. Should probably be a signed integer.
 pub type TileUnit = i32;

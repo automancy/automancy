@@ -1,7 +1,5 @@
 use automancy_defs::{id::Id, stack::ItemAmount};
-use rhai::plugin::*;
-use rhai::Module;
-use rhai::{exported_module, Engine};
+use rhai::{Engine, Module, exported_module, plugin::*};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RhaiUiUnit {

@@ -1,14 +1,14 @@
-use crate::coord::{TileBounds, TileCoord};
-use glam::{vec2, vec3, vec4};
-use hexx::{HexLayout, HexOrientation};
 use std::f32::consts::PI;
+
+pub use glam::{swizzles::*, vec2, vec3, vec4};
+use hexx::{HexLayout, HexOrientation};
+
+use crate::coord::{TileBounds, TileCoord};
 
 pub const HEX_GRID_LAYOUT: HexLayout = HexLayout {
     orientation: HexOrientation::Pointy,
     origin: Vec2::ZERO,
-    hex_size: Vec2::ONE,
-    invert_x: true,
-    invert_y: true,
+    scale: Vec2::NEG_ONE,
 };
 
 pub const SQRT_3: Float = 1.732_050_8;
@@ -20,6 +20,10 @@ pub type Float = f32;
 pub type Vec2 = glam::Vec2;
 pub type Vec3 = glam::Vec3;
 pub type Vec4 = glam::Vec4;
+
+pub type IVec2 = glam::IVec2;
+pub type IVec3 = glam::IVec3;
+pub type IVec4 = glam::IVec4;
 
 pub type Matrix2 = glam::Mat2;
 pub type Matrix3 = glam::Mat3;

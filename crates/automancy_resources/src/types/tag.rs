@@ -1,11 +1,10 @@
-use crate::registry::Registry;
-use crate::{load_recursively, ResourceManager, RON_EXT};
+use std::{ffi::OsStr, fs::read_to_string, path::Path};
+
 use automancy_defs::{id::Id, parse_ids};
 use hashbrown::HashSet;
 use serde::Deserialize;
-use std::ffi::OsStr;
-use std::fs::read_to_string;
-use std::path::Path;
+
+use crate::{RON_EXT, ResourceManager, load_recursively, registry::Registry};
 
 #[derive(Debug, Clone)]
 pub struct TagDef {

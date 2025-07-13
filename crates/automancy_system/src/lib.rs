@@ -1,25 +1,35 @@
-use automancy_defs::{id::Id, kira::manager::AudioManager, math::Vec2, rendering::Vertex};
-use automancy_resources::{data::DataMap, types::item::ItemDef, ResourceManager};
+use std::{
+    sync::{Arc, atomic::AtomicBool},
+    time::{Duration, Instant, SystemTime},
+};
+
+use automancy_defs::{id::Id, rendering::Vertex};
+use automancy_resources::{ResourceManager, data::DataMap, types::item::ItemDef};
 use camera::GameCamera;
 use cosmic_text::fontdb::Source;
 use game::GameSystemMessage;
 use hashbrown::HashMap;
 use input::{ActionType, InputHandler};
+use kira::AudioManager;
 use map::{LoadMapOption, MapInfo, MapInfoRaw};
 use options::{GameOptions, MiscOptions};
 use ractor::ActorRef;
-use std::{
-    sync::{atomic::AtomicBool, Arc},
-    time::{Duration, Instant, SystemTime},
-};
+use ron::extensions::Extensions;
 use tile_entity::{TileEntityMsg, TileEntityWithId};
 use tokio::{runtime::Runtime, sync::Mutex, task::JoinHandle};
 use ui_state::UiState;
 use wgpu::{Device, Queue};
 use winit::window::Window;
-use yakui::{font::Fonts, ManagedTextureId, Yakui};
+use yakui::{ManagedTextureId, Yakui, font::Fonts};
 use yakui_wgpu::YakuiWgpu;
 use yakui_winit::YakuiWinit;
+
+pub const RON_EXTENSIONS: ron::extensions::Extensions =
+    ron::extensions::Extensions::IMPLICIT_SOME.union(Extensions::UNWRAP_VARIANT_NEWTYPES);
+
+pub fn ron_options() -> ron::options::Options {
+    ron::options::Options::default().with_default_extension(RON_EXTENSIONS)
+}
 
 pub mod camera;
 pub mod game;
@@ -30,14 +40,14 @@ pub mod tile_entity;
 pub mod ui_state;
 pub mod util;
 
-pub struct GameGui<YakuiResources> {
-    pub renderer: YakuiWgpu<YakuiResources>,
+pub struct GameGui {
+    pub renderer: YakuiWgpu,
     pub yak: Yakui,
     pub window: YakuiWinit,
     pub fonts: HashMap<String, Source>,
 }
 
-impl<T> GameGui<T> {
+impl GameGui {
     pub fn set_font(&mut self, symbols_font: &str, font: &str, font_source: Source) {
         let fonts = self.yak.dom().get_global_or_init(Fonts::default);
 
@@ -55,8 +65,8 @@ impl<T> GameGui<T> {
     }
 
     pub fn new(device: &Device, queue: &Queue, window: &Window) -> Self {
-        let mut yak = Yakui::new();
-        let renderer = yakui_wgpu::YakuiWgpu::new(&mut yak, device, queue);
+        let yak = Yakui::new();
+        let renderer = yakui_wgpu::YakuiWgpu::new(device, queue);
         let window = yakui_winit::YakuiWinit::new(window);
 
         Self {
@@ -87,7 +97,7 @@ pub struct EventLoopStorage {
     pub pointing_updating: Arc<AtomicBool>,
 }
 
-pub struct InnerGameState<YakuiResources, Renderer> {
+pub struct InnerGameState<Renderer> {
     pub ui_state: UiState,
     pub options: GameOptions,
     pub misc_options: MiscOptions,
@@ -100,7 +110,7 @@ pub struct InnerGameState<YakuiResources, Renderer> {
     pub audio_man: AudioManager,
     pub start_instant: Instant,
 
-    pub gui: Option<GameGui<YakuiResources>>,
+    pub gui: Option<GameGui>,
     pub renderer: Option<Renderer>,
     pub screenshotting: bool,
 
@@ -114,18 +124,6 @@ pub struct InnerGameState<YakuiResources, Renderer> {
     pub indices_init: Option<Vec<u16>>,
 }
 
-impl<A, B> InnerGameState<A, B> {
-    pub fn ui_viewport(&self) -> Vec2 {
-        self.gui
-            .as_ref()
-            .unwrap()
-            .yak
-            .layout_dom()
-            .viewport()
-            .size()
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GameLoadResult {
     Loaded,
@@ -133,10 +131,7 @@ pub enum GameLoadResult {
     Failed,
 }
 
-pub fn game_load_map_inner<A, B>(
-    state: &mut InnerGameState<A, B>,
-    opt: LoadMapOption,
-) -> GameLoadResult {
+pub fn game_load_map_inner<A>(state: &mut InnerGameState<A>, opt: LoadMapOption) -> GameLoadResult {
     let success = match state.tokio.block_on(
         state
             .game
@@ -161,6 +156,6 @@ pub fn game_load_map_inner<A, B>(
     }
 }
 
-pub fn game_load_map<A, B>(state: &mut InnerGameState<A, B>, map_name: String) -> GameLoadResult {
+pub fn game_load_map<A>(state: &mut InnerGameState<A>, map_name: String) -> GameLoadResult {
     game_load_map_inner(state, LoadMapOption::FromSave(map_name))
 }

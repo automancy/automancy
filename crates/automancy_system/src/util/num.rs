@@ -1,8 +1,9 @@
-use super::round::Round;
 use std::{
     fmt::{Debug, Display},
     ops::{Add, Div, Mul, Neg, Sub},
 };
+
+use super::round::Round;
 
 pub trait NumTrait:
     'static

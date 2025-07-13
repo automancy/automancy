@@ -1,7 +1,7 @@
-use automancy_defs::math::{z_far, z_near, Float, Matrix4};
-use automancy_defs::{glam::vec3, math::Quaternion};
-use serde::{Deserialize, Serialize};
 use std::f32::consts::FRAC_PI_4;
+
+use automancy_defs::math::{Float, Matrix4, Quaternion, vec3, z_far, z_near};
+use serde::{Deserialize, Serialize};
 
 pub mod audio;
 pub mod category;

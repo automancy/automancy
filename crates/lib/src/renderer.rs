@@ -1,50 +1,47 @@
-use crate::gpu;
-use crate::gpu::{
-    GlobalResources, Gpu, GuiResources, RenderResources, SharedResources, MODEL_DEPTH_CLEAR,
-    NORMAL_CLEAR, SCREENSHOT_FORMAT,
+use std::{
+    borrow::Cow,
+    collections::{BTreeMap, VecDeque},
+    mem,
+    ops::Mul,
+    sync::Arc,
+    time::Instant,
 };
-use crate::GameState;
+
 use arboard::{Clipboard, ImageData};
-use automancy_defs::math::Matrix4;
-use automancy_defs::rendering::{GameUBO, InstanceData};
 use automancy_defs::{
     coord::TileCoord,
-    math::{Vec2, Vec4},
-    rendering::AnimationMatrixData,
+    id::{Id, ModelId, RenderTagId},
+    math::{Matrix4, Vec2, Vec3, Vec4},
+    rendering::{
+        AnimationMatrixData, GameMatrix, GameUBO, GpuInstance, InstanceData, MatrixData,
+        PostProcessingUBO, WorldMatrixData,
+    },
 };
-use automancy_defs::{id::Id, rendering::GameMatrix};
-use automancy_defs::{id::ModelId, math::Vec3};
-use automancy_defs::{id::RenderTagId, rendering::PostProcessingUBO};
-use automancy_defs::{
-    rendering::{GpuInstance, MatrixData, WorldMatrixData},
-    slice_group_by::GroupBy,
-};
-use automancy_resources::rhai_render::RenderCommand;
-use automancy_resources::ResourceManager;
-use automancy_system::game::GameSystemMessage;
-use automancy_system::GameGui;
+use automancy_resources::{ResourceManager, rhai_render::RenderCommand};
+use automancy_system::{GameGui, game::GameSystemMessage};
 use automancy_ui::{GameElementPaint, UiGameObjectType};
 use hashbrown::{HashMap, HashSet};
 use image::{EncodableLayout, RgbaImage};
 use ordermap::OrderMap;
 use range_set_blaze::RangeSetBlaze;
-use std::borrow::Cow;
-use std::collections::BTreeMap;
-use std::mem;
-use std::sync::Arc;
-use std::time::Instant;
-use std::{collections::VecDeque, ops::Mul};
-use tokio::sync::oneshot;
+use slice_group_by::GroupBy;
 use wgpu::{
-    util::DrawIndexedIndirectArgs, BufferAddress, BufferDescriptor, BufferUsages, Color,
-    CommandEncoderDescriptor, ImageCopyBuffer, ImageDataLayout, IndexFormat, LoadOp, Maintain,
-    MapMode, Operations, RenderPassColorAttachment, RenderPassDepthStencilAttachment,
-    RenderPassDescriptor, SurfaceError, TextureDescriptor, TextureDimension, TextureFormat,
-    TextureUsages, TextureViewDescriptor, COPY_BUFFER_ALIGNMENT, COPY_BYTES_PER_ROW_ALIGNMENT,
+    BufferDescriptor, BufferUsages, Color, CommandBuffer, CommandEncoderDescriptor, Extent3d,
+    IndexFormat, LoadOp, MapMode, Operations, RenderPassColorAttachment,
+    RenderPassDepthStencilAttachment, RenderPassDescriptor, StoreOp, SurfaceError,
+    TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor,
+    util::DrawIndexedIndirectArgs,
 };
-use wgpu::{CommandBuffer, StoreOp};
 use yakui::{Rect, UVec2};
 use yakui_wgpu::SurfaceInfo;
+
+use crate::{
+    GameState, gpu,
+    gpu::{
+        GlobalResources, Gpu, GuiResources, MODEL_DEPTH_CLEAR, NORMAL_CLEAR, RenderResources,
+        SCREENSHOT_FORMAT, SharedResources,
+    },
+};
 
 pub type OverlayInstance = (InstanceData, ModelId, GameMatrix<true>, usize);
 pub type GuiInstance = (
@@ -496,7 +493,7 @@ pub fn render(state: &mut GameState, screenshotting: bool) -> Result<(), Surface
         screenshotting,
     );
 
-    automancy_ui::reset_custom_paint_state();
+    automancy_ui::custom::reset_paint_state();
     renderer.last_tile_tints = tile_tints;
 
     r
@@ -516,15 +513,32 @@ impl GameRenderer {
     ) -> Result<(), SurfaceError> {
         let size = self.gpu.window.inner_size();
 
-        let output = self.gpu.surface.get_current_texture()?;
+        let surface = self.gpu.surface.get_current_texture()?;
 
         {
-            let output_size = output.texture.size();
+            let output_size = surface.texture.size();
 
             if output_size.width != size.width || output_size.height != size.height {
                 return Ok(());
             }
         }
+
+        let surface_pixel_size = surface.texture.format().target_pixel_byte_cost().unwrap();
+        let surface_dim = surface.texture.size();
+        let buffer_dim = {
+            let dim = surface_dim.physical_size(surface.texture.format());
+
+            let padded_width = dim.width.div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT)
+                * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+
+            Extent3d {
+                width: padded_width,
+                ..dim
+            }
+        };
+        let buffer_size = (buffer_dim.width * buffer_dim.height * surface_pixel_size)
+            .div_ceil(wgpu::COPY_BUFFER_ALIGNMENT)
+            * wgpu::COPY_BUFFER_ALIGNMENT;
 
         let mut encoder = self
             .gpu
@@ -579,6 +593,7 @@ impl GameRenderer {
                         color_attachments: &[
                             Some(RenderPassColorAttachment {
                                 view: &self.shared_resources.game_texture().1,
+                                depth_slice: None,
                                 resolve_target: None,
                                 ops: Operations {
                                     load: LoadOp::Clear(Color::BLACK),
@@ -587,6 +602,7 @@ impl GameRenderer {
                             }),
                             Some(RenderPassColorAttachment {
                                 view: &self.shared_resources.normal_texture().1,
+                                depth_slice: None,
                                 resolve_target: None,
                                 ops: Operations {
                                     load: LoadOp::Clear(NORMAL_CLEAR),
@@ -595,6 +611,7 @@ impl GameRenderer {
                             }),
                             Some(RenderPassColorAttachment {
                                 view: &self.shared_resources.model_depth_texture().1,
+                                depth_slice: None,
                                 resolve_target: None,
                                 ops: Operations {
                                     load: LoadOp::Clear(MODEL_DEPTH_CLEAR),
@@ -680,6 +697,7 @@ impl GameRenderer {
                 color_attachments: &[
                     Some(RenderPassColorAttachment {
                         view: &self.shared_resources.game_texture().1,
+                        depth_slice: None,
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Load,
@@ -688,6 +706,7 @@ impl GameRenderer {
                     }),
                     Some(RenderPassColorAttachment {
                         view: &self.shared_resources.normal_texture().1,
+                        depth_slice: None,
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Load,
@@ -696,6 +715,7 @@ impl GameRenderer {
                     }),
                     Some(RenderPassColorAttachment {
                         view: &self.shared_resources.model_depth_texture().1,
+                        depth_slice: None,
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Load,
@@ -826,6 +846,7 @@ impl GameRenderer {
                 label: Some("Game Post Processing Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
                     view: &self.shared_resources.game_post_processing_texture().1,
+                    depth_slice: None,
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(Color::BLACK),
@@ -859,6 +880,7 @@ impl GameRenderer {
                 label: Some("Game Antialiasing Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
                     view: &self.shared_resources.game_antialiasing_texture().1,
+                    depth_slice: None,
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(Color::BLACK),
@@ -881,20 +903,18 @@ impl GameRenderer {
 
         let custom_gui_commands: CommandBuffer;
         {
-            let surface = SurfaceInfo {
+            let surface_info = SurfaceInfo {
                 format: self.gpu.config.format,
                 sample_count: 4,
-                color_attachments: vec![Some(RenderPassColorAttachment {
+                color_attachment: Some(RenderPassColorAttachment {
                     view: &self.shared_resources.gui_texture().1,
+                    depth_slice: None,
                     resolve_target: Some(&self.shared_resources.gui_texture_resolve().1),
                     ops: Operations {
                         load: LoadOp::Clear(Color::TRANSPARENT),
                         store: StoreOp::Store,
                     },
-                })],
-                depth_format: None,
-                depth_attachment: None,
-                depth_load_op: None,
+                }),
             };
 
             let mut resources = YakuiRenderResources {
@@ -902,7 +922,7 @@ impl GameRenderer {
 
                 resource_man: resource_man.clone(),
                 global_resources: self.global_resources.clone(),
-                surface_format: surface.format,
+                surface_format: surface_info.format,
                 gui_resources: self.render_resources.gui_resources.take(),
 
                 animation_matrix_data_map: self.gui_animation_matrix_data_map.take(),
@@ -918,7 +938,7 @@ impl GameRenderer {
             {
                 let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                     label: Some("yakui Render Pass"),
-                    color_attachments: &surface.color_attachments,
+                    color_attachments: &surface_info.color_attachments,
                     depth_stencil_attachment: None,
                     ..Default::default()
                 });
@@ -928,7 +948,7 @@ impl GameRenderer {
                     &self.gpu.device,
                     &self.gpu.queue,
                     &mut render_pass,
-                    surface,
+                    surface_info,
                     &mut resources,
                 );
             }
@@ -950,6 +970,7 @@ impl GameRenderer {
                 label: Some("Combine Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
                     view: &self.shared_resources.first_combine_texture().1,
+                    depth_slice: None,
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(Color::BLACK),
@@ -967,7 +988,7 @@ impl GameRenderer {
         }
 
         {
-            let view = output
+            let view = surface
                 .texture
                 .create_view(&TextureViewDescriptor::default());
 
@@ -975,6 +996,7 @@ impl GameRenderer {
                 label: Some("Present Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
                     view: &view,
+                    depth_slice: None,
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(Color::BLACK),
@@ -991,19 +1013,10 @@ impl GameRenderer {
             render_pass.draw(0..3, 0..1)
         }
 
-        fn size_align(size: u32, alignment: u32) -> u32 {
-            size.div_ceil(alignment) * alignment
-        }
-
-        let block_size = output.texture.format().block_copy_size(None).unwrap();
-        let texture_dim = output.texture.size();
-        let buffer_dim = texture_dim.physical_size(output.texture.format());
-        let padded_width = size_align(buffer_dim.width * block_size, COPY_BYTES_PER_ROW_ALIGNMENT);
-
         let screenshot_buffer = if screenshotting {
             let intermediate_texture = self.gpu.device.create_texture(&TextureDescriptor {
                 label: Some("Screenshot Intermediate Texture"),
-                size: texture_dim,
+                size: surface_dim,
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: TextureDimension::D2,
@@ -1020,6 +1033,7 @@ impl GameRenderer {
                     label: Some("Screenshot Intermediate Pass"),
                     color_attachments: &[Some(RenderPassColorAttachment {
                         view: &intermediate_texture_view,
+                        depth_slice: None,
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Load,
@@ -1038,21 +1052,18 @@ impl GameRenderer {
 
             let buffer = self.gpu.device.create_buffer(&BufferDescriptor {
                 label: Some("Screenshot Buffer"),
-                size: size_align(
-                    padded_width * buffer_dim.height,
-                    COPY_BUFFER_ALIGNMENT as u32,
-                ) as BufferAddress,
+                size: buffer_size,
                 usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             });
 
             encoder.copy_texture_to_buffer(
                 intermediate_texture.as_image_copy(),
-                ImageCopyBuffer {
+                wgpu::TexelCopyBufferInfo {
                     buffer: &buffer,
-                    layout: ImageDataLayout {
+                    layout: wgpu::TexelCopyBufferLayout {
                         offset: 0,
-                        bytes_per_row: Some(padded_width),
+                        bytes_per_row: Some(buffer_dim.width * surface_pixel_size),
                         rows_per_image: Some(buffer_dim.height),
                     },
                 },
@@ -1073,45 +1084,37 @@ impl GameRenderer {
         }
 
         if let Some(buffer) = screenshot_buffer {
-            {
-                let slice = buffer.slice(..);
+            let slice = buffer.slice(..);
+            slice.map_async(MapMode::Read, move |result| {
+                result.unwrap();
+            });
 
-                let (tx, rx) = oneshot::channel();
+            self.gpu.device.poll(wgpu::PollType::Wait);
 
-                slice.map_async(MapMode::Read, move |result| {
-                    tx.send(result).unwrap();
-                });
-                self.gpu.device.poll(Maintain::Wait);
-                rx.blocking_recv().unwrap().unwrap();
+            let padded_data = slice.get_mapped_range().to_vec();
+            let mut data = Vec::new();
 
-                let texture_width = (texture_dim.width * block_size) as usize;
-                let data = slice.get_mapped_range();
-                let mut result = Vec::<u8>::new();
-                for chunk in data.chunks_exact(padded_width as usize) {
-                    for pixel in chunk[..texture_width].chunks_exact(4) {
-                        result.extend(&[pixel[0], pixel[1], pixel[2], 255]);
-                    }
-                }
+            let padded_width = (buffer_dim.width * surface_pixel_size) as usize;
+            let unpadded_width = (surface_dim.width * surface_pixel_size) as usize;
 
-                if let Some(image) =
-                    RgbaImage::from_vec(texture_dim.width, texture_dim.height, result)
-                {
-                    self.screenshot_clipboard
-                        .set_image(ImageData {
-                            width: image.width() as usize,
-                            height: image.height() as usize,
-                            bytes: Cow::from(image.as_bytes()),
-                        })
-                        .unwrap();
-                }
+            for chunk in padded_data.chunks(padded_data) {
+                data.extend(&chunk[..unpadded_width]);
             }
 
-            buffer.unmap();
+            if let Some(image) = RgbaImage::from_vec(size.width, size.height, data) {
+                self.screenshot_clipboard
+                    .set_image(ImageData {
+                        width: image.width() as usize,
+                        height: image.height() as usize,
+                        bytes: Cow::from(image.as_bytes()),
+                    })
+                    .unwrap();
+            }
         }
 
         self.gpu.window.pre_present_notify();
 
-        output.present();
+        surface.present();
 
         Ok(())
     }

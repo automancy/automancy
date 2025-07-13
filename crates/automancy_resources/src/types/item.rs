@@ -1,9 +1,9 @@
-use crate::{load_recursively, ResourceManager, RON_EXT};
+use std::{ffi::OsStr, fs::read_to_string, path::Path};
+
 use automancy_defs::id::{Id, ModelId};
 use serde::Deserialize;
-use std::ffi::OsStr;
-use std::fs::read_to_string;
-use std::path::Path;
+
+use crate::{RON_EXT, ResourceManager, load_recursively};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 pub struct ItemDef {

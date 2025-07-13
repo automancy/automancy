@@ -1,13 +1,13 @@
-use crate::input::InputHandler;
-use automancy_defs::glam::{vec2, vec3, Vec2, Vec3};
-use automancy_defs::hexx::Hex;
-use automancy_defs::math;
-use automancy_defs::math::{camera_matrix, Float, HEX_GRID_LAYOUT};
+use std::ops::Mul;
+
 use automancy_defs::{
     coord::{TileBounds, TileCoord},
-    math::Matrix4,
+    math,
+    math::{Float, HEX_GRID_LAYOUT, Matrix4, Vec2, Vec3, camera_matrix, vec2, vec3},
 };
-use std::ops::Mul;
+use hexx::Hex;
+
+use crate::input::InputHandler;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct GameCamera {
@@ -22,11 +22,7 @@ pub struct GameCamera {
 
 pub fn fit_z(mut z: Float) -> Float {
     if z > 1.0 {
-        if z <= 1.5 {
-            z = 1.0
-        } else {
-            z -= 0.5
-        }
+        if z <= 1.5 { z = 1.0 } else { z -= 0.5 }
     }
 
     2.5 + z * 4.0
@@ -81,10 +77,10 @@ impl GameCamera {
 
     /// Updates the movement state of the camera based on input.
     pub fn handle_input(&mut self, input: &InputHandler) {
-        if input.tertiary_held {
-            if let Some(delta) = input.main_move {
-                self.on_moving_main(delta);
-            }
+        if input.tertiary_held
+            && let Some(delta) = input.main_move
+        {
+            self.on_moving_main(delta);
         }
 
         if let Some(delta) = input.scroll {

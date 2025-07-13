@@ -1,8 +1,9 @@
-use automancy_defs::colors;
 use std::f32::consts::TAU;
+
+use automancy_defs::colors;
 use yakui::{
-    paint::{PaintDom, PaintMesh, Pipeline, Vertex},
     Color, Rect, TextureId, Vec2, Vec4,
+    paint::{PaintDom, PaintMesh, Pipeline, Vertex},
 };
 
 #[rustfmt::skip]

@@ -1,15 +1,16 @@
-use crate::GameState;
-use automancy_defs::{colors, glam::vec2, id::TileId, rendering::InstanceData};
+use automancy_defs::{colors, id::TileId, math::vec2, rendering::InstanceData};
 use automancy_resources::{data::DataMap, types::IconMode};
 use automancy_ui::{
-    col, col_align_end, colored_label, colored_sized_text, group, label, row, ui_game_object,
-    window_box, UiGameObjectType, LABEL_SIZE, LARGE_ICON_SIZE, PADDING_LARGE,
+    LABEL_SIZE, LARGE_ICON_SIZE, PADDING_LARGE, UiGameObjectType, col, col_align_end,
+    colored_label, colored_sized_text, group, label, row, ui_game_object, window_box,
 };
 use winit::keyboard::{Key, NamedKey};
 use yakui::{
-    widgets::{Absolute, Layer, Pad},
-    Alignment, Dim2, Pivot,
+    Alignment, Dim2, Pivot, reflow,
+    widgets::{Layer, Pad},
 };
+
+use crate::GameState;
 
 #[track_caller]
 fn input_hint_names(state: &mut GameState) {
@@ -115,8 +116,8 @@ fn tile_icon(id: TileId) {
 
 /// Draws the info GUI.
 pub fn info_ui(state: &mut GameState) {
-    Absolute::new(Alignment::TOP_RIGHT, Pivot::TOP_RIGHT, Dim2::ZERO).show(|| {
-        Layer::new().show(|| {
+    Layer::new().show(|| {
+        reflow(Alignment::TOP_RIGHT, Pivot::TOP_RIGHT, Dim2::ZERO, || {
             Pad::all(PADDING_LARGE).show(|| {
                 window_box(
                     state

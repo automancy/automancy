@@ -1,44 +1,42 @@
-use automancy_defs::rendering::InstanceData;
-use automancy_defs::stack::ItemStack;
-use automancy_defs::{colors, glam::Vec2};
-use automancy_defs::{colors::BACKGROUND_3, id::Id};
-use automancy_defs::{coord::TileCoord, glam::vec2};
-use automancy_defs::{
-    hexx::{HexLayout, HexOrientation},
-    id::ModelId,
-};
-use automancy_resources::data::{Data, DataMap};
-use automancy_resources::petgraph::visit::Topo;
-use automancy_resources::types::IconMode;
-use automancy_resources::{rhai_call_options, rhai_log_err};
-use automancy_system::input::ActionType;
-use automancy_system::util::is_research_unlocked;
-use automancy_ui::{
-    button, centered_horizontal, col, group, heading, inactive_button, interactive, label,
-    list_row, movable, row, scroll_horizontal, scroll_horizontal_bar_alignment, scroll_vertical,
-    scroll_vertical_bar_alignment, ui_game_object, window_box, PositionRecord, RoundRect,
-    UiGameObjectType, DIVIER_HEIGHT, DIVIER_THICKNESS, MEDIUM_ICON_SIZE, PADDING_MEDIUM,
-    SMALL_ICON_SIZE, TINY_ICON_SIZE,
-};
-use rhai::{Array, Dynamic, Scope};
 use std::mem;
+
+use automancy_defs::{
+    colors,
+    colors::BACKGROUND_3,
+    coord::TileCoord,
+    id::{Id, ModelId},
+    math::{Vec2, vec2},
+    rendering::InstanceData,
+    stack::ItemStack,
+};
+use automancy_resources::{
+    data::{Data, DataMap},
+    rhai_call_options, rhai_log_err,
+    types::IconMode,
+};
+use automancy_system::{input::ActionType, util::is_research_unlocked};
+use automancy_ui::{
+    DIVIER_HEIGHT, DIVIER_THICKNESS, MEDIUM_ICON_SIZE, PADDING_MEDIUM, PositionRecord, RoundRect,
+    SMALL_ICON_SIZE, TINY_ICON_SIZE, UiGameObjectType, button, centered_horizontal, col, group,
+    heading, inactive_button, interactive, label, list_row, movable, row, scroll_horizontal,
+    scroll_horizontal_bar_alignment, scroll_vertical, scroll_vertical_bar_alignment,
+    ui_game_object, window_box,
+};
+use hexx::{HexLayout, HexOrientation};
+use petgraph::visit::Topo;
+use rhai::{Array, Dynamic, Scope};
 use yakui::{
-    constrained, divider, reflow,
-    widgets::{Absolute, Layer, Pad},
-    Alignment, Constraints, Dim2, Pivot, Rect,
+    Alignment, Constraints, Dim2, Pivot, Rect, constrained, divider, reflow,
+    widgets::{Layer, Pad},
 };
 
+use super::{item::draw_item, util::take_item_animation};
 use crate::GameState;
-
-use super::item::draw_item;
-use super::util::take_item_animation;
 
 const PUZZLE_HEX_GRID_LAYOUT: HexLayout = HexLayout {
     orientation: HexOrientation::Pointy,
     origin: vec2(TINY_ICON_SIZE, 0.0),
-    hex_size: vec2(TINY_ICON_SIZE, TINY_ICON_SIZE),
-    invert_x: false,
-    invert_y: true,
+    scale: vec2(TINY_ICON_SIZE, -TINY_ICON_SIZE),
 };
 
 fn player_inventory(state: &mut GameState, game_data: &mut DataMap) {
@@ -585,75 +583,76 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                     let p = (PUZZLE_HEX_GRID_LAYOUT.hex_to_world_pos(**coord) + min).round();
 
                     Layer::new().show(|| {
-                        Absolute::new(
+                        reflow(
                             Alignment::TOP_LEFT,
                             Pivot::BOTTOM_LEFT,
                             Dim2::pixels(p.x + 20.0, p.y + 20.0),
-                        )
-                        .show(|| {
-                            RoundRect::new(8.0, colors::WHITE).show_children(|| {
-                                Pad::all(PADDING_MEDIUM).show(|| {
-                                    scroll_horizontal(
-                                        Vec2::ZERO,
-                                        Vec2::new(200.0, f32::INFINITY),
-                                        || {
-                                            row(|| {
-                                                let reset = interactive(|| {
-                                                    ui_game_object(
-                                                        InstanceData::default(),
-                                                        UiGameObjectType::Model(ModelId(
-                                                            state
-                                                                .resource_man
-                                                                .registry
-                                                                .model_ids
-                                                                .puzzle_space,
-                                                        )),
-                                                        PUZZLE_HEX_GRID_LAYOUT.hex_size * 2.0,
-                                                        Some(IconMode::Item.model_matrix()),
-                                                        Some(IconMode::Item.world_matrix()),
-                                                    );
-                                                });
-
-                                                if reset.clicked {
-                                                    select_result = Some((
-                                                        *coord,
-                                                        state
-                                                            .resource_man
-                                                            .registry
-                                                            .model_ids
-                                                            .puzzle_space,
-                                                    ));
-                                                    *dirty = true;
-                                                }
-
-                                                for id in ids {
-                                                    let select = interactive(|| {
+                            || {
+                                RoundRect::new(8.0, colors::WHITE).show_children(|| {
+                                    Pad::all(PADDING_MEDIUM).show(|| {
+                                        scroll_horizontal(
+                                            Vec2::ZERO,
+                                            Vec2::new(200.0, f32::INFINITY),
+                                            || {
+                                                row(|| {
+                                                    let reset = interactive(|| {
                                                         ui_game_object(
                                                             InstanceData::default(),
-                                                            UiGameObjectType::Model(
+                                                            UiGameObjectType::Model(ModelId(
                                                                 state
                                                                     .resource_man
-                                                                    .model_or_missing_item(
-                                                                        &ModelId(*id),
-                                                                    ),
-                                                            ),
+                                                                    .registry
+                                                                    .model_ids
+                                                                    .puzzle_space,
+                                                            )),
                                                             PUZZLE_HEX_GRID_LAYOUT.hex_size * 2.0,
                                                             Some(IconMode::Item.model_matrix()),
                                                             Some(IconMode::Item.world_matrix()),
                                                         );
                                                     });
 
-                                                    if select.clicked {
-                                                        select_result = Some((*coord, *id));
+                                                    if reset.clicked {
+                                                        select_result = Some((
+                                                            *coord,
+                                                            state
+                                                                .resource_man
+                                                                .registry
+                                                                .model_ids
+                                                                .puzzle_space,
+                                                        ));
                                                         *dirty = true;
                                                     }
-                                                }
-                                            });
-                                        },
-                                    );
+
+                                                    for id in ids {
+                                                        let select = interactive(|| {
+                                                            ui_game_object(
+                                                                InstanceData::default(),
+                                                                UiGameObjectType::Model(
+                                                                    state
+                                                                        .resource_man
+                                                                        .model_or_missing_item(
+                                                                            &ModelId(*id),
+                                                                        ),
+                                                                ),
+                                                                PUZZLE_HEX_GRID_LAYOUT.hex_size
+                                                                    * 2.0,
+                                                                Some(IconMode::Item.model_matrix()),
+                                                                Some(IconMode::Item.world_matrix()),
+                                                            );
+                                                        });
+
+                                                        if select.clicked {
+                                                            select_result = Some((*coord, *id));
+                                                            *dirty = true;
+                                                        }
+                                                    }
+                                                });
+                                            },
+                                        );
+                                    });
                                 });
-                            });
-                        });
+                            },
+                        );
                     });
                 }
             }

@@ -1,22 +1,20 @@
-use crate::{col, pad_x, pad_y, row, PaintRectLerpedColor, RoundRect};
+use std::cell::Cell;
+
 use automancy_defs::{
     colors,
-    glam::{vec2, Vec2Swizzles},
+    math::{Vec2Swizzles, vec2},
 };
-use std::cell::Cell;
-use yakui::geometry::{Constraints, Vec2};
 use yakui::{
-    constrained,
+    Alignment, Dim2, Pivot, Rect, Response, constrained,
+    event::{EventInterest, EventResponse, WidgetEvent},
+    geometry::{Constraints, Vec2},
     input::MouseButton,
     reflow,
-    widget::{EventContext, LayoutContext, Widget},
-    Alignment, Dim2, Rect,
-};
-use yakui::{
-    event::{EventInterest, EventResponse, WidgetEvent},
     util::widget_children,
+    widget::{EventContext, LayoutContext, PaintContext, Widget},
 };
-use yakui::{Pivot, Response};
+
+use crate::{PaintRectLerpedColor, RoundRect, col, pad_x, pad_y, row};
 
 const SCROLL_SIZE: f32 = 8.0;
 const SCROLL_RADIUS: f32 = 4.0;
@@ -184,8 +182,8 @@ impl Widget for ScrollableWidget {
         size
     }
 
-    fn paint(&self, mut ctx: yakui::widget::PaintContext<'_>) {
-        let clip = ctx.paint.get_current_clip().unwrap_or(Rect::ZERO);
+    fn paint(&self, mut ctx: PaintContext<'_>) {
+        let clip = ctx.clip;
 
         let node = ctx.dom.get_current();
         for &child in &node.children {

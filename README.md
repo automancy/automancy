@@ -22,7 +22,7 @@ Some of the major techs used:
 - yakui (for the GUI)
 - Rhai (for the scripting)
     - TBD: we're switching to wasm
-- Blender (for the modelling)
+- Blender (for the modelling) 
 - Rusty Object Notation - 'ron' (for the definition files)
 
 ### Folk's
@@ -58,11 +58,11 @@ criteria:
 
 - The viewport is _exactly_ 160cm by 160cm (cm is used to reduce rounding errors).
 - The file does not contain any color outside of fills.
-  - That means, no gradients.
+    - That means, no gradients.
 - The file does not contain any clipping or masking.
-  - Use the boolean operators.
+    - Use the boolean operators.
 - The file does not contain any strokes.
-  - Use "Stroke to Path" to convert them.
+    - Use "Stroke to Path" to convert them.
 
 **Currently, the game supports neither materials nor textures,** **_and has no plans to support them._**
 
@@ -76,10 +76,12 @@ criteria:
 
 #### The Standard™️ Operational®️ Procedure©️
 
-- **Run `run.sh` to run the game.**
-    - Alternatively, run `cargo run -p build_script` before running the game.
-      This will build all the resources.
-      TBD: discussion of this wrt `mancie`?
+- Install [just](https://github.com/casey/just)!
+    - Then, run `just` or `just dev` for dev builds.
+    - Or `just staging` for a staging build, for a more performant build of the game.
+    - And for release builds, `just release`. This uses `opt-level=s` and `lto=fat` to minimize binary size.
+- After adding a dependency, please be sure to run `just sort`.
+    - This also depends on [cargo-sort](https://github.com/devinr528/cargo-sort).
 
 #### On Async
 

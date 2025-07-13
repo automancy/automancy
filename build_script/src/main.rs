@@ -1,11 +1,14 @@
-use std::env::current_dir;
-use std::ffi::OsStr;
-use std::fs::metadata;
-use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::str;
-use std::str::FromStr;
-use std::thread;
+use std::{
+    env::current_dir,
+    ffi::OsStr,
+    fs::metadata,
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
+    str,
+    str::FromStr,
+    thread,
+};
+
 use walkdir::WalkDir;
 
 fn load_recursively(path: &Path, extension: &OsStr) -> Vec<PathBuf> {

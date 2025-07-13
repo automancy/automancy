@@ -1,12 +1,12 @@
-pub static VERSION: &str = env!("CARGO_PKG_VERSION");
+pub static PROFILE: &str = option_env!("BUILD_PROFILE").unwrap_or("dev");
+pub static VERSION: &str = env!("CARGO_PKG_VERSION") + "-" + PROFILE;
 
+pub use anyhow;
 pub use automancy_defs::*;
 pub use automancy_macros::*;
 pub use automancy_resources::*;
 pub use automancy_system::*;
 pub use automancy_ui::*;
-
-pub use anyhow;
 pub use bytemuck;
 pub use cosmic_text;
 pub use hashbrown;
@@ -32,6 +32,4 @@ pub mod renderer;
 pub mod ui_game_object;
 pub mod util;
 
-use renderer::{GameRenderer, YakuiRenderResources};
-
-pub type GameState = InnerGameState<YakuiRenderResources, GameRenderer>;
+pub type GameState = InnerGameState<renderer::GameRenderer>;

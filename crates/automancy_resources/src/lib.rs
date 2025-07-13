@@ -1,34 +1,31 @@
-use crate::registry::{DataIds, ErrorIds, GuiIds, KeyIds, ModelIds, Registry};
-use crate::types::font::Font;
-use crate::types::model::IndexRange;
-use crate::types::translate::TranslateDef;
-use automancy_defs::rendering::{Animation, Mesh};
-use automancy_defs::{
-    chrono::{DateTime, Local},
-    id::SharedStr,
+use std::{
+    collections::BTreeMap,
+    ffi::OsStr,
+    fmt,
+    fmt::{Debug, Formatter},
+    path::{Path, PathBuf},
+    sync::{Arc, RwLock},
+    time::SystemTime,
 };
-use automancy_defs::{coord::TileCoord, log};
-use automancy_defs::{id::ModelId, kira::sound::static_sound::StaticSoundData};
-use automancy_defs::{id::TileId, kira::track::TrackHandle};
+
 use automancy_defs::{
-    id::{Id, IdRaw, Interner},
+    coord::TileCoord,
+    id::{Id, IdRaw, Interner, ModelId, SharedStr, TileId},
+    rendering::{Animation, Mesh},
     stack::ItemStack,
 };
+use chrono::{DateTime, Local};
 use hashbrown::HashMap;
-use rhai::{CallFnOptions, Dynamic, Engine, AST};
-use std::collections::BTreeMap;
-use std::ffi::OsStr;
-use std::fmt;
-use std::fmt::{Debug, Formatter};
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
-use std::time::SystemTime;
+use kira::{sound::static_sound::StaticSoundData, track::TrackHandle};
+use rhai::{AST, CallFnOptions, Dynamic, Engine};
 use thiserror::Error;
-use types::function::FunctionMetadata;
-use types::item::ItemDef;
+use types::{function::FunctionMetadata, item::ItemDef};
 use walkdir::WalkDir;
 
-pub use petgraph;
+use crate::{
+    registry::{DataIds, ErrorIds, GuiIds, KeyIds, ModelIds, Registry},
+    types::{font::Font, model::IndexRange, translate::TranslateDef},
+};
 
 pub mod data;
 pub mod error;
@@ -188,7 +185,7 @@ impl ResourceManager {
     }
 }
 
-pub fn rhai_call_options(state: &mut Dynamic) -> CallFnOptions {
+pub fn rhai_call_options<'a>(state: &'a mut Dynamic) -> CallFnOptions<'a> {
     CallFnOptions::new()
         .eval_ast(false)
         .rewind_scope(true)

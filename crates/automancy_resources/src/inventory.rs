@@ -1,3 +1,8 @@
+use std::{
+    collections::BTreeMap,
+    ops::{Deref, DerefMut},
+};
+
 use automancy_defs::{
     id::{Id, Interner},
     parse_map_id_of, resolve_map_id_of,
@@ -5,8 +10,6 @@ use automancy_defs::{
     try_parse_map_id_of,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
-use std::ops::{Deref, DerefMut};
 
 #[derive(Debug, Default, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct Inventory(BTreeMap<Id, ItemAmount>);

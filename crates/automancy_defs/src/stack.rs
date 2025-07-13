@@ -1,5 +1,6 @@
-use crate::id::Id;
 use rhai::INT;
+
+use crate::id::Id;
 
 pub type ItemAmount = INT;
 

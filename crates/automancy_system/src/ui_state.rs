@@ -1,14 +1,14 @@
+use std::{fmt::Debug, mem};
+
 use automancy_defs::{
     coord::TileCoord,
-    glam::vec2,
     id::{Id, ModelId, TileId},
-    math::Vec2,
+    math::{Vec2, vec2},
 };
 use automancy_resources::data::DataMap;
-use enum_map::{enum_map, Enum, EnumMap};
+use enum_map::{Enum, EnumMap, enum_map};
 use fuzzy_matcher::skim::SkimMatcherV2;
 use hashbrown::{HashMap, HashSet};
-use std::{fmt::Debug, mem};
 
 /// The state of the main game GUI.
 #[derive(Eq, PartialEq, Copy, Clone, Debug, Default)]

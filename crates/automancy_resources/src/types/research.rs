@@ -1,19 +1,19 @@
-use crate::data::{DataMap, DataMapRaw};
-use crate::types::IconMode;
-use crate::{load_recursively, ResourceManager, RON_EXT};
+use std::{ffi::OsStr, fs::read_to_string, path::Path};
+
 use automancy_defs::{
     id::{Id, ModelId, TileId},
-    parse_item_stacks,
-};
-use automancy_defs::{
-    parse_ids,
+    parse_ids, parse_item_stacks,
     stack::{ItemAmount, ItemStack},
 };
 use petgraph::visit::IntoNodeReferences;
 use serde::Deserialize;
-use std::ffi::OsStr;
-use std::fs::read_to_string;
-use std::path::Path;
+
+use crate::{
+    RON_EXT, ResourceManager,
+    data::{DataMap, DataMapRaw},
+    load_recursively,
+    types::IconMode,
+};
 
 #[derive(Debug, Clone)]
 pub struct ResearchDef {

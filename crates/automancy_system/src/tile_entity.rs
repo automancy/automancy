@@ -1,21 +1,28 @@
-use crate::game::{GameSystemMessage, TickUnit};
-use crate::tile_entity::TileEntityMsg::*;
-use automancy_defs::id::{Id, TileId};
-use automancy_defs::{coord::TileCoord, stack::ItemStack};
-use automancy_resources::types::function::{OnFailAction, TileResult, TileTransactionResult};
-use automancy_resources::{
-    data::{Data, DataMap},
-    FunctionInfo,
+use std::{mem, sync::Arc};
+
+use automancy_defs::{
+    coord::TileCoord,
+    id::{Id, TileId},
+    stack::ItemStack,
 };
-use automancy_resources::{rhai_call_options, rhai_log_err, ResourceManager};
-use automancy_resources::{rhai_render::RenderCommand, rhai_ui::RhaiUiUnit};
+use automancy_resources::{
+    FunctionInfo, ResourceManager,
+    data::{Data, DataMap},
+    rhai_call_options, rhai_log_err,
+    rhai_render::RenderCommand,
+    rhai_ui::RhaiUiUnit,
+    types::function::{OnFailAction, TileResult, TileTransactionResult},
+};
 use hashbrown::HashSet;
 use ractor::{Actor, ActorProcessingErr, ActorRef, RpcReplyPort};
-use rand::{thread_rng, RngCore};
+use rand::{RngCore, rng};
 use rhai::{Dynamic, Scope};
-use std::mem;
-use std::sync::Arc;
 use thiserror::Error;
+
+use crate::{
+    game::{GameSystemMessage, TickUnit},
+    tile_entity::TileEntityMsg::*,
+};
 
 pub type TileEntityWithId = (TileId, ActorRef<TileEntityMsg>);
 
@@ -336,8 +343,7 @@ impl TileEntity {
             .function
             .as_ref()
             .and_then(|v| self.resource_man.functions.get(v))
-        {
-            if let Some(result) = run_tile_function(
+            && let Some(result) = run_tile_function(
                 &self.resource_man,
                 self.id,
                 self.coord,
@@ -352,9 +358,9 @@ impl TileEntity {
                     ("stack", Dynamic::from(stack)),
                 ],
                 "handle_transaction",
-            ) {
-                return self.handle_rhai_transaction_result(state, result);
-            }
+            )
+        {
+            return self.handle_rhai_transaction_result(state, result);
         }
 
         None
@@ -367,7 +373,6 @@ pub enum TileEntityError {
     NonExistent(TileCoord),
 }
 
-#[async_trait::async_trait]
 impl Actor for TileEntity {
     type Msg = TileEntityMsg;
     type State = TileEntityState;
@@ -402,8 +407,7 @@ impl Actor for TileEntity {
                     .function
                     .as_ref()
                     .and_then(|v| self.resource_man.functions.get(v))
-                {
-                    if let Some(result) = run_tile_function(
+                    && let Some(result) = run_tile_function(
                         &self.resource_man,
                         self.id,
                         self.coord,
@@ -412,9 +416,9 @@ impl Actor for TileEntity {
                         function,
                         [],
                         "handle_tick",
-                    ) {
-                        self.handle_rhai_result(state, result);
-                    }
+                    )
+                {
+                    self.handle_rhai_result(state, result);
                 }
             }
             Transaction {
@@ -427,10 +431,9 @@ impl Actor for TileEntity {
             } => {
                 if let Some(record) =
                     self.transaction(state, stack, source_coord, source_id, root_coord, root_id)
+                    && !hidden
                 {
-                    if !hidden {
-                        state.game.send_message(record)?;
-                    }
+                    state.game.send_message(record)?;
                 }
             }
             TransactionResult { result } => {
@@ -473,8 +476,7 @@ impl Actor for TileEntity {
                     .function
                     .as_ref()
                     .and_then(|v| self.resource_man.functions.get(v))
-                {
-                    if let Some(result) = run_tile_function(
+                    && let Some(result) = run_tile_function(
                         &self.resource_man,
                         self.id,
                         self.coord,
@@ -486,9 +488,9 @@ impl Actor for TileEntity {
                             ("requested_from_id", Dynamic::from(requested_from_id)),
                         ],
                         "handle_extract_request",
-                    ) {
-                        self.handle_rhai_result(state, result);
-                    }
+                    )
+                {
+                    self.handle_rhai_result(state, result);
                 }
             }
             GetTileConfigUi(reply) => {
@@ -589,5 +591,5 @@ fn send_to_tile(
 }
 
 fn random() -> i32 {
-    thread_rng().next_u32() as i32
+    rng().next_u32() as i32
 }

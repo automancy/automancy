@@ -1,10 +1,13 @@
-use crate::data::{DataMap, DataMapRaw};
-use crate::{load_recursively, ResourceManager, RON_EXT};
+use std::{ffi::OsStr, fs::read_to_string, path::Path};
+
 use automancy_defs::id::{Id, TileId};
 use serde::Deserialize;
-use std::ffi::OsStr;
-use std::fs::read_to_string;
-use std::path::Path;
+
+use crate::{
+    RON_EXT, ResourceManager,
+    data::{DataMap, DataMapRaw},
+    load_recursively,
+};
 
 #[derive(Debug, Clone)]
 pub struct TileDef {

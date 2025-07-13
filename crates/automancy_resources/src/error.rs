@@ -1,6 +1,8 @@
-use crate::{format::FormatContext, ResourceManager};
-use automancy_defs::id::Id;
 use std::cell::RefCell;
+
+use automancy_defs::id::Id;
+
+use crate::{ResourceManager, format::FormatContext};
 
 /// An ErrorManager contains a queue of errors to be displayed.
 #[derive(Default)]

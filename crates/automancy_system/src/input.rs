@@ -1,21 +1,23 @@
-use crate::options::GameOptions;
-use automancy_defs::id::Id;
+use std::{cell::Cell, mem};
+
 use automancy_defs::{
-    glam::vec2,
-    math::{Float, Vec2},
+    id::Id,
+    math::{Float, Vec2, vec2},
 };
 use automancy_resources::ResourceManager;
 use hashbrown::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
-use std::{cell::Cell, mem};
-use winit::event::{
-    DeviceEvent, ElementState, KeyEvent, Modifiers, MouseButton, MouseScrollDelta, WindowEvent,
-};
-use winit::keyboard::{Key, NamedKey, SmolStr};
 use winit::{
-    event::ElementState::{Pressed, Released},
+    event::{
+        DeviceEvent, ElementState,
+        ElementState::{Pressed, Released},
+        KeyEvent, Modifiers, MouseButton, MouseScrollDelta, WindowEvent,
+    },
+    keyboard::{Key, NamedKey, SmolStr},
     platform::modifier_supplement::KeyEventExtModifierSupplement,
 };
+
+use crate::options::GameOptions;
 
 thread_local! {
     static DEFAULT_KEYMAP: Cell<Option<HashMap<Key, KeyAction>>> = Cell::default();

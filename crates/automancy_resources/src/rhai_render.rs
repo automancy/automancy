@@ -2,9 +2,7 @@ use automancy_defs::{
     id::{Id, ModelId, RenderTagId},
     math::Matrix4,
 };
-use rhai::plugin::*;
-use rhai::Module;
-use rhai::{exported_module, Engine};
+use rhai::{Engine, Module, exported_module, plugin::*};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum RenderCommand {

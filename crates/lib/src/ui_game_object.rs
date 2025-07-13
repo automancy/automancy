@@ -1,24 +1,28 @@
-use crate::gpu::{self, MODEL_DEPTH_CLEAR, NORMAL_CLEAR};
-use crate::renderer::{try_add_animation, YakuiRenderResources};
-use automancy_defs::coord::TileCoord;
-use automancy_defs::rendering::{
-    AnimationMatrixData, GameMatrix, GameUBO, GpuInstance, IntermediateUBO, MatrixData,
-    WorldMatrixData,
+use core::cell::Cell;
+use std::time::Instant;
+
+use automancy_defs::{
+    coord::TileCoord,
+    rendering::{
+        AnimationMatrixData, GameMatrix, GameUBO, GpuInstance, IntermediateUBO, MatrixData,
+        WorldMatrixData,
+    },
 };
 use automancy_resources::rhai_render::RenderCommand;
 use automancy_system::tile_entity::collect_render_commands;
-use automancy_ui::{GameElementPaint, UiGameObjectType, SHOULD_RERENDER};
-use core::cell::Cell;
-use std::time::Instant;
-use wgpu::util::{BufferInitDescriptor, DeviceExt, DrawIndexedIndirectArgs};
-use wgpu::BindGroupEntry;
+use automancy_ui::{GameElementPaint, UiGameObjectType};
 use wgpu::{
-    BindGroupDescriptor, BindingResource, BufferUsages, Color, IndexFormat, LoadOp, Operations,
-    RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor, StoreOp,
-    TextureViewDescriptor,
+    BindGroupDescriptor, BindGroupEntry, BindingResource, BufferUsages, Color, IndexFormat, LoadOp,
+    Operations, RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor,
+    StoreOp, TextureViewDescriptor,
+    util::{BufferInitDescriptor, DeviceExt, DrawIndexedIndirectArgs},
 };
 use yakui::UVec2;
-use yakui_wgpu::CallbackTrait;
+
+use crate::{
+    gpu::{self, MODEL_DEPTH_CLEAR, NORMAL_CLEAR},
+    renderer::{YakuiRenderResources, try_add_animation},
+};
 
 thread_local! {
     static START_INSTANT: Cell<Option<Instant>> = const { Cell::new(None) };
@@ -85,7 +89,7 @@ impl CallbackTrait<YakuiRenderResources> for GameElementPaint {
             let mut non_opaque_draw_info = non_opaque_draw_info.as_mut().unwrap();
             let animation_matrix_data_map = animation_matrix_data_map.as_mut().unwrap();
 
-            if SHOULD_RERENDER.get() {
+            if automancy_ui::custom::should_rerender() {
                 rects.clear();
 
                 let mut gpu_instances = vec![];

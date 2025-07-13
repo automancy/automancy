@@ -1,12 +1,12 @@
-use crate::types::research::ResearchDef;
-use crate::types::script::ScriptDef;
-use crate::types::tag::TagDef;
-use crate::types::tile::TileDef;
-use crate::types::{category::CategoryDef, item::ItemDef};
 use automancy_defs::id::{Id, TileId};
 use automancy_macros::IdReg;
 use hashbrown::HashMap;
 use petgraph::{graph::NodeIndex, prelude::StableDiGraph};
+
+use crate::types::{
+    category::CategoryDef, item::ItemDef, research::ResearchDef, script::ScriptDef, tag::TagDef,
+    tile::TileDef,
+};
 
 /// Represents the resource registry.
 #[derive(Clone)]
