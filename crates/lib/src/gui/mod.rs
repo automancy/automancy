@@ -1,18 +1,21 @@
-use crate::GameState;
-use automancy_defs::glam::vec3;
-use automancy_defs::id::ModelId;
-use automancy_defs::rendering::InstanceData;
-use automancy_defs::{colors, math, rendering::make_line, window};
-use automancy_defs::{
-    math::{Float, Matrix4, FAR, HEX_GRID_LAYOUT},
-    rendering::GameMatrix,
+use automancy_data::{
+    colors,
+    id::ModelId,
+    math,
+    math::{FAR, Float, HEX_GRID_LAYOUT, Matrix4, vec3},
+    rendering::{GameMatrixData, Instance, make_line},
+    window,
 };
-use automancy_resources::data::DataMap;
-use automancy_system::input::ActionType;
-use automancy_system::ui_state::{PopupState, Screen};
+use automancy_resources::generic::DataMap;
+use automancy_system::{
+    input::ActionType,
+    ui_state::{PopupState, Screen},
+};
 use tokio::sync::oneshot;
 use util::render_overlay_cached;
 use winit::event_loop::ActiveEventLoop;
+
+use crate::GameState;
 
 pub mod debug;
 pub mod error;
@@ -75,7 +78,7 @@ pub fn render_ui(
                         state.ui_state.selected_tile_id,
                         DataMap::default(),
                         &mut state.ui_state.selected_tile_render_cache,
-                        Matrix4::from_translation(vec3(
+                        Matrix4::from_translation(Vec3::new(
                             cursor_pos.x as Float,
                             cursor_pos.y as Float,
                             FAR,
@@ -85,9 +88,9 @@ pub fn render_ui(
 
                     if let Some((coord, ..)) = state.ui_state.linking_tile {
                         state.renderer.as_mut().unwrap().overlay_instances.push((
-                            InstanceData::default().with_color_offset(colors::RED.to_linear()),
+                            Instance::default().with_color_offset(colors::RED.to_linear()),
                             ModelId(state.resource_man.registry.model_ids.cube1x1),
-                            GameMatrix::<true>::new(
+                            GameMatrixData::<true>::new(
                                 make_line(
                                     HEX_GRID_LAYOUT.hex_to_world_pos(*coord),
                                     cursor_pos.truncate(),
@@ -127,11 +130,6 @@ pub fn render_ui(
 
     util::render_info_tip(state);
 
-    state.renderer.as_mut().unwrap().tile_tints.insert(
-        state.camera.pointing_at,
-        colors::RED.with_alpha(0.2).to_linear(),
-    );
-
     for coord in &state.ui_state.grouped_tiles {
         state
             .renderer
@@ -144,9 +142,9 @@ pub fn render_ui(
     if let Some(start) = state.ui_state.paste_from {
         if start != state.camera.pointing_at {
             state.renderer.as_mut().unwrap().overlay_instances.push((
-                InstanceData::default().with_color_offset(colors::LIGHT_BLUE.to_linear()),
+                Instance::default().with_color_offset(colors::LIGHT_BLUE.to_linear()),
                 ModelId(state.resource_man.registry.model_ids.cube1x1),
-                GameMatrix::<true>::new(
+                GameMatrixData::<true>::new(
                     make_line(
                         HEX_GRID_LAYOUT.hex_to_world_pos(*start),
                         HEX_GRID_LAYOUT.hex_to_world_pos(*state.camera.pointing_at),
@@ -166,7 +164,7 @@ pub fn render_ui(
                 let coord = *coord + diff;
                 let p = HEX_GRID_LAYOUT.hex_to_world_pos(*coord);
 
-                Matrix4::from_translation(vec3(p.x, p.y, FAR))
+                Matrix4::from_translation(Vec3::new(p.x, p.y, FAR))
             };
 
             let cache = state

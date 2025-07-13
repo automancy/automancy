@@ -1,16 +1,15 @@
-use crate::{
-    center_col, col, heading, pad_y, RoundedRectLerpedColor, PADDING_LARGE, PADDING_MEDIUM,
-    ROUNDED_MEDIUM,
-};
-use automancy_defs::colors;
-use yakui::geometry::{Color, Constraints, Vec2};
-use yakui::widget::{LayoutContext, PaintContext, Widget};
-use yakui::Response;
+use automancy_data::colors;
 use yakui::{
-    align, colored_box_container,
+    Alignment, Response, align, colored_box_container,
+    geometry::{Color, Constraints, Vec2},
     util::{widget, widget_children},
+    widget::{LayoutContext, PaintContext, Widget},
     widgets::{Layer, Pad},
-    Alignment,
+};
+
+use crate::{
+    PADDING_LARGE, PADDING_MEDIUM, ROUNDED_MEDIUM, RoundedRectLerpedColor, center_col, col,
+    heading, pad_y,
 };
 
 /**

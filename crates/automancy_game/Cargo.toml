@@ -1,0 +1,48 @@
+[package]
+name = "automancy_game"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+
+[dependencies]
+automancy_data = { workspace = true }
+automancy_macros = { workspace = true }
+
+# logging
+log = { workspace = true }
+
+# parsing / data mangling / math / files
+approx = { workspace = true }
+gltf = { workspace = true }
+ron = { workspace = true }
+serde = { workspace = true }
+ttf-parser = { workspace = true }
+zstd = { workspace = true }
+
+# specialized data storage types
+arraydeque = { workspace = true }
+enum-map = { workspace = true }
+hashbrown = { workspace = true }
+petgraph = { workspace = true }
+
+# rendering / windowing
+winit = { workspace = true }
+
+# user input / user interface
+kira = { workspace = true }
+
+# scripting / game logic / async runtime
+ractor = { workspace = true }
+rayon = { workspace = true }
+rhai = { workspace = true }
+tokio = { workspace = true }
+
+# utils
+anyhow = { workspace = true }
+chrono = { workspace = true }
+fuzzy-matcher = { workspace = true }
+interpolator = { workspace = true }
+rand = { workspace = true }
+thiserror = { workspace = true }
+walkdir = { workspace = true }

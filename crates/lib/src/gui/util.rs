@@ -1,33 +1,26 @@
-use crate::renderer::GameRenderer;
-use crate::GameState;
-use automancy_defs::coord::TileCoord;
-use automancy_defs::id::{ModelId, TileId};
-use automancy_defs::math::Matrix4;
-use automancy_defs::rendering::GameMatrix;
-use automancy_defs::{
-    id::{Id, SharedStr},
-    rendering::InstanceData,
+use std::{sync::Arc, time::Instant};
+
+use automancy_data::{
+    coord::TileCoord,
+    id::{Id, ModelId, SharedStr, TileId},
+    math::Matrix4,
+    rendering::{GameMatrixData, Instance},
 };
-use automancy_resources::data::DataMap;
-use automancy_resources::rhai_render::RenderCommand;
-use automancy_resources::types::IconMode;
-use automancy_resources::ResourceManager;
-use automancy_system::game::TAKE_ITEM_ANIMATION_SPEED;
-use automancy_system::tile_entity::collect_render_commands;
-use automancy_system::ui_state::TextField;
+use automancy_resources::{
+    ResourceManager, generic::DataMap, rhai_render::RenderCommand, types::IconMode,
+};
+use automancy_system::{
+    game::TAKE_ITEM_ANIMATION_SPEED, tile_entity::collect_render_commands, ui_state::TextField,
+};
 use automancy_ui::{
-    col, group, hover_tip, radio, scroll_vertical, textbox, ui_game_object, UiGameObjectType,
-    HOVER_TIP,
+    GameObjectType, HOVER_TIP, col, group, hover_tip, radio, scroll_vertical, textbox,
+    ui_game_object,
 };
 use fuzzy_matcher::FuzzyMatcher;
 use hashbrown::{HashMap, HashSet};
-use std::sync::Arc;
-use std::time::Instant;
-use yakui::{constrained, Constraints};
-use yakui::{
-    widgets::{Absolute, Layer},
-    Alignment, Dim2, Pivot, Rect, Vec2,
-};
+use yakui::{Alignment, Constraints, Dim2, Pivot, Rect, Vec2, constrained, reflow, widgets::Layer};
+
+use crate::{GameState, renderer::GameRenderer};
 
 pub fn render_overlay_cached(
     resource_man: &ResourceManager,
@@ -85,9 +78,9 @@ pub fn render_overlay_cached(
 
                 for mesh in meshes.iter().flatten() {
                     renderer.overlay_instances.push((
-                        InstanceData::default().with_alpha(0.6),
+                        Instance::default().with_alpha(0.6),
                         model,
-                        GameMatrix::<true>::new(
+                        GameMatrixData::<true>::new(
                             transform * model_matrix,
                             world_matrix,
                             mesh.matrix,
@@ -112,7 +105,6 @@ pub fn searchable_id(
 ) {
     textbox(
         state.ui_state.text_field.get(field),
-        None,
         hint_text.as_deref().map(Arc::<str>::as_ref),
     );
 
@@ -127,7 +119,7 @@ pub fn searchable_id(
                             let name = get_name(state, *id);
                             let score = state.ui_state.text_field.fuse.fuzzy_match(&name, &text);
 
-                            if score.unwrap_or(0) < (name.len() / 2) as i64 {
+                            if score.unwrap_or(0) < (name.len() / 2) as isize {
                                 None
                             } else {
                                 Some(*id).zip(score)
@@ -196,21 +188,21 @@ pub fn take_item_animation(state: &mut GameState, id: Id, dst_rect: Rect) {
             let pos = src_rect.pos().lerp(dst_rect.pos(), d);
             let size = src_rect.size().lerp(dst_rect.size(), d);
 
-            Absolute::new(
-                Alignment::TOP_LEFT,
-                Pivot::TOP_LEFT,
-                Dim2::pixels(pos.x, pos.y),
-            )
-            .show(|| {
-                Layer::new().show(|| {
-                    ui_game_object(
-                        InstanceData::default(),
-                        UiGameObjectType::Model(state.resource_man.item_model_or_missing(&id)),
-                        size,
-                        None,
-                        Some(IconMode::Item.world_matrix()),
-                    );
-                });
+            Layer::new().show(|| {
+                reflow(
+                    Alignment::TOP_LEFT,
+                    Pivot::TOP_LEFT,
+                    Dim2::pixels(pos.x, pos.y),
+                    || {
+                        ui_game_object(
+                            Instance::default(),
+                            GameObjectType::Model(state.resource_man.item_model_or_missing(&id)),
+                            size,
+                            None,
+                            Some(IconMode::Item.world_matrix()),
+                        );
+                    },
+                );
             });
         }
     }
