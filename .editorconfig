@@ -12,8 +12,11 @@ insert_final_newline = true
 indent_style = space
 indent_size = 4
 
+[*.ron]
+max_line_length = 9999
+
 [*.rs]
-max_line_length = 160
+max_line_length = 150
 
 [*.md]
 # double whitespace at end of line
@@ -22,6 +25,3 @@ trim_trailing_whitespace = false
 
 [*.yml]
 indent_size = 2
-
-[Makefile]
-indent_style = tab

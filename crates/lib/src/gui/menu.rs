@@ -1,33 +1,36 @@
-use crate::event::{refresh_maps, shutdown_graceful};
-use crate::{GameState, VERSION};
-use automancy_defs::{colors::BACKGROUND_3, glam::vec2, log};
-use automancy_resources::{
-    error::push_err,
-    format::{FormatContext, Formattable},
-    format_time,
-};
-use automancy_system::map::{GameMap, LoadMapOption};
-use automancy_system::ui_state::{OptionsMenuState, PopupState, Screen, SubState, TextField};
-use automancy_system::{
-    game::{GameSystemMessage, COULD_NOT_LOAD_ANYTHING},
-    options::UiScale,
-};
-use automancy_system::{game_load_map, game_load_map_inner, GameLoadResult};
-use automancy_ui::{
-    button, center_col, center_row, checkbox, col, group, heading, label, pad_x, row,
-    scroll_horizontal_bar_alignment, scroll_vertical, selection_box, slider, stretch_col, textbox,
-    window, DIVIER_HEIGHT, DIVIER_THICKNESS, PADDING_LARGE, PADDING_MEDIUM, PADDING_SMALL,
-};
 use std::{fs, mem};
+
+use automancy_data::{colors::BACKGROUND_3, math::vec2};
+use automancy_resources::{error::push_err, format::FormatContext, format_time};
+use automancy_system::{
+    GameLoadResult,
+    game::{COULD_NOT_LOAD_ANYTHING, GameSystemMessage},
+    game_load_map, game_load_map_inner,
+    map::{GameMap, LoadMapOption},
+    options::UiScale,
+    ui_state::{OptionsMenuState, PopupState, Screen, SubState, TextField},
+};
+use automancy_ui::{
+    DIVIER_HEIGHT, DIVIER_THICKNESS, PADDING_LARGE, PADDING_MEDIUM, PADDING_SMALL, button,
+    center_col, center_row, checkbox, col, group, heading, label, pad_x, row,
+    scroll_horizontal_bar_alignment, scroll_vertical, selection_box, slider, stretch_col, textbox,
+    window,
+};
+use interpolator::Formattable;
 use winit::event_loop::ActiveEventLoop;
-use yakui::{constrained, divider, image, spacer, widgets::Pad, Constraints, Vec2};
+use yakui::{Constraints, Vec2, constrained, divider, image, spacer, widgets::Pad};
+
+use crate::{
+    GameState, VERSION,
+    event::{refresh_maps, shutdown_graceful},
+};
 
 /// Draws the main menu.
 pub fn main_menu(state: &mut GameState, event_loop: &ActiveEventLoop) -> anyhow::Result<bool> {
     let mut result = Ok(false);
 
     window("Main Menu".to_string(), || {
-        image(state.logo.unwrap(), vec2(128.0, 128.0));
+        image(state.logo.unwrap(), Vec2::new(128.0, 128.0));
 
         if button(
             &state
@@ -57,7 +60,7 @@ pub fn main_menu(state: &mut GameState, event_loop: &ActiveEventLoop) -> anyhow:
         )
         .clicked
         {
-            open::that("https://gamedev.lgbt/@automancy").unwrap();
+            open::that_detached("https://gamedev.lgbt/@automancy").unwrap();
         }
 
         if button(
@@ -67,7 +70,7 @@ pub fn main_menu(state: &mut GameState, event_loop: &ActiveEventLoop) -> anyhow:
         )
         .clicked
         {
-            open::that("https://github.com/automancy/automancy").unwrap();
+            open::that_detached("https://github.com/automancy/automancy").unwrap();
         }
 
         if button(
@@ -155,7 +158,7 @@ pub fn map_menu(state: &mut GameState) {
                         let mut dirty = false;
 
                         {
-                            let infos = mem::take(&mut state.loop_store.map_infos_cache);
+                            let infos = std::mem::take(&mut state.loop_store.map_infos_cache);
                             for ((_, save_time), map_name) in &infos {
                                 group(|| {
                                     row(|| {
@@ -168,11 +171,11 @@ pub fn map_menu(state: &mut GameState) {
                                                     .text_field
                                                     .get(TextField::MapRenaming);
 
-                                                let res = textbox(renaming, None, None);
+                                                let res = textbox(renaming, None);
                                                 if res.lost_focus || res.activated {
                                                     state.ui_state.renaming_map = None;
 
-                                                    let new_name = mem::take(renaming)
+                                                    let new_name = std::mem::take(renaming)
                                                         .chars()
                                                         .filter(|v| v.is_alphanumeric())
                                                         .collect::<String>();

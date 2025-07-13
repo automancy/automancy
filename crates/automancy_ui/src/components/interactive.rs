@@ -1,9 +1,9 @@
 use yakui::{
+    Response,
     event::{EventInterest, EventResponse, WidgetEvent},
     input::MouseButton,
     util::widget_children,
     widget::{EventContext, Widget},
-    Response,
 };
 
 #[derive(Debug, Default)]

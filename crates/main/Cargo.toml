@@ -1,26 +1,64 @@
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [package]
 name = "automancy"
 version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
-
+license = { workspace = true }
 
 [dependencies]
+automancy_data = { workspace = true }
+automancy_game = { workspace = true }
 automancy_lib = { workspace = true }
+automancy_rendering = { workspace = true }
 
+# logging
+log = { workspace = true }
+
+# parsing / data mangling / math / files
+bytemuck = { workspace = true }
 image = { workspace = true }
+ttf-parser = { workspace = true }
 
+# specialized data storage types
+hashbrown = { workspace = true }
 
-color-eyre = "0.6.3"
-env_logger = "0.11.3"
-rfd = "0.15.0"
-human-panic = "2.0.0"
-strip-ansi-escapes = "0.2.0"
+# rendering / windowing
+wgpu = { workspace = true }
+winit = { workspace = true }
 
-# tracy version v0.11.0
-tracing-tracy = "=0.11.1"
-tracy-client = "=0.17.1"
+# user input / user interface
+arboard = { workspace = true }
+cosmic-text = { workspace = true }
+kira = { workspace = true }
+open = { workspace = true }
+yakui = { workspace = true }
+yakui-wgpu = { workspace = true }
+yakui-winit = { workspace = true }
 
-tracing = "0.1.40"
-tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+# scripting / game logic / async runtime
+ractor = { workspace = true }
+tokio = { workspace = true }
+
+# utils
+anyhow = { workspace = true }
+fuzzy-matcher = { workspace = true }
+strum = { workspace = true }
+uuid = { workspace = true }
+
+# binary exclusive stuff
+color-eyre = "0.6.5"
+env_logger = "0.11.8"
+native-dialog = { version = "0.9.2", features = [
+    "windows_dpi_awareness",
+    "windows_visual_styles",
+] }
+strip-ansi-escapes = "0.2.1"
+tiny-skia = "0.11.4"
+unicode-segmentation = "1.10.1"
+
+# tracy version v0.12.2
+tracing-tracy = "=0.11.4"
+tracy-client = "=0.18.2"
+
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }

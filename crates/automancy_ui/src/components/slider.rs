@@ -1,13 +1,14 @@
-use crate::{center_row, pad_x, simple_textbox, PADDING_SMALL};
-use automancy_defs::colors;
-use automancy_system::util::num::NumTrait;
 use std::{cell::Cell, fmt::Debug, ops::RangeInclusive};
+
+use automancy_data::colors;
+use automancy_system::util::num::NumTrait;
 use yakui::{
-    colored_box, colored_circle, draggable, use_state,
+    Color, Constraints, Rect, Response, Vec2, colored_box, colored_circle, draggable, use_state,
     util::widget,
     widget::{LayoutContext, PaintContext, Widget},
-    Color, Constraints, Rect, Response, Vec2,
 };
+
+use crate::{PADDING_SMALL, center_row, pad_x, simple_textbox};
 
 const TRACK_COLOR: Color = colors::BACKGROUND_2;
 const KNOB_COLOR: Color = colors::ORANGE;
@@ -155,41 +156,31 @@ fn round_to_step<T: NumTrait>(value: T, step: T) -> T {
 #[track_caller]
 pub fn num_input<T: NumTrait>(
     value: &mut T,
-    value_changed: bool,
     range: RangeInclusive<T>,
     parse: impl Fn(&str) -> Option<T>,
-    to_string: impl Fn(&T) -> String,
-) {
-    let text = use_state(String::new);
+    to_string: impl Fn(&T) -> String + 'static,
+) -> bool {
+    let text = {
+        let v = *value;
+        use_state(move || to_string(&v))
+    };
 
-    let updated = use_state(|| false);
+    let mut updated = false;
 
-    if value_changed {
-        updated.set(true);
-    }
-
-    let string_v = to_string(value);
-
-    let res = simple_textbox(
-        &string_v,
-        updated.get().then_some(&string_v),
-        Some(&string_v),
-    )
-    .into_inner();
-
+    let res = simple_textbox(&mut text.borrow_mut(), None).into_inner();
     if let Some(v) = res.text {
         text.set(v);
     }
 
-    updated.set(false);
+    if (res.activated || res.lost_focus)
+        && let Some(v) = parse(text.borrow().as_str().trim())
+    {
+        *value = v.clamp(*range.start(), *range.end());
 
-    if res.activated || res.lost_focus {
-        if let Some(v) = parse(text.borrow().as_str().trim()) {
-            *value = v.clamp(*range.start(), *range.end());
-        }
-
-        updated.set(true);
+        updated = true;
     }
+
+    updated
 }
 
 #[track_caller]
@@ -198,7 +189,7 @@ pub fn slider<T: NumTrait>(
     range: RangeInclusive<T>,
     step: Option<T>,
     parse: impl Fn(&str) -> Option<T>,
-    to_string: impl Fn(&T) -> String,
+    to_string: impl Fn(&T) -> String + 'static,
 ) -> bool {
     let mut updated = false;
 
@@ -212,7 +203,7 @@ pub fn slider<T: NumTrait>(
         }
 
         pad_x(PADDING_SMALL, 0.0).show(|| {
-            num_input(value, updated, range, parse, to_string);
+            updated = updated || num_input(value, range, parse, to_string);
         });
     });
 

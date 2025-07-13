@@ -1,7 +1,8 @@
-use crate::GameState;
 use automancy_resources::error::{error_to_key, peek_err, pop_err};
 use automancy_ui::{button, label, row_max, window};
 use yakui::{spacer, widgets::Layer};
+
+use crate::GameState;
 
 /// Draws an error popup. Can only be called when there are errors in the queue!
 pub fn error_popup(state: &mut GameState) {

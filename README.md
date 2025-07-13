@@ -22,7 +22,7 @@ Some of the major techs used:
 - yakui (for the GUI)
 - Rhai (for the scripting)
     - TBD: we're switching to wasm
-- Blender (for the modelling)
+- Blender (for the modelling) 
 - Rusty Object Notation - 'ron' (for the definition files)
 
 ### Folk's
@@ -38,7 +38,6 @@ Major modellers:
 - :c
 
 Major SFX designers:
-- Madeline Sparkles
 - :c
 
 ## ~ All the links ~
@@ -58,11 +57,11 @@ criteria:
 
 - The viewport is _exactly_ 160cm by 160cm (cm is used to reduce rounding errors).
 - The file does not contain any color outside of fills.
-  - That means, no gradients.
+    - That means, no gradients.
 - The file does not contain any clipping or masking.
-  - Use the boolean operators.
+    - Use the boolean operators.
 - The file does not contain any strokes.
-  - Use "Stroke to Path" to convert them.
+    - Use "Stroke to Path" to convert them.
 
 **Currently, the game supports neither materials nor textures,** **_and has no plans to support them._**
 
@@ -76,18 +75,20 @@ criteria:
 
 #### The Standard™️ Operational®️ Procedure©️
 
-- **Run `run.sh` to run the game.**
-    - Alternatively, run `cargo run -p build_script` before running the game.
-      This will build all the resources.
-      TBD: discussion of this wrt `mancie`?
+- Install [just](https://github.com/casey/just)!
+    - Then, execute `just run` or `just run dev` to run a dev build.
+    - Or `just run staging` for a staging build, for a more performant build of the game.
+    - And for release builds, `just run release`. This uses `opt-level=s` and `lto=fat` to minimize binary size.
+    - If you just want to build the game, run `just build`. The same arguments should work too.
+- After adding a dependency, please be sure to run:
+    - `just sort`
+        - This also depends on [cargo-sort](https://github.com/devinr528/cargo-sort).
+    - `just license`
+        - This also depends on [cargo-about](https://github.com/EmbarkStudios/cargo-about).
 
 #### On Async
 
 The rendering is single-threaded, the game logic is run with an actor system (ractor) on top of a Tokio runtime.
-
-"Scripts" are called "functions" as the name is taken in-game by what would otherwise be called "recipes."
-- The weird terminology comes from the fact that "recipes" doesn't make sense for machines.
-- TBD: rename?? this is sometimes stupidly hard to accomodate for because brainfarts. just don't call them functions or smth
 
 #### Write all tile logic in script-side
 

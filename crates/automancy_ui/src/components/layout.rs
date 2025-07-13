@@ -1,51 +1,7 @@
 use yakui::{
-    util::widget_children,
-    widget::{LayoutContext, Widget},
+    CrossAxisAlignment, MainAxisAlignItems, MainAxisAlignment, MainAxisSize,
     widgets::{CountGrid, List},
-    Constraints, CrossAxisAlignment, MainAxisAlignItems, MainAxisAlignment, MainAxisSize, Response,
-    Vec2,
 };
-
-#[derive(Debug, Clone, Default)]
-pub struct ViewportConstrained {}
-
-impl ViewportConstrained {
-    #[track_caller]
-    pub fn show<F: FnOnce()>(self, children: F) -> Response<()> {
-        widget_children::<ViewportConstrainedWidget, F>(children, self)
-    }
-}
-
-#[derive(Debug)]
-struct ViewportConstrainedWidget {
-    props: ViewportConstrained,
-}
-
-type ViewportConstrainedResponse = ();
-
-impl Widget for ViewportConstrainedWidget {
-    type Props<'a> = ViewportConstrained;
-    type Response = ViewportConstrainedResponse;
-
-    fn new() -> Self {
-        Self {
-            props: ViewportConstrained::default(),
-        }
-    }
-
-    fn update(&mut self, props: Self::Props<'_>) -> Self::Response {
-        self.props = props;
-    }
-
-    fn layout(&self, ctx: LayoutContext<'_>, constraints: Constraints) -> Vec2 {
-        let constraints = Constraints {
-            min: constraints.min,
-            max: constraints.max.min(ctx.layout.viewport().size()),
-        };
-
-        self.default_layout(ctx, constraints)
-    }
-}
 
 pub fn grid_row(count: usize) -> CountGrid {
     let mut v = CountGrid::row(count);
@@ -177,9 +133,4 @@ pub fn spaced_col(children: impl FnOnce()) {
     let mut v = list_col_max();
     v.main_axis_alignment = MainAxisAlignment::SpaceEvenly;
     v.show(children);
-}
-
-#[track_caller]
-pub fn viewport_constrained(children: impl FnOnce()) {
-    ViewportConstrained::default().show(children);
 }

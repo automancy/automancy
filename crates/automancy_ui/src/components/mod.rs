@@ -1,4 +1,4 @@
-use automancy_defs::math::Vec2;
+use automancy_data::math::Vec2;
 
 pub const HEADING_SIZE: f32 = 20.0;
 pub const LABEL_SIZE: f32 = 14.0;
@@ -31,20 +31,8 @@ mod textbox;
 mod tip;
 mod util;
 
-pub use self::button::*;
-pub use self::checkbox::*;
-pub use self::container::*;
-pub use self::game_object::*;
-pub use self::hover::*;
-pub use self::interactive::*;
-pub use self::layout::*;
-pub use self::movable::*;
-pub use self::position::*;
-pub use self::scrollable::*;
-pub use self::select::*;
-pub use self::shapes::*;
-pub use self::slider::*;
-pub use self::text::*;
-pub use self::textbox::*;
-pub use self::tip::*;
-pub use self::util::*;
+pub use self::{
+    button::*, checkbox::*, container::*, game_object::*, hover::*, interactive::*, layout::*,
+    movable::*, position::*, scrollable::*, select::*, shapes::*, slider::*, text::*, textbox::*,
+    tip::*, util::*,
+};
