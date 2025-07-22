@@ -3,6 +3,8 @@ name = "automancy_defs"
 version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
+license = { workspace = true }
+license-file = { workspace = true }
 
 [dependencies]
 # logging

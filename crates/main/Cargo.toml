@@ -3,6 +3,8 @@ name = "automancy"
 version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
+license = { workspace = true }
+license-file = { workspace = true }
 
 [dependencies]
 automancy_lib = { workspace = true }

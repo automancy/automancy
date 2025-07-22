@@ -12,3 +12,6 @@ buildscript:
 
 sort:
     cargo sort --grouped --workspace
+
+license:
+    cargo about generate --workspace about.hbs -o README-LICENSE.html

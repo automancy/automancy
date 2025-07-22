@@ -1,7 +1,10 @@
 [package]
 name = "build_script"
 version = "0.1.0"
-edition = "2024"
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+license-file = { workspace = true }
 
 [dependencies]
 walkdir = { workspace = true }

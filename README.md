@@ -80,8 +80,11 @@ criteria:
     - Then, run `just` or `just dev` for dev builds.
     - Or `just staging` for a staging build, for a more performant build of the game.
     - And for release builds, `just release`. This uses `opt-level=s` and `lto=fat` to minimize binary size.
-- After adding a dependency, please be sure to run `just sort`.
-    - This also depends on [cargo-sort](https://github.com/devinr528/cargo-sort).
+- After adding a dependency, please be sure to run:
+    - `just sort`
+        - This also depends on [cargo-sort](https://github.com/devinr528/cargo-sort).
+    - `just license`
+        - This also depends on [cargo-about](https://github.com/EmbarkStudios/cargo-about).
 
 #### On Async
 

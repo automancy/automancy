@@ -19,6 +19,8 @@ authors = [
     "Mae Rosaline <mae@maestoso.online>",
 ]
 edition = "2024"
+license = "MPL-2.0"
+license-file = "LICENSE"
 
 [workspace.dependencies]
 automancy_defs = { path = "crates/automancy_defs" }
@@ -85,7 +87,7 @@ anyhow = "1.0.98"
 chrono = "0.4.41"
 fuzzy-matcher = "0.3.7"
 interpolator = { version = "0.5.0", features = ["number"] }
-rand = "0.9.1"
+rand = "0.9.2"
 slice-group-by = "0.3.1"
 thiserror = "2.0.12"
 walkdir = "2.5.0"
