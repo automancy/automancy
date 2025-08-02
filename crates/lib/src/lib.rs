@@ -2,7 +2,7 @@ pub static PROFILE: &str = option_env!("BUILD_PROFILE").unwrap_or("dev");
 pub static VERSION: &str = env!("CARGO_PKG_VERSION") + "-" + PROFILE;
 
 pub use anyhow;
-pub use automancy_defs::*;
+pub use automancy_data::*;
 pub use automancy_macros::*;
 pub use automancy_resources::*;
 pub use automancy_system::*;
@@ -28,8 +28,5 @@ pub use yakui_winit;
 pub mod event;
 pub mod gpu;
 pub mod gui;
-pub mod renderer;
-pub mod ui_game_object;
+pub mod rendering;
 pub mod util;
-
-pub type GameState = InnerGameState<renderer::GameRenderer>;

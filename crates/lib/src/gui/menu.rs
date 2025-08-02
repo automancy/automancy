@@ -1,6 +1,6 @@
 use std::{fs, mem};
 
-use automancy_defs::{colors::BACKGROUND_3, math::vec2};
+use automancy_data::{colors::BACKGROUND_3, math::vec2};
 use automancy_resources::{error::push_err, format::FormatContext, format_time};
 use automancy_system::{
     GameLoadResult,
@@ -30,7 +30,7 @@ pub fn main_menu(state: &mut GameState, event_loop: &ActiveEventLoop) -> anyhow:
     let mut result = Ok(false);
 
     window("Main Menu".to_string(), || {
-        image(state.logo.unwrap(), vec2(128.0, 128.0));
+        image(state.logo.unwrap(), Vec2::new(128.0, 128.0));
 
         if button(
             &state

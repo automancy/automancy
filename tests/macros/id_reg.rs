@@ -1,4 +1,4 @@
-use automancy_defs::id::{Id, Interner};
+use automancy_data::id::{Id, Interner};
 use automancy_macros::IdReg;
 
 #[derive(IdReg)]

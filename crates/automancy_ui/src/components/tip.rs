@@ -1,6 +1,6 @@
 use std::cell::Cell;
 
-use automancy_defs::colors;
+use automancy_data::colors;
 use yakui::widgets::Text;
 
 use crate::{interactive, label_text, symbol};

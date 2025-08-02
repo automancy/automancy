@@ -1,24 +1,24 @@
 use std::mem;
 
-use automancy_defs::{
+use automancy_data::{
     colors,
     colors::BACKGROUND_3,
     coord::TileCoord,
     id::{Id, ModelId},
     math::{Vec2, vec2},
-    rendering::InstanceData,
+    rendering::Instance,
     stack::ItemStack,
 };
 use automancy_resources::{
-    data::{Data, DataMap},
+    generic::{Data, DataMap},
     rhai_call_options, rhai_log_err,
     types::IconMode,
 };
 use automancy_system::{input::ActionType, util::is_research_unlocked};
 use automancy_ui::{
-    DIVIER_HEIGHT, DIVIER_THICKNESS, MEDIUM_ICON_SIZE, PADDING_MEDIUM, PositionRecord, RoundRect,
-    SMALL_ICON_SIZE, TINY_ICON_SIZE, UiGameObjectType, button, centered_horizontal, col, group,
-    heading, inactive_button, interactive, label, list_row, movable, row, scroll_horizontal,
+    DIVIER_HEIGHT, DIVIER_THICKNESS, GameObjectType, MEDIUM_ICON_SIZE, PADDING_MEDIUM,
+    PositionRecord, RoundRect, SMALL_ICON_SIZE, TINY_ICON_SIZE, button, centered_horizontal, col,
+    group, heading, inactive_button, interactive, label, list_row, movable, row, scroll_horizontal,
     scroll_horizontal_bar_alignment, scroll_vertical, scroll_vertical_bar_alignment,
     ui_game_object, window_box,
 };
@@ -35,8 +35,8 @@ use crate::GameState;
 
 const PUZZLE_HEX_GRID_LAYOUT: HexLayout = HexLayout {
     orientation: HexOrientation::Pointy,
-    origin: vec2(TINY_ICON_SIZE, 0.0),
-    scale: vec2(TINY_ICON_SIZE, -TINY_ICON_SIZE),
+    origin: Vec2::new(TINY_ICON_SIZE, 0.0),
+    scale: Vec2::new(TINY_ICON_SIZE, -TINY_ICON_SIZE),
 };
 
 fn player_inventory(state: &mut GameState, game_data: &mut DataMap) {
@@ -116,9 +116,9 @@ fn research_selection(state: &mut GameState, game_data: &mut DataMap) {
                     let interact = interactive(|| {
                         centered_horizontal(|| {
                             ui_game_object(
-                                InstanceData::default(),
-                                UiGameObjectType::Model(icon),
-                                vec2(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE),
+                                Instance::default(),
+                                GameObjectType::Model(icon),
+                                Vec2::new(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE),
                                 Some(research.icon_mode.model_matrix()),
                                 Some(research.icon_mode.world_matrix()),
                             );
@@ -225,8 +225,8 @@ fn research_board_tiles(
                     Dim2::pixels(pos.x, pos.y),
                     || {
                         ui_game_object(
-                            InstanceData::default(),
-                            UiGameObjectType::Model(
+                            Instance::default(),
+                            GameObjectType::Model(
                                 state.resource_man.model_or_puzzle_space(&ModelId(id)),
                             ),
                             PUZZLE_HEX_GRID_LAYOUT.hex_size * 2.0,
@@ -597,8 +597,8 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                                                 row(|| {
                                                     let reset = interactive(|| {
                                                         ui_game_object(
-                                                            InstanceData::default(),
-                                                            UiGameObjectType::Model(ModelId(
+                                                            Instance::default(),
+                                                            GameObjectType::Model(ModelId(
                                                                 state
                                                                     .resource_man
                                                                     .registry
@@ -626,8 +626,8 @@ pub fn player(state: &mut GameState, game_data: &mut DataMap) {
                                                     for id in ids {
                                                         let select = interactive(|| {
                                                             ui_game_object(
-                                                                InstanceData::default(),
-                                                                UiGameObjectType::Model(
+                                                                Instance::default(),
+                                                                GameObjectType::Model(
                                                                     state
                                                                         .resource_man
                                                                         .model_or_missing_item(

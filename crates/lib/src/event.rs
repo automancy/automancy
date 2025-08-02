@@ -4,12 +4,12 @@ use std::{
     time::{Instant, SystemTime},
 };
 
-use automancy_defs::{
+use automancy_data::{
     coord::TileCoord,
     id::{Id, TileId},
     window,
 };
-use automancy_resources::data::Data;
+use automancy_resources::generic::Data;
 use automancy_system::{
     game::{GameSystemMessage, PlaceTileResponse},
     input::{self, ActionType},
@@ -32,7 +32,7 @@ pub fn refresh_maps(state: &mut GameState) {
     fs::create_dir_all(MAP_PATH).unwrap();
 
     state.loop_store.map_infos_cache = fs::read_dir(MAP_PATH)
-        .expect("Map folder doesn't exist- is the disk full?")
+        .expect("map folder doesn't exist- is the disk full?")
         .flatten()
         .map(|f| f.file_name().to_str().unwrap().to_string())
         .filter(|f| !f.starts_with('.'))
@@ -64,7 +64,7 @@ pub async fn shutdown_graceful(
 
     game.call(GameSystemMessage::SaveMap, None)
         .await
-        .expect("Could not save the game on exit!");
+        .expect("could not save the game on exit!");
     game.stop(Some("Game closed".to_string()));
     game_handle.take().unwrap().await?;
 

@@ -1,8 +1,8 @@
 use std::time::Instant;
 
-use automancy_defs::{colors, coord::TileCoord, id::Id, stack::ItemStack};
+use automancy_data::{colors, coord::TileCoord, id::Id, stack::ItemStack};
 use automancy_resources::{
-    data::{Data, DataMap},
+    generic::{Data, DataMap},
     inventory::Inventory,
     rhai_ui::RhaiUiUnit,
 };

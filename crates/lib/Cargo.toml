@@ -4,13 +4,9 @@ version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
-license-file = { workspace = true }
 
 [dependencies]
-automancy_defs = { workspace = true }
 automancy_macros = { workspace = true }
-automancy_resources = { workspace = true }
-automancy_system = { workspace = true }
 automancy_ui = { workspace = true }
 
 # logging

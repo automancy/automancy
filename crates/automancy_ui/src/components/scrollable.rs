@@ -1,6 +1,6 @@
 use std::cell::Cell;
 
-use automancy_defs::{
+use automancy_data::{
     colors,
     math::{Vec2Swizzles, vec2},
 };
@@ -361,7 +361,7 @@ pub fn scroll_vertical_bar_alignment(
         let res = res.unwrap();
 
         if let Some(alignment) = alignment {
-            scroll_bar(res.into_inner(), alignment.as_vec2(), ScrollDirection::Y);
+            scroll_bar(res.into_inner(), alignment.as_Vec2::new(), ScrollDirection::Y);
         }
     });
 }
@@ -386,7 +386,7 @@ pub fn scroll_horizontal_bar_alignment(
         let res = res.unwrap();
 
         if let Some(alignment) = alignment {
-            scroll_bar(res.into_inner(), alignment.as_vec2(), ScrollDirection::X);
+            scroll_bar(res.into_inner(), alignment.as_Vec2::new(), ScrollDirection::X);
         }
     });
 }
@@ -428,9 +428,9 @@ fn scroll_bar(res: ScrollableResponse, alignment: Vec2, dir: ScrollDirection) {
                     );
 
                     rect.min_size = if dir == ScrollDirection::Y {
-                        vec2(SCROLL_SIZE, (res.size * ratio).floor())
+                        Vec2::new(SCROLL_SIZE, (res.size * ratio).floor())
                     } else {
-                        vec2((res.size * ratio).floor(), SCROLL_SIZE)
+                        Vec2::new((res.size * ratio).floor(), SCROLL_SIZE)
                     };
                     rect.show();
                 });

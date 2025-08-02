@@ -1,4 +1,4 @@
-use automancy_defs::colors::BACKGROUND_3;
+use automancy_data::colors::BACKGROUND_3;
 use automancy_ui::{DIVIER_HEIGHT, DIVIER_THICKNESS, col, label, movable, window};
 use ron::ser::PrettyConfig;
 use yakui::{divider, widgets::Layer};

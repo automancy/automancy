@@ -1,16 +1,16 @@
-use automancy_defs::{
+use automancy_data::{
     colors,
     id::{Id, ModelId, TileId},
     math::{Float, Matrix4, vec2},
-    rendering::InstanceData,
+    rendering::Instance,
 };
 use automancy_resources::{
-    data::{Data, DataMap},
+    generic::{Data, DataMap},
     types::IconMode,
 };
 use automancy_system::util::{is_research_unlocked, should_category_show};
 use automancy_ui::{
-    LARGE_ICON_SIZE, MEDIUM_ICON_SIZE, RoundRect, UiGameObjectType, center_col, col, hover_tip,
+    GameObjectType, LARGE_ICON_SIZE, MEDIUM_ICON_SIZE, RoundRect, center_col, col, hover_tip,
     interactive, label, row, scroll_horizontal_bar_alignment, ui_game_object,
 };
 use interpolator::Formattable;
@@ -116,9 +116,9 @@ fn draw_tile_selection(
 
         let response = interactive(|| {
             ui_game_object(
-                InstanceData::default().with_color_offset(color_offset),
-                UiGameObjectType::Tile(*id, DataMap::default()),
-                vec2(size, size),
+                Instance::default().with_color_offset(color_offset),
+                GameObjectType::Tile(*id, DataMap::default()),
+                Vec2::new(size, size),
                 Some(rotate),
                 Some(world_matrix),
             );
@@ -170,12 +170,12 @@ pub fn tile_selections(
                                     let category = state.resource_man.registry.categories[id];
 
                                     let ty = match category.icon_mode {
-                                        IconMode::Item => UiGameObjectType::Model(
+                                        IconMode::Item => GameObjectType::Model(
                                             state
                                                 .resource_man
                                                 .model_or_missing_item(&ModelId(category.icon)),
                                         ),
-                                        IconMode::Tile => UiGameObjectType::Tile(
+                                        IconMode::Tile => GameObjectType::Tile(
                                             TileId(category.icon),
                                             DataMap::default(),
                                         ),
@@ -183,9 +183,9 @@ pub fn tile_selections(
 
                                     let response = interactive(|| {
                                         ui_game_object(
-                                            InstanceData::default(),
+                                            Instance::default(),
                                             ty,
-                                            vec2(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE),
+                                            Vec2::new(MEDIUM_ICON_SIZE, MEDIUM_ICON_SIZE),
                                             Some(model_matrix),
                                             Some(world_matrix),
                                         );

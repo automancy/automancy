@@ -1,6 +1,6 @@
 use std::cell::Cell;
 
-use automancy_defs::colors;
+use automancy_data::colors;
 use yakui::{
     Alignment, Constraints, Dim2, Flow, Response, Vec2,
     event::{EventInterest, EventResponse, WidgetEvent},

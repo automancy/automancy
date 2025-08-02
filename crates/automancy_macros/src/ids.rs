@@ -8,7 +8,7 @@ use crate::parse_literal;
 ///
 /// ```
 /// use automancy_macros::IdReg;
-/// use automancy_defs::id::Id;
+/// use automancy_data::id::Id;
 ///
 /// #[derive(IdReg)]
 /// pub struct FooIds {
@@ -85,14 +85,14 @@ pub fn derive_id_reg(item: TokenStream) -> TokenStream {
         .zip(names)
         .flat_map(|((field, namespace), name)| {
             quote! {
-                #field: automancy_defs::id::IdRaw::new(#namespace, #name).to_id(interner),
+                #field: automancy_data::id::IdRaw::new(#namespace, #name).to_id(interner),
             }
         })
         .collect::<TokenStream>();
 
     quote! {
         impl #name {
-            pub fn new(interner: &mut automancy_defs::id::Interner) -> Self {
+            pub fn new(interner: &mut automancy_data::id::Interner) -> Self {
                 Self {
                     #items
                 }

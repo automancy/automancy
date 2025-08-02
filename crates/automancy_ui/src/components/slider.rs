@@ -1,6 +1,6 @@
 use std::{cell::Cell, fmt::Debug, ops::RangeInclusive};
 
-use automancy_defs::colors;
+use automancy_data::colors;
 use automancy_system::util::num::NumTrait;
 use yakui::{
     Color, Constraints, Rect, Response, Vec2, colored_box, colored_circle, draggable, use_state,

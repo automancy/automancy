@@ -1,4 +1,4 @@
-use automancy_defs::colors::BLACK;
+use automancy_data::colors::BLACK;
 use cosmic_text::FamilyOwned;
 use yakui::{
     Alignment, Color, Constraints, Response, Vec2, align, constrained,

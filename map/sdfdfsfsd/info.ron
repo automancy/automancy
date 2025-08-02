@@ -1,0 +1,1 @@
+(tile_count:5,data:({"automancy:player_inventory":Inventory(([("automancy:white_mechwork",49),("automancy:white_matter",1120)])),"automancy:research_items_filled":SetId([]),"automancy:research_puzzle_completed":SetId([]),"core:unlocked_researches":SetId(["automancy:basic_prism","automancy:basic_assembler"])}))

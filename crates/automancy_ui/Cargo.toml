@@ -4,20 +4,15 @@ version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
-license-file = { workspace = true }
 
 [dependencies]
-automancy_defs = { workspace = true }
 automancy_macros = { workspace = true }
-automancy_resources = { workspace = true }
-automancy_system = { workspace = true }
 
 # logging
 log = { workspace = true }
 
 # parsing / data mangling / math / files
 crunch = { workspace = true }
-
 ron = { workspace = true }
 serde = { workspace = true }
 
@@ -39,3 +34,5 @@ rhai = { workspace = true }
 tokio = { workspace = true }
 
 # utils
+strum = { workspace = true }
+strum_macros = { workspace = true }

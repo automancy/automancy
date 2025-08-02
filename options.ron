@@ -1,0 +1,73 @@
+(
+    graphics: (
+        fps_limit: 250,
+        fullscreen: false,
+        ui_scale: Normal,
+        anti_aliasing: FXAA,
+    ),
+    audio: (
+        sfx_volume: 0.5,
+        music_volume: 0.5,
+    ),
+    gui: (
+        font: Some("Exo 2"),
+    ),
+    keymap: {
+        Character("c"): (
+            action: Copy,
+            press_type: Tap,
+        ),
+        Named(Control): (
+            action: HotkeyActive,
+            press_type: Hold,
+        ),
+        Named(F1): (
+            action: ToggleGui,
+            press_type: Toggle,
+        ),
+        Named(F11): (
+            action: Fullscreen,
+            press_type: Tap,
+        ),
+        Named(F2): (
+            action: Screenshot,
+            press_type: Tap,
+        ),
+        Character("x"): (
+            action: Cut,
+            press_type: Tap,
+        ),
+        Named(Escape): (
+            action: Cancel,
+            press_type: Tap,
+        ),
+        Character("z"): (
+            action: Undo,
+            press_type: Tap,
+        ),
+        Character("e"): (
+            action: Player,
+            press_type: Toggle,
+        ),
+        Named(Shift): (
+            action: SelectMode,
+            press_type: Hold,
+        ),
+        Character("r"): (
+            action: Redo,
+            press_type: Tap,
+        ),
+        Named(F3): (
+            action: Debug,
+            press_type: Toggle,
+        ),
+        Named(Backspace): (
+            action: Delete,
+            press_type: Tap,
+        ),
+        Character("v"): (
+            action: Paste,
+            press_type: Tap,
+        ),
+    },
+)

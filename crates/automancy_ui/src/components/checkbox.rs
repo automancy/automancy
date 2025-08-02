@@ -1,4 +1,4 @@
-use automancy_defs::colors;
+use automancy_data::colors;
 use yakui::{
     Response,
     event::{EventInterest, EventResponse, WidgetEvent},

@@ -1,19 +1,19 @@
 use std::{sync::Arc, time::Instant};
 
-use automancy_defs::{
+use automancy_data::{
     coord::TileCoord,
     id::{Id, ModelId, SharedStr, TileId},
     math::Matrix4,
-    rendering::{GameMatrix, InstanceData},
+    rendering::{GameMatrixData, Instance},
 };
 use automancy_resources::{
-    ResourceManager, data::DataMap, rhai_render::RenderCommand, types::IconMode,
+    ResourceManager, generic::DataMap, rhai_render::RenderCommand, types::IconMode,
 };
 use automancy_system::{
     game::TAKE_ITEM_ANIMATION_SPEED, tile_entity::collect_render_commands, ui_state::TextField,
 };
 use automancy_ui::{
-    HOVER_TIP, UiGameObjectType, col, group, hover_tip, radio, scroll_vertical, textbox,
+    GameObjectType, HOVER_TIP, col, group, hover_tip, radio, scroll_vertical, textbox,
     ui_game_object,
 };
 use fuzzy_matcher::FuzzyMatcher;
@@ -78,9 +78,9 @@ pub fn render_overlay_cached(
 
                 for mesh in meshes.iter().flatten() {
                     renderer.overlay_instances.push((
-                        InstanceData::default().with_alpha(0.6),
+                        Instance::default().with_alpha(0.6),
                         model,
-                        GameMatrix::<true>::new(
+                        GameMatrixData::<true>::new(
                             transform * model_matrix,
                             world_matrix,
                             mesh.matrix,
@@ -119,7 +119,7 @@ pub fn searchable_id(
                             let name = get_name(state, *id);
                             let score = state.ui_state.text_field.fuse.fuzzy_match(&name, &text);
 
-                            if score.unwrap_or(0) < (name.len() / 2) as i64 {
+                            if score.unwrap_or(0) < (name.len() / 2) as isize {
                                 None
                             } else {
                                 Some(*id).zip(score)
@@ -195,8 +195,8 @@ pub fn take_item_animation(state: &mut GameState, id: Id, dst_rect: Rect) {
                     Dim2::pixels(pos.x, pos.y),
                     || {
                         ui_game_object(
-                            InstanceData::default(),
-                            UiGameObjectType::Model(state.resource_man.item_model_or_missing(&id)),
+                            Instance::default(),
+                            GameObjectType::Model(state.resource_man.item_model_or_missing(&id)),
                             size,
                             None,
                             Some(IconMode::Item.world_matrix()),

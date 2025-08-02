@@ -15,7 +15,6 @@ use camera::GameCamera;
 use color_eyre::config::HookBuilder;
 use cosmic_text::fontdb::Source;
 use game::{GameSystem, GameSystemMessage, TICK_INTERVAL};
-use glam::uvec2;
 use gpu::Gpu;
 use input::InputHandler;
 use kira::{
@@ -61,46 +60,46 @@ fn load_resources(
 
             resource_man
                 .load_models(&dir, namespace)
-                .expect("Error loading models");
+                .expect("error loading models");
 
-            resource_man.load_audio(&dir).expect("Error loading audio");
+            resource_man.load_audio(&dir).expect("error loading audio");
 
             resource_man
                 .load_tiles(&dir, namespace)
-                .expect("Error loading tiles");
+                .expect("error loading tiles");
 
             resource_man
                 .load_items(&dir, namespace)
-                .expect("Error loading items");
+                .expect("error loading items");
 
             resource_man
                 .load_tags(&dir, namespace)
-                .expect("Error loading tags");
+                .expect("error loading tags");
             resource_man
                 .load_categories(&dir, namespace)
-                .expect("Error loading categories");
+                .expect("error loading categories");
 
             resource_man
                 .load_scripts(&dir, namespace)
-                .expect("Error loading scripts");
+                .expect("error loading scripts");
 
             resource_man
                 .load_translates(&dir, namespace, selected_language)
-                .expect("Error loading translates");
+                .expect("error loading translates");
 
             resource_man
                 .load_shaders(&dir)
-                .expect("Error loading shaders");
+                .expect("error loading shaders");
 
-            resource_man.load_fonts(&dir).expect("Error loading fonts");
+            resource_man.load_fonts(&dir).expect("error loading fonts");
 
             resource_man
                 .load_functions(&dir, namespace)
-                .expect("Error loading functions");
+                .expect("error loading functions");
 
             resource_man
                 .load_researches(&dir, namespace)
-                .expect("Error loading researches");
+                .expect("error loading researches");
 
             log::info!("Loaded namespace {namespace}.");
         });
@@ -259,7 +258,7 @@ impl ApplicationHandler for Automancy {
         self.window = Some(Arc::new(
             event_loop
                 .create_window(window_attributes)
-                .expect("Failed to open window"),
+                .expect("failed to open window"),
         ));
         log::info!("Window created.");
 
@@ -313,7 +312,7 @@ impl ApplicationHandler for Automancy {
         let logo = image::load_from_memory(LOGO).unwrap();
         let mut logo = Texture::new(
             yakui::paint::TextureFormat::Rgba8Srgb,
-            uvec2(logo.width(), logo.height()),
+            uVec2::new(logo.width(), logo.height()),
             logo.into_bytes(),
         );
         logo.mag_filter = TextureFilter::Linear;

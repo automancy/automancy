@@ -1,8 +1,8 @@
 use std::{mem, num::NonZero, sync::Arc};
 
-use automancy_defs::rendering::{
-    AnimationMatrixData, GameUBO, GpuInstance, IntermediateUBO, MatrixData, PostProcessingUBO,
-    Vertex, WorldMatrixData,
+use automancy_data::rendering::{
+    GameUniformData, GpuAnimationMatrixData, GpuGameMatrixData, GpuInstance, GpuVertex,
+    GpuWorldMatrixData, IntermediateUniformData, PostProcessingUniformData,
 };
 use automancy_macros::OptionGetter;
 use automancy_resources::ResourceManager;
@@ -457,9 +457,8 @@ pub struct PostProcessingResources {
 
 pub struct RenderResources {
     pub overlay_objects_resources: OverlayObjectsResources,
-    pub game_resources: GameResources,
 
-    pub gui_resources: Option<GuiResources>,
+    pub game_resources: GameResources,
 
     pub post_processing_resources: PostProcessingResources,
 }
@@ -786,7 +785,7 @@ pub fn init_gpu_resources(
     device: &Device,
     config: &SurfaceConfiguration,
     resource_man: &ResourceManager,
-    vertices: Vec<Vertex>,
+    vertices: Vec<GpuVertex>,
     indices: Vec<u16>,
 ) -> (SharedResources, RenderResources, GlobalResources) {
     let game_shader = device.create_shader_module(ShaderModuleDescriptor {
@@ -981,7 +980,7 @@ pub fn init_gpu_resources(
         vertex: VertexState {
             module: &game_shader,
             entry_point: None,
-            buffers: &[Vertex::desc(), GpuInstance::desc()],
+            buffers: &[GpuVertex::desc(), GpuInstance::desc()],
             compilation_options: PipelineCompilationOptions::default(),
         },
         fragment: Some(FragmentState {
@@ -1031,25 +1030,25 @@ pub fn init_gpu_resources(
     let game_resources = {
         let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Game Uniform Buffer"),
-            contents: bytemuck::cast_slice(&[GameUBO::default()]),
+            contents: bytemuck::cast_slice(&[GameUniformData::default()]),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
 
         let matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Game Matrix Data Buffer"),
-            contents: &vec![0; mem::size_of::<MatrixData>() * 524288],
+            contents: &vec![0; mem::size_of::<GpuGameMatrixData>() * 524288],
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
         });
 
         let animation_matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Game Animation Matrix Data Buffer"),
-            contents: &vec![0; mem::size_of::<AnimationMatrixData>() * 524288],
+            contents: &vec![0; mem::size_of::<GpuAnimationMatrixData>() * 524288],
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
         });
 
         let world_matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Game World Matrix Data Buffer"),
-            contents: &vec![0; mem::size_of::<WorldMatrixData>()],
+            contents: &vec![0; mem::size_of::<GpuWorldMatrixData>()],
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
         });
 
@@ -1093,19 +1092,19 @@ pub fn init_gpu_resources(
     let overlay_objects_resources = {
         let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Overlay Objects Uniform Buffer"),
-            contents: bytemuck::cast_slice(&[GameUBO::default()]),
+            contents: bytemuck::cast_slice(&[GameUniformData::default()]),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
 
         let matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Overlay Objects Matrix Data Buffer"),
-            contents: &vec![0; mem::size_of::<MatrixData>() * 256],
+            contents: &vec![0; mem::size_of::<GpuGameMatrixData>() * 256],
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
         });
 
         let world_matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Overlay Objects World Matrix Data Buffer"),
-            contents: &vec![0; mem::size_of::<WorldMatrixData>() * 256],
+            contents: &vec![0; mem::size_of::<GpuWorldMatrixData>() * 256],
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
         });
 
@@ -1122,13 +1121,13 @@ pub fn init_gpu_resources(
                 },
                 BindGroupEntry {
                     binding: 2,
-                    resource: game_resources
-                        .animation_matrix_data_buffer
-                        .as_entire_binding(),
+                    resource: world_matrix_data_buffer.as_entire_binding(),
                 },
                 BindGroupEntry {
                     binding: 3,
-                    resource: world_matrix_data_buffer.as_entire_binding(),
+                    resource: game_resources
+                        .animation_matrix_data_buffer
+                        .as_entire_binding(),
                 },
             ],
             label: Some("overlay_objects_bind_group"),
@@ -1150,26 +1149,26 @@ pub fn init_gpu_resources(
     let gui_resources = {
         let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Gui Uniform Buffer"),
-            contents: bytemuck::cast_slice(&[GameUBO::default()]),
+            contents: bytemuck::cast_slice(&[GameUniformData::default()]),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
 
         const MATRIX_DATA_SIZE: usize = 4096;
         let matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Gui Matrix Data Buffer"),
-            contents: &vec![0; mem::size_of::<MatrixData>() * MATRIX_DATA_SIZE],
+            contents: &vec![0; mem::size_of::<GpuGameMatrixData>() * MATRIX_DATA_SIZE],
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
         });
 
         let animation_matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Gui Animation Matrix Data Buffer"),
-            contents: &vec![0; mem::size_of::<AnimationMatrixData>() * MATRIX_DATA_SIZE],
+            contents: &vec![0; mem::size_of::<GpuAnimationMatrixData>() * MATRIX_DATA_SIZE],
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
         });
 
         let world_matrix_data_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Gui World Matrix Data Buffer"),
-            contents: &vec![0; mem::size_of::<WorldMatrixData>() * MATRIX_DATA_SIZE],
+            contents: &vec![0; mem::size_of::<GpuWorldMatrixData>() * MATRIX_DATA_SIZE],
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
         });
 
@@ -1198,7 +1197,7 @@ pub fn init_gpu_resources(
 
         let post_processing_uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: None,
-            contents: bytemuck::cast_slice(&[PostProcessingUBO {
+            contents: bytemuck::cast_slice(&[PostProcessingUniformData {
                 flags: 0,
                 ..Default::default()
             }]),
@@ -1385,7 +1384,7 @@ pub fn init_gpu_resources(
     let (post_processing_resources, post_processing_pipeline) = {
         let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Post Processing Uniform Buffer"),
-            contents: bytemuck::cast_slice(&[PostProcessingUBO::default()]),
+            contents: bytemuck::cast_slice(&[PostProcessingUniformData::default()]),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
 
@@ -1491,7 +1490,7 @@ pub fn init_gpu_resources(
 
     let screenshot_uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
         label: Some("Screenshot Uniform Buffer"),
-        contents: bytemuck::cast_slice(&[IntermediateUBO::default()]),
+        contents: bytemuck::cast_slice(&[IntermediateUniformData::default()]),
         usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
     });
     let screenshot_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
@@ -1530,7 +1529,7 @@ pub fn init_gpu_resources(
 
     let present_uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
         label: Some("Present Uniform Buffer"),
-        contents: bytemuck::cast_slice(&[IntermediateUBO::default()]),
+        contents: bytemuck::cast_slice(&[IntermediateUniformData::default()]),
         usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
     });
     let present_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {

@@ -1,4 +1,4 @@
-use automancy_defs::colors;
+use automancy_data::colors;
 use yakui::{
     Color, Response, opaque,
     widgets::{Button, ButtonResponse, DynamicButtonStyle, Pad, Text},

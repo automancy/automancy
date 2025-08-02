@@ -1,4 +1,4 @@
-use automancy_defs::coord::TileCoord;
+use automancy_data::coord::TileCoord;
 
 pub mod macros;
 

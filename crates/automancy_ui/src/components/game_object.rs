@@ -1,53 +1,34 @@
-use std::{
-    cell::{Cell, RefCell},
-    collections::BTreeMap,
-};
+use std::cell::{Cell, RefCell};
 
-use automancy_defs::{
+use automancy_data::{
     id::{ModelId, TileId},
     math::Matrix4,
-    rendering::InstanceData,
+    rendering::Instance,
 };
-use automancy_resources::data::DataMap;
-use wgpu::{BindGroup, Buffer};
-use yakui::{
-    Rect, Response, Vec2,
-    paint::{PaintCall, PaintLayer, UserPaintCallId},
-    util::widget,
-    widget::Widget,
-};
+use automancy_resources::generic::DataMap;
+use yakui::{Rect, Response, Vec2, paint::PaintCall, util::widget, widget::Widget};
 
-use crate::custom::{mark_rerender, new_user_paint_id, should_rerender};
+use crate::custom::{CustomRenderer, RenderObject, mark_rerender, should_rerender};
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum UiGameObjectType {
+pub enum GameObjectType {
     Tile(TileId, DataMap),
     Model(ModelId),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct GameObject {
-    pub instance: InstanceData,
-    pub ty: UiGameObjectType,
+    pub instance: Instance,
+    pub ty: GameObjectType,
     pub size: Vec2,
     pub model_matrix: Matrix4,
     pub world_matrix: Matrix4,
 }
 
-pub fn ui_game_object(
-    instance: InstanceData,
-    ty: UiGameObjectType,
-    size: Vec2,
-    model_matrix: Option<Matrix4>,
-    world_matrix: Option<Matrix4>,
-) -> Response<()> {
-    GameObject::new(instance, ty, size, model_matrix, world_matrix).show()
-}
-
 impl GameObject {
     pub fn new(
-        instance: InstanceData,
-        ty: UiGameObjectType,
+        instance: Instance,
+        ty: GameObjectType,
         size: Vec2,
         model_matrix: Option<Matrix4>,
         world_matrix: Option<Matrix4>,
@@ -63,26 +44,34 @@ impl GameObject {
 
     #[track_caller]
     pub fn show(self) -> Response<()> {
-        widget::<GameElementWidget>(Some(self))
+        widget::<GameObjectWidget>(Some(self))
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct GameElementPaint {
-    pub props: GameObject,
-    pub clip_offset: Vec2,
-    pub clip_scale: Vec2,
-    pub present_uniform: Option<Buffer>,
-    pub present_bind_group: Option<BindGroup>,
+pub fn ui_game_object(
+    instance: Instance,
+    ty: GameObjectType,
+    size: Vec2,
+    model_matrix: Option<Matrix4>,
+    world_matrix: Option<Matrix4>,
+) -> Response<()> {
+    GameObject::new(instance, ty, size, model_matrix, world_matrix).show()
 }
 
 #[derive(Debug, Clone)]
-pub struct GameElementWidget {
+pub struct GameObjectPaint {
+    pub props: GameObject,
+    pub clip_offset: Vec2,
+    pub clip_scale: Vec2,
+}
+
+#[derive(Debug, Clone)]
+pub struct GameObjectWidget {
     props: RefCell<Option<GameObject>>,
     clip: Cell<Rect>,
 }
 
-impl Widget for GameElementWidget {
+impl Widget for GameObjectWidget {
     type Props<'a> = Option<GameObject>;
     type Response = ();
 
@@ -96,7 +85,7 @@ impl Widget for GameElementWidget {
     fn update(&mut self, props: Self::Props<'_>) -> Self::Response {
         let old = self.props.get_mut();
 
-        if !should_rerender() && old != &props {
+        if old != &props && !should_rerender() {
             mark_rerender();
         }
 
@@ -146,32 +135,16 @@ impl Widget for GameElementWidget {
             let mut props = self.props.borrow().clone().unwrap();
             props.size *= ctx.layout.scale_factor();
 
-            ctx.dom.get_global_or_init(GameObjectRenderer::default).add(
-                layer,
-                GameElementPaint {
-                    props,
-                    clip_scale,
-                    clip_offset,
-                    present_bind_group: None,
-                    present_uniform: None,
-                },
-                inside,
-            );
+            let id =
+                ctx.dom
+                    .get_global_or_init(CustomRenderer::init)
+                    .add(RenderObject::GameObject(GameObjectPaint {
+                        props,
+                        clip_scale,
+                        clip_offset,
+                    }));
+
+            layer.calls.push((inside, PaintCall::User(id)));
         }
-    }
-}
-
-#[derive(Debug, Default, Clone)]
-struct GameObjectRenderer {
-    objects: BTreeMap<UserPaintCallId, GameElementPaint>,
-}
-
-impl GameObjectRenderer {
-    pub fn add(&mut self, layer: &mut PaintLayer, object: GameElementPaint, clip: Rect) {
-        let id = new_user_paint_id();
-
-        self.objects.insert(id, object);
-
-        layer.calls.push((clip, PaintCall::User(id)));
     }
 }

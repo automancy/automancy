@@ -1,4 +1,4 @@
-use automancy_defs::colors;
+use automancy_data::colors;
 use yakui::{
     Alignment, Dim2, Pivot, Response, Vec2, colored_circle, reflow, use_state,
     widgets::{ButtonResponse, Circle, Layer, Pad},

@@ -27,7 +27,7 @@ pub fn derive_option_getter(item: TokenStream) -> TokenStream {
                     let name = field
                         .ident
                         .clone()
-                        .expect("Somehow the field doesn't have a name");
+                        .expect("somehow the field doesn't have a name");
 
                     if attrs.contains(&get_ident) {
                         items.push((

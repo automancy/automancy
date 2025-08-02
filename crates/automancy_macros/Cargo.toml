@@ -4,13 +4,12 @@ version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
-license-file = { workspace = true }
 
 [lib]
 proc-macro = true
 
 [dependencies]
-automancy_defs = { workspace = true }
+automancy_data = { workspace = true }
 
 proc-macro2 = "1.0"
 quote = "1.0"
