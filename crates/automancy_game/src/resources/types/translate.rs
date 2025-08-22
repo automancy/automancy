@@ -5,24 +5,27 @@ use std::{
     path::Path,
 };
 
+use automancy_data::id::{Id, TileId, parse::parse_map_id_str};
 use hashbrown::HashMap;
 use interpolator::Formattable;
 use serde::Deserialize;
 
-#[derive(Debug, Default, Clone)]
+use crate::resources::{RON_EXT, ResourceManager, format::FormatContext};
+
+#[derive(Debug, Default)]
 pub struct TranslateDef {
-    pub none: SharedStr,
-    pub unnamed: SharedStr,
+    pub none: String,
+    pub unnamed: String,
 
-    pub(crate) items: HashMap<Id, SharedStr>,
-    pub(crate) tiles: HashMap<Id, SharedStr>,
-    pub(crate) categories: HashMap<Id, SharedStr>,
-    pub(crate) scripts: HashMap<Id, SharedStr>,
+    pub(crate) items: HashMap<Id, String>,
+    pub(crate) tiles: HashMap<Id, String>,
+    pub(crate) categories: HashMap<Id, String>,
+    pub(crate) scripts: HashMap<Id, String>,
 
-    pub(crate) gui: HashMap<Id, SharedStr>,
-    pub(crate) error: HashMap<Id, SharedStr>,
-    pub(crate) research: HashMap<Id, SharedStr>,
-    pub keys: HashMap<Id, SharedStr>,
+    pub(crate) gui: HashMap<Id, String>,
+    pub(crate) error: HashMap<Id, String>,
+    pub(crate) research: HashMap<Id, String>,
+    pub keys: HashMap<Id, String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -58,20 +61,27 @@ impl ResourceManager {
         let v = ron::from_str::<Raw>(&read_to_string(file)?)?;
 
         let mut new = TranslateDef {
-            none: SharedStr::default(),
-            unnamed: SharedStr::default(),
-            items: parse_map_id_str(v.items.into_iter(), &mut self.interner, Some(namespace)),
-            tiles: parse_map_id_str(v.tiles.into_iter(), &mut self.interner, Some(namespace)),
+            none: Default::default(),
+            unnamed: Default::default(),
+            items: parse_map_id_str(v.items.into_iter(), &mut self.interner, Some(namespace))
+                .collect(),
+            tiles: parse_map_id_str(v.tiles.into_iter(), &mut self.interner, Some(namespace))
+                .collect(),
             categories: parse_map_id_str(
                 v.categories.into_iter(),
                 &mut self.interner,
                 Some(namespace),
-            ),
-            scripts: parse_map_id_str(v.scripts.into_iter(), &mut self.interner, Some(namespace)),
-            gui: parse_map_id_str(v.gui.into_iter(), &mut self.interner, Some(namespace)),
-            keys: parse_map_id_str(v.keys.into_iter(), &mut self.interner, Some(namespace)),
-            error: parse_map_id_str(v.error.into_iter(), &mut self.interner, Some(namespace)),
-            research: parse_map_id_str(v.research.into_iter(), &mut self.interner, Some(namespace)),
+            )
+            .collect(),
+            scripts: parse_map_id_str(v.scripts.into_iter(), &mut self.interner, Some(namespace))
+                .collect(),
+            gui: parse_map_id_str(v.gui.into_iter(), &mut self.interner, Some(namespace)).collect(),
+            keys: parse_map_id_str(v.keys.into_iter(), &mut self.interner, Some(namespace))
+                .collect(),
+            error: parse_map_id_str(v.error.into_iter(), &mut self.interner, Some(namespace))
+                .collect(),
+            research: parse_map_id_str(v.research.into_iter(), &mut self.interner, Some(namespace))
+                .collect(),
         };
         if let Some(v) = v.none {
             new.none = v.into();
@@ -122,70 +132,70 @@ impl ResourceManager {
         Ok(())
     }
 
-    pub fn item_name(&self, id: Id) -> SharedStr {
+    pub fn item_name(&self, id: Id) -> &str {
         match self.translates.items.get(&id) {
-            Some(name) => name.clone(),
-            None => self.translates.unnamed.clone(),
+            Some(name) => name.as_str(),
+            None => self.translates.unnamed.as_str(),
         }
     }
 
-    pub fn try_item_name(&self, id: Option<Id>) -> SharedStr {
+    pub fn try_item_name(&self, id: Option<Id>) -> &str {
         if let Some(id) = id {
             self.item_name(id)
         } else {
-            self.translates.none.clone()
+            self.translates.none.as_str()
         }
     }
 
-    pub fn script_name(&self, id: Id) -> SharedStr {
+    pub fn script_name(&self, id: Id) -> &str {
         match self.translates.scripts.get(&id) {
-            Some(name) => name.clone(),
-            None => self.translates.unnamed.clone(),
+            Some(name) => name.as_str(),
+            None => self.translates.unnamed.as_str(),
         }
     }
 
-    pub fn try_script_name(&self, id: Option<Id>) -> SharedStr {
+    pub fn try_script_name(&self, id: Option<Id>) -> &str {
         if let Some(id) = id {
             self.item_name(id)
         } else {
-            self.translates.none.clone()
+            self.translates.none.as_str()
         }
     }
 
-    pub fn tile_name(&self, id: TileId) -> SharedStr {
+    pub fn tile_name(&self, id: TileId) -> &str {
         match self.translates.tiles.get(&*id) {
-            Some(name) => name.clone(),
-            None => self.translates.unnamed.clone(),
+            Some(name) => name.as_str(),
+            None => self.translates.unnamed.as_str(),
         }
     }
 
-    pub fn try_tile_name(&self, id: Option<TileId>) -> SharedStr {
+    pub fn try_tile_name(&self, id: Option<TileId>) -> &str {
         if let Some(id) = id {
             self.tile_name(id)
         } else {
-            self.translates.none.clone()
+            self.translates.none.as_str()
         }
     }
 
-    pub fn category_name(&self, id: Id) -> SharedStr {
+    pub fn category_name(&self, id: Id) -> &str {
         match self.translates.categories.get(&id) {
-            Some(name) => name.clone(),
-            None => self.translates.unnamed.clone(),
+            Some(name) => name.as_str(),
+            None => self.translates.unnamed.as_str(),
         }
     }
 
-    pub fn try_category_name(&self, id: Option<Id>) -> SharedStr {
+    pub fn try_category_name(&self, id: Option<Id>) -> &str {
         if let Some(id) = id {
             self.category_name(id)
         } else {
-            self.translates.none.clone()
+            self.translates.none.as_str()
         }
     }
 
-    pub fn gui_str(&self, id: Id) -> SharedStr {
+    pub fn gui_str(&self, id: Id) -> &str {
         match self.translates.gui.get(&id) {
-            Some(v) => v.clone(),
-            None => self.translates.unnamed.clone(),
+            Some(v) => v.as_str(),
+            None => self.translates.unnamed.as_str(),
         }
     }
 
@@ -199,14 +209,14 @@ impl ResourceManager {
                         fmt,
                     )
                 }),
-            None => self.translates.unnamed.to_string(),
+            None => self.translates.unnamed.clone(),
         }
     }
 
-    pub fn research_str(&self, id: Id) -> SharedStr {
+    pub fn research_str(&self, id: Id) -> &str {
         match self.translates.research.get(&id) {
-            Some(v) => v.clone(),
-            None => self.translates.unnamed.clone(),
+            Some(v) => v.as_str(),
+            None => self.translates.unnamed.as_str(),
         }
     }
 }

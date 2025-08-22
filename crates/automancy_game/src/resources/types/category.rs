@@ -1,9 +1,10 @@
 use std::{ffi::OsStr, fs::read_to_string, path::Path};
 
+use automancy_data::id::{Id, TileId};
 use hashbrown::HashMap;
 use serde::Deserialize;
 
-use super::IconMode;
+use crate::resources::{RON_EXT, ResourceManager, load_recursively, types::IconMode};
 
 #[derive(Debug, Clone, Copy)]
 pub struct CategoryDef {

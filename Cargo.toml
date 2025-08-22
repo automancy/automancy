@@ -7,9 +7,9 @@ members = [
     "crates/automancy_game",
     "crates/automancy_macros",
     "crates/automancy_rendering",
-    "crates/automancy_ui",
-    "crates/lib",
-    "crates/main",
+    #"crates/automancy_ui",
+    #"crates/lib",
+    #"crates/main",
 ]
 
 [workspace.package]
@@ -23,10 +23,12 @@ license = "MPL-2.0"
 
 [workspace.dependencies]
 automancy_data = { path = "crates/automancy_data" }
-automancy_lib = { path = "crates/lib" }
+automancy_game = { path = "crates/automancy_game" }
+#automancy_lib = { path = "crates/lib" }
 automancy_macros = { path = "crates/automancy_macros" }
+automancy_rendering = { path = "crates/automancy_rendering" }
 automancy_system = { path = "crates/automancy_system" }
-automancy_ui = { path = "crates/automancy_ui" }
+#automancy_ui = { path = "crates/automancy_ui" }
 
 # logging
 log = "0.4.27"
@@ -41,6 +43,7 @@ hexx = { git = "https://github.com/automancy/hexx.git", features = ["serde"] }
 image = "0.25.6"
 ron = { version = "0.10.1" }
 serde = { version = "1.0", features = ["derive"] }
+ttf-parser = "0.25.1"
 uuid = "1.17.0"
 vek = { version = "0.17.1", features = ["rgb", "rgba", "serde", "image"] }
 zstd = "0.13.3"
@@ -48,7 +51,7 @@ zstd = "0.13.3"
 # specialized data storage types
 arraydeque = "0.5.1"
 enum-map = "2.7.3"
-hashbrown = { version = "0.15.4", features = ["serde", "rayon", "inline-more"] }
+hashbrown = { version = "0.15.5", features = ["serde", "rayon", "inline-more"] }
 ordermap = "0.5.8"
 petgraph = "0.8.2"
 range-set-blaze = "0.3.0"
@@ -85,13 +88,14 @@ tokio = { version = "1.46.1", features = ["full"] }
 # utils
 anyhow = "1.0.98"
 chrono = "0.4.41"
+futures = "0.3.31"
 fuzzy-matcher = "0.3.7"
 interpolator = { version = "0.5.0", features = ["number"] }
 rand = "0.9.2"
 slice-group-by = "0.3.1"
 strum = "0.27.2"
 strum_macros = "0.27.2"
-thiserror = "2.0.12"
+thiserror = "2.0.16"
 walkdir = "2.5.0"
 
 [profile.dev]

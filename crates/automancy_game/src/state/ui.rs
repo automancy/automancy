@@ -1,3 +1,13 @@
+use core::{fmt::Debug, mem};
+
+use automancy_data::{
+    game::{coord::TileCoord, generic::DataMap},
+    id::{Id, ModelId, TileId},
+    math::Vec2,
+};
+use enum_map::{Enum, enum_map};
+use hashbrown::{HashMap, HashSet};
+
 /// The state of the main game GUI.
 #[derive(Eq, PartialEq, Copy, Clone, Debug, Default)]
 pub enum Screen {
@@ -34,7 +44,7 @@ pub enum PopupState {
     InvalidName,
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Enum, Clone, Copy, Debug)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Clone, Copy, Debug, Enum)]
 pub enum TextField {
     Filter,
     MapRenaming,
@@ -42,8 +52,8 @@ pub enum TextField {
 }
 
 pub struct TextFieldState {
-    pub fuse: SkimMatcherV2,
-    fields: EnumMap<TextField, String>,
+    pub fuse: fuzzy_matcher::skim::SkimMatcherV2,
+    fields: enum_map::EnumMap<TextField, String>,
 }
 
 impl Debug for TextFieldState {
@@ -57,7 +67,7 @@ impl Debug for TextFieldState {
 impl Default for TextFieldState {
     fn default() -> Self {
         TextFieldState {
-            fuse: SkimMatcherV2::default().ignore_case(),
+            fuse: fuzzy_matcher::skim::SkimMatcherV2::default().ignore_case(),
             fields: enum_map! {
                 TextField::Filter => Default::default(),
                 TextField::MapName => Default::default(),

@@ -1,200 +1,58 @@
 use std::{mem, sync::Arc};
 
-use hashbrown::HashSet;
+use automancy_data::{
+    game::{coord::TileCoord, generic::DataMap, item::ItemStack},
+    id::TileId,
+};
+use ractor::{Actor, ActorProcessingErr, ActorRef};
+use rand::RngCore;
 use rhai::{Dynamic, Scope};
 use thiserror::Error;
 
-pub type TileEntityWithId = (TileId, ActorRef<TileEntityMsg>);
-
-fn run_tile_function<Result: 'static, const SIZE: usize>(
-    resource_man: &ResourceManager,
-    id: TileId,
-    coord: TileCoord,
-    data: &mut DataMap,
-    field_changes: &mut HashSet<Id>,
-    (ast, metadata): &FunctionInfo,
-    args: [(&'static str, Dynamic); SIZE],
-    function: &'static str,
-) -> Option<Result> {
-    let tile_def = resource_man.registry.tiles.get(&id)?;
-    let mut rhai_state = Dynamic::from(data.clone());
-
-    let mut input = rhai::Map::from([
-        ("coord".into(), Dynamic::from(coord)),
-        ("id".into(), Dynamic::from(id)),
-        ("random".into(), Dynamic::from_int(random())),
-        ("setup".into(), Dynamic::from(tile_def.data.clone())),
-    ]);
-
-    input.extend(args.into_iter().map(|(k, v)| (k.into(), v)));
-
-    let result = resource_man.engine.call_fn_with_options::<Dynamic>(
-        rhai_call_options(&mut rhai_state),
-        &mut Scope::new(),
-        ast,
-        function,
-        (input,),
-    );
-
-    {
-        let new_data = rhai_state.cast::<DataMap>();
-
-        for k in new_data.keys().cloned() {
-            if data.get(k).is_none() {
-                field_changes.insert(k);
-            }
-        }
-
-        for (k, v) in mem::take(data) {
-            let new_v = new_data.get(k);
-            if new_v.is_none() || new_v.is_some_and(|new| new != &v) {
-                field_changes.insert(k);
-            }
-        }
-
-        *data = new_data;
-    }
-
-    match result {
-        Ok(result) => result.try_cast::<Result>(),
-        Err(err) => {
-            rhai_log_err(function, &metadata.str_id, &err, Some(coord));
-            None
-        }
-    }
-}
-
-pub fn collect_render_commands(
-    resource_man: &ResourceManager,
-    id: TileId,
-    coord: TileCoord,
-    data: &mut DataMap,
-    field_changes: &mut HashSet<Id>,
-    loading: bool,
-    unloading: bool,
-) -> Option<Vec<RenderCommand>> {
-    let tile_def = resource_man.registry.tiles.get(&id)?;
-
-    if let Some(function @ (_, metadata)) = tile_def
-        .function
-        .as_ref()
-        .and_then(|v| resource_man.functions.get(v))
-    {
-        if !loading
-            && !unloading
-            && !metadata
-                .render_listening_to_fields
-                .iter()
-                .all(|v| field_changes.contains(v))
-        {
-            return None;
-        }
-
-        let last_changes = mem::take(field_changes);
-
-        if let Some(result) = run_tile_function(
-            resource_man,
-            id,
-            coord,
-            data,
-            field_changes,
-            function,
-            [
-                ("field_changes", Dynamic::from_iter(last_changes)),
-                ("loading", Dynamic::from_bool(loading)),
-                ("unloading", Dynamic::from_bool(unloading)),
-            ],
-            "tile_render",
-        ) as Option<rhai::Array>
-        {
-            return Some(
-                result
-                    .into_iter()
-                    .flat_map(|v| v.try_cast::<RenderCommand>())
-                    .collect::<Vec<_>>(),
-            );
-        }
-    }
-
-    None
-}
+use crate::{
+    actor::message::{GameMsg, TileMsg, TileResult, TileTransactionResult},
+    resources::{FunctionInfo, ResourceManager, rhai_call_options, rhai_log_err},
+    scripting::render::RenderCommand,
+};
 
 #[derive(Debug, Clone)]
-pub struct TileEntity {
-    /// The ID of the tile entity.
-    pub id: TileId,
-    /// The coordinates of the tile entity.
-    pub coord: TileCoord,
-    /// The handle to the Resource Manager
+pub struct TileActor {
+    /// a handle to the game.
+    pub game: ActorRef<GameMsg>,
     pub resource_man: Arc<ResourceManager>,
+
+    pub id: TileId,
+    pub coord: TileCoord,
 }
 
-/// Represents a tile entity's state. A tile entity is the actor that allows the tile to take, process, and output resources.
 #[derive(Debug, Clone)]
-pub struct TileEntityState {
-    /// A handle to the game.
-    game: ActorRef<GameSystemMessage>,
-
-    /// The data map stored by the tile.
+pub struct TileActorState {
     data: DataMap,
-
-    /// The field changed since last render request.
-    field_changes: HashSet<Id>,
 }
 
-impl TileEntityState {
-    fn new(game: ActorRef<GameSystemMessage>) -> Self {
+impl TileActorState {
+    fn new() -> Self {
         Self {
-            game,
-
-            data: Default::default(),
-
-            field_changes: HashSet::new(),
+            data: DataMap::new(),
         }
     }
 }
 
-#[derive(Debug)]
-pub enum TileEntityMsg {
-    Tick {
-        tick_count: TickUnit,
-    },
-    Transaction {
-        stack: ItemStack,
-        source_coord: TileCoord,
-        source_id: TileId,
-        root_coord: TileCoord,
-        root_id: TileId,
-        hidden: bool,
-    },
-    TransactionResult {
-        result: ItemStack,
-    },
-    ExtractRequest {
-        requested_from_id: TileId,
-        requested_from_coord: TileCoord,
-    },
-    CollectRenderCommands {
-        reply: RpcReplyPort<Option<Vec<RenderCommand>>>,
-        loading: bool,
-        unloading: bool,
-    },
-    SetData(DataMap),
-    SetDataValue(Id, Data),
-    RemoveData(Id),
-    TakeData(RpcReplyPort<DataMap>),
-    GetData(RpcReplyPort<DataMap>),
-    GetDataValue(Id, RpcReplyPort<Option<Data>>),
-    GetDataWithCoord(RpcReplyPort<(TileCoord, DataMap)>),
-    GetTileConfigUi(RpcReplyPort<Option<RhaiUiUnit>>),
-}
+impl TileActor {
+    fn send_to_tile(&self, state: &mut TileActorState, coord: TileCoord, msg: TileMsg) {
+        match self.game.send_message(GameMsg::SendTileMsg(coord, msg)) {
+            Ok(_) => {}
+            Err(_) => {
+                state.data = Default::default();
+            }
+        }
+    }
 
-impl TileEntity {
     fn handle_rhai_transaction_result(
         &self,
-        state: &mut TileEntityState,
+        state: &mut TileActorState,
         result: TileTransactionResult,
-    ) -> Option<GameSystemMessage> {
+    ) -> Option<GameMsg> {
         match result {
             TileTransactionResult::PassOn {
                 coord,
@@ -203,11 +61,10 @@ impl TileEntity {
                 root_coord,
                 root_id,
             } => {
-                send_to_tile(
+                self.send_to_tile(
                     state,
-                    self.coord,
                     coord,
-                    Transaction {
+                    TileMsg::Transaction {
                         stack,
                         source_id: self.id,
                         source_coord: self.coord,
@@ -215,7 +72,6 @@ impl TileEntity {
                         root_coord,
                         hidden: false,
                     },
-                    OnFailAction::None,
                 );
 
                 None
@@ -228,11 +84,10 @@ impl TileEntity {
                 root_coord,
                 root_id,
             } => {
-                send_to_tile(
+                self.send_to_tile(
                     state,
-                    self.coord,
                     coord,
-                    Transaction {
+                    TileMsg::Transaction {
                         stack,
                         source_id,
                         source_coord,
@@ -240,7 +95,6 @@ impl TileEntity {
                         root_coord,
                         hidden: false,
                     },
-                    OnFailAction::None,
                 );
 
                 None
@@ -250,12 +104,10 @@ impl TileEntity {
                 source_coord,
                 root_coord,
             } => {
-                send_to_tile(
+                self.send_to_tile(
                     state,
-                    self.coord,
                     root_coord,
-                    TransactionResult { result: consumed },
-                    OnFailAction::None,
+                    TileMsg::TransactionResult { result: consumed },
                 );
 
                 None
@@ -263,7 +115,7 @@ impl TileEntity {
         }
     }
 
-    fn handle_rhai_result(&self, state: &mut TileEntityState, result: TileResult) {
+    fn handle_rhai_result(&self, state: &mut TileActorState, result: TileResult) {
         match result {
             TileResult::MakeTransaction {
                 coord,
@@ -272,11 +124,10 @@ impl TileEntity {
                 stacks,
             } => {
                 for stack in stacks {
-                    send_to_tile(
+                    self.send_to_tile(
                         state,
-                        source_coord,
                         coord,
-                        Transaction {
+                        TileMsg::Transaction {
                             stack,
                             source_coord,
                             source_id,
@@ -284,7 +135,6 @@ impl TileEntity {
                             root_id: source_id,
                             hidden: false,
                         },
-                        OnFailAction::None,
                     );
                 }
             }
@@ -294,41 +144,79 @@ impl TileEntity {
                 requested_from_coord,
                 on_fail_action,
             } => {
-                send_to_tile(
+                self.send_to_tile(
                     state,
-                    requested_from_coord,
                     coord,
-                    ExtractRequest {
+                    TileMsg::ExtractRequest {
                         requested_from_id,
                         requested_from_coord,
                     },
-                    on_fail_action,
                 );
+            }
+        }
+    }
+
+    fn run_tile_function<Result: 'static, const SIZE: usize>(
+        &self,
+        state: &mut TileActorState,
+        (ast, metadata): &FunctionInfo,
+        args: [(&'static str, Dynamic); SIZE],
+        function: &'static str,
+    ) -> Option<Result> {
+        fn random() -> i32 {
+            rand::rng().next_u32() as i32
+        }
+
+        let tile_def = self.resource_man.registry.tiles.get(&self.id)?;
+
+        let input = rhai::Map::from_iter(
+            [
+                ("coord", Dynamic::from(self.coord)),
+                ("id", Dynamic::from(self.id)),
+                ("random", Dynamic::from_int(random())),
+                ("setup", Dynamic::from(tile_def.data.clone())),
+            ]
+            .into_iter()
+            .chain(args.into_iter())
+            .map(|(k, v)| (rhai::Identifier::from(k), v)),
+        );
+
+        let mut rhai_state = Dynamic::from(mem::take(&mut state.data));
+        let result = self.resource_man.engine.call_fn_with_options::<Dynamic>(
+            rhai_call_options(&mut rhai_state),
+            &mut Scope::new(),
+            ast,
+            function,
+            (input,),
+        );
+        state.data = rhai_state.cast::<DataMap>();
+
+        match result {
+            Ok(result) => result.try_cast::<Result>(),
+            Err(err) => {
+                rhai_log_err(function, &metadata.str_id, &err, Some(self.coord));
+                None
             }
         }
     }
 
     fn transaction(
         &self,
-        state: &mut TileEntityState,
+        state: &mut TileActorState,
         stack: ItemStack,
         source_coord: TileCoord,
         source_id: TileId,
         root_coord: TileCoord,
         root_id: TileId,
-    ) -> Option<GameSystemMessage> {
+    ) -> Option<GameMsg> {
         let tile = self.resource_man.registry.tiles.get(&self.id)?;
 
         if let Some(function) = tile
             .function
             .as_ref()
             .and_then(|v| self.resource_man.functions.get(v))
-            && let Some(result) = run_tile_function(
-                &self.resource_man,
-                self.id,
-                self.coord,
-                &mut state.data,
-                &mut state.field_changes,
+            && let Some(result) = self.run_tile_function(
+                state,
                 function,
                 [
                     ("source_coord", Dynamic::from(source_coord)),
@@ -345,25 +233,64 @@ impl TileEntity {
 
         None
     }
+
+    fn collect_render_commands(
+        &self,
+        state: &mut TileActorState,
+        loading: bool,
+        unloading: bool,
+    ) -> Option<Vec<RenderCommand>> {
+        let tile_def = self.resource_man.registry.tiles.get(&self.id)?;
+
+        if let Some(function) = tile_def
+            .function
+            .as_ref()
+            .and_then(|v| self.resource_man.functions.get(v))
+        {
+            if !(loading || unloading) {
+                return None;
+            }
+
+            if let Some(result) = self.run_tile_function(
+                state,
+                function,
+                [
+                    ("loading", Dynamic::from_bool(loading)),
+                    ("unloading", Dynamic::from_bool(unloading)),
+                ],
+                "tile_render",
+            ) as Option<rhai::Array>
+            {
+                return Some(
+                    result
+                        .into_iter()
+                        .flat_map(|v| v.try_cast::<RenderCommand>())
+                        .collect::<Vec<_>>(),
+                );
+            }
+        }
+
+        None
+    }
 }
 
 #[derive(Error, Debug)]
-pub enum TileEntityError {
+pub enum TileActorError {
     #[error("the tile ID at {0} is no longer existent")]
     NonExistent(TileCoord),
 }
 
-impl Actor for TileEntity {
-    type Msg = TileEntityMsg;
-    type State = TileEntityState;
-    type Arguments = (ActorRef<GameSystemMessage>,);
+impl Actor for TileActor {
+    type Msg = TileMsg;
+    type State = TileActorState;
+    type Arguments = ();
 
     async fn pre_start(
         &self,
         _myself: ActorRef<Self::Msg>,
-        args: Self::Arguments,
+        _args: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
-        Ok(TileEntityState::new(args.0))
+        Ok(TileActorState::new())
     }
 
     async fn handle(
@@ -373,7 +300,7 @@ impl Actor for TileEntity {
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         match message {
-            Tick {
+            TileMsg::Tick {
                 tick_count: _tick_count,
             } => {
                 let tile_def = self
@@ -381,27 +308,19 @@ impl Actor for TileEntity {
                     .registry
                     .tiles
                     .get(&self.id)
-                    .ok_or(Box::new(TileEntityError::NonExistent(self.coord)))?;
+                    .ok_or(Box::new(TileActorError::NonExistent(self.coord)))?;
 
                 if let Some(function) = tile_def
                     .function
                     .as_ref()
                     .and_then(|v| self.resource_man.functions.get(v))
-                    && let Some(result) = run_tile_function(
-                        &self.resource_man,
-                        self.id,
-                        self.coord,
-                        &mut state.data,
-                        &mut state.field_changes,
-                        function,
-                        [],
-                        "handle_tick",
-                    )
+                    && let Some(result) = self.run_tile_function(state, function, [], "handle_tick")
                 {
                     self.handle_rhai_result(state, result);
                 }
             }
-            Transaction {
+
+            TileMsg::Transaction {
                 stack,
                 source_coord,
                 source_id,
@@ -413,35 +332,31 @@ impl Actor for TileEntity {
                     self.transaction(state, stack, source_coord, source_id, root_coord, root_id)
                     && !hidden
                 {
-                    state.game.send_message(record)?;
+                    self.game.send_message(record)?;
                 }
             }
-            TransactionResult { result } => {
+            TileMsg::TransactionResult { result } => {
                 let tile_def = self
                     .resource_man
                     .registry
                     .tiles
                     .get(&self.id)
-                    .ok_or(Box::new(TileEntityError::NonExistent(self.coord)))?;
+                    .ok_or(Box::new(TileActorError::NonExistent(self.coord)))?;
 
                 if let Some(function) = tile_def
                     .function
                     .as_ref()
                     .and_then(|v| self.resource_man.functions.get(v))
                 {
-                    let _: Option<()> = run_tile_function(
-                        &self.resource_man,
-                        self.id,
-                        self.coord,
-                        &mut state.data,
-                        &mut state.field_changes,
+                    let _: Option<()> = self.run_tile_function(
+                        state,
                         function,
                         [("transferred", Dynamic::from(result))],
                         "handle_transaction_result",
                     );
                 }
             }
-            ExtractRequest {
+            TileMsg::ExtractRequest {
                 requested_from_id,
                 requested_from_coord,
             } => {
@@ -450,18 +365,14 @@ impl Actor for TileEntity {
                     .registry
                     .tiles
                     .get(&self.id)
-                    .ok_or(Box::new(TileEntityError::NonExistent(self.coord)))?;
+                    .ok_or(Box::new(TileActorError::NonExistent(self.coord)))?;
 
                 if let Some(function) = tile_def
                     .function
                     .as_ref()
                     .and_then(|v| self.resource_man.functions.get(v))
-                    && let Some(result) = run_tile_function(
-                        &self.resource_man,
-                        self.id,
-                        self.coord,
-                        &mut state.data,
-                        &mut state.field_changes,
+                    && let Some(result) = self.run_tile_function(
+                        state,
                         function,
                         [
                             ("requested_from_coord", Dynamic::from(requested_from_coord)),
@@ -473,103 +384,59 @@ impl Actor for TileEntity {
                     self.handle_rhai_result(state, result);
                 }
             }
-            GetTileConfigUi(reply) => {
+
+            TileMsg::CollectRenderCommands {
+                reply,
+                loading,
+                unloading,
+            } => {
+                reply.send(self.collect_render_commands(state, loading, unloading))?;
+            }
+            TileMsg::GetTileConfigUi(reply) => {
                 let tile_def = self
                     .resource_man
                     .registry
                     .tiles
                     .get(&self.id)
-                    .ok_or(Box::new(TileEntityError::NonExistent(self.coord)))?;
+                    .ok_or(Box::new(TileActorError::NonExistent(self.coord)))?;
 
                 if let Some(function) = tile_def
                     .function
                     .as_ref()
                     .and_then(|v| self.resource_man.functions.get(v))
                 {
-                    if let Some(result) = run_tile_function(
-                        &self.resource_man,
-                        self.id,
-                        self.coord,
-                        &mut state.data,
-                        &mut state.field_changes,
-                        function,
-                        [],
-                        "tile_config",
-                    ) {
+                    if let Some(result) = self.run_tile_function(state, function, [], "tile_config")
+                    {
                         reply.send(Some(result))?;
                     } else {
                         reply.send(None)?;
                     }
                 }
             }
-            CollectRenderCommands {
-                reply,
-                loading,
-                unloading,
-            } => {
-                reply.send(collect_render_commands(
-                    &self.resource_man,
-                    self.id,
-                    self.coord,
-                    &mut state.data,
-                    &mut state.field_changes,
-                    loading,
-                    unloading,
-                ))?;
-            }
-            SetData(data) => {
-                state.field_changes.extend(data.keys());
-                state.data = data;
-            }
-            SetDataValue(key, value) => {
-                state.field_changes.insert(key);
-                state.data.set(key, value);
-            }
-            TakeData(reply) => {
-                state.field_changes.extend(state.data.keys());
-                reply.send(mem::take(&mut state.data))?;
-            }
-            RemoveData(key) => {
-                state.field_changes.insert(key);
-                state.data.remove(key);
-            }
-            GetData(reply) => {
+
+            TileMsg::GetData(reply) => {
                 reply.send(state.data.clone())?;
             }
-            GetDataValue(key, reply) => {
+            TileMsg::GetDatum(key, reply) => {
                 reply.send(state.data.get(key).cloned())?;
             }
-            GetDataWithCoord(reply) => {
-                reply.send((self.coord, state.data.clone()))?;
+            TileMsg::SetData(data) => {
+                state.data = data;
+            }
+            TileMsg::SetDatum(key, value) => {
+                state.data.set(key, value);
+            }
+            TileMsg::TakeData(reply) => {
+                reply.send(mem::take(&mut state.data))?;
+            }
+            TileMsg::RemoveDatum(key) => {
+                state.data.remove(key);
+            }
+            TileMsg::ReadData(f) => {
+                f(&mut state.data);
             }
         }
 
         Ok(())
     }
-}
-
-fn send_to_tile(
-    state: &mut TileEntityState,
-    source: TileCoord,
-    to: TileCoord,
-    msg: TileEntityMsg,
-    on_fail: OnFailAction,
-) {
-    match state
-        .game
-        .send_message(GameSystemMessage::ForwardMsgToTile {
-            source,
-            to,
-            msg,
-            on_fail,
-        }) {
-        Ok(_) => {}
-        Err(_) => {
-            state.data = Default::default();
-        }
-    }
-}
-
-fn random() -> i32 {
-    rng().next_u32() as i32
 }

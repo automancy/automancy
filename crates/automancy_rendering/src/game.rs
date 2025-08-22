@@ -2,39 +2,15 @@ use std::{borrow::Cow, collections::VecDeque, mem, sync::Arc, time::Instant};
 
 use arboard::{Clipboard, ImageData};
 use automancy_data::{
-    coord::TileCoord,
-    id::{Id, ModelId, RenderId},
+    id::{Id, ModelId},
     math::{Matrix4, Vec2, Vec3, Vec4},
-    rendering::{
-        GameMatrixData, GameUniformData, GpuAnimationMatrixData, GpuGameMatrixData, GpuInstance,
-        GpuWorldMatrixData, Instance, PostProcessingUniformData,
-    },
+    rendering::gpu::{GameMatrixData, Instance},
 };
-use automancy_resources::{ResourceManager, rhai_render::RenderCommand};
-use automancy_system::{GameGui, game::GameSystemMessage};
-use automancy_ui::{GameObjectPaint, GameObjectType};
-use hashbrown::{HashMap, HashSet};
-use image::{EncodableLayout, RgbaImage};
-use ordermap::OrderMap;
-use range_set_blaze::RangeSetBlaze;
-use slice_group_by::GroupBy;
-use wgpu::{
-    BufferDescriptor, BufferUsages, Color, CommandBuffer, CommandEncoderDescriptor, Extent3d,
-    IndexFormat, LoadOp, MapMode, Operations, RenderPassColorAttachment,
-    RenderPassDepthStencilAttachment, RenderPassDescriptor, StoreOp, SurfaceError,
-    TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor,
-    util::DrawIndexedIndirectArgs,
-};
+use hashbrown::HashMap;
 use yakui::{Rect, UVec2};
 use yakui_wgpu::SurfaceInfo;
 
-use crate::{
-    GameState, gpu,
-    gpu::{
-        GlobalResources, Gpu, GuiResources, MODEL_DEPTH_CLEAR, NORMAL_CLEAR, RenderResources,
-        SCREENSHOT_FORMAT, SharedResources,
-    },
-};
+use crate::ui::game_object::GameObjectType;
 
 pub type OverlayInstance = (Instance, ModelId, GameMatrixData<true>, usize);
 pub type GuiInstance = (
@@ -63,6 +39,9 @@ pub struct YakuiRenderResources {
 const WE_ONLY_USE_1_WORLD_MATRIX_IN_GAME_LOL: u32 = 0;
 
 pub struct GameRenderer {
+    pub vertices_init: Option<Vec<GpuVertex>>,
+    pub indices_init: Option<Vec<u16>>,
+
     pub gpu: Gpu,
     pub shared_resources: SharedResources,
     pub render_resources: RenderResources,

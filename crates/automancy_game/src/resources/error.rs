@@ -1,5 +1,7 @@
 use std::cell::RefCell;
 
+use automancy_data::id::Id;
+
 use crate::resources::{ResourceManager, format::FormatContext};
 
 /// An ErrorManager contains a queue of errors to be displayed.

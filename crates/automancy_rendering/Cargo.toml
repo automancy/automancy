@@ -8,36 +8,38 @@ license = { workspace = true }
 [dependencies]
 automancy_data = { workspace = true }
 automancy_macros = { workspace = true }
+automancy_game = { workspace = true }
 
 # logging
 log = { workspace = true }
 
 # parsing / data mangling / math / files
 bytemuck = { workspace = true }
-const-hex = { workspace = true }
 gltf = { workspace = true }
-hexx = { workspace = true }
+image = { workspace = true }
 ron = { workspace = true }
 serde = { workspace = true }
 
 # specialized data storage types
 hashbrown = { workspace = true }
-petgraph = { workspace = true }
+ordermap = { workspace = true }
+range-set-blaze = { workspace = true }
 
 # rendering / windowing
 wgpu = { workspace = true }
 winit = { workspace = true }
+yakui-wgpu = { workspace = true }
+yakui-winit = { workspace = true }
 
 # user input / user interface
-kira = { workspace = true }
+arboard = { workspace = true }
 yakui = { workspace = true }
 
 # scripting / game logic / async runtime
-rhai = { workspace = true }
+tokio = { workspace = true }
 
 # utils
 anyhow = { workspace = true }
-chrono = { workspace = true }
-interpolator = { workspace = true }
-thiserror = { workspace = true }
-walkdir = { workspace = true }
+slice-group-by = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }

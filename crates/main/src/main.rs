@@ -501,7 +501,7 @@ fn main() -> anyhow::Result<()> {
         let misc_options = MiscOptions::load();
 
         let (resource_man, vertices, indices) = load_resources(&misc_options.language, track);
-        RESOURCE_MAN.write().unwrap().replace(resource_man.clone());
+        global::set_resource_man(resource_man.clone());
         log::info!("Loaded resources.");
 
         let options = GameOptions::load(&resource_man);

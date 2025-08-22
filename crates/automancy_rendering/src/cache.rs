@@ -1,11 +1,5 @@
 use std::collections::BTreeMap;
 
-use automancy_data::{
-    coord::TileCoord,
-    id::{ModelId, RenderId},
-    rendering::{GpuGameMatrixData, GpuInstance, GpuWorldMatrixData, MeshId},
-};
-use automancy_resources::{ResourceManager, rhai_render::RenderCommand};
 use hashbrown::{HashMap, HashSet};
 use range_set_blaze::RangeSetBlaze;
 

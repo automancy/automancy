@@ -32,7 +32,3 @@ yakui-winit = { workspace = true }
 # scripting / game logic / async runtime
 rhai = { workspace = true }
 tokio = { workspace = true }
-
-# utils
-strum = { workspace = true }
-strum_macros = { workspace = true }

@@ -1,4 +1,7 @@
-use automancy_data::{math::Vec3, rendering::colors::Rgba};
+use automancy_data::{
+    math::{Float, Matrix3, Matrix4, Vec3},
+    rendering::colors::Rgba,
+};
 use bytemuck::{ByteEq, ByteHash, Pod, Zeroable};
 
 pub type GpuPos3 = [Float; 3];
@@ -76,7 +79,7 @@ impl GpuInstance {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialOrd, Pod, Zeroable)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct GpuGameMatrixData {
     pub model_matrix: GpuMat4,
     pub normal_matrix: GpuMat3,
@@ -95,27 +98,21 @@ impl GpuGameMatrixData {
     pub fn new(model_matrix: Matrix4, mesh_matrix: Matrix4) -> Self {
         let matrix = model_matrix * mesh_matrix;
 
-        let inverse_transpose = Matrix3::from_cols(
-            matrix.x_axis.truncate(),
-            matrix.y_axis.truncate(),
-            matrix.z_axis.truncate(),
-        )
-        .inverse()
-        .transpose();
+        let inverse_transpose = Matrix3::from(matrix.inverted()).transposed();
 
         GpuGameMatrixData {
-            model_matrix: matrix.to_cols_array_2d(),
+            model_matrix: matrix.into_col_arrays(),
             normal_matrix: [
-                inverse_transpose.x_axis.extend(0.0).to_array(),
-                inverse_transpose.y_axis.extend(0.0).to_array(),
-                inverse_transpose.z_axis.extend(0.0).to_array(),
+                inverse_transpose.cols.x.with_w(0.0).into_array(),
+                inverse_transpose.cols.y.with_w(0.0).into_array(),
+                inverse_transpose.cols.z.with_w(0.0).into_array(),
             ],
         }
     }
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialOrd, Pod, Zeroable)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct GpuAnimationMatrixData {
     pub animation_matrix: GpuMat4,
 }
@@ -129,7 +126,7 @@ impl Default for GpuAnimationMatrixData {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialOrd, Pod, Zeroable)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct GpuWorldMatrixData {
     world_matrix: GpuMat4,
 }
@@ -137,7 +134,7 @@ pub struct GpuWorldMatrixData {
 impl GpuWorldMatrixData {
     pub fn new(matrix: Matrix4) -> Self {
         Self {
-            world_matrix: matrix.to_cols_array_2d(),
+            world_matrix: matrix.into_col_arrays(),
         }
     }
 }
@@ -151,23 +148,25 @@ impl Default for GpuWorldMatrixData {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialOrd, Pod, Zeroable)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct GpuGameUniformData {
     light_color: GpuColor,
     light_pos: GpuPos4,
 }
 
-impl GameUniformData {
+impl GpuGameUniformData {
     pub fn new(light_color: Rgba, light_pos: Vec3, light_strength: Float) -> Self {
+        let light_pos = light_pos.into_array();
+
         Self {
             light_color: light_color.into_array(),
-            light_pos: [..light_pos.into_array(), light_strength],
+            light_pos: [light_pos[0], light_pos[1], light_pos[2], light_strength],
         }
     }
 }
 
 impl Default for GpuGameUniformData {
     fn default() -> Self {
-        Self::new(Vec3::new(0.0, 0.0, 6.0), None)
+        Self::new(Rgba::white(), Vec3::new(0.0, 0.0, 6.0), 1.0)
     }
 }

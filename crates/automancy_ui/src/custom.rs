@@ -7,12 +7,6 @@ use yakui::{context::dom, paint::UserPaintCallId};
 
 use crate::GameObjectPaint;
 
-#[derive(Debug, EnumDiscriminants)]
-#[strum_discriminants(derive(Hash, PartialOrd, Ord))]
-pub enum RenderObject {
-    GameObject(GameObjectPaint),
-}
-
 #[derive(Debug)]
 struct CustomRendererInner {
     objects: Vec<RenderObject>,

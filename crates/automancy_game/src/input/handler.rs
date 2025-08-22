@@ -2,9 +2,8 @@ use std::{cell::Cell, mem};
 
 use automancy_data::{
     id::Id,
-    math::{Float, Vec2, vec2},
+    math::{Float, Vec2},
 };
-use automancy_resources::ResourceManager;
 use hashbrown::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use winit::{
@@ -17,7 +16,7 @@ use winit::{
     platform::modifier_supplement::KeyEventExtModifierSupplement,
 };
 
-use crate::options::GameOptions;
+use crate::{persistent::options::GameOptions, resources::ResourceManager};
 
 thread_local! {
     static DEFAULT_KEYMAP: Cell<Option<HashMap<Key, KeyAction>>> = Cell::default();

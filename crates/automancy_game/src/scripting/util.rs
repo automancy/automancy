@@ -1,4 +1,7 @@
+use automancy_data::{game::item::ItemStack, id::Id};
 use rhai::{Engine, Module, exported_module, plugin::*};
+
+use crate::resources::{ResourceManager, types::item::ItemDef};
 
 fn item_match(resource_man: &ResourceManager, id: Id, other: Id) -> bool {
     if let Some(tag) = resource_man.registry.tags.get(&other) {
@@ -39,18 +42,17 @@ fn item_ids_of_tag(resource_man: &ResourceManager, id: Id) -> Vec<Id> {
 
 #[export_module]
 mod utils {
-    use automancy_data::{id::Id, stack::ItemStack};
     use rhai::Array;
 
-    use crate::{RESOURCE_MAN, types::item::ItemDef};
+    use crate::resources::global;
 
     pub fn item_match(id: Id, other: Id) -> bool {
-        super::item_match(RESOURCE_MAN.read().unwrap().as_ref().unwrap(), id, other)
+        super::item_match(&global::resource_man(), id, other)
     }
 
     pub fn item_matches(id: Id, others: Array) -> Dynamic {
         match super::item_matches(
-            RESOURCE_MAN.read().unwrap().as_ref().unwrap(),
+            &global::resource_man(),
             id,
             others.into_iter().map(|v| v.cast::<ItemDef>()),
         ) {
@@ -61,7 +63,7 @@ mod utils {
 
     pub fn item_stack_matches(id: Id, others: Array) -> Dynamic {
         match super::item_stack_matches(
-            RESOURCE_MAN.read().unwrap().as_ref().unwrap(),
+            &global::resource_man(),
             id,
             others.into_iter().map(|v| v.cast::<ItemStack>()),
         ) {
@@ -71,10 +73,7 @@ mod utils {
     }
 
     pub fn item_ids_of_tag(id: Id) -> Dynamic {
-        Dynamic::from_iter(super::item_ids_of_tag(
-            RESOURCE_MAN.read().unwrap().as_ref().unwrap(),
-            id,
-        ))
+        Dynamic::from_iter(super::item_ids_of_tag(&global::resource_man(), id))
     }
 }
 

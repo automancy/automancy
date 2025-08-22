@@ -85,7 +85,7 @@ pub fn derive_id_reg(item: TokenStream) -> TokenStream {
         .zip(names)
         .flat_map(|((field, namespace), name)| {
             quote! {
-                #field: automancy_data::id::IdRaw::new(#namespace, #name).to_id(interner),
+                #field: automancy_data::id::deserialize::IdStr::new(#namespace, #name).into_id(interner),
             }
         })
         .collect::<TokenStream>();

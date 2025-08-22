@@ -1,6 +1,12 @@
 use std::{ffi::OsStr, fs::read_to_string, path::Path};
 
+use automancy_data::{
+    game::item::{ItemAmount, ItemStack},
+    id::{Id, parse::parse_item_stacks},
+};
 use serde::Deserialize;
+
+use crate::resources::{RON_EXT, ResourceManager, load_recursively};
 
 #[derive(Debug, Clone)]
 pub struct InstructionsDef {

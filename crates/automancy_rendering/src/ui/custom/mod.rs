@@ -5,6 +5,12 @@ use yakui::paint::UserPaintCallId;
 
 use crate::gpu::GuiResources;
 
+#[derive(Debug, EnumDiscriminants)]
+#[strum_discriminants(derive(Hash, PartialOrd, Ord))]
+pub enum RenderObject {
+    GameObject(GameObjectPaint),
+}
+
 pub mod game_object;
 
 #[derive(Debug)]

@@ -1,45 +1,79 @@
-/// Stores information that lives for the entire lifetime of the session, and is not dropped at the end of one event cycle or handled elsewhere.
-#[derive(Debug, Default)]
-pub struct EventLoopStorage {
-    /// tag searching cache
-    pub tag_cache: HashMap<Id, Arc<Vec<ItemDef>>>,
-    /// the last frame's starting time
-    pub frame_start: Option<Instant>,
-    /// the elapsed time between each frame
-    pub elapsed: Duration,
+use std::{sync::Arc, time::Instant};
 
-    pub map_infos_cache: Vec<((MapInfoRaw, Option<SystemTime>), String)>,
-    pub map_info: Option<(Arc<Mutex<MapInfo>>, LoadMapOption)>,
+use automancy_data::game::generic::DataMap;
+use kira::AudioManager;
+use ractor::ActorRef;
+use tokio::{runtime::Runtime, task::JoinHandle};
 
-    pub config_open_cache: Arc<Mutex<Option<ActorRef<TileEntityMsg>>>>,
-    pub config_open_updating: Arc<AtomicBool>,
-    pub pointing_cache: Arc<Mutex<Option<TileEntityWithId>>>,
-    pub pointing_updating: Arc<AtomicBool>,
-}
+use crate::{
+    actor::{map::GameMapId, message::GameMsg},
+    input::{
+        camera::GameCamera,
+        handler::{ActionType, InputHandler},
+    },
+    persistent::options::{GameOptions, MiscOptions},
+    resources::ResourceManager,
+    state::event::EventLoopStorage,
+};
 
-pub struct InnerGameState {
-    pub ui_state: UiState,
-    pub options: GameOptions,
-    pub misc_options: MiscOptions,
+pub mod event;
+pub mod ui;
+
+pub struct AutomancyGameState {
     pub resource_man: Arc<ResourceManager>,
-    pub input_handler: InputHandler,
     pub loop_store: EventLoopStorage,
-    pub tokio: Runtime,
-    pub game: ActorRef<GameSystemMessage>,
-    pub camera: GameCamera,
+    pub input_handler: InputHandler,
     pub audio_man: AudioManager,
-    pub start_instant: Instant,
+    pub camera: GameCamera,
 
-    pub gui: Option<GameGui>,
-    pub renderer: Option<Renderer>,
-    pub screenshotting: bool,
-
-    pub logo: Option<ManagedTextureId>,
-    pub input_hints: Vec<Vec<ActionType>>,
-    pub puzzle_state: Option<(DataMap, bool)>,
-
+    pub tokio: Runtime,
+    pub game: ActorRef<GameMsg>,
     pub game_handle: Option<JoinHandle<()>>,
 
-    pub vertices_init: Option<Vec<GpuVertex>>,
-    pub indices_init: Option<Vec<u16>>,
+    pub options: GameOptions,
+    pub misc_options: MiscOptions,
+
+    pub start_instant: Instant,
+
+    pub input_hints: Vec<Vec<ActionType>>,
+    pub puzzle_state: Option<(DataMap, bool)>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AutomancyGameLoadResult {
+    Loaded,
+    LoadedMainMenu,
+    Failed,
+}
+
+pub fn game_load_map_inner(
+    state: &mut AutomancyGameState,
+    id: GameMapId,
+) -> AutomancyGameLoadResult {
+    let success = match state.tokio.block_on(
+        state
+            .game
+            .call(|reply| GameMsg::LoadMap(id.clone(), reply), None),
+    ) {
+        Ok(v) => v.unwrap(),
+        Err(_) => false,
+    };
+
+    if success {
+        state.loop_store.map_info = state
+            .tokio
+            .block_on(state.game.call(GameMsg::GetMapIdAndData, None))
+            .unwrap()
+            .unwrap();
+
+        AutomancyGameLoadResult::Loaded
+    } else if id == GameMapId::MainMenu {
+        AutomancyGameLoadResult::Failed
+    } else {
+        game_load_map_inner(state, GameMapId::MainMenu)
+    }
+}
+
+pub fn game_load_map(state: &mut AutomancyGameState, map_name: String) -> AutomancyGameLoadResult {
+    game_load_map_inner(state, GameMapId::SaveFile(map_name))
 }

@@ -1,7 +1,10 @@
 use std::{ffi::OsStr, fs::read_to_string, path::Path};
 
+use automancy_data::id::{Id, parse::parse_ids};
 use hashbrown::HashSet;
 use serde::Deserialize;
+
+use crate::resources::{RON_EXT, ResourceManager, load_recursively, registry::Registry};
 
 #[derive(Debug, Clone)]
 pub struct TagDef {

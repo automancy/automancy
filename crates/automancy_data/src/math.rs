@@ -4,7 +4,7 @@ pub mod consts {
 
 pub type Float = f32;
 pub type Int = i32;
-pub type UInt = UInt;
+pub type UInt = u32;
 
 pub type Vec2 = vek::Vec2<Float>;
 pub type Vec3 = vek::Vec3<Float>;
@@ -25,8 +25,14 @@ pub type Quat = vek::Quaternion<Float>;
 
 #[inline]
 #[must_use]
-pub fn vec_to_angle(d: Vec2) -> Float {
+pub fn vec2_to_radians(d: Vec2) -> Float {
     let angle = d.y.atan2(d.x);
 
-    angle.rem_euclid(consts::PI)
+    angle.rem_euclid(consts::TAU)
+}
+
+#[inline]
+#[must_use]
+pub fn vec2_to_degrees(d: Vec2) -> Float {
+    vec2_to_radians(d).to_degrees().round()
 }

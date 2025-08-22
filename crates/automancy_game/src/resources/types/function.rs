@@ -1,59 +1,13 @@
 use std::{ffi::OsStr, path::Path};
 
+use automancy_data::id::{Id, deserialize::IdStr};
 use hashbrown::HashSet;
 use rhai::{ImmutableString, Module, Scope};
 
-#[derive(Debug, Clone)]
-pub enum TileResult {
-    MakeTransaction {
-        coord: TileCoord,
-        source_id: TileId,
-        source_coord: TileCoord,
-        stacks: Vec<ItemStack>,
-    },
-    MakeExtractRequest {
-        coord: TileCoord,
-        requested_from_id: TileId,
-        requested_from_coord: TileCoord,
-        on_fail_action: OnFailAction,
-    },
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum TileTransactionResult {
-    PassOn {
-        coord: TileCoord,
-        stack: ItemStack,
-        source_coord: TileCoord,
-        root_coord: TileCoord,
-        root_id: TileId,
-    },
-    Proxy {
-        coord: TileCoord,
-        stack: ItemStack,
-        source_coord: TileCoord,
-        source_id: TileId,
-        root_coord: TileCoord,
-        root_id: TileId,
-    },
-    Consume {
-        consumed: ItemStack,
-        source_coord: TileCoord,
-        root_coord: TileCoord,
-    },
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum OnFailAction {
-    None,
-    RemoveTile,
-    RemoveAllData,
-    RemoveData(Id),
-}
+use crate::resources::{FUNCTION_EXT, ResourceManager, load_recursively};
 
 pub struct FunctionMetadata {
     pub str_id: String,
-    pub render_listening_to_fields: HashSet<Id>,
 }
 
 impl ResourceManager {
@@ -85,7 +39,7 @@ impl ResourceManager {
                 for id_dep in id_deps.into_iter() {
                     let v = id_dep.cast::<rhai::Array>();
 
-                    let id = IdRaw::parse(
+                    let id = IdStr::parse(
                         v[0].clone().cast::<ImmutableString>().as_str(),
                         Some(namespace),
                     )
@@ -137,10 +91,10 @@ impl ResourceManager {
                     "function_id",
                     (),
                 )?;
-                let raw_id = IdRaw::parse(&raw_id, Some(namespace)).unwrap();
+                let raw_id = IdStr::parse(&raw_id, Some(namespace)).unwrap();
                 let str_id = raw_id.to_string();
 
-                let id = raw_id.to_id(&mut self.interner);
+                let id = raw_id.into_id(&mut self.interner);
 
                 let id_deps = self.engine.call_fn::<rhai::Array>(
                     &mut Scope::new(),
@@ -152,7 +106,7 @@ impl ResourceManager {
                 for id_dep in id_deps.into_iter() {
                     let v = id_dep.cast::<rhai::Array>();
 
-                    let id = IdRaw::parse(
+                    let id = IdStr::parse(
                         v[0].clone().cast::<ImmutableString>().as_str(),
                         Some(namespace),
                     )
@@ -170,25 +124,8 @@ impl ResourceManager {
 
                 let ast = self.engine.compile_file_with_scope(&scope, file)?;
 
-                let render_listening_to_fields = self.engine.call_fn::<rhai::Array>(
-                    &mut Scope::new(),
-                    &ast,
-                    "render_listening_to_fields",
-                    (),
-                );
-                if render_listening_to_fields.is_err() {
-                    log::info!(
-                        "Source function '{str_id}' does not have a function called 'render_listening_to_fields', which means it will NOT listen to any field changes!"
-                    )
-                }
-
                 let metadata = FunctionMetadata {
                     str_id: str_id.clone(),
-                    render_listening_to_fields: render_listening_to_fields
-                        .unwrap_or_default()
-                        .into_iter()
-                        .flat_map(|v| v.try_cast::<Id>())
-                        .collect(),
                 };
 
                 self.functions.insert(id, (ast, metadata));

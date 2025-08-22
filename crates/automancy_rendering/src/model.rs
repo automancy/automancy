@@ -1,4 +1,8 @@
+use automancy_data::math::{Float, Matrix4, Quat, Vec3, Vec4};
+use bytemuck::{Pod, Zeroable};
 use gltf::animation::util::ReadOutputs;
+
+use crate::data::GpuVertex;
 
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Zeroable, Pod)]
@@ -8,7 +12,7 @@ pub struct MeshId(u32);
 pub struct Mesh {
     pub index: MeshId,
 
-    pub vertices: Vec<rendering::Vertex>,
+    pub vertices: Vec<GpuVertex>,
     pub indices: Vec<u16>,
 
     pub opaque: bool,
@@ -35,8 +39,8 @@ pub fn parse_gltf_model(
             let index = node.index();
 
             let transform = node.transform();
-            let matrix = Matrix4::from_rotation_z(consts::PI)
-                * Matrix4::from_cols_array_2d(&transform.clone().matrix());
+            let matrix = // Matrix4::rotation_z(consts::PI) *
+                Matrix4::from_col_arrays(transform.clone().matrix());
 
             if let Some(mesh) = node.mesh() {
                 let mut read_vertices = vec![];
@@ -52,9 +56,9 @@ pub fn parse_gltf_model(
                         for (pos, (normal, color)) in
                             positions.zip(normals.zip(colors.into_rgba_f32()))
                         {
-                            let pos = matrix.transform_point3(Vec3::from_array(pos)).to_array();
+                            let pos = matrix.mul_point(Vec3::from_slice(&pos)).into_array();
 
-                            read_vertices.push(rendering::GpuVertex { pos, normal, color })
+                            read_vertices.push(GpuVertex { pos, normal, color })
                         }
                     }
 
@@ -90,20 +94,21 @@ pub fn parse_gltf_model(
             let mut read_outputs = vec![];
 
             if let Some((inputs, outputs)) = reader.read_inputs().zip(reader.read_outputs()) {
+                let (translation, rotation, scale) = meshes[target]
+                    .as_ref()
+                    .unwrap()
+                    .transform
+                    .clone()
+                    .decomposed();
+
                 match outputs {
                     ReadOutputs::Translations(outputs) => {
-                        let transform = meshes[target]
-                            .as_ref()
-                            .unwrap()
-                            .transform
-                            .clone()
-                            .decomposed();
-                        let [ox, oy, oz] = transform.0;
-                        let [sx, sy, sz] = transform.2;
+                        let [ox, oy, oz] = translation;
+                        let [sx, sy, sz] = scale;
 
                         for (input, [x, y, z]) in inputs.zip(outputs) {
                             read_inputs.push(input);
-                            read_outputs.push(Matrix4::from_translation(Vec3::new(
+                            read_outputs.push(Matrix4::translation_3d(Vec3::new(
                                 (ox - x) / sx,
                                 (oy - y) / sy,
                                 (oz - z) / sz,
@@ -111,17 +116,11 @@ pub fn parse_gltf_model(
                         }
                     }
                     ReadOutputs::Scales(outputs) => {
-                        let [sx, sy, sz] = meshes[target]
-                            .as_ref()
-                            .unwrap()
-                            .transform
-                            .clone()
-                            .decomposed()
-                            .2;
+                        let [sx, sy, sz] = scale;
 
                         for (input, [x, y, z]) in inputs.zip(outputs) {
                             read_inputs.push(input);
-                            read_outputs.push(Matrix4::from_scale(Vec3::new(
+                            read_outputs.push(Matrix4::scaling_3d(Vec3::new(
                                 x / sx,
                                 y / sy,
                                 z / sz,
@@ -130,17 +129,11 @@ pub fn parse_gltf_model(
                     }
                     ReadOutputs::Rotations(outputs) => {
                         for (input, output) in inputs.zip(outputs.into_f32()) {
-                            let transform = meshes[target]
-                                .as_ref()
-                                .unwrap()
-                                .transform
-                                .clone()
-                                .decomposed();
-                            let rotate = Quaternion::from_array(transform.1);
-                            let output = Quaternion::from_array(output);
+                            let rotate = Quat::from_vec4(Vec4::from_slice(&rotation));
+                            let output = Quat::from_vec4(Vec4::from_slice(&output));
 
                             read_inputs.push(input);
-                            read_outputs.push(Matrix4::from_quat(rotate.inverse() * output));
+                            read_outputs.push(Matrix4::from(rotate.inverse() * output));
                         }
                     }
                     _ => {}

@@ -8,12 +8,17 @@ use std::{
 
 use log;
 
+use crate::resources::{FONT_EXT, LoadResourceError, ResourceManager};
+
 pub struct Font {
     pub name: String,
     pub data: Arc<Vec<u8>>,
 }
 
-fn collect_families(name_id: u16, names: &Names) -> Vec<(String, Language)> {
+fn collect_families(
+    name_id: u16,
+    names: &ttf_parser::post::Names,
+) -> Vec<(String, ttf_parser::Language)> {
     let mut families = Vec::new();
     for name in names.into_iter() {
         if name.name_id == name_id {
@@ -26,19 +31,19 @@ fn collect_families(name_id: u16, names: &Names) -> Vec<(String, Language)> {
     families
 }
 
-fn parse_name(names: Names) -> Option<String> {
-    let mut families = collect_families(TYPOGRAPHIC_FAMILY, &names);
+fn parse_name(names: ttf_parser::post::Names) -> Option<String> {
+    let mut families = collect_families(ttf_parser::name_id::TYPOGRAPHIC_FAMILY, &names);
 
     // We have to fallback to Family Name when no Typographic Family Name was set.
     if families.is_empty() {
-        families = collect_families(FAMILY, &names);
+        families = collect_families(ttf_parser::name_id::FAMILY, &names);
     }
 
     // Make English US the first one.
     if families.len() > 1 {
         if let Some(index) = families
             .iter()
-            .position(|f| f.1 == Language::English_UnitedStates)
+            .position(|f| f.1 == ttf_parser::Language::English_UnitedStates)
         {
             if index != 0 {
                 families.swap(0, index);
@@ -69,7 +74,7 @@ impl ResourceManager {
                 File::open(&file)?.read_to_end(&mut data)?;
                 let data = Arc::new(data);
 
-                let name = parse_name(Face::parse(&data, 0)?.names())
+                let name = parse_name(ttf_parser::Face::parse(&data, 0)?.names())
                     .ok_or_else(|| LoadResourceError::CouldNotGetFontName(file.clone()))?;
 
                 log::info!("Loaded font '{name}'!");

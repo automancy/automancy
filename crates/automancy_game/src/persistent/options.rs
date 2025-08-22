@@ -8,6 +8,12 @@ use std::{
 use hashbrown::HashMap;
 use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
+use winit::keyboard::Key;
+
+use crate::{
+    input::handler::{KeyAction, get_default_keymap},
+    resources::ResourceManager,
+};
 
 static OPTIONS_PATH: &str = "options.ron";
 static MISC_OPTIONS_PATH: &str = "misc_options.ron";

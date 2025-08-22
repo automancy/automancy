@@ -6,15 +6,9 @@ use automancy_data::{
     rendering::Instance,
 };
 use automancy_resources::generic::DataMap;
-use yakui::{Rect, Response, Vec2, paint::PaintCall, util::widget, widget::Widget};
+use yakui::{paint::PaintCall, util::widget, widget::Widget, Rect, Response, Vec2};
 
-use crate::custom::{CustomRenderer, RenderObject, mark_rerender, should_rerender};
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum GameObjectType {
-    Tile(TileId, DataMap),
-    Model(ModelId),
-}
+use crate::custom::{mark_rerender, should_rerender, CustomRenderer, RenderObject};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct GameObject {

@@ -2,31 +2,13 @@ use core::cell::Cell;
 use std::time::Instant;
 
 use automancy_data::{
-    coord::TileCoord,
-    rendering::{
-        GameMatrixData, GameUniformData, GpuAnimationMatrixData, GpuGameMatrixData, GpuInstance,
-        GpuWorldMatrixData, IntermediateUniformData,
-    },
+    game::generic::DataMap,
+    id::{ModelId, TileId},
 };
-use automancy_resources::rhai_render::RenderCommand;
-use automancy_system::tile_entity::collect_render_commands;
-use automancy_ui::{
-    GameObjectPaint, GameObjectType,
-    custom::{RenderObject, RenderObjectDiscriminants},
-};
-use hashbrown::{HashMap, HashSet};
-use wgpu::{
-    BindGroupDescriptor, BindGroupEntry, BindingResource, BufferUsages, Color, IndexFormat, LoadOp,
-    Operations, RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor,
-    StoreOp, TextureViewDescriptor,
-    util::{BufferInitDescriptor, DeviceExt, DrawIndexedIndirectArgs},
-};
+use hashbrown::HashMap;
 use yakui::UVec2;
 
-use crate::{
-    gpu::{self, MODEL_DEPTH_CLEAR, NORMAL_CLEAR},
-    rendering::ui::UiRenderer,
-};
+use crate::ui::UiRenderer;
 
 thread_local! {
     static START_INSTANT: Cell<Option<Instant>> = const { Cell::new(None) };
@@ -34,6 +16,12 @@ thread_local! {
 
 pub fn init_custom_paint_state(start_instant: Instant) {
     START_INSTANT.set(Some(start_instant));
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum GameObjectType {
+    Tile(TileId, DataMap),
+    Model(ModelId),
 }
 
 pub struct GameObjectRenderer {

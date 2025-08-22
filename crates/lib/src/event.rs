@@ -19,7 +19,6 @@ use automancy_system::{
 };
 use ractor::{ActorRef, rpc::CallResult};
 use tokio::task::JoinHandle;
-use wgpu::SurfaceError;
 use winit::{
     event::{Event, WindowEvent},
     event_loop::ActiveEventLoop,
@@ -65,7 +64,7 @@ pub async fn shutdown_graceful(
     game.call(GameSystemMessage::SaveMap, None)
         .await
         .expect("could not save the game on exit!");
-    game.stop(Some("Game closed".to_string()));
+    game.stop(Some("game closed".to_string()));
     game_handle.take().unwrap().await?;
 
     event_loop.exit();

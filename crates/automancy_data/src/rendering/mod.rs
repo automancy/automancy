@@ -3,7 +3,7 @@ pub mod colors;
 pub mod gpu;
 
 pub mod util {
-    use crate::math::{Float, Matrix4, Vec2, Vec3, vec_to_angle};
+    use crate::math::{Float, Matrix4, Vec2, Vec3, vec2_to_degrees};
 
     pub const LINE_DEPTH: Float = 0.075;
 
@@ -12,7 +12,7 @@ pub mod util {
     pub fn make_line(a: Vec2, b: Vec2, z: Float) -> Matrix4 {
         let mid = Vec2::lerp(a, b, 0.5);
         let d = a.distance(b);
-        let theta = vec_to_angle(b - a);
+        let theta = vec2_to_degrees(b - a);
 
         Matrix4::translation_3d(Vec3::new(mid.x, mid.y, z))
             * Matrix4::rotation_z(theta)

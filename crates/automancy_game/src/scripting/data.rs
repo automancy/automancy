@@ -1,20 +1,19 @@
+use core::any::TypeId;
+
 use automancy_data::{
-    coord::TileCoord,
     game::{
         coord::{TileBounds, TileCoord},
-        generic::{Data, DataMap},
+        generic::{DataMap, Datum},
         inventory::Inventory,
-        item::ItemAmount,
+        item::{ItemAmount, ItemStack},
     },
     id::{Id, ModelId, TileId},
-    stack::{ItemAmount, ItemStack},
 };
 use hashbrown::{HashMap, HashSet};
 use rhai::{Dynamic, Engine};
 
-use crate::{
-    generic::DataMap,
-    inventory::Inventory,
+use crate::resources::{
+    global,
     types::{
         item::ItemDef,
         script::{InstructionsDef, ScriptDef},
@@ -23,80 +22,74 @@ use crate::{
     },
 };
 
-pub fn data_into_dynamic(v: Data) -> Dynamic {
+pub fn data_into_dynamic(v: Datum) -> Dynamic {
     match v {
-        Data::Inventory(v) => Dynamic::from(v),
-        Data::Coord(v) => Dynamic::from(v),
-        Data::VecCoord(v) => Dynamic::from_iter(v),
-        Data::TileBounds(v) => Dynamic::from(v),
-        Data::Id(v) => Dynamic::from(v),
-        Data::Color(v) => Dynamic::from(v),
-        Data::VecId(v) => Dynamic::from_iter(v),
-        Data::SetId(v) => Dynamic::from_iter(v),
-        Data::Amount(v) => Dynamic::from_int(v),
-        Data::Bool(v) => Dynamic::from_bool(v),
-        Data::TileMap(v) => Dynamic::from(v),
-        Data::MapSetId(v) => Dynamic::from(v),
+        Datum::Inventory(v) => Dynamic::from(v),
+        Datum::Coord(v) => Dynamic::from(v),
+        Datum::VecCoord(v) => Dynamic::from_iter(v),
+        Datum::TileBounds(v) => Dynamic::from(v),
+        Datum::Id(v) => Dynamic::from(v),
+        Datum::Color(v) => Dynamic::from(v),
+        Datum::VecId(v) => Dynamic::from_iter(v),
+        Datum::SetId(v) => Dynamic::from_iter(v),
+        Datum::Amount(v) => Dynamic::from_int(v),
+        Datum::Bool(v) => Dynamic::from_bool(v),
+        Datum::TileMap(v) => Dynamic::from(v),
+        Datum::MapSetId(v) => Dynamic::from(v),
     }
 }
 
-pub fn data_from_dynamic(v: Dynamic) -> Option<Data> {
+pub fn data_from_dynamic(v: Dynamic) -> Option<Datum> {
     let id = v.type_id();
 
     Some(if id == TypeId::of::<TileCoord>() {
-        Data::Coord(v.cast())
+        Datum::Coord(v.cast())
     } else if id == TypeId::of::<Id>() {
-        Data::Id(v.cast())
+        Datum::Id(v.cast())
     } else if id == TypeId::of::<ItemAmount>() {
-        Data::Amount(v.cast())
+        Datum::Amount(v.cast())
     } else if id == TypeId::of::<bool>() {
-        Data::Bool(v.cast())
+        Datum::Bool(v.cast())
     } else if id == TypeId::of::<Inventory>() {
-        Data::Inventory(v.cast())
+        Datum::Inventory(v.cast())
     } else if id == TypeId::of::<Vec<TileCoord>>() {
-        Data::VecCoord(v.cast())
+        Datum::VecCoord(v.cast())
     } else if id == TypeId::of::<Vec<Id>>() {
-        Data::VecId(v.cast())
+        Datum::VecId(v.cast())
     } else if id == TypeId::of::<HashSet<Id>>() {
-        Data::SetId(v.cast())
+        Datum::SetId(v.cast())
     } else if id == TypeId::of::<TileBounds>() {
-        Data::TileBounds(v.cast())
+        Datum::TileBounds(v.cast())
     } else if id == TypeId::of::<HashMap<TileCoord, Id>>() {
-        Data::TileMap(v.cast())
+        Datum::TileMap(v.cast())
     } else if id == TypeId::of::<HashMap<Id, HashSet<Id>>>() {
-        Data::MapSetId(v.cast())
+        Datum::MapSetId(v.cast())
     } else {
         return None;
     })
 }
 
-pub fn rhai_get(dmap: &mut DataMap, id: Id) -> Dynamic {
-    if let Some(v) = dmap.get(id).cloned() {
-        v.into_dynamic()
+pub fn rhai_get(data: &mut DataMap, id: Id) -> Dynamic {
+    if let Some(datum) = data.get(id).cloned() {
+        data_into_dynamic(datum)
     } else {
         Dynamic::UNIT
     }
 }
 
-pub fn rhai_set(dmap: &mut DataMap, id: Id, data: Dynamic) {
-    if let Some(data) = Data::from_dynamic(data) {
-        self.set(id, data);
+pub fn rhai_set(data: &mut DataMap, id: Id, dynamic: Dynamic) {
+    if let Some(datum) = data_from_dynamic(dynamic) {
+        data.set(id, datum);
     }
-}
-
-pub fn get_or_new_inventory(&mut self, id: Id) -> Dynamic {
-    self.0
-        .entry(id)
-        .or_insert_with(|| Data::Inventory(Default::default()))
-        .clone()
-        .into_dynamic()
 }
 
 pub(crate) fn register_data_stuff(engine: &mut Engine) {
     engine
         .register_type_with_name::<DataMap>("DataMap")
         .register_indexer_get_set(rhai_get, rhai_set)
-        .register_fn("get_or_new_inventory", get_or_new_inventory);
+        .register_fn("get_or_new_inventory", |v: &mut DataMap, id: Id| {
+            v.inventory_mut(id).clone()
+        });
 
     engine
         .register_type_with_name::<Inventory>("Inventory")
@@ -197,26 +190,13 @@ pub(crate) fn register_data_stuff(engine: &mut Engine) {
     engine.register_type_with_name::<TagDef>("TagDef");
 
     engine.register_fn("as_script", |id: Id| {
-        match RESOURCE_MAN
-            .read()
-            .unwrap()
-            .as_ref()
-            .unwrap()
-            .registry
-            .scripts
-            .get(&id)
-            .cloned()
-        {
+        match global::resource_man().registry.scripts.get(&id).cloned() {
             Some(v) => Dynamic::from(v),
             None => Dynamic::UNIT,
         }
     });
     engine.register_fn("as_tile", |id: Id| {
-        match RESOURCE_MAN
-            .read()
-            .unwrap()
-            .as_ref()
-            .unwrap()
+        match global::resource_man()
             .registry
             .tiles
             .get(&TileId(id))
@@ -227,31 +207,13 @@ pub(crate) fn register_data_stuff(engine: &mut Engine) {
         }
     });
     engine.register_fn("as_item", |id: Id| {
-        match RESOURCE_MAN
-            .read()
-            .unwrap()
-            .as_ref()
-            .unwrap()
-            .registry
-            .items
-            .get(&id)
-            .cloned()
-        {
+        match global::resource_man().registry.items.get(&id).cloned() {
             Some(v) => Dynamic::from(v),
             None => Dynamic::UNIT,
         }
     });
     engine.register_fn("as_tag", |id: Id| {
-        match RESOURCE_MAN
-            .read()
-            .unwrap()
-            .clone()
-            .unwrap()
-            .registry
-            .tags
-            .get(&id)
-            .cloned()
-        {
+        match global::resource_man().registry.tags.get(&id).cloned() {
             Some(v) => Dynamic::from(v),
             None => Dynamic::UNIT,
         }

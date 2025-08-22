@@ -1,16 +1,18 @@
 use rhai::{Engine, exported_module};
 
 mod tile_stuff {
-    use automancy_data::{coord::TileCoord, id::Id, stack::ItemStack};
     use rhai::{Module, plugin::*};
-
-    use crate::types::function::{OnFailAction, TileResult, TileTransactionResult};
 
     #[allow(non_snake_case)]
     #[export_module]
     pub mod tile_result {
-        use automancy_data::id::TileId;
+        use automancy_data::{
+            game::{coord::TileCoord, item::ItemStack},
+            id::TileId,
+        };
         use rhai::Array;
+
+        use crate::actor::message::{OnFailAction, TileResult};
 
         pub fn MakeTransaction(
             coord: TileCoord,
@@ -43,7 +45,12 @@ mod tile_stuff {
     #[allow(non_snake_case)]
     #[export_module]
     pub mod tile_trans_result {
-        use automancy_data::id::TileId;
+        use automancy_data::{
+            game::{coord::TileCoord, item::ItemStack},
+            id::TileId,
+        };
+
+        use crate::actor::message::TileTransactionResult;
 
         pub fn PassOn(
             coord: TileCoord,
@@ -93,6 +100,10 @@ mod tile_stuff {
     #[allow(non_snake_case)]
     #[export_module]
     pub mod on_fail_action {
+        use automancy_data::id::Id;
+
+        use crate::actor::message::OnFailAction;
+
         pub fn None() -> OnFailAction {
             OnFailAction::None
         }

@@ -4,15 +4,15 @@ use hashbrown::HashMap;
 use ractor::{ActorRef, Message, MessagingErr, RpcReplyPort, concurrency, rpc::CallResult};
 
 pub async fn multi_call_iter<Key, TMessage, TReply, TMsgBuilder>(
-    actors: &HashMap<Key, ActorRef<TMessage>>,
+    actors: impl ExactSizeIterator<Item = (Key, ActorRef<TMessage>)>,
     msg_builder: TMsgBuilder,
     timeout_option: Option<Duration>,
 ) -> Result<HashMap<Key, TReply>, MessagingErr<TMessage>>
 where
-    Key: Hash + Eq + Send + Sync + Copy + 'static,
+    Key: Hash + Eq + Send + Sync + 'static,
     TMessage: Message,
     TReply: Send + 'static,
-    TMsgBuilder: Fn(RpcReplyPort<TReply>, Key) -> TMessage,
+    TMsgBuilder: Fn(&Key, RpcReplyPort<TReply>) -> TMessage,
 {
     let len = actors.len();
 
@@ -24,8 +24,8 @@ where
             Some(duration) => (tx, duration).into(),
             None => tx.into(),
         };
-        actor.cast(msg_builder(port, *k))?;
-        rx_ports.insert(*k, rx);
+        actor.cast(msg_builder(&k, port))?;
+        rx_ports.insert(k, rx);
     }
 
     let mut join_set = tokio::task::JoinSet::new();
@@ -55,6 +55,8 @@ where
     }
 
     let mut results = HashMap::with_capacity(len);
+
+    // wait for the replies
     while let Some(result) = join_set.join_next().await {
         match result {
             Ok((k, r)) => {
@@ -66,6 +68,5 @@ where
         }
     }
 
-    // wait for the replies
     Ok(results)
 }

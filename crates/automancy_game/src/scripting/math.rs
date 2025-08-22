@@ -6,7 +6,7 @@ use rhai::{Engine, Module};
 pub(crate) fn register_math_stuff(engine: &mut Engine) {
     let mut module = Module::new();
 
-    module.set_var("IDENTITY", Matrix4::IDENTITY);
+    module.set_var("IDENTITY", Matrix4::identity());
 
     engine.register_static_module("Matrix", module.into());
 

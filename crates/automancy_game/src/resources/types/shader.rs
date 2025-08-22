@@ -4,6 +4,8 @@ use std::{
     path::Path,
 };
 
+use crate::resources::{COULD_NOT_GET_FILE_STEM, LoadResourceError, ResourceManager, SHADER_EXT};
+
 impl ResourceManager {
     pub fn load_shaders(&mut self, dir: &Path) -> anyhow::Result<()> {
         let shaders = dir.join("shaders");

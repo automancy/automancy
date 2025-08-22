@@ -1,7 +1,19 @@
 use std::{ffi::OsStr, fs::read_to_string, path::Path};
 
+use automancy_data::{
+    game::{
+        generic::{DataMap, serailize::DataMapRaw},
+        item::{ItemAmount, ItemStack},
+    },
+    id::{
+        Id, ModelId, TileId,
+        parse::{parse_ids, parse_item_stacks},
+    },
+};
 use petgraph::visit::IntoNodeReferences;
 use serde::Deserialize;
+
+use crate::resources::{RON_EXT, ResourceManager, load_recursively, types::IconMode};
 
 #[derive(Debug, Clone)]
 pub struct ResearchDef {
@@ -139,50 +151,41 @@ impl ResourceManager {
     }
 
     pub fn is_research_unlocked(&self, research: Id, game_data: &mut DataMap) -> bool {
-        if let Data::SetId(unlocked) = game_data
-            .entry(resource_man.registry.data_ids.unlocked_researches)
-            .or_insert_with(|| Data::SetId(HashSet::new()))
-        {
-            if unlocked.contains(&research) {
-                return true;
-            }
+        let unlocked = game_data.set_id_mut(self.registry.data_ids.unlocked_researches);
+
+        if unlocked.contains(&research) {
+            return true;
         }
 
         false
     }
 
     pub fn should_category_show(&self, category: Id, game_data: &mut DataMap) -> bool {
-        let Some(category) = resource_man.registry.categories.get(&category) else {
+        let Some(category) = self.registry.categories.get(&category) else {
             return false;
         };
 
-        let Some(tiles) = resource_man.get_tiles_by_category(category.id) else {
+        let Some(tiles) = self.get_tiles_by_category(category.id) else {
             return false;
         };
 
         if tiles.iter().any(|id| {
-            resource_man.registry.tiles[id]
+            self.registry.tiles[id]
                 .data
-                .get(resource_man.registry.data_ids.default_tile)
-                .cloned()
-                .and_then(|v| v.into_bool())
-                .unwrap_or(false)
+                .bool_or_default(self.registry.data_ids.default_tile, false)
         }) {
             return true;
         }
 
-        let Some(researches) = resource_man.get_researches_by_category(category.id) else {
+        let Some(researches) = self.get_researches_by_category(category.id) else {
             return false;
         };
 
-        if let Data::SetId(unlocked) = game_data
-            .entry(resource_man.registry.data_ids.unlocked_researches)
-            .or_insert_with(|| Data::SetId(HashSet::new()))
-        {
-            for research in researches {
-                if unlocked.contains(&research) {
-                    return true;
-                }
+        let unlocked = game_data.set_id_mut(self.registry.data_ids.unlocked_researches);
+
+        for research in researches {
+            if unlocked.contains(&research) {
+                return true;
             }
         }
 

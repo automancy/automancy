@@ -1,9 +1,9 @@
-use std::ops::{Add, Neg, Sub};
+use core::ops::{Add, Neg, Sub};
 
 use automancy_data::{
-    coord::{TileBounds, TileCoord, TileUnit},
+    game::coord::{TileBounds, TileCoord, TileUnit},
     id::Id,
-    math::{Matrix4, tile_direction_to_angle},
+    math::Matrix4,
 };
 use hashbrown::HashMap;
 use rhai::{Dynamic, Engine, Module};
@@ -12,7 +12,7 @@ pub(crate) fn register_coord_stuff(engine: &mut Engine) {
     let mut module = Module::new();
 
     module
-        .set_var("ZERO", TileCoord::ZERO)
+        .set_var("ORIGIN", TileCoord::ORIGIN)
         .set_var("TOP_RIGHT", TileCoord::TOP_RIGHT)
         .set_var("RIGHT", TileCoord::RIGHT)
         .set_var("BOTTOM_RIGHT", TileCoord::BOTTOM_RIGHT)
@@ -39,11 +39,7 @@ pub(crate) fn register_coord_stuff(engine: &mut Engine) {
             v.as_translation()
         })
         .register_fn("as_rotation_z", |v: TileCoord| -> Matrix4 {
-            let Some(deg) = tile_direction_to_angle(v) else {
-                return Matrix4::IDENTITY;
-            };
-
-            Matrix4::from_rotation_z(deg.to_radians())
+            Matrix4::rotation_z(TileCoord::as_degrees(v).to_radians())
         })
         .register_get("q", |v: &mut TileCoord| -> TileUnit { v.x })
         .register_get("r", |v: &mut TileCoord| -> TileUnit { v.y })

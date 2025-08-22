@@ -36,6 +36,26 @@ pub fn projection(aspect: Float) -> Matrix4 {
 
 #[inline]
 #[must_use]
+fn transform_camera_z(z: Float) -> Float {
+    let mut z = z * 4.0;
+
+    if z > 1.0 && z <= 1.5 {
+        z = 1.0
+    } else if z > 1.5 {
+        z -= 0.5
+    }
+
+    z * 4.0 + 2.8
+}
+
+#[inline]
+#[must_use]
+fn transform_camera_pos(Vec3 { x, y, z }: Vec3) -> Vec3 {
+    Vec3::new(x, y, transform_camera_z(z))
+}
+
+#[inline]
+#[must_use]
 pub fn camera_angle(z: Float) -> Float {
     // TODO magic values
     let max = 6.5;
@@ -58,6 +78,8 @@ fn view_plane_normal(camera_pos: Vec3) -> Vec3 {
 #[inline]
 #[must_use]
 fn camera_view(camera_pos: Vec3) -> Matrix4 {
+    let camera_pos = transform_camera_pos(camera_pos);
+
     Matrix4::look_at_lh(
         camera_pos,
         camera_pos + view_plane_normal(camera_pos),
@@ -67,9 +89,9 @@ fn camera_view(camera_pos: Vec3) -> Matrix4 {
 
 #[inline]
 #[must_use]
-pub fn camera_matrix(pos: Vec3, aspect: Float) -> Matrix4 {
+pub fn camera_matrix(aspect: Float, camera_pos: Vec3) -> Matrix4 {
     let projection = projection(aspect);
-    let view = camera_view(pos);
+    let view = camera_view(camera_pos);
 
     projection * view
 }
@@ -166,20 +188,4 @@ pub fn viewport_bounding_rect_in_world(viewport_size: Vec2, camera_pos: Vec3) ->
         .unwrap_or_default();
 
     (Vec2::new(min_x, min_y), Vec2::new(max_x, max_y))
-}
-
-#[inline]
-#[must_use]
-pub fn fit_camera_z(mut z: Float) -> Float {
-    if z > 1.0 {
-        if z <= 1.5 { z = 1.0 } else { z -= 0.5 }
-    }
-
-    2.5 + z * 4.0
-}
-
-#[inline]
-#[must_use]
-pub fn fit_camera_pos(Vec3 { x, y, z }: Vec3) -> Vec3 {
-    Vec3::new(x, y, fit_camera_z(z))
 }

@@ -15,7 +15,6 @@ log = { workspace = true }
 # parsing / data mangling / math / files
 bytemuck = { workspace = true }
 crunch = { workspace = true }
-hexx = { workspace = true }
 ron = { workspace = true }
 serde = { workspace = true }
 uuid = { workspace = true }
@@ -49,5 +48,3 @@ anyhow = { workspace = true }
 fuzzy-matcher = { workspace = true }
 interpolator = { workspace = true }
 slice-group-by = { workspace = true }
-thiserror = { workspace = true }
-walkdir = { workspace = true }

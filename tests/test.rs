@@ -1,5 +1,3 @@
-use automancy_data::coord::TileCoord;
-
 pub mod macros;
 
 #[test]

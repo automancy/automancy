@@ -15,6 +15,9 @@ pub const fn rgba_from_u8(color: RgbaU8) -> Rgba {
 pub trait ColorExt {
     fn from_u8(color: RgbaU8) -> Self;
     fn to_u8(self) -> RgbaU8;
+
+    fn encode(self) -> String;
+    fn decode(v: String) -> Self;
 }
 
 impl ColorExt for Rgba {
@@ -29,6 +32,25 @@ impl ColorExt for Rgba {
             b: (self.b * 255.0) as u8,
             a: (self.a * 255.0) as u8,
         }
+    }
+
+    fn encode(self) -> String {
+        let v = self.to_u8();
+
+        const_hex::encode([v.r, v.g, v.b, v.a])
+    }
+
+    fn decode(v: String) -> Self {
+        let mut color = const_hex::decode(v)
+            .unwrap_or_else(|_| vec![0, 0, 0, 255])
+            .into_iter();
+
+        Rgba::from_u8(RgbaU8 {
+            r: color.next().unwrap_or(0),
+            g: color.next().unwrap_or(0),
+            b: color.next().unwrap_or(0),
+            a: color.next().unwrap_or(255),
+        })
     }
 }
 

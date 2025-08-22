@@ -4,9 +4,11 @@ use std::{
 };
 
 use crate::{
-    game::item::{ItemAmount, ItemStack},
+    game::{
+        generic::serailize::IdMap,
+        item::{ItemAmount, ItemStack},
+    },
     id::{Id, Interner},
-    parse::id::resolve_map_id_item,
 };
 
 #[derive(Debug, Default, Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -62,48 +64,130 @@ impl Inventory {
         taking
     }
 
-    pub fn to_raw(self, interner: &Interner) -> raw::InventoryRaw {
-        raw::InventoryRaw(
-            resolve_map_id_item(
-                self.0
-                    .into_iter()
-                    .filter(|(_, amount)| *amount > 0)
-                    .map(|(a, b)| (a, b)),
-                interner,
-            )
-            .collect(),
-        )
+    pub fn into_raw(self, id_map: &mut IdMap, interner: &Interner) -> serialize::InventoryRaw {
+        let mut r = serialize::InventoryRaw::default();
+
+        for (id, amount) in self.into_inner() {
+            id_map.insert(id, interner);
+
+            r.push((id, amount));
+        }
+
+        r
     }
 }
 
-pub mod raw {
+pub mod serialize {
+    use core::ops::{Deref, DerefMut};
+
     use serde::{Deserialize, Serialize};
 
     use crate::{
-        game::{inventory::Inventory, item::ItemAmount},
-        id::Interner,
-        parse::id::{parse_map_id_item, try_parse_map_id_item},
+        game::{
+            generic::serailize::{IdMap, IdMapError},
+            inventory::Inventory,
+            item::ItemAmount,
+        },
+        id::{Id, Interner},
     };
 
-    #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-    pub struct InventoryRaw(pub(crate) Vec<(String, ItemAmount)>);
+    #[derive(Debug, Default, Clone, Serialize, Deserialize)]
+    pub struct InventoryRaw(Vec<(Id, ItemAmount)>);
+
+    impl Deref for InventoryRaw {
+        type Target = Vec<(Id, ItemAmount)>;
+
+        fn deref(&self) -> &Self::Target {
+            &self.0
+        }
+    }
+
+    impl DerefMut for InventoryRaw {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            &mut self.0
+        }
+    }
+
+    impl From<Vec<(Id, ItemAmount)>> for InventoryRaw {
+        fn from(value: Vec<(Id, ItemAmount)>) -> Self {
+            Self(value)
+        }
+    }
 
     impl InventoryRaw {
-        pub fn try_to_inventory(self, interner: &Interner) -> Inventory {
-            Inventory(
-                try_parse_map_id_item(self.0.into_iter().map(|(a, b)| (a, b)), interner).collect(),
-            )
+        pub fn into_inner(self) -> Vec<(Id, ItemAmount)> {
+            self.0
         }
 
-        pub fn to_inventory(
+        pub fn into_inventory(
+            self,
+            id_map: &IdMap,
+            interner: &Interner,
+        ) -> Result<Inventory, IdMapError> {
+            let mut r = Inventory::default();
+
+            for (unmapped_id, amount) in self.0.into_iter() {
+                r.insert(id_map.resolve(unmapped_id, interner)?, amount);
+            }
+
+            Ok(r)
+        }
+    }
+}
+
+pub mod deserialize {
+    use core::ops::{Deref, DerefMut};
+
+    use serde::Deserialize;
+
+    use crate::{
+        game::{inventory::Inventory, item::ItemAmount},
+        id::{
+            Interner,
+            deserialize::{IdStr, IdStrParseError},
+        },
+    };
+
+    #[derive(Debug, Default, Clone, Deserialize)]
+    pub struct InventoryStr(Vec<(IdStr, ItemAmount)>);
+
+    impl Deref for InventoryStr {
+        type Target = Vec<(IdStr, ItemAmount)>;
+
+        fn deref(&self) -> &Self::Target {
+            &self.0
+        }
+    }
+
+    impl DerefMut for InventoryStr {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            &mut self.0
+        }
+    }
+
+    impl From<Vec<(IdStr, ItemAmount)>> for InventoryStr {
+        fn from(value: Vec<(IdStr, ItemAmount)>) -> Self {
+            Self(value)
+        }
+    }
+
+    impl InventoryStr {
+        pub fn into_inner(self) -> Vec<(IdStr, ItemAmount)> {
+            self.0
+        }
+
+        pub fn into_inventory(
             self,
             interner: &mut Interner,
-            namespace: Option<impl AsRef<str>>,
-        ) -> Inventory {
-            Inventory(
-                parse_map_id_item(self.0.into_iter().map(|(a, b)| (a, b)), interner, namespace)
-                    .collect(),
-            )
+            fallback_namespace: Option<&impl AsRef<str>>,
+        ) -> Result<Inventory, IdStrParseError> {
+            let mut r = Inventory::default();
+
+            for (id, amount) in self.0.into_iter() {
+                r.insert(id.into_id(interner, fallback_namespace)?, amount);
+            }
+
+            Ok(r)
         }
     }
 }

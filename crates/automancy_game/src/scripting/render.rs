@@ -6,6 +6,7 @@ use rhai::{Engine, Module, exported_module, plugin::*};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum RenderCommand {
+    Clear,
     Untrack {
         tag: RenderId,
         model: ModelId,
@@ -42,6 +43,36 @@ mod render_stuff {
             model: ModelId(model),
             model_matrix,
         }
+    }
+}
+
+pub mod util {
+    use automancy_data::{
+        game::coord::TileCoord,
+        id::{ModelId, RenderId},
+    };
+
+    use crate::{resources::ResourceManager, scripting::render::RenderCommand};
+
+    pub fn track_none(resource_man: &ResourceManager, coord: TileCoord) -> [RenderCommand; 2] {
+        [
+            RenderCommand::Track {
+                tag: RenderId(resource_man.registry.data_ids.none_tile_render_tag),
+                model: ModelId(resource_man.registry.model_ids.tile_none),
+            },
+            RenderCommand::Transform {
+                tag: RenderId(resource_man.registry.data_ids.none_tile_render_tag),
+                model: ModelId(resource_man.registry.model_ids.tile_none),
+                model_matrix: coord.as_translation(),
+            },
+        ]
+    }
+
+    pub fn untrack_none(resource_man: &ResourceManager) -> [RenderCommand; 1] {
+        [RenderCommand::Untrack {
+            tag: RenderId(resource_man.registry.data_ids.none_tile_render_tag),
+            model: ModelId(resource_man.registry.model_ids.tile_none),
+        }]
     }
 }
 

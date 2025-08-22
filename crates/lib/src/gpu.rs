@@ -9,21 +9,6 @@ use automancy_resources::ResourceManager;
 use bytemuck::Pod;
 use ordermap::OrderMap;
 use slice_group_by::GroupBy;
-use wgpu::{
-    AdapterInfo, AddressMode, Backends, BindGroup, BindGroupDescriptor, BindGroupEntry,
-    BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType,
-    BlendState, Buffer, BufferAddress, BufferBindingType, BufferUsages, COPY_BUFFER_ALIGNMENT,
-    Color, ColorTargetState, ColorWrites, CommandEncoder, CompareFunction, DepthStencilState,
-    Device, DeviceDescriptor, Extent3d, Face, Features, FilterMode, FragmentState, FrontFace,
-    Instance, InstanceDescriptor, InstanceFlags, Limits, MultisampleState,
-    PipelineCompilationOptions, PipelineLayoutDescriptor, PowerPreference, PresentMode,
-    PrimitiveState, PrimitiveTopology, Queue, RenderPipeline, RenderPipelineDescriptor,
-    RequestAdapterOptions, Sampler, SamplerBindingType, SamplerDescriptor, ShaderModule,
-    ShaderModuleDescriptor, ShaderSource, ShaderStages, Surface, SurfaceConfiguration, Texture,
-    TextureDescriptor, TextureDimension, TextureFormat, TextureSampleType, TextureUsages,
-    TextureView, TextureViewDescriptor, TextureViewDimension, VertexState,
-    util::{BufferInitDescriptor, DeviceExt, StagingBelt},
-};
 use winit::{dpi::PhysicalSize, window::Window};
 use yakui::UVec2;
 

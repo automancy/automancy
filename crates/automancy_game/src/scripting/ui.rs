@@ -1,4 +1,4 @@
-use automancy_data::{id::Id, stack::ItemAmount};
+use automancy_data::{game::item::ItemAmount, id::Id};
 use rhai::{Engine, Module, exported_module, plugin::*};
 
 #[derive(Debug, Clone, PartialEq, Eq)]

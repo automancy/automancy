@@ -1,6 +1,12 @@
 use std::{ffi::OsStr, fs::read_to_string, path::Path};
 
+use automancy_data::{
+    game::generic::{DataMap, deserialize::DataMapStr},
+    id::{Id, TileId},
+};
 use serde::Deserialize;
+
+use crate::resources::{RON_EXT, ResourceManager, load_recursively};
 
 #[derive(Debug, Clone)]
 pub struct TileDef {
@@ -16,7 +22,7 @@ struct Raw {
     pub function: Option<String>,
     #[serde(default)]
     pub category: Option<String>,
-    pub data: DataMapRaw,
+    pub data: DataMapStr,
 }
 
 impl ResourceManager {
@@ -33,7 +39,7 @@ impl ResourceManager {
             .category
             .map(|v| Id::parse(&v, &mut self.interner, Some(namespace)).unwrap());
 
-        let data = v.data.intern_to_data(&mut self.interner, Some(namespace));
+        let data = v.data.into_data(&mut self.interner, Some(namespace));
 
         self.registry.tiles.insert(
             id,

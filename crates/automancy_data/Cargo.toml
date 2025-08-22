@@ -14,22 +14,13 @@ approx = { workspace = true }
 bytemuck = { workspace = true }
 const-hex = { workspace = true }
 hexx = { workspace = true }
-ron = { workspace = true }
 serde = { workspace = true }
-uuid = { workspace = true }
 vek = { workspace = true }
-zstd = { workspace = true }
 
 # specialized data storage types
-arraydeque = { workspace = true }
-enum-map = { workspace = true }
 hashbrown = { workspace = true }
 string-interner = { workspace = true }
 
 # utils
-anyhow = { workspace = true }
-fuzzy-matcher = { workspace = true }
-interpolator = { workspace = true }
-rand = { workspace = true }
+futures = { workspace = true }
 thiserror = { workspace = true }
-walkdir = { workspace = true }

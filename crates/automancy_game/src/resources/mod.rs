@@ -9,10 +9,13 @@ use std::{
     fmt,
     fmt::{Debug, Formatter},
     path::{Path, PathBuf},
-    sync::{Arc, RwLock},
     time::SystemTime,
 };
 
+use automancy_data::{
+    game::coord::TileCoord,
+    id::{Id, Interner, ModelId, TileId, deserialize::IdStr},
+};
 use chrono::{DateTime, Local};
 use hashbrown::HashMap;
 use kira::{sound::static_sound::StaticSoundData, track::TrackHandle};
@@ -20,6 +23,14 @@ use rhai::{AST, CallFnOptions, Dynamic, Engine};
 use thiserror::Error;
 use types::function::FunctionMetadata;
 use walkdir::WalkDir;
+
+use crate::{
+    resources::{
+        registry::Registry,
+        types::{font::Font, translate::TranslateDef},
+    },
+    scripting,
+};
 
 pub type FunctionInfo = (AST, FunctionMetadata);
 
@@ -67,7 +78,19 @@ pub enum ResourceError {
     ItemNotFound,
 }
 
-pub static RESOURCE_MAN: RwLock<Option<Arc<ResourceManager>>> = RwLock::new(None);
+pub mod global {
+    use std::sync::{Arc, RwLock};
+
+    use super::ResourceManager;
+
+    static RESOURCE_MAN: RwLock<Option<Arc<ResourceManager>>> = RwLock::new(None);
+    pub fn resource_man() -> Arc<ResourceManager> {
+        RESOURCE_MAN.read().unwrap().as_ref().unwrap().clone()
+    }
+    pub fn set_resource_man(resource_man: Arc<ResourceManager>) {
+        RESOURCE_MAN.write().unwrap().replace(resource_man);
+    }
+}
 
 /// Represents a resource manager, which contains all resources (apart from maps) loaded from disk dynamically.
 pub struct ResourceManager {
@@ -79,15 +102,14 @@ pub struct ResourceManager {
 
     pub translates: TranslateDef,
     pub audio: HashMap<String, StaticSoundData>,
-    pub shaders: HashMap<String, SharedStr>,
+    pub shaders: HashMap<String, String>,
     pub functions: HashMap<Id, FunctionInfo>,
     pub fonts: BTreeMap<String, Font>, // yes this does need to be a BTreeMap
 
     pub ordered_tiles: Vec<TileId>,
     pub ordered_items: Vec<Id>,
     pub ordered_categories: Vec<Id>,
-    pub all_meshes_anims: HashMap<ModelId, (Vec<Option<Mesh>>, Vec<Animation>)>,
-    pub all_index_ranges: HashMap<ModelId, HashMap<usize, IndexRange>>,
+    pub all_gltf_models: HashMap<ModelId, (gltf::Document, Vec<gltf::buffer::Data>)>,
 }
 
 impl Debug for ResourceManager {
@@ -99,27 +121,26 @@ impl Debug for ResourceManager {
 impl ResourceManager {
     pub fn new(track: TrackHandle) -> Self {
         let mut interner = Interner::new();
-        let none = IdRaw::new("core", "none").to_id(&mut interner);
-        let any = IdRaw::new("core", "#any").to_id(&mut interner);
+        let none = IdStr::new("core", "none").into_id(&mut interner);
+        let any = IdStr::new("core", "#any").into_id(&mut interner);
 
         let mut engine = Engine::new();
         engine.set_max_expr_depths(0, 0);
         engine.set_fast_operators(false);
 
-        rhai_math::register_math_stuff(&mut engine);
-        rhai_utils::register_functions(&mut engine);
-        rhai_coord::register_coord_stuff(&mut engine);
-        rhai_data::register_data_stuff(&mut engine);
-        rhai_resources::register_resources(&mut engine);
-        rhai_tile::register_tile_stuff(&mut engine);
-        rhai_ui::register_ui_stuff(&mut engine);
-        rhai_render::register_render_stuff(&mut engine);
+        scripting::coord::register_coord_stuff(&mut engine);
+        scripting::data::register_data_stuff(&mut engine);
+        scripting::math::register_math_stuff(&mut engine);
+        scripting::render::register_render_stuff(&mut engine);
+        scripting::tile::register_tile_stuff(&mut engine);
+        scripting::ui::register_ui_stuff(&mut engine);
+        scripting::util::register_functions(&mut engine);
 
-        let data_ids = DataIds::new(&mut interner);
-        let model_ids = ModelIds::new(&mut interner);
-        let gui_ids = GuiIds::new(&mut interner);
-        let key_ids = KeyIds::new(&mut interner);
-        let err_ids = ErrorIds::new(&mut interner);
+        let data_ids = registry::DataIds::new(&mut interner);
+        let model_ids = registry::ModelIds::new(&mut interner);
+        let gui_ids = registry::GuiIds::new(&mut interner);
+        let key_ids = registry::KeyIds::new(&mut interner);
+        let err_ids = registry::ErrorIds::new(&mut interner);
 
         Self {
             interner,
@@ -156,8 +177,7 @@ impl ResourceManager {
             ordered_tiles: vec![],
             ordered_items: vec![],
             ordered_categories: vec![],
-            all_index_ranges: Default::default(),
-            all_meshes_anims: Default::default(),
+            all_gltf_models: Default::default(),
         }
     }
 }

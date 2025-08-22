@@ -2,6 +2,8 @@ use std::{ffi::OsStr, fs::read_dir, path::Path};
 
 use kira::sound::static_sound::StaticSoundData;
 
+use crate::resources::{AUDIO_EXT, COULD_NOT_GET_FILE_STEM, LoadResourceError, ResourceManager};
+
 impl ResourceManager {
     pub fn load_audio(&mut self, dir: &Path) -> anyhow::Result<()> {
         let audio = dir.join("audio");

@@ -1,37 +1,51 @@
 use std::ops::Mul;
 
-use hexx::Hex;
+use automancy_data::{
+    game::coord::{TileBounds, TileCoord},
+    math::{Float, Matrix4, Vec2, Vec3},
+    rendering,
+};
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+use crate::input::handler::InputHandler;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GameCamera {
     pos: Vec3,
     move_vel: Vec2,
     scroll_vel: Float,
 
+    matrix: Matrix4,
+
     pub culling_range: TileBounds,
     pub pointing_at: TileCoord,
-    matrix: Matrix4,
 }
 
 impl GameCamera {
-    pub fn new((width, height): (Float, Float)) -> Self {
-        let pos = Vec3::new(0.0, 0.0, 2.0);
-        let matrix = camera_matrix(fit_pos(pos), width / height);
+    fn pos_updated(&mut self, viewport_size: Vec2) {
+        self.matrix = rendering::camera::camera_matrix(viewport_size.x / viewport_size.y, self.pos);
+        self.culling_range = TileBounds::from_display(viewport_size, self.pos);
+    }
 
-        Self {
-            pos,
+    pub fn new(viewport_size: Vec2) -> Self {
+        let mut this = Self {
+            pos: Vec3::new(0.0, 0.0, 0.75),
             move_vel: Vec2::new(0.0, 0.0),
             scroll_vel: 0.0,
 
-            culling_range: math::get_culling_range((width, height), fit_pos(pos)),
+            matrix: Matrix4::identity(),
+
+            culling_range: TileBounds::Empty,
             pointing_at: TileCoord::new(0, 0),
-            matrix,
-        }
+        };
+
+        this.pos_updated(viewport_size);
+
+        this
     }
 
     /// Returns the position of the camera.
     pub fn get_pos(&self) -> Vec3 {
-        fit_pos(self.pos)
+        self.pos
     }
 
     pub fn get_matrix(&self) -> Matrix4 {
@@ -41,19 +55,16 @@ impl GameCamera {
 
 impl GameCamera {
     /// Sets the position the camera is centered on.
-    pub fn update_pointing_at(&mut self, main_pos: Vec2, (width, height): (Float, Float)) {
-        let p = Hex::round(
-            math::main_pos_to_fract_hex((width, height), main_pos, self.get_pos()).to_array(),
-        );
+    pub fn update_pointing_at(&mut self, main_pos: Vec2, viewport_size: Vec2) {
+        let world_pos = rendering::camera::pixel_to_world(main_pos, viewport_size, self.pos);
+        let p = TileCoord::from_world_pos(world_pos.xy());
 
         self.pointing_at = p.into();
     }
 
     /// Gets the TileCoord the camera is pointing at.
     pub fn get_tile_coord(&self) -> TileCoord {
-        HEX_GRID_LAYOUT
-            .world_pos_to_hex(Vec2::new(self.pos.x as Float, self.pos.y as Float))
-            .into()
+        TileCoord::from_world_pos(Vec2::new(self.pos.x as Float, self.pos.y as Float)).into()
     }
 
     /// Updates the movement state of the camera based on input.
@@ -70,10 +81,10 @@ impl GameCamera {
     }
 
     /// Updates the camera's position.
-    pub fn update_pos(&mut self, (width, height): (Float, Float), elapsed: Float) {
-        let m = elapsed * 100.0;
+    pub fn update_pos(&mut self, viewport_size: Vec2, elapsed: Float) {
+        if self.move_vel.magnitude_squared() > 0.0000001 {
+            let m = elapsed * 100.0;
 
-        if self.move_vel.length_squared() > 0.0000001 {
             self.pos.x += self.move_vel.x * m;
             self.pos.y += self.move_vel.y * m;
 
@@ -81,14 +92,15 @@ impl GameCamera {
         }
 
         if self.scroll_vel.abs() > 0.00005 {
+            let m = elapsed * 20.0;
+
             self.pos.z += self.scroll_vel * m;
-            self.pos.z = self.pos.z.clamp(0.05, 4.0);
+            self.pos.z = self.pos.z.clamp(0.0, 1.0);
 
             self.scroll_vel -= self.scroll_vel * elapsed.mul(15.0).min(0.9);
         }
 
-        self.matrix = camera_matrix(self.get_pos(), width / height);
-        self.culling_range = math::get_culling_range((width, height), self.get_pos());
+        self.pos_updated(viewport_size);
     }
 
     /// Called when the camera is scrolled.
@@ -110,9 +122,6 @@ impl GameCamera {
         const MAX_MOVE_VEL: Float = 2.0;
 
         self.move_vel += delta / 500.0;
-        self.move_vel = self.move_vel.clamp(
-            Vec2::new(-MAX_MOVE_VEL, -MAX_MOVE_VEL),
-            Vec2::new(MAX_MOVE_VEL, MAX_MOVE_VEL),
-        );
+        self.move_vel = self.move_vel.map(|v| v.clamp(-MAX_MOVE_VEL, MAX_MOVE_VEL));
     }
 }

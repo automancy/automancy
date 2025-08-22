@@ -1,67 +1,57 @@
-use std::{
-    mem,
-    sync::Arc,
-    time::{Duration, Instant},
+use std::{mem, sync::Arc, time::Instant};
+
+use automancy_data::{
+    game::{
+        coord::{TileBounds, TileCoord},
+        generic::DataMap,
+    },
+    id::{Id, TileId},
+};
+use hashbrown::HashMap;
+use ractor::{Actor, ActorProcessingErr, ActorRef, SupervisionEvent};
+use rayon::prelude::*;
+
+use crate::{
+    actor::{
+        TickUnit, TileEntry, TileMap, UNDO_CACHE_SIZE, map,
+        map::GameMap,
+        message::{GameMsg, PlaceTileResponse, TileMsg},
+        tile::{TileActor, TileActorError},
+        util::multi_call_iter,
+    },
+    resources::ResourceManager,
+    scripting::{render, render::RenderCommand},
 };
 
-/// Game ticks per second
-pub const TPS: usize = 60;
-pub const TICK_INTERVAL: Duration = Duration::from_nanos(1_000_000_000 / TPS);
-pub const MAX_ALLOWED_TICK_INTERVAL: Duration = TICK_INTERVAL.saturating_mul(5);
-
-pub const TRANSACTION_ANIMATION_SPEED: Duration = Duration::from_nanos(800_000_000);
-pub const TRANSACTION_MIN_INTERVAL: Duration = Duration::from_nanos(250_000_000);
-pub const TAKE_ITEM_ANIMATION_SPEED: Duration = Duration::from_nanos(300_000_000);
-
-const UNDO_CACHE_SIZE: usize = 256;
-
-pub type TickUnit = u16;
-
-pub type FlatTiles = Vec<(TileCoord, TileId, Option<DataMap>)>;
-
-#[derive(Debug, Default)]
-pub struct GameSystemState {
-    /// a count of all the ticks that have happened
+pub struct GameData {
+    /// the number of the ticks that have happened
     tick_count: TickUnit,
-    /// is the game stopped
-    stopped: bool,
+    map: GameMap,
 
-    /// the tile entities
-    tile_entities: TileEntities,
-    /// the map
-    map: Option<GameMap>,
-
-    /// what to do to undo the last UNDO_CACHE_SIZE user events
-    undo_steps: ArrayDeque<Vec<GameSystemMessage>, UNDO_CACHE_SIZE, Wrapping>,
-
+    /// what to do to undo the last [`UNDO_CACHE_SIZE`] user events
+    undo_steps: arraydeque::ArrayDeque<Vec<GameMsg>, UNDO_CACHE_SIZE, arraydeque::Wrapping>,
     cleanup_render_commands: HashMap<TileCoord, Vec<RenderCommand>>,
     last_culling_range: TileBounds,
 }
 
+#[derive(Default)]
+pub enum GameState {
+    #[default]
+    Unloaded,
+
+    Running(GameData),
+    Paused(GameData),
+    Stopped,
+}
+
+#[derive(Default)]
+pub struct GameActorState {
+    game_state: GameState,
+}
+
 pub static COULD_NOT_LOAD_ANYTHING: &str = "??? main menu is corrupted and couldn't be emptied!";
 
-fn track_none(resource_man: &ResourceManager, coord: TileCoord) -> [RenderCommand; 2] {
-    [
-        RenderCommand::Track {
-            tag: RenderId(resource_man.registry.data_ids.none_tile_render_tag),
-            model: ModelId(resource_man.registry.model_ids.tile_none),
-        },
-        RenderCommand::Transform {
-            tag: RenderId(resource_man.registry.data_ids.none_tile_render_tag),
-            model: ModelId(resource_man.registry.model_ids.tile_none),
-            model_matrix: coord.as_translation(),
-        },
-    ]
-}
-
-fn untrack_none(resource_man: &ResourceManager) -> [RenderCommand; 1] {
-    [RenderCommand::Untrack {
-        tag: RenderId(resource_man.registry.data_ids.none_tile_render_tag),
-        model: ModelId(resource_man.registry.model_ids.tile_none),
-    }]
-}
-
-fn fill_map_with_none(
+fn fill_rest_of_map_with_none(
     resource_man: &ResourceManager,
     culling_range: TileBounds,
     last_culling_range: TileBounds,
@@ -73,82 +63,162 @@ fn fill_map_with_none(
 
     for coord in culling_range.into_iter() {
         if !commands.contains_key(&coord) && !last_culling_range.contains(coord) {
-            commands.insert(coord, track_none(resource_man, coord).to_vec());
+            commands.insert(
+                coord,
+                render::util::track_none(resource_man, coord).to_vec(),
+            );
         }
     }
 
     for coord in last_culling_range.into_iter() {
         if !commands.contains_key(&coord) && !culling_range.contains(coord) {
-            commands.insert(coord, untrack_none(resource_man).to_vec());
+            commands.insert(coord, render::util::untrack_none(resource_man).to_vec());
         }
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-pub enum PlaceTileResponse {
-    Placed,
-    Removed,
-    Ignored,
-}
-
-/// Represents a message the game receives
-#[derive(Debug)]
-pub enum GameSystemMessage {
-    /// tick the tiles once
-    Tick,
-    StopTicking,
-
-    /// load a map
-    LoadMap(LoadMapOption, RpcReplyPort<bool>),
-    /// save the map
-    SaveMap(RpcReplyPort<()>),
-    GetMapInfoAndName(RpcReplyPort<Option<(Arc<Mutex<MapInfo>>, LoadMapOption)>>),
-
-    /// send a message to a tile entity
-    ForwardMsgToTile {
-        source: TileCoord,
-        to: TileCoord,
-        msg: TileEntityMsg,
-        on_fail: OnFailAction,
-    },
-
-    /// place a tile at the given position
-    PlaceTile {
-        coord: TileCoord,
-        id: TileId,
-        data: Option<DataMap>,
-        record: bool,
-        reply: Option<RpcReplyPort<PlaceTileResponse>>,
-    },
-    PlaceTiles {
-        tiles: FlatTiles,
-        reply: Option<RpcReplyPort<FlatTiles>>,
-        place_over: bool,
-        record: bool,
-    },
-    MoveTiles(Vec<TileCoord>, TileCoord, bool),
-
-    Undo,
-
-    /// get the tile at the given position
-    GetTile(TileCoord, RpcReplyPort<Option<TileId>>),
-    /// get the tile entity at the given position
-    GetTileEntity(TileCoord, RpcReplyPort<Option<ActorRef<TileEntityMsg>>>),
-    GetTiles(Vec<TileCoord>, RpcReplyPort<FlatTiles>),
-    /// get all the tiles' render commands
-    GetAllRenderCommands {
-        culling_range: TileBounds,
-        reply: RpcReplyPort<[HashMap<TileCoord, Vec<RenderCommand>>; 2]>,
-    },
-}
-
-pub struct GameSystem {
+pub struct GameActor {
     pub resource_man: Arc<ResourceManager>,
 }
 
-impl Actor for GameSystem {
-    type Msg = GameSystemMessage;
-    type State = GameSystemState;
+impl GameActor {
+    /// Stops a Tile and removes it from the game.
+    #[must_use]
+    async fn remove_tile(
+        &self,
+        game_data: &mut GameData,
+        coord: TileCoord,
+    ) -> Option<(TileId, DataMap)> {
+        let removed_tile = game_data.map.tiles.remove(&coord);
+        let mut removed_data = None;
+
+        if let Some(tile) = &removed_tile {
+            try_category(&self.resource_man, tile.id, |item| {
+                let inventory = game_data
+                    .map
+                    .map_data
+                    .data
+                    .inventory_mut(self.resource_man.registry.data_ids.player_inventory);
+
+                inventory.add(item, 1);
+            });
+
+            removed_data = Some(
+                tile.handle
+                    .call(|reply| TileMsg::TakeData(reply), None)
+                    .await
+                    .unwrap()
+                    .unwrap(),
+            );
+
+            let mut cleanup = tile
+                .handle
+                .call(
+                    |reply| TileMsg::CollectRenderCommands {
+                        reply,
+                        loading: false,
+                        unloading: true,
+                    },
+                    None,
+                )
+                .await
+                .unwrap()
+                .unwrap()
+                .unwrap_or_default();
+
+            game_data
+                .cleanup_render_commands
+                .entry(coord)
+                .or_default()
+                .append(&mut cleanup);
+
+            tile.handle.stop(Some("removed from game".to_string()));
+        }
+
+        removed_tile.map(|tile| tile.id).zip(removed_data)
+    }
+
+    #[inline]
+    async fn insert_new_tile(
+        &self,
+        myself: ActorRef<GameMsg>,
+        tiles: &mut TileMap,
+        coord: TileCoord,
+        id: TileId,
+    ) -> ActorRef<TileMsg> {
+        let (handle, _) = Actor::spawn_linked(
+            Some(coord.to_minimal_string()),
+            TileActor {
+                id,
+                coord,
+                game: myself.clone(),
+                resource_man: self.resource_man.clone(),
+            },
+            (),
+            myself.get_cell(),
+        )
+        .await
+        .unwrap();
+
+        tiles.insert(
+            coord,
+            TileEntry {
+                id,
+                handle: handle.clone(),
+            },
+        );
+
+        handle
+    }
+
+    #[must_use]
+    async fn place_tile(
+        &self,
+        myself: ActorRef<GameMsg>,
+        game_data: &mut GameData,
+        coord: TileCoord,
+        (id, data): (TileId, DataMap),
+    ) -> Option<(TileId, DataMap)> {
+        let mut requirement_unmet = false;
+
+        try_category(&self.resource_man, id, |item| {
+            let inventory = game_data
+                .map
+                .map_data
+                .data
+                .inventory_mut(self.resource_man.registry.data_ids.player_inventory);
+
+            if inventory.get(item) > 0 {
+                inventory.take(item, 1);
+            } else {
+                requirement_unmet = true;
+            }
+        });
+
+        if requirement_unmet {
+            return None;
+        }
+
+        let mut removed_tile = None;
+        if let Some((id, data)) = self.remove_tile(game_data, coord).await {
+            if id == TileId(self.resource_man.registry.none) {
+                return Some((id, data));
+            }
+
+            removed_tile = Some((id, data));
+        }
+
+        self.insert_new_tile(myself.clone(), &mut game_data.map.tiles, coord, id)
+            .await
+            .cast(TileMsg::SetData(data));
+
+        removed_tile
+    }
+}
+
+impl Actor for GameActor {
+    type Msg = GameMsg;
+    type State = GameActorState;
     type Arguments = ();
 
     async fn pre_start(
@@ -156,7 +226,17 @@ impl Actor for GameSystem {
         _myself: ActorRef<Self::Msg>,
         _args: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
-        Ok(Self::State::default())
+        Ok(GameActorState::default())
+    }
+
+    async fn post_stop(
+        &self,
+        _myself: ActorRef<Self::Msg>,
+        state: &mut Self::State,
+    ) -> Result<(), ActorProcessingErr> {
+        state.game_state = GameState::Stopped;
+
+        Ok(())
     }
 
     async fn handle(
@@ -166,383 +246,324 @@ impl Actor for GameSystem {
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         match message {
-            LoadMap(opt, reply) => {
-                let last_culling_range = state.last_culling_range;
-                state.last_culling_range = TileBounds::Empty;
-
-                let commands = multi_call_iter(
-                    &state.tile_entities,
-                    |reply, coord| TileEntityMsg::CollectRenderCommands {
-                        reply,
-                        loading: false,
-                        unloading: last_culling_range.contains(coord),
-                    },
-                    None,
-                )
-                .await
-                .map(|commands| {
-                    commands
-                        .into_iter()
-                        .flat_map(|(k, v)| Some(k).zip(v))
-                        .collect()
-                });
-
-                match commands {
-                    Ok(mut commands) => {
-                        fill_map_with_none(
-                            &self.resource_man,
-                            TileBounds::Empty,
-                            last_culling_range,
-                            &mut commands,
-                        );
-                        state.cleanup_render_commands = commands;
-                    }
-                    Err(err) => {
-                        log::error!("Map render cleanup failed to collect commands! Error: {err:?}")
-                    }
-                }
-
-                for tile_entity in mem::take(&mut state.tile_entities).into_values() {
-                    tile_entity
-                        .stop_and_wait(Some("Loading new map".to_string()), None)
-                        .await
-                        .unwrap();
-                }
-
-                state.map = None;
-                state.undo_steps.clear();
-
-                let (map, tile_entities) =
-                    match GameMap::load(myself.clone(), self.resource_man.clone(), &opt).await {
-                        Ok(v) => v,
-                        Err(abort) => {
-                            if abort {
-                                reply.send(false)?;
-                                return Ok(());
-                            } else {
-                                (GameMap::new_empty(opt.clone()), HashMap::new())
+            GameMsg::Tick => match &mut state.game_state {
+                GameState::Running(game_data) => {
+                    let start = Instant::now();
+                    {
+                        for (_coord, tile) in game_data.map.tiles.iter() {
+                            if let Err(e) = tile.handle.send_message(TileMsg::Tick {
+                                tick_count: game_data.tick_count,
+                            }) {
+                                log::error!("{e:?}");
                             }
+                        }
+
+                        game_data.tick_count = game_data.tick_count.wrapping_add(1);
+                    }
+                    let finish = Instant::now();
+
+                    {
+                        let tick_time = finish - start;
+
+                        if tick_time >= super::MAX_ALLOWED_TICK_INTERVAL {
+                            log::warn!(
+                                "Tick took longer than the allowed maximum! tick_time: {:?}, maximum: {:?}",
+                                tick_time,
+                                super::MAX_ALLOWED_TICK_INTERVAL
+                            );
+                        }
+                    }
+                }
+                _ => {
+                    log::warn!(
+                        "Game is not running but is requested to run `Tick`! This isn't supposed to happen."
+                    );
+                }
+            },
+
+            GameMsg::SendTileMsg(coord, msg) => match &mut state.game_state {
+                GameState::Running(game_data) => {
+                    if let Some(tile) = game_data.map.tiles.get(&coord) {
+                        tile.handle.send_message(msg)?;
+                    }
+                }
+                _ => {
+                    log::warn!(
+                        "Game is not running but is requested to run `SendTileMsg`! This isn't supposed to happen."
+                    );
+                }
+            },
+
+            GameMsg::LoadMap(map_id, reply) => {
+                match mem::take(&mut state.game_state) {
+                    GameState::Running(mut game_data) | GameState::Paused(mut game_data) => {
+                        for tile in mem::take(&mut game_data.map.tiles)
+                            .into_inner()
+                            .into_values()
+                        {
+                            tile.handle.stop(Some("loading new map".to_string()));
+                        }
+                    }
+                    _ => {}
+                }
+
+                let (flat_tiles, map_data) =
+                    match map::serialize::load_map(self.resource_man.clone(), &map_id) {
+                        Ok(v) => v,
+                        Err(_) => {
+                            reply.send(false)?;
+
+                            panic!("TODO: handle map reading error");
                         }
                     };
 
-                state.map = Some(map);
-                state.tile_entities = tile_entities;
+                let mut tiles = TileMap::default();
+                for (coord, (id, _)) in &flat_tiles {
+                    self.insert_new_tile(myself.clone(), &mut tiles, *coord, *id)
+                        .await;
+                }
 
-                log::info!("Successfully loaded map {opt}!");
+                flat_tiles.into_par_iter().for_each(|(coord, (_, data))| {
+                    tiles[&coord].handle.cast(TileMsg::SetData(data));
+                });
+
+                log::info!("Successfully loaded map {map_id}!");
+
+                state.game_state = GameState::Running(GameData {
+                    map: GameMap {
+                        id: map_id,
+                        tiles,
+                        map_data,
+                    },
+                    tick_count: 0, // TODO should the new GameState inherit the tick count?
+                    cleanup_render_commands: Default::default(),
+                    undo_steps: arraydeque::ArrayDeque::new(),
+                    last_culling_range: TileBounds::Empty,
+                });
+
                 reply.send(true)?;
             }
-            SaveMap(reply) => {
-                if let Some(map) = &state.map {
-                    map.save(&self.resource_man.interner, &state.tile_entities)
-                        .await?;
+            GameMsg::SaveMap(reply) => {
+                let mut result = Ok(());
+
+                match &state.game_state {
+                    GameState::Running(game_data) | GameState::Paused(game_data) => {
+                        result =
+                            map::serialize::save_map(&game_data.map, &self.resource_man.interner)
+                                .await;
+                    }
+                    _ => {}
                 }
+
                 reply.send(())?;
+                result.unwrap();
             }
-            GetMapInfoAndName(reply) => {
-                if let Some(map) = &state.map {
-                    reply.send(Some((map.info.clone(), map.opt.clone())))?;
-                } else {
+            GameMsg::GetMapIdAndData(reply) => match &state.game_state {
+                GameState::Running(game_data) | GameState::Paused(game_data) => {
+                    reply.send(Some((
+                        game_data.map.id.clone(),
+                        game_data.map.map_data.clone(),
+                    )))?;
+                }
+                _ => {
                     reply.send(None)?;
                 }
-            }
+            },
 
-            Tick => {
-                tick(state);
-            }
-            StopTicking => {
-                state.stopped = true;
-            }
+            message => {
+                let running = matches!(state.game_state, GameState::Running(..));
 
-            rest => {
-                if state.stopped {
-                    return Ok(());
-                }
-
-                let Some(map) = state.map.as_mut() else {
-                    return Ok(());
-                };
-
-                match rest {
-                    GetAllRenderCommands {
-                        culling_range,
-                        reply,
-                    } => {
-                        let last_culling_range = state.last_culling_range;
-                        state.last_culling_range = culling_range;
-
-                        let commands = multi_call_iter(
-                            &state.tile_entities,
-                            |reply, coord| {
-                                let loading = culling_range.contains(coord)
-                                    && !last_culling_range.contains(coord);
-                                let unloading = last_culling_range.contains(coord)
-                                    && !culling_range.contains(coord);
-
-                                TileEntityMsg::CollectRenderCommands {
-                                    reply,
-                                    loading,
-                                    unloading,
-                                }
-                            },
-                            None,
-                        )
-                        .await
-                        .map(|commands| {
-                            commands
-                                .into_iter()
-                                .flat_map(|(k, v)| Some(k).zip(v))
-                                .collect()
-                        });
-
-                        match commands {
-                            Ok(mut commands) => {
-                                fill_map_with_none(
-                                    &self.resource_man,
-                                    culling_range,
-                                    last_culling_range,
-                                    &mut commands,
-                                );
-
-                                reply.send([
-                                    mem::take(&mut state.cleanup_render_commands),
-                                    commands,
-                                ])?;
-                            }
-                            Err(err) => {
-                                log::error!("Could not collect render commands! Error: {err:?}")
-                            }
-                        }
-                    }
-                    PlaceTile {
-                        coord,
-                        id,
-                        data,
-                        record,
-                        reply,
-                    } => {
-                        if let Some(old_id) = map.tiles.get(&coord)
-                            && *old_id == id
-                        {
-                            if let Some(reply) = reply {
-                                reply.send(PlaceTileResponse::Ignored)?;
-                            }
-
-                            return Ok(());
-                        }
-
-                        if id == TileId(self.resource_man.registry.none)
-                            && !map.tiles.contains_key(&coord)
-                        {
-                            if let Some(reply) = reply {
-                                reply.send(PlaceTileResponse::Ignored)?;
-                            }
-
-                            return Ok(());
-                        }
-
-                        let old_tile = insert_new_tile(
-                            self.resource_man.clone(),
-                            myself.clone(),
-                            map,
-                            &mut state.tile_entities,
-                            &mut state.cleanup_render_commands,
+                match &mut state.game_state {
+                    GameState::Running(game_data) | GameState::Paused(game_data) => match message {
+                        GameMsg::PlaceTile {
                             coord,
-                            id,
-                            data,
-                        )
-                        .await;
+                            tile: (id, data),
+                            record,
+                            reply,
+                        } if running => {
+                            if let Some(old_tile) = game_data.map.tiles.get(&coord)
+                                && old_tile.id == id
+                            {
+                                if let Some(reply) = reply {
+                                    reply.send(PlaceTileResponse::Ignored)?;
+                                }
 
-                        if let Some(reply) = reply {
-                            if let (Some(_), ..) = &old_tile {
-                                if id == TileId(self.resource_man.registry.none) {
-                                    reply.send(PlaceTileResponse::Removed)?;
+                                return Ok(());
+                            }
+
+                            if id == TileId(self.resource_man.registry.none)
+                                && !game_data.map.tiles.contains_key(&coord)
+                            {
+                                if let Some(reply) = reply {
+                                    reply.send(PlaceTileResponse::Ignored)?;
+                                }
+
+                                return Ok(());
+                            }
+
+                            let removed_tile = self
+                                .place_tile(myself.clone(), game_data, coord, (id, data))
+                                .await;
+
+                            if let Some(reply) = reply {
+                                if let Some((id, _data)) = &removed_tile {
+                                    if *id == TileId(self.resource_man.registry.none) {
+                                        reply.send(PlaceTileResponse::Removed)?;
+                                    } else {
+                                        reply.send(PlaceTileResponse::Placed)?;
+                                    }
                                 } else {
                                     reply.send(PlaceTileResponse::Placed)?;
                                 }
-                            } else {
-                                reply.send(PlaceTileResponse::Placed)?;
                             }
-                        }
 
-                        if let (Some(id), data) = old_tile
-                            && record
-                        {
-                            state.undo_steps.push_back(vec![PlaceTile {
-                                coord,
-                                id,
-                                record: false,
-                                reply: None,
-                                data,
-                            }]);
-                        }
-                    }
-                    GetTile(coord, reply) => {
-                        reply.send(map.tiles.get(&coord).cloned())?;
-                    }
-                    GetTileEntity(coord, reply) => {
-                        reply.send(state.tile_entities.get(&coord).cloned())?;
-                    }
-                    ForwardMsgToTile {
-                        source,
-                        to,
-                        msg,
-                        on_fail,
-                    } => {
-                        if let Some(tile_entity) = state.tile_entities.get(&to) {
-                            tile_entity.send_message(msg)?;
-                        } else {
-                            match on_fail {
-                                OnFailAction::None => {}
-                                OnFailAction::RemoveTile => {
-                                    remove_tile(
-                                        &self.resource_man,
-                                        map,
-                                        &mut state.tile_entities,
-                                        source,
-                                    )
-                                    .await;
-                                }
-                                OnFailAction::RemoveAllData => {
-                                    if let Some(entity) = state.tile_entities.get(&source) {
-                                        entity.send_message(TileEntityMsg::SetData(
-                                            DataMap::default(),
-                                        ))?;
-                                    }
-                                }
-                                OnFailAction::RemoveData(id) => {
-                                    if let Some(entity) = state.tile_entities.get(&source) {
-                                        entity.send_message(TileEntityMsg::RemoveData(id))?;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    Undo => {
-                        if let Some(step) = state.undo_steps.pop_back() {
-                            for msg in step {
-                                myself.send_message(msg)?;
-                            }
-                        }
-                    }
-                    GetTiles(coords, reply) => {
-                        let mut tiles = vec![];
-
-                        for (id, coord) in coords
-                            .into_iter()
-                            .flat_map(|coord| map.tiles.get(&coord).zip(Some(coord)))
-                        {
-                            if let Some(entity) = state.tile_entities.get(&coord) {
-                                if let Ok(CallResult::Success(mut data)) =
-                                    entity.call(TileEntityMsg::GetData, None).await
-                                {
-                                    tiles.push((
-                                        coord,
-                                        *id,
-                                        Some(copy_auxiliary_data(&self.resource_man, &mut data)),
-                                    ));
-                                }
-                            } else {
-                                tiles.push((coord, *id, None));
-                            }
-                        }
-                        reply.send(tiles)?;
-                    }
-                    PlaceTiles {
-                        tiles,
-                        reply,
-                        place_over,
-                        record,
-                    } => {
-                        let mut old = vec![];
-
-                        for (coord, id, data) in tiles {
-                            if (place_over || map.tiles.get(&coord).is_none())
-                                && let (Some(old_id), old_data) = insert_new_tile(
-                                    self.resource_man.clone(),
-                                    myself.clone(),
-                                    map,
-                                    &mut state.tile_entities,
-                                    &mut state.cleanup_render_commands,
-                                    coord,
-                                    id,
-                                    data,
-                                )
-                                .await
+                            if let Some(tile) = removed_tile
+                                && record
                             {
-                                if let Some(mut old_data) = old_data {
-                                    old.push((
-                                        coord,
-                                        old_id,
-                                        Some(copy_auxiliary_data(
-                                            &self.resource_man,
-                                            &mut old_data,
-                                        )),
-                                    ));
-                                } else {
-                                    old.push((coord, old_id, None));
+                                game_data.undo_steps.push_back(vec![GameMsg::PlaceTile {
+                                    coord,
+                                    tile,
+                                    record: false,
+                                    reply: None,
+                                }]);
+                            }
+                        }
+                        GameMsg::PlaceTiles {
+                            tiles,
+                            replace,
+                            record,
+                            reply,
+                        } if running => {
+                            let mut removed_tiles = HashMap::default();
+
+                            for (coord, tile) in tiles.into_iter() {
+                                let should_place =
+                                    replace || game_data.map.tiles.get(&coord).is_none();
+
+                                if should_place
+                                    && let Some(tile) = self
+                                        .place_tile(myself.clone(), game_data, coord, tile)
+                                        .await
+                                {
+                                    removed_tiles.insert(coord, tile);
+                                }
+                            }
+
+                            if let Some(reply) = reply {
+                                reply.send(removed_tiles)?;
+                            } else if record {
+                                game_data.undo_steps.push_back(vec![GameMsg::PlaceTiles {
+                                    tiles: removed_tiles,
+                                    replace,
+                                    record: false,
+                                    reply: None,
+                                }]);
+                            }
+                        }
+                        GameMsg::MoveTiles(tiles, direction, record) if running => {
+                            let mut undo = vec![];
+
+                            let mut removed_tiles = Vec::new();
+
+                            for coord in tiles {
+                                if let Some(old) = self.remove_tile(game_data, coord).await {
+                                    removed_tiles.push((coord, old));
+                                }
+                            }
+
+                            for (coord, tile) in removed_tiles {
+                                let new_coord = coord + direction;
+
+                                self.place_tile(myself.clone(), game_data, new_coord, tile)
+                                    .await;
+
+                                undo.push(new_coord);
+                            }
+
+                            if record {
+                                game_data
+                                    .undo_steps
+                                    .push_back(vec![GameMsg::MoveTiles(undo, -direction, false)]);
+                            }
+                        }
+                        GameMsg::Undo if running => {
+                            if let Some(step) = game_data.undo_steps.pop_back() {
+                                for msg in step {
+                                    myself.send_message(msg)?;
                                 }
                             }
                         }
 
-                        if let Some(reply) = reply {
-                            reply.send(old)?;
-                        } else if record {
-                            state.undo_steps.push_back(vec![PlaceTiles {
-                                tiles: old,
-                                reply: None,
-                                place_over: false,
-                                record: false,
-                            }]);
+                        GameMsg::GetTile(coord, reply) => {
+                            reply.send(game_data.map.tiles.get(&coord).cloned())?;
                         }
-                    }
-                    MoveTiles(tiles, direction, record) => {
-                        let mut undo = vec![];
+                        GameMsg::GetTiles(coords, reply) => {
+                            let tiles = coords
+                                .into_iter()
+                                .map(|coord| (coord, game_data.map.tiles.get(&coord).cloned()))
+                                .collect::<Vec<_>>();
 
-                        let mut removed = Vec::new();
+                            reply.send(tiles)?;
+                        }
+                        GameMsg::GetAllRenderCommands {
+                            culling_range,
+                            reply,
+                        } => {
+                            let last_culling_range = game_data.last_culling_range;
+                            game_data.last_culling_range = culling_range;
 
-                        for coord in tiles {
-                            if let Some(old) = remove_tile(
-                                &self.resource_man,
-                                map,
-                                &mut state.tile_entities,
-                                coord,
+                            let commands = multi_call_iter(
+                                game_data
+                                    .map
+                                    .tiles
+                                    .iter()
+                                    .map(|(coord, tile)| (*coord, tile.handle.clone())),
+                                |coord, reply| {
+                                    let loading = culling_range.contains(*coord)
+                                        && !last_culling_range.contains(*coord);
+                                    let unloading = last_culling_range.contains(*coord)
+                                        && !culling_range.contains(*coord);
+
+                                    TileMsg::CollectRenderCommands {
+                                        reply,
+                                        loading,
+                                        unloading,
+                                    }
+                                },
+                                None,
                             )
                             .await
-                            {
-                                removed.push((coord, old));
+                            .map(|commands| {
+                                commands
+                                    .into_iter()
+                                    .flat_map(|(k, v)| Some(k).zip(v))
+                                    .collect()
+                            });
+
+                            match commands {
+                                Ok(mut commands) => {
+                                    fill_rest_of_map_with_none(
+                                        &self.resource_man,
+                                        culling_range,
+                                        last_culling_range,
+                                        &mut commands,
+                                    );
+
+                                    reply.send([
+                                        mem::take(&mut game_data.cleanup_render_commands),
+                                        commands,
+                                    ])?;
+                                }
+                                Err(err) => {
+                                    log::error!(
+                                        "Could not collect render commands! Error: {err:?}"
+                                    );
+                                    reply.send([HashMap::default(), HashMap::default()])?;
+                                }
                             }
                         }
-
-                        for (coord, (id, data, mut cleanup)) in removed {
-                            let new_coord = coord + direction;
-
-                            state
-                                .cleanup_render_commands
-                                .entry(coord)
-                                .or_default()
-                                .append(&mut cleanup);
-
-                            insert_new_tile(
-                                self.resource_man.clone(),
-                                myself.clone(),
-                                map,
-                                &mut state.tile_entities,
-                                &mut state.cleanup_render_commands,
-                                new_coord,
-                                id,
-                                data,
-                            )
-                            .await;
-
-                            undo.push(new_coord);
-                        }
-
-                        if record {
-                            state
-                                .undo_steps
-                                .push_back(vec![MoveTiles(undo, -direction, false)]);
-                        }
-                    }
+                        _ => {}
+                    },
                     _ => {}
                 }
             }
@@ -563,19 +584,14 @@ impl Actor for GameSystem {
                     "Tile entity {dead_actor:?} panicked, trying to remove. Error: {error}"
                 );
 
-                if let Ok(tile_error) = error.downcast::<Box<TileEntityError>>() {
+                if let Ok(tile_error) = error.downcast::<Box<TileActorError>>() {
                     match **tile_error {
-                        TileEntityError::NonExistent(coord) => {
-                            if let Some(map) = state.map.as_mut() {
-                                remove_tile(
-                                    &self.resource_man,
-                                    map,
-                                    &mut state.tile_entities,
-                                    coord,
-                                )
-                                .await;
+                        TileActorError::NonExistent(coord) => match &mut state.game_state {
+                            GameState::Running(game_data) | GameState::Paused(game_data) => {
+                                self.remove_tile(game_data, coord).await;
                             }
-                        }
+                            _ => {}
+                        },
                     }
                 }
             }
@@ -592,241 +608,56 @@ impl Actor for GameSystem {
 }
 
 pub fn try_category(resource_man: &ResourceManager, id: TileId, category_item: impl FnOnce(Id)) {
-    if let Some(category) = resource_man
+    if resource_man
+        .registry
+        .tiles
+        .get(&id)
+        .unwrap()
+        .data
+        .bool_or_default(resource_man.registry.data_ids.default_tile, false)
+    {
+        return;
+    }
+
+    let Some(category) = resource_man
         .registry
         .tiles
         .get(&id)
         .and_then(|tile| tile.category)
-        && Data::Bool(false)
-            == *resource_man.registry.tiles[&id]
-                .data
-                .get(resource_man.registry.data_ids.default_tile)
-                .unwrap_or(&Data::Bool(false))
-        && let Some(item) = resource_man
-            .registry
-            .categories
-            .get(&category)
-            .and_then(|v| v.item)
-    {
-        category_item(item);
-    }
-}
+    else {
+        return;
+    };
 
-/// Creates a new tile of given type at the given position, and with an initial state.
-pub async fn new_tile(
-    resource_man: Arc<ResourceManager>,
-    game: ActorRef<GameSystemMessage>,
-    coord: TileCoord,
-    id: TileId,
-) -> ActorRef<TileEntityMsg> {
-    let (actor, _handle) = Actor::spawn_linked(
-        Some(coord.to_minimal_string()),
-        TileEntity {
-            id,
-            coord,
-            resource_man,
-        },
-        (game.clone(),),
-        game.get_cell(),
-    )
-    .await
-    .unwrap();
+    let Some(item) = resource_man
+        .registry
+        .categories
+        .get(&category)
+        .and_then(|category| category.item)
+    else {
+        return;
+    };
 
-    actor
-}
-
-/// Stops a tile and removes it from the game
-async fn remove_tile(
-    resource_man: &ResourceManager,
-    map: &mut GameMap,
-    tile_entities: &mut TileEntities,
-    coord: TileCoord,
-) -> Option<(TileId, Option<DataMap>, Vec<RenderCommand>)> {
-    if let Some((tile, tile_entity)) = map.tiles.remove(&coord).zip(tile_entities.remove(&coord)) {
-        {
-            let lock = &mut map.info.lock().await;
-
-            try_category(resource_man, tile, |item| {
-                if let Data::Inventory(inventory) = lock
-                    .data
-                    .entry(resource_man.registry.data_ids.player_inventory)
-                    .or_insert_with(|| Data::Inventory(Default::default()))
-                {
-                    inventory.add(item, 1);
-                }
-            });
-        }
-
-        let data = tile_entity
-            .call(TileEntityMsg::TakeData, None)
-            .await
-            .ok()
-            .and_then(|v| v.success_or(()).ok());
-
-        let mut commands = tile_entity
-            .call(
-                |reply| TileEntityMsg::CollectRenderCommands {
-                    reply,
-                    loading: false,
-                    unloading: true,
-                },
-                None,
-            )
-            .await
-            .unwrap()
-            .unwrap()
-            .unwrap_or_default();
-
-        commands.extend_from_slice(&track_none(resource_man, coord));
-
-        tile_entity
-            .stop_and_wait(Some("Removed from game".to_string()), None)
-            .await
-            .unwrap();
-
-        Some((tile, data, commands))
-    } else {
-        None
-    }
-}
-
-/// Makes a new tile and add it into both the map and the game
-async fn insert_new_tile(
-    resource_man: Arc<ResourceManager>,
-    game: ActorRef<GameSystemMessage>,
-    map: &mut GameMap,
-    tile_entities: &mut TileEntities,
-    cleanup_render_commands: &mut HashMap<TileCoord, Vec<RenderCommand>>,
-    coord: TileCoord,
-    tile_id: TileId,
-    data: Option<DataMap>,
-) -> (Option<TileId>, Option<DataMap>) {
-    let mut skip = false;
-
-    {
-        let lock = &mut map.info.lock().await;
-
-        try_category(&resource_man, tile_id, |item| {
-            if let Data::Inventory(inventory) = lock
-                .data
-                .entry(resource_man.registry.data_ids.player_inventory)
-                .or_insert_with(|| Data::Inventory(Default::default()))
-            {
-                if inventory.get(item) < 1 {
-                    skip = true;
-                }
-
-                inventory.take(item, 1);
-            }
-        });
-    }
-
-    if skip {
-        return (None, None);
-    }
-
-    let mut old_id = None;
-    let mut old_data = None;
-
-    if let Some((id, data, mut cleanup)) =
-        remove_tile(&resource_man, map, tile_entities, coord).await
-    {
-        cleanup_render_commands
-            .entry(coord)
-            .or_default()
-            .append(&mut cleanup);
-
-        if tile_id == TileId(resource_man.registry.none) {
-            return (Some(id), data);
-        }
-
-        old_id = Some(id);
-        old_data = data;
-    }
-
-    let tile_entity = new_tile(resource_man.clone(), game, coord, tile_id).await;
-
-    if let Some(data) = data {
-        tile_entity
-            .send_message(TileEntityMsg::SetData(data))
-            .unwrap();
-    }
-
-    cleanup_render_commands
-        .entry(coord)
-        .or_default()
-        .extend_from_slice(&untrack_none(&resource_man));
-
-    let mut new_tile_render = tile_entity
-        .call(
-            |reply| TileEntityMsg::CollectRenderCommands {
-                reply,
-                loading: true,
-                unloading: false,
-            },
-            None,
-        )
-        .await
-        .unwrap()
-        .unwrap()
-        .unwrap_or_default();
-
-    cleanup_render_commands
-        .entry(coord)
-        .or_default()
-        .append(&mut new_tile_render);
-
-    tile_entities.insert(coord, tile_entity);
-    map.tiles.insert(coord, tile_id);
-
-    (old_id, old_data)
-}
-
-fn inner_tick(state: &mut GameSystemState) {
-    state.tile_entities.iter().for_each(|(_, tile_entity)| {
-        if let Err(e) = tile_entity.send_message(TileEntityMsg::Tick {
-            tick_count: state.tick_count,
-        }) {
-            log::error!("{e:?}");
-        }
-    });
-
-    state.tick_count = state.tick_count.wrapping_add(1);
-}
-
-/// Runs the game for one tick, logging if the tick is too long.
-pub fn tick(state: &mut GameSystemState) {
-    let start = Instant::now();
-    inner_tick(state);
-    let finish = Instant::now();
-
-    let tick_time = finish - start;
-
-    if tick_time >= MAX_ALLOWED_TICK_INTERVAL {
-        log::warn!(
-            "Tick took longer than allowed maximum! tick_time: {tick_time:?}, maximum: {MAX_ALLOWED_TICK_INTERVAL:?}"
-        );
-    }
+    category_item(item);
 }
 
 // TODO replace this with a scripted function
-pub fn copy_auxiliary_data(resource_man: &ResourceManager, data: &mut DataMap) -> DataMap {
+pub fn copy_auxiliary_data(resource_man: &ResourceManager, data: &DataMap) -> DataMap {
     let mut copied = DataMap::default();
 
-    if let Some(v) = data.remove(resource_man.registry.data_ids.direction) {
-        copied.set(resource_man.registry.data_ids.direction, v);
+    if let Some(v) = data.get(resource_man.registry.data_ids.direction) {
+        copied.set(resource_man.registry.data_ids.direction, v.clone());
     }
-    if let Some(v) = data.remove(resource_man.registry.data_ids.link) {
-        copied.set(resource_man.registry.data_ids.link, v);
+    if let Some(v) = data.get(resource_man.registry.data_ids.link) {
+        copied.set(resource_man.registry.data_ids.link, v.clone());
     }
-    if let Some(v) = data.remove(resource_man.registry.data_ids.script) {
-        copied.set(resource_man.registry.data_ids.script, v);
+    if let Some(v) = data.get(resource_man.registry.data_ids.script) {
+        copied.set(resource_man.registry.data_ids.script, v.clone());
     }
-    if let Some(v) = data.remove(resource_man.registry.data_ids.capacity) {
-        copied.set(resource_man.registry.data_ids.capacity, v);
+    if let Some(v) = data.get(resource_man.registry.data_ids.capacity) {
+        copied.set(resource_man.registry.data_ids.capacity, v.clone());
     }
-    if let Some(v) = data.remove(resource_man.registry.data_ids.item) {
-        copied.set(resource_man.registry.data_ids.item, v);
+    if let Some(v) = data.get(resource_man.registry.data_ids.item) {
+        copied.set(resource_man.registry.data_ids.item, v.clone());
     }
 
     copied
