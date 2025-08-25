@@ -17,21 +17,21 @@ pub struct Font {
 
 fn collect_families(
     name_id: u16,
-    names: &ttf_parser::post::Names,
+    names: &ttf_parser::name::Names,
 ) -> Vec<(String, ttf_parser::Language)> {
     let mut families = Vec::new();
     for name in names.into_iter() {
-        if name.name_id == name_id {
-            if let Some(family) = name.to_string() {
-                families.push((family, name.language()));
-            }
+        if name.name_id == name_id
+            && let Some(family) = name.to_string()
+        {
+            families.push((family, name.language()));
         }
     }
 
     families
 }
 
-fn parse_name(names: ttf_parser::post::Names) -> Option<String> {
+fn parse_name(names: ttf_parser::name::Names) -> Option<String> {
     let mut families = collect_families(ttf_parser::name_id::TYPOGRAPHIC_FAMILY, &names);
 
     // We have to fallback to Family Name when no Typographic Family Name was set.
@@ -40,15 +40,13 @@ fn parse_name(names: ttf_parser::post::Names) -> Option<String> {
     }
 
     // Make English US the first one.
-    if families.len() > 1 {
-        if let Some(index) = families
+    if families.len() > 1
+        && let Some(index) = families
             .iter()
             .position(|f| f.1 == ttf_parser::Language::English_UnitedStates)
-        {
-            if index != 0 {
-                families.swap(0, index);
-            }
-        }
+        && index != 0
+    {
+        families.swap(0, index);
     }
 
     if families.is_empty() {

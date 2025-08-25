@@ -14,31 +14,28 @@ use std::{
 
 use automancy_data::{
     game::coord::TileCoord,
-    id::{Id, Interner, ModelId, TileId, deserialize::IdStr},
+    id::{Id, Interner, ModelId, TileId, deserialize::StrId},
 };
 use chrono::{DateTime, Local};
 use hashbrown::HashMap;
 use kira::{sound::static_sound::StaticSoundData, track::TrackHandle};
-use rhai::{AST, CallFnOptions, Dynamic, Engine};
+use rhai::{CallFnOptions, Dynamic, Engine};
 use thiserror::Error;
-use types::function::FunctionMetadata;
 use walkdir::WalkDir;
 
 use crate::{
     resources::{
         registry::Registry,
-        types::{font::Font, translate::TranslateDef},
+        types::{font::Font, script::ScriptData, translate::TranslateDef},
     },
     scripting,
 };
-
-pub type FunctionInfo = (AST, FunctionMetadata);
 
 pub static RESOURCES_PATH: &str = "resources";
 
 pub static FONT_EXT: [&str; 2] = ["ttf", "otf"];
 pub static RON_EXT: &str = "ron";
-pub static FUNCTION_EXT: &str = "rhai";
+pub static SCRIPT_EXT: &str = "rhai";
 pub static SHADER_EXT: &str = "wgsl";
 
 /// TODO set of extensions
@@ -103,13 +100,14 @@ pub struct ResourceManager {
     pub translates: TranslateDef,
     pub audio: HashMap<String, StaticSoundData>,
     pub shaders: HashMap<String, String>,
-    pub functions: HashMap<Id, FunctionInfo>,
+    pub scripts: HashMap<Id, ScriptData>,
     pub fonts: BTreeMap<String, Font>, // yes this does need to be a BTreeMap
 
     pub ordered_tiles: Vec<TileId>,
     pub ordered_items: Vec<Id>,
     pub ordered_categories: Vec<Id>,
-    pub all_gltf_models: HashMap<ModelId, (gltf::Document, Vec<gltf::buffer::Data>)>,
+
+    pub gltf_models: HashMap<ModelId, (gltf::Document, Vec<gltf::buffer::Data>)>,
 }
 
 impl Debug for ResourceManager {
@@ -121,8 +119,12 @@ impl Debug for ResourceManager {
 impl ResourceManager {
     pub fn new(track: TrackHandle) -> Self {
         let mut interner = Interner::new();
-        let none = IdStr::new("core", "none").into_id(&mut interner);
-        let any = IdStr::new("core", "#any").into_id(&mut interner);
+        let none = StrId::new("core", "none")
+            .into_id(&mut interner, None)
+            .unwrap();
+        let any = StrId::new("core", "#any")
+            .into_id(&mut interner, None)
+            .unwrap();
 
         let mut engine = Engine::new();
         engine.set_max_expr_depths(0, 0);
@@ -134,7 +136,7 @@ impl ResourceManager {
         scripting::render::register_render_stuff(&mut engine);
         scripting::tile::register_tile_stuff(&mut engine);
         scripting::ui::register_ui_stuff(&mut engine);
-        scripting::util::register_functions(&mut engine);
+        scripting::util::register_script_stuff(&mut engine);
 
         let data_ids = registry::DataIds::new(&mut interner);
         let model_ids = registry::ModelIds::new(&mut interner);
@@ -148,13 +150,13 @@ impl ResourceManager {
             engine,
 
             registry: Registry {
-                tiles: Default::default(),
-                scripts: Default::default(),
-                tags: Default::default(),
-                categories: Default::default(),
+                tile_defs: Default::default(),
+                recipe_defs: Default::default(),
+                tag_defs: Default::default(),
+                categorie_defs: Default::default(),
                 categories_tiles_map: Default::default(),
-                items: Default::default(),
-                researches: Default::default(),
+                item_defs: Default::default(),
+                researche_defs: Default::default(),
                 researches_id_map: Default::default(),
                 researches_unlock_map: Default::default(),
 
@@ -171,13 +173,13 @@ impl ResourceManager {
             translates: Default::default(),
             audio: Default::default(),
             shaders: Default::default(),
-            functions: Default::default(),
+            scripts: Default::default(),
             fonts: Default::default(),
 
             ordered_tiles: vec![],
             ordered_items: vec![],
             ordered_categories: vec![],
-            all_gltf_models: Default::default(),
+            gltf_models: Default::default(),
         }
     }
 }
@@ -191,7 +193,7 @@ pub fn rhai_call_options<'a>(state: &'a mut Dynamic) -> CallFnOptions<'a> {
 
 pub fn rhai_log_err(
     called_func: &str,
-    function_id: &str,
+    script_id: &str,
     err: &rhai::EvalAltResult,
     coord: Option<TileCoord>,
 ) {
@@ -202,11 +204,11 @@ pub fn rhai_log_err(
     match err {
         rhai::EvalAltResult::ErrorFunctionNotFound(name, ..) => {
             if name != called_func {
-                log::error!("At {coord}, In {function_id}, {called_func}: {err}");
+                log::error!("At {coord}, In {script_id}, {called_func}: {err}");
             }
         }
         _ => {
-            log::error!("At {coord}, In {function_id}, {called_func}: {err}");
+            log::error!("At {coord}, In {script_id}, {called_func}: {err}");
         }
     }
 }

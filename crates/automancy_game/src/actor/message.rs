@@ -139,5 +139,5 @@ pub enum TileMsg {
     SetDatum(Id, Datum),
     TakeData(RpcReplyPort<DataMap>),
     RemoveDatum(Id),
-    ReadData(Box<dyn FnOnce(&mut DataMap) -> () + Send + Sync>),
+    ReadData(Box<dyn FnOnce(&mut DataMap) + Send + Sync>),
 }

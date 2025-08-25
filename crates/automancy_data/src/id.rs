@@ -14,6 +14,12 @@ pub type Interner = StringInterner<StringBackend<Id>>;
 #[serde(transparent)]
 pub struct Id(u32);
 
+impl From<u32> for Id {
+    fn from(value: u32) -> Self {
+        Self(value)
+    }
+}
+
 impl Display for Id {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("Id({})", self.0))
@@ -28,10 +34,6 @@ impl Symbol for Id {
     fn to_usize(self) -> usize {
         self.0 as usize
     }
-}
-
-impl Id {
-    pub const NO_NAMEPSACE: Option<&'static str> = None;
 }
 
 #[repr(transparent)]
@@ -76,27 +78,27 @@ pub mod deserialize {
     use super::{Id, Interner};
 
     #[derive(Debug, Error)]
-    pub enum IdStrParseError {
+    pub enum StrIdParseError {
         #[error(
-            "no delimiter ':' found in the id, ids need to be in the format of `namespace:name`"
+            "More than 1 delimiter ':' found in {0}. There can only be 1 delimiter! Ids should be in the format of 'namespace:name'. (If you want to separate the name anyway, use '/' instead.)"
         )]
-        NoDelim,
-        #[error("no delimiter ':' found in the id, and there wasn't any usable fallback namespace")]
-        NoDelimNoFallback,
+        ExtraDelims(StrId),
+        #[error("No delimiter ':' found in {0} and there wasn't any sensible fallback namespace.")]
+        NoDelimNoFallback(StrId),
     }
 
     #[repr(transparent)]
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
     #[serde(transparent)]
-    pub struct IdStr(String);
+    pub struct StrId(String);
 
-    impl Display for IdStr {
+    impl Display for StrId {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             self.0.fmt(f)
         }
     }
 
-    impl Deref for IdStr {
+    impl Deref for StrId {
         type Target = str;
 
         fn deref(&self) -> &Self::Target {
@@ -104,96 +106,124 @@ pub mod deserialize {
         }
     }
 
-    impl AsRef<str> for IdStr {
+    impl AsRef<str> for StrId {
         fn as_ref(&self) -> &str {
             self
         }
     }
 
-    impl IdStr {
-        fn try_parse(s: &str) -> Result<IdStr, IdStrParseError> {
-            s.split_once(':')
-                .map(|(a, b)| Self::new(a, b))
-                .ok_or(IdStrParseError::NoDelim)
+    impl From<String> for StrId {
+        fn from(value: String) -> Self {
+            Self(value)
         }
+    }
 
-        fn parse(
-            s: &str,
-            fallback_namespace: Option<&impl AsRef<str>>,
-        ) -> Result<IdStr, IdStrParseError> {
-            Self::try_parse(s).or_else(|_| {
-                fallback_namespace
-                    .as_ref()
-                    .map(|v| Self::new(v.as_ref(), s))
-                    .ok_or(IdStrParseError::NoDelim)
-            })
+    pub trait StrIdExt<T: Sized> {
+        fn into_id(
+            self,
+            interner: &mut Interner,
+            fallback_namespace: Option<&str>,
+        ) -> Result<T, StrIdParseError>;
+    }
+
+    impl StrId {
+        fn parse(self, fallback_namespace: Option<&str>) -> Result<StrId, StrIdParseError> {
+            let delim_count = self.0.chars().filter(|v| *v == ':').count();
+
+            if delim_count == 1 {
+                Ok(self)
+            } else if delim_count > 1 {
+                Err(StrIdParseError::ExtraDelims(self))
+            } else if let Some(fallback_namespace) = fallback_namespace {
+                Ok(StrId::new(self.0.as_str(), fallback_namespace))
+            } else {
+                Err(StrIdParseError::NoDelimNoFallback(self))
+            }
         }
 
         pub fn into_id(
-            &self,
+            self,
             interner: &mut Interner,
-            fallback_namespace: Option<&impl AsRef<str>>,
-        ) -> Result<Id, IdStrParseError> {
-            Ok(interner.get_or_intern(Self::parse(&self.0, fallback_namespace)?))
+            fallback_namespace: Option<&str>,
+        ) -> Result<Id, StrIdParseError> {
+            <Self as StrIdExt<Id>>::into_id(self, interner, fallback_namespace)
         }
 
-        pub fn new(a: &str, b: &str) -> Self {
+        pub fn new(a: &str, b: &str) -> StrId {
             assert!(!a.is_empty());
             assert!(!b.is_empty());
 
-            IdStr(format!("{a}:{b}"))
+            StrId(format!("{a}:{b}"))
+        }
+    }
+
+    impl StrIdExt<Id> for StrId {
+        fn into_id(
+            self,
+            interner: &mut Interner,
+            fallback_namespace: Option<&str>,
+        ) -> Result<Id, StrIdParseError> {
+            Ok(interner.get_or_intern(self.parse(fallback_namespace)?.0))
+        }
+    }
+
+    impl StrIdExt<Option<Id>> for Option<StrId> {
+        fn into_id(
+            self,
+            interner: &mut Interner,
+            fallback_namespace: Option<&str>,
+        ) -> Result<Option<Id>, StrIdParseError> {
+            match self {
+                Some(v) => v.into_id(interner, fallback_namespace).map(Some),
+                None => Ok(None),
+            }
         }
     }
 }
 
 pub mod parse {
     use crate::{
-        game::item::{ItemAmount, ItemStack},
+        game::item::{ItemStack, deserialize::ItemStackStr},
         id::{
             Id, Interner,
-            deserialize::{IdStr, IdStrParseError},
+            deserialize::{StrId, StrIdParseError},
         },
     };
 
     pub fn parse_ids(
-        iter: impl Iterator<Item = IdStr>,
+        iter: impl Iterator<Item = StrId>,
         interner: &mut Interner,
-        namespace: Option<&impl AsRef<str>>,
-    ) -> impl Iterator<Item = Result<Id, IdStrParseError>> {
-        iter.map(move |id| id.into_id(interner, namespace.as_ref()))
+        namespace: Option<&str>,
+    ) -> impl Iterator<Item = Result<Id, StrIdParseError>> {
+        iter.map(move |id| id.into_id(interner, namespace))
     }
 
     pub fn parse_map_id_item<Item>(
-        iter: impl Iterator<Item = (IdStr, Item)>,
+        iter: impl Iterator<Item = (StrId, Item)>,
         interner: &mut Interner,
-        namespace: Option<&impl AsRef<str>>,
-    ) -> impl Iterator<Item = Result<(Id, Item), IdStrParseError>> {
-        iter.map(move |(id, item)| {
-            id.into_id(interner, namespace.as_ref())
-                .map(|id| (id, item))
-        })
+        namespace: Option<&str>,
+    ) -> impl Iterator<Item = Result<(Id, Item), StrIdParseError>> {
+        iter.map(move |(id, item)| id.into_id(interner, namespace).map(|id| (id, item)))
     }
 
     pub fn parse_map_item_id<Item>(
-        iter: impl Iterator<Item = (Item, IdStr)>,
+        iter: impl Iterator<Item = (Item, StrId)>,
         interner: &mut Interner,
-        namespace: Option<&impl AsRef<str>>,
-    ) -> impl Iterator<Item = Result<(Item, Id), IdStrParseError>> {
-        iter.map(move |(item, id)| {
-            id.into_id(interner, namespace.as_ref())
-                .map(|id| (item, id))
-        })
+        namespace: Option<&str>,
+    ) -> impl Iterator<Item = Result<(Item, Id), StrIdParseError>> {
+        iter.map(move |(item, id)| id.into_id(interner, namespace).map(|id| (item, id)))
     }
 
     pub fn parse_item_stacks(
-        iter: impl Iterator<Item = (IdStr, impl Into<ItemAmount>)>,
+        iter: impl Iterator<Item = ItemStackStr>,
         interner: &mut Interner,
-        namespace: Option<&impl AsRef<str>>,
-    ) -> impl Iterator<Item = Result<ItemStack, IdStrParseError>> {
-        iter.map(move |(id, amount)| {
-            id.into_id(interner, namespace.as_ref())
-                .map(|id| (id, amount.into()))
+        namespace: Option<&str>,
+    ) -> impl Iterator<Item = Result<ItemStack, StrIdParseError>> {
+        iter.map(move |stack| {
+            stack.id.into_id(interner, namespace).map(|id| ItemStack {
+                id,
+                amount: stack.amount,
+            })
         })
-        .map(|v| v.map(|(id, amount)| ItemStack { id, amount }))
     }
 }

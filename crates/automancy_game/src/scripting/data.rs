@@ -14,12 +14,7 @@ use rhai::{Dynamic, Engine};
 
 use crate::resources::{
     global,
-    types::{
-        item::ItemDef,
-        script::{InstructionsDef, ScriptDef},
-        tag::TagDef,
-        tile::TileDef,
-    },
+    types::{item::ItemDef, recipe::RecipeDef, tag::TagDef, tile::TileDef},
 };
 
 pub fn data_into_dynamic(v: Datum) -> Dynamic {
@@ -170,27 +165,27 @@ pub(crate) fn register_data_stuff(engine: &mut Engine) {
         .register_fn("==", |a: ItemDef, b: ItemDef| a == b)
         .register_fn("!=", |a: ItemDef, b: ItemDef| a != b);
     engine
-        .register_type_with_name::<ScriptDef>("ScriptDef")
-        .register_get("instructions", |v: &mut ScriptDef| -> InstructionsDef {
-            v.instructions.clone()
-        });
-    engine
-        .register_type_with_name::<InstructionsDef>("InstructionsDef")
-        .register_get("inputs", |v: &mut InstructionsDef| -> Dynamic {
+        .register_type_with_name::<RecipeDef>("RecipeDef")
+        .register_get("inputs", |v: &mut RecipeDef| -> Dynamic {
             if let Some(v) = &v.inputs {
                 Dynamic::from_iter(v.iter().cloned())
             } else {
                 Dynamic::UNIT
             }
         })
-        .register_get("outputs", |v: &mut InstructionsDef| -> Dynamic {
+        .register_get("outputs", |v: &mut RecipeDef| -> Dynamic {
             Dynamic::from_iter(v.outputs.iter().cloned())
         });
     engine.register_type_with_name::<TileDef>("TileDef");
     engine.register_type_with_name::<TagDef>("TagDef");
 
-    engine.register_fn("as_script", |id: Id| {
-        match global::resource_man().registry.scripts.get(&id).cloned() {
+    engine.register_fn("as_recipe", |id: Id| {
+        match global::resource_man()
+            .registry
+            .recipe_defs
+            .get(&id)
+            .cloned()
+        {
             Some(v) => Dynamic::from(v),
             None => Dynamic::UNIT,
         }
@@ -198,7 +193,7 @@ pub(crate) fn register_data_stuff(engine: &mut Engine) {
     engine.register_fn("as_tile", |id: Id| {
         match global::resource_man()
             .registry
-            .tiles
+            .tile_defs
             .get(&TileId(id))
             .cloned()
         {
@@ -207,13 +202,13 @@ pub(crate) fn register_data_stuff(engine: &mut Engine) {
         }
     });
     engine.register_fn("as_item", |id: Id| {
-        match global::resource_man().registry.items.get(&id).cloned() {
+        match global::resource_man().registry.item_defs.get(&id).cloned() {
             Some(v) => Dynamic::from(v),
             None => Dynamic::UNIT,
         }
     });
     engine.register_fn("as_tag", |id: Id| {
-        match global::resource_man().registry.tags.get(&id).cloned() {
+        match global::resource_man().registry.tag_defs.get(&id).cloned() {
             Some(v) => Dynamic::from(v),
             None => Dynamic::UNIT,
         }

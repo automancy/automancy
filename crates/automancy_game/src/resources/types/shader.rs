@@ -28,7 +28,7 @@ impl ResourceManager {
                     .into();
 
                 if let Ok(shader) = read_to_string(&file) {
-                    self.shaders.insert(name, shader.into());
+                    self.shaders.insert(name, shader);
                 }
             }
         }

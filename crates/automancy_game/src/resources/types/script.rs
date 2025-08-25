@@ -1,60 +1,61 @@
-use std::{ffi::OsStr, fs::read_to_string, path::Path};
+use std::{ffi::OsStr, path::Path};
 
-use automancy_data::{
-    game::item::{ItemAmount, ItemStack},
-    id::{Id, parse::parse_item_stacks},
-};
-use serde::Deserialize;
+use automancy_data::id::deserialize::StrId;
 
-use crate::resources::{RON_EXT, ResourceManager, load_recursively};
+use crate::resources::{ResourceManager, SCRIPT_EXT, load_recursively};
 
-#[derive(Debug, Clone)]
-pub struct InstructionsDef {
-    pub inputs: Option<Vec<ItemStack>>,
-    pub outputs: Vec<ItemStack>,
+pub enum ScriptType {
+    Library,
+    Tile,
 }
 
-#[derive(Debug, Clone)]
-pub struct ScriptDef {
-    pub id: Id,
-    pub instructions: InstructionsDef,
+pub struct ScriptMetadata {
+    pub str_id: String,
 }
 
-#[derive(Debug, Deserialize)]
-struct InstructionsRaw {
-    pub inputs: Option<Vec<(String, ItemAmount)>>,
-    pub output: Vec<(String, ItemAmount)>,
-}
-
-#[derive(Debug, Deserialize)]
-struct Raw {
-    pub id: String,
-    pub instructions: InstructionsRaw,
+pub struct ScriptData {
+    pub ast: rhai::AST,
+    pub metadata: ScriptMetadata,
 }
 
 impl ResourceManager {
-    fn load_script(&mut self, file: &Path, namespace: &str) -> anyhow::Result<()> {
-        log::info!("Loading script at: {file:?}");
+    fn read_id_deps(
+        &mut self,
+        namespace: &str,
+        str_id: &str,
+        script_type: ScriptType,
+        ast: &rhai::AST,
+        scope: &mut rhai::Scope,
+    ) -> anyhow::Result<()> {
+        let id_deps =
+            self.engine
+                .call_fn::<rhai::Array>(&mut rhai::Scope::new(), ast, "id_deps", ())?;
 
-        let v = ron::from_str::<Raw>(&read_to_string(file)?)?;
+        for id_dep in id_deps.into_iter() {
+            let mut array = id_dep.cast::<rhai::Array>().into_iter();
 
-        let id = Id::parse(&v.id, &mut self.interner, Some(namespace)).unwrap();
+            let id = StrId::from(
+                array
+                    .next()
+                    .unwrap()
+                    .cast::<rhai::ImmutableString>()
+                    .to_string(),
+            )
+            .into_id(&mut self.interner, Some(namespace))?;
 
-        let instructions = InstructionsDef {
-            inputs: v
-                .instructions
-                .inputs
-                .map(|v| parse_item_stacks(v.into_iter(), &mut self.interner, Some(namespace))),
-            outputs: parse_item_stacks(
-                v.instructions.output.into_iter(),
-                &mut self.interner,
-                Some(namespace),
-            ),
-        };
+            let key = array.next().unwrap().cast::<rhai::ImmutableString>();
 
-        let script = ScriptDef { id, instructions };
+            match script_type {
+                ScriptType::Library => {
+                    log::info!("Adding {key} -> {id} into scope of library script {str_id}");
+                }
+                ScriptType::Tile => {
+                    log::info!("Adding {key} -> {id} into scope of tile script {str_id}");
+                }
+            };
 
-        self.registry.scripts.insert(id, script);
+            scope.push_constant(key.as_str(), id);
+        }
 
         Ok(())
     }
@@ -62,8 +63,84 @@ impl ResourceManager {
     pub fn load_scripts(&mut self, dir: &Path, namespace: &str) -> anyhow::Result<()> {
         let scripts = dir.join("scripts");
 
-        for file in load_recursively(&scripts, OsStr::new(RON_EXT)) {
-            self.load_script(&file, namespace)?;
+        {
+            let lib = scripts.join("lib");
+
+            for file in load_recursively(&lib, OsStr::new(SCRIPT_EXT)) {
+                log::info!("Loading library script at {file:?}");
+
+                let Some(name) = file.file_stem().and_then(OsStr::to_str).map(str::to_string)
+                else {
+                    continue;
+                };
+
+                let str_id = format!("lib::{}::{}", namespace, name);
+                let mut scope = rhai::Scope::new();
+
+                {
+                    let ast = self.engine.compile_file(file.clone())?;
+
+                    self.read_id_deps(namespace, &str_id, ScriptType::Library, &ast, &mut scope)?;
+                }
+
+                let ast = self.engine.compile_file_with_scope(&scope, file)?;
+                let module = rhai::Module::eval_ast_as_new(rhai::Scope::new(), &ast, &self.engine);
+
+                match module {
+                    Ok(module) => {
+                        self.engine
+                            .register_static_module(str_id.clone(), module.into());
+                    }
+                    Err(err) => {
+                        log::error!("Could not register library script {str_id}! Error: {err:?}");
+                        continue;
+                    }
+                }
+
+                log::info!("Registered library script with id '{str_id}'!");
+            }
+        }
+
+        let src = scripts.join("src");
+
+        {
+            let src_tile = src.join("tile");
+
+            for file in load_recursively(&src_tile, OsStr::new(SCRIPT_EXT)) {
+                log::info!("Loading tile script at {file:?}");
+
+                let mut scope = rhai::Scope::new();
+                let str_id;
+                let id;
+
+                {
+                    let ast = self.engine.compile_file(file.clone())?;
+
+                    let raw_id = self.engine.call_fn::<rhai::ImmutableString>(
+                        &mut rhai::Scope::new(),
+                        &ast,
+                        "script_id",
+                        (),
+                    )?;
+                    str_id = raw_id.to_string();
+                    id = StrId::from(raw_id.to_string())
+                        .into_id(&mut self.interner, Some(namespace))?;
+
+                    self.read_id_deps(namespace, &str_id, ScriptType::Tile, &ast, &mut scope)?;
+                }
+
+                self.scripts.insert(
+                    id,
+                    ScriptData {
+                        ast: self.engine.compile_file_with_scope(&scope, file)?,
+                        metadata: ScriptMetadata {
+                            str_id: str_id.clone(),
+                        },
+                    },
+                );
+
+                log::info!("Registered tile script with ID '{str_id}'!");
+            }
         }
 
         Ok(())

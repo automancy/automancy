@@ -12,7 +12,6 @@ automancy_macros = { workspace = true }
 log = { workspace = true }
 
 # parsing / data mangling / math / files
-crunch = { workspace = true }
 ron = { workspace = true }
 serde = { workspace = true }
 

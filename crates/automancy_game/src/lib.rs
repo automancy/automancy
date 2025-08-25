@@ -1,3 +1,5 @@
+#![feature(iterator_try_collect)]
+
 pub mod actor;
 pub mod input;
 pub mod persistent;

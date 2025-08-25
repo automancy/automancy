@@ -3,6 +3,7 @@ use std::{mem, sync::Arc};
 use automancy_data::{
     game::{coord::TileCoord, generic::DataMap, item::ItemStack},
     id::TileId,
+    math::Int,
 };
 use ractor::{Actor, ActorProcessingErr, ActorRef};
 use rand::RngCore;
@@ -11,7 +12,7 @@ use thiserror::Error;
 
 use crate::{
     actor::message::{GameMsg, TileMsg, TileResult, TileTransactionResult},
-    resources::{FunctionInfo, ResourceManager, rhai_call_options, rhai_log_err},
+    resources::{ResourceManager, rhai_call_options, rhai_log_err, types::script::ScriptData},
     scripting::render::RenderCommand,
 };
 
@@ -156,18 +157,18 @@ impl TileActor {
         }
     }
 
-    fn run_tile_function<Result: 'static, const SIZE: usize>(
+    fn run_tile_script<Result: 'static, const SIZE: usize>(
         &self,
         state: &mut TileActorState,
-        (ast, metadata): &FunctionInfo,
+        script: &ScriptData,
         args: [(&'static str, Dynamic); SIZE],
-        function: &'static str,
+        function_name: &'static str,
     ) -> Option<Result> {
-        fn random() -> i32 {
-            rand::rng().next_u32() as i32
+        fn random() -> Int {
+            rand::rng().next_u32() as Int
         }
 
-        let tile_def = self.resource_man.registry.tiles.get(&self.id)?;
+        let tile_def = self.resource_man.registry.tile_defs.get(&self.id)?;
 
         let input = rhai::Map::from_iter(
             [
@@ -177,7 +178,7 @@ impl TileActor {
                 ("setup", Dynamic::from(tile_def.data.clone())),
             ]
             .into_iter()
-            .chain(args.into_iter())
+            .chain(args)
             .map(|(k, v)| (rhai::Identifier::from(k), v)),
         );
 
@@ -185,8 +186,8 @@ impl TileActor {
         let result = self.resource_man.engine.call_fn_with_options::<Dynamic>(
             rhai_call_options(&mut rhai_state),
             &mut Scope::new(),
-            ast,
-            function,
+            &script.ast,
+            function_name,
             (input,),
         );
         state.data = rhai_state.cast::<DataMap>();
@@ -194,7 +195,12 @@ impl TileActor {
         match result {
             Ok(result) => result.try_cast::<Result>(),
             Err(err) => {
-                rhai_log_err(function, &metadata.str_id, &err, Some(self.coord));
+                rhai_log_err(
+                    function_name,
+                    &script.metadata.str_id,
+                    &err,
+                    Some(self.coord),
+                );
                 None
             }
         }
@@ -209,15 +215,15 @@ impl TileActor {
         root_coord: TileCoord,
         root_id: TileId,
     ) -> Option<GameMsg> {
-        let tile = self.resource_man.registry.tiles.get(&self.id)?;
+        let tile = self.resource_man.registry.tile_defs.get(&self.id)?;
 
-        if let Some(function) = tile
-            .function
+        if let Some(script) = tile
+            .script
             .as_ref()
-            .and_then(|v| self.resource_man.functions.get(v))
-            && let Some(result) = self.run_tile_function(
+            .and_then(|v| self.resource_man.scripts.get(v))
+            && let Some(result) = self.run_tile_script(
                 state,
-                function,
+                script,
                 [
                     ("source_coord", Dynamic::from(source_coord)),
                     ("source_id", Dynamic::from(source_id)),
@@ -240,20 +246,20 @@ impl TileActor {
         loading: bool,
         unloading: bool,
     ) -> Option<Vec<RenderCommand>> {
-        let tile_def = self.resource_man.registry.tiles.get(&self.id)?;
+        let tile_def = self.resource_man.registry.tile_defs.get(&self.id)?;
 
-        if let Some(function) = tile_def
-            .function
+        if let Some(script) = tile_def
+            .script
             .as_ref()
-            .and_then(|v| self.resource_man.functions.get(v))
+            .and_then(|v| self.resource_man.scripts.get(v))
         {
             if !(loading || unloading) {
                 return None;
             }
 
-            if let Some(result) = self.run_tile_function(
+            if let Some(result) = self.run_tile_script(
                 state,
-                function,
+                script,
                 [
                     ("loading", Dynamic::from_bool(loading)),
                     ("unloading", Dynamic::from_bool(unloading)),
@@ -306,15 +312,15 @@ impl Actor for TileActor {
                 let tile_def = self
                     .resource_man
                     .registry
-                    .tiles
+                    .tile_defs
                     .get(&self.id)
                     .ok_or(Box::new(TileActorError::NonExistent(self.coord)))?;
 
-                if let Some(function) = tile_def
-                    .function
+                if let Some(script) = tile_def
+                    .script
                     .as_ref()
-                    .and_then(|v| self.resource_man.functions.get(v))
-                    && let Some(result) = self.run_tile_function(state, function, [], "handle_tick")
+                    .and_then(|v| self.resource_man.scripts.get(v))
+                    && let Some(result) = self.run_tile_script(state, script, [], "handle_tick")
                 {
                     self.handle_rhai_result(state, result);
                 }
@@ -339,18 +345,18 @@ impl Actor for TileActor {
                 let tile_def = self
                     .resource_man
                     .registry
-                    .tiles
+                    .tile_defs
                     .get(&self.id)
                     .ok_or(Box::new(TileActorError::NonExistent(self.coord)))?;
 
-                if let Some(function) = tile_def
-                    .function
+                if let Some(script) = tile_def
+                    .script
                     .as_ref()
-                    .and_then(|v| self.resource_man.functions.get(v))
+                    .and_then(|v| self.resource_man.scripts.get(v))
                 {
-                    let _: Option<()> = self.run_tile_function(
+                    let _: Option<()> = self.run_tile_script(
                         state,
-                        function,
+                        script,
                         [("transferred", Dynamic::from(result))],
                         "handle_transaction_result",
                     );
@@ -363,17 +369,17 @@ impl Actor for TileActor {
                 let tile_def = self
                     .resource_man
                     .registry
-                    .tiles
+                    .tile_defs
                     .get(&self.id)
                     .ok_or(Box::new(TileActorError::NonExistent(self.coord)))?;
 
-                if let Some(function) = tile_def
-                    .function
+                if let Some(script) = tile_def
+                    .script
                     .as_ref()
-                    .and_then(|v| self.resource_man.functions.get(v))
-                    && let Some(result) = self.run_tile_function(
+                    .and_then(|v| self.resource_man.scripts.get(v))
+                    && let Some(result) = self.run_tile_script(
                         state,
-                        function,
+                        script,
                         [
                             ("requested_from_coord", Dynamic::from(requested_from_coord)),
                             ("requested_from_id", Dynamic::from(requested_from_id)),
@@ -396,17 +402,16 @@ impl Actor for TileActor {
                 let tile_def = self
                     .resource_man
                     .registry
-                    .tiles
+                    .tile_defs
                     .get(&self.id)
                     .ok_or(Box::new(TileActorError::NonExistent(self.coord)))?;
 
-                if let Some(function) = tile_def
-                    .function
+                if let Some(script) = tile_def
+                    .script
                     .as_ref()
-                    .and_then(|v| self.resource_man.functions.get(v))
+                    .and_then(|v| self.resource_man.scripts.get(v))
                 {
-                    if let Some(result) = self.run_tile_function(state, function, [], "tile_config")
-                    {
+                    if let Some(result) = self.run_tile_script(state, script, [], "tile_config") {
                         reply.send(Some(result))?;
                     } else {
                         reply.send(None)?;

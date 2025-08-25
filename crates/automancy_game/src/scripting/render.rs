@@ -6,7 +6,6 @@ use rhai::{Engine, Module, exported_module, plugin::*};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum RenderCommand {
-    Clear,
     Untrack {
         tag: RenderId,
         model: ModelId,

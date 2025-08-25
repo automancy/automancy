@@ -468,7 +468,7 @@ pub mod deserialize {
         },
         id::{
             Interner,
-            deserialize::{IdStr, IdStrParseError},
+            deserialize::{StrId, StrIdParseError},
             parse::{parse_ids, parse_map_item_id},
         },
         math::IVec2,
@@ -484,21 +484,21 @@ pub mod deserialize {
         TileBounds(TileBounds),
         Color(String),
         Inventory(InventoryStr),
-        Id(IdStr),
-        VecId(Vec<IdStr>),
+        Id(StrId),
+        VecId(Vec<StrId>),
         VecOffsetCoord(Vec<IVec2>),
-        SetId(Vec<IdStr>),
-        TileMap(Vec<(TileCoord, IdStr)>),
-        TileMapOffsetCoord(Vec<(IVec2, IdStr)>),
-        MapSetId(Vec<(IdStr, Vec<IdStr>)>),
+        SetId(Vec<StrId>),
+        TileMap(Vec<(TileCoord, StrId)>),
+        TileMapOffsetCoord(Vec<(IVec2, StrId)>),
+        MapSetId(Vec<(StrId, Vec<StrId>)>),
     }
 
     impl DatumStr {
         pub fn into_datum(
             self,
             interner: &mut Interner,
-            fallback_namespace: Option<&impl AsRef<str>>,
-        ) -> Result<Datum, IdStrParseError> {
+            fallback_namespace: Option<&str>,
+        ) -> Result<Datum, StrIdParseError> {
             Ok(match self {
                 DatumStr::Amount(v) => Datum::Amount(v),
                 DatumStr::Bool(v) => Datum::Bool(v),
@@ -552,10 +552,10 @@ pub mod deserialize {
     }
 
     #[derive(Debug, Clone, Default, Deserialize)]
-    pub struct DataMapStr(BTreeMap<IdStr, DatumStr>);
+    pub struct DataMapStr(BTreeMap<StrId, DatumStr>);
 
     impl Deref for DataMapStr {
-        type Target = BTreeMap<IdStr, DatumStr>;
+        type Target = BTreeMap<StrId, DatumStr>;
 
         fn deref(&self) -> &Self::Target {
             &self.0
@@ -568,8 +568,8 @@ pub mod deserialize {
         }
     }
 
-    impl From<BTreeMap<IdStr, DatumStr>> for DataMapStr {
-        fn from(value: BTreeMap<IdStr, DatumStr>) -> Self {
+    impl From<BTreeMap<StrId, DatumStr>> for DataMapStr {
+        fn from(value: BTreeMap<StrId, DatumStr>) -> Self {
             Self(value)
         }
     }
@@ -578,8 +578,8 @@ pub mod deserialize {
         pub fn into_data(
             self,
             interner: &mut Interner,
-            fallback_namespace: Option<&impl AsRef<str>>,
-        ) -> Result<DataMap, IdStrParseError> {
+            fallback_namespace: Option<&str>,
+        ) -> Result<DataMap, StrIdParseError> {
             let mut map = DataMap::new();
 
             for (id, raw_datum) in self.0.into_iter() {

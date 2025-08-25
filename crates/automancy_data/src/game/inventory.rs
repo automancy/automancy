@@ -144,15 +144,15 @@ pub mod deserialize {
         game::{inventory::Inventory, item::ItemAmount},
         id::{
             Interner,
-            deserialize::{IdStr, IdStrParseError},
+            deserialize::{StrId, StrIdParseError},
         },
     };
 
     #[derive(Debug, Default, Clone, Deserialize)]
-    pub struct InventoryStr(Vec<(IdStr, ItemAmount)>);
+    pub struct InventoryStr(Vec<(StrId, ItemAmount)>);
 
     impl Deref for InventoryStr {
-        type Target = Vec<(IdStr, ItemAmount)>;
+        type Target = Vec<(StrId, ItemAmount)>;
 
         fn deref(&self) -> &Self::Target {
             &self.0
@@ -165,22 +165,22 @@ pub mod deserialize {
         }
     }
 
-    impl From<Vec<(IdStr, ItemAmount)>> for InventoryStr {
-        fn from(value: Vec<(IdStr, ItemAmount)>) -> Self {
+    impl From<Vec<(StrId, ItemAmount)>> for InventoryStr {
+        fn from(value: Vec<(StrId, ItemAmount)>) -> Self {
             Self(value)
         }
     }
 
     impl InventoryStr {
-        pub fn into_inner(self) -> Vec<(IdStr, ItemAmount)> {
+        pub fn into_inner(self) -> Vec<(StrId, ItemAmount)> {
             self.0
         }
 
         pub fn into_inventory(
             self,
             interner: &mut Interner,
-            fallback_namespace: Option<&impl AsRef<str>>,
-        ) -> Result<Inventory, IdStrParseError> {
+            fallback_namespace: Option<&str>,
+        ) -> Result<Inventory, StrIdParseError> {
             let mut r = Inventory::default();
 
             for (id, amount) in self.0.into_iter() {

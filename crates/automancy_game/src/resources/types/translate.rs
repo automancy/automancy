@@ -5,7 +5,7 @@ use std::{
     path::Path,
 };
 
-use automancy_data::id::{Id, TileId, parse::parse_map_id_str};
+use automancy_data::id::{Id, TileId, deserialize::StrId, parse::parse_map_id_item};
 use hashbrown::HashMap;
 use interpolator::Formattable;
 use serde::Deserialize;
@@ -20,7 +20,7 @@ pub struct TranslateDef {
     pub(crate) items: HashMap<Id, String>,
     pub(crate) tiles: HashMap<Id, String>,
     pub(crate) categories: HashMap<Id, String>,
-    pub(crate) scripts: HashMap<Id, String>,
+    pub(crate) recipes: HashMap<Id, String>,
 
     pub(crate) gui: HashMap<Id, String>,
     pub(crate) error: HashMap<Id, String>,
@@ -36,22 +36,22 @@ struct Raw {
     unnamed: Option<String>,
 
     #[serde(default)]
-    items: HashMap<String, String>,
+    items: HashMap<StrId, String>,
     #[serde(default)]
-    tiles: HashMap<String, String>,
+    tiles: HashMap<StrId, String>,
     #[serde(default)]
-    categories: HashMap<String, String>,
+    categories: HashMap<StrId, String>,
     #[serde(default)]
-    scripts: HashMap<String, String>,
+    scripts: HashMap<StrId, String>,
 
     #[serde(default)]
-    gui: HashMap<String, String>,
+    gui: HashMap<StrId, String>,
     #[serde(default)]
-    error: HashMap<String, String>,
+    error: HashMap<StrId, String>,
     #[serde(default)]
-    research: HashMap<String, String>,
+    research: HashMap<StrId, String>,
     #[serde(default)]
-    keys: HashMap<String, String>,
+    keys: HashMap<StrId, String>,
 }
 
 impl ResourceManager {
@@ -60,35 +60,49 @@ impl ResourceManager {
 
         let v = ron::from_str::<Raw>(&read_to_string(file)?)?;
 
-        let mut new = TranslateDef {
-            none: Default::default(),
-            unnamed: Default::default(),
-            items: parse_map_id_str(v.items.into_iter(), &mut self.interner, Some(namespace))
-                .collect(),
-            tiles: parse_map_id_str(v.tiles.into_iter(), &mut self.interner, Some(namespace))
-                .collect(),
-            categories: parse_map_id_str(
-                v.categories.into_iter(),
+        let new = TranslateDef {
+            none: v.none.unwrap_or_default(),
+            unnamed: v.unnamed.unwrap_or_default(),
+            items: {
+                parse_map_id_item(v.items.into_iter(), &mut self.interner, Some(namespace))
+                    .try_collect()?
+            },
+            tiles: {
+                parse_map_id_item(v.tiles.into_iter(), &mut self.interner, Some(namespace))
+                    .try_collect()?
+            },
+            categories: {
+                parse_map_id_item(
+                    v.categories.into_iter(),
+                    &mut self.interner,
+                    Some(namespace),
+                )
+                .try_collect()?
+            },
+            recipes: {
+                parse_map_id_item(v.scripts.into_iter(), &mut self.interner, Some(namespace))
+                    .try_collect()?
+            },
+            gui: {
+                parse_map_id_item(v.gui.into_iter(), &mut self.interner, Some(namespace))
+                    .try_collect()?
+            },
+            keys: {
+                parse_map_id_item(v.keys.into_iter(), &mut self.interner, Some(namespace))
+                    .try_collect()?
+            },
+            error: {
+                parse_map_id_item(v.error.into_iter(), &mut self.interner, Some(namespace))
+                    .try_collect()?
+            },
+            research: parse_map_id_item(
+                v.research.into_iter(),
                 &mut self.interner,
                 Some(namespace),
             )
-            .collect(),
-            scripts: parse_map_id_str(v.scripts.into_iter(), &mut self.interner, Some(namespace))
-                .collect(),
-            gui: parse_map_id_str(v.gui.into_iter(), &mut self.interner, Some(namespace)).collect(),
-            keys: parse_map_id_str(v.keys.into_iter(), &mut self.interner, Some(namespace))
-                .collect(),
-            error: parse_map_id_str(v.error.into_iter(), &mut self.interner, Some(namespace))
-                .collect(),
-            research: parse_map_id_str(v.research.into_iter(), &mut self.interner, Some(namespace))
-                .collect(),
+            .try_collect()?,
         };
-        if let Some(v) = v.none {
-            new.none = v.into();
-        }
-        if let Some(v) = v.unnamed {
-            new.unnamed = v.into();
-        }
+
         if self.translates.none.is_empty() {
             self.translates.none = new.none;
         }
@@ -99,7 +113,7 @@ impl ResourceManager {
         self.translates.items.extend(new.items);
         self.translates.tiles.extend(new.tiles);
         self.translates.categories.extend(new.categories);
-        self.translates.scripts.extend(new.scripts);
+        self.translates.recipes.extend(new.recipes);
         self.translates.gui.extend(new.gui);
         self.translates.keys.extend(new.keys);
         self.translates.error.extend(new.error);
@@ -148,7 +162,7 @@ impl ResourceManager {
     }
 
     pub fn script_name(&self, id: Id) -> &str {
-        match self.translates.scripts.get(&id) {
+        match self.translates.recipes.get(&id) {
             Some(name) => name.as_str(),
             None => self.translates.unnamed.as_str(),
         }

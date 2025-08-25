@@ -43,6 +43,7 @@ hexx = { git = "https://github.com/automancy/hexx.git", features = ["serde"] }
 image = "0.25.6"
 ron = { version = "0.10.1" }
 serde = { version = "1.0", features = ["derive"] }
+serde_tuple = { version = "1.1.2" }
 ttf-parser = "0.25.1"
 uuid = "1.17.0"
 vek = { version = "0.17.1", features = ["rgb", "rgba", "serde", "image"] }
@@ -50,11 +51,12 @@ zstd = "0.13.3"
 
 # specialized data storage types
 arraydeque = "0.5.1"
+bit-set = "0.8.0"
 enum-map = "2.7.3"
+fingertrees = "0.2.11"
 hashbrown = { version = "0.15.5", features = ["serde", "rayon", "inline-more"] }
-ordermap = "0.5.8"
 petgraph = "0.8.2"
-range-set-blaze = "0.3.0"
+smallvec = "1.15.1"
 string-interner = { git = "https://github.com/automancy/string-interner" }
 
 # rendering / windowing

@@ -8,8 +8,6 @@ use automancy_data::{
 use hashbrown::HashMap;
 use yakui::UVec2;
 
-use crate::ui::UiRenderer;
-
 thread_local! {
     static START_INSTANT: Cell<Option<Instant>> = const { Cell::new(None) };
 }
@@ -19,9 +17,21 @@ pub fn init_custom_paint_state(start_instant: Instant) {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum GameObjectType {
+pub enum GameObjectPaintType {
     Tile(TileId, DataMap),
     Model(ModelId),
+}
+
+#[derive(Debug, Clone)]
+pub struct GameObjectPaint {
+    pub instance: Instance,
+    pub ty: GameObjectPaintType,
+    pub size: Vec2,
+    pub model_matrix: Matrix4,
+    pub world_matrix: Matrix4,
+
+    pub clip_offset: Vec2,
+    pub clip_scale: Vec2,
 }
 
 pub struct GameObjectRenderer {
@@ -99,7 +109,7 @@ impl GameObjectRenderer {
 
             for (ty, instance, game_matrix, (rect_index, _)) in instances.into_iter() {
                 let models = match ty {
-                    GameObjectType::Tile(tile_id, mut data) => {
+                    GameObjectPaintType::Tile(tile_id, mut data) => {
                         if let Some(commands) = collect_render_commands(
                             resource_man,
                             tile_id,
@@ -120,7 +130,7 @@ impl GameObjectRenderer {
                             vec![]
                         }
                     }
-                    GameObjectType::Model(model_id) => vec![model_id],
+                    GameObjectPaintType::Model(model_id) => vec![model_id],
                 };
 
                 for model in models {
@@ -154,7 +164,7 @@ impl GameObjectRenderer {
                         let index_range = &resource_man.all_index_ranges[&model][&mesh.index];
 
                         draw_info.push((
-                            DrawIndexedIndirectArgs {
+                            wgpu::util::DrawIndexedIndirectArgs {
                                 first_index: index_range.pos,
                                 index_count: index_range.count,
                                 base_vertex: index_range.base_vertex,

@@ -4,20 +4,21 @@ use hashbrown::HashMap;
 use petgraph::{graph::NodeIndex, prelude::StableDiGraph};
 
 use crate::resources::types::{
-    category::CategoryDef, item::ItemDef, research::ResearchDef, script::ScriptDef, tag::TagDef,
+    category::CategoryDef, item::ItemDef, recipe::RecipeDef, research::ResearchDef, tag::TagDef,
     tile::TileDef,
 };
 
 /// Represents the resource registry.
 #[derive(Clone)]
 pub struct Registry {
-    pub tiles: HashMap<TileId, TileDef>,
-    pub scripts: HashMap<Id, ScriptDef>,
-    pub tags: HashMap<Id, TagDef>,
-    pub categories: HashMap<Id, CategoryDef>,
+    pub tile_defs: HashMap<TileId, TileDef>,
+    pub recipe_defs: HashMap<Id, RecipeDef>,
+    pub tag_defs: HashMap<Id, TagDef>,
+    pub categorie_defs: HashMap<Id, CategoryDef>,
+    pub item_defs: HashMap<Id, ItemDef>,
+    pub researche_defs: StableDiGraph<ResearchDef, ()>,
+
     pub(crate) categories_tiles_map: HashMap<Id, Vec<TileId>>,
-    pub items: HashMap<Id, ItemDef>,
-    pub researches: StableDiGraph<ResearchDef, ()>,
     pub(crate) researches_id_map: HashMap<Id, NodeIndex>,
     pub(crate) researches_unlock_map: HashMap<TileId, NodeIndex>,
 

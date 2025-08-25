@@ -127,9 +127,7 @@ pub mod serialize {
                         err
                     );
                 }
-                Err(IdMapError::MapMissingId(id)) => {
-                    return Err(MapReadError::MissingId(id));
-                }
+                Err(IdMapError::MapMissingId(id)) => Err(MapReadError::MissingId(id)),
             }
         }
     }
@@ -143,20 +141,13 @@ pub mod serialize {
         pub data: DataMapRaw,
     }
 
-    #[derive(Debug, Serialize, Deserialize)]
+    #[derive(Debug, Default, Serialize, Deserialize)]
     pub struct GameMapRaw {
         tiles: Vec<(TileCoord, Id, DataMapRaw)>,
         id_map: IdMap,
     }
 
     impl GameMapRaw {
-        pub fn new() -> Self {
-            Self {
-                tiles: Default::default(),
-                id_map: Default::default(),
-            }
-        }
-
         pub fn raw_to_data(
             &self,
             data: DataMapRaw,
@@ -312,7 +303,7 @@ pub mod serialize {
             let map_file = File::create(GameMap::map(&map.id).unwrap()).unwrap();
             let mut map_encoder = zstd::Encoder::new(map_file, 0).unwrap();
 
-            let mut map_raw = GameMapRaw::new();
+            let mut map_raw = GameMapRaw::default();
             {
                 let mut tiles_data = multi_call_iter(
                     map.tiles

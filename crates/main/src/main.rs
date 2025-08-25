@@ -75,13 +75,14 @@ fn load_resources(
             resource_man
                 .load_tags(&dir, namespace)
                 .expect("error loading tags");
+
             resource_man
                 .load_categories(&dir, namespace)
                 .expect("error loading categories");
 
             resource_man
-                .load_scripts(&dir, namespace)
-                .expect("error loading scripts");
+                .load_recipes(&dir, namespace)
+                .expect("error loading recipes");
 
             resource_man
                 .load_translates(&dir, namespace, selected_language)
@@ -94,8 +95,8 @@ fn load_resources(
             resource_man.load_fonts(&dir).expect("error loading fonts");
 
             resource_man
-                .load_functions(&dir, namespace)
-                .expect("error loading functions");
+                .load_scripts(&dir, namespace)
+                .expect("error loading scripts");
 
             resource_man
                 .load_researches(&dir, namespace)
@@ -165,7 +166,7 @@ fn write_msg<P: AsRef<Path>>(buffer: &mut impl Write, file_path: P) -> std::fmt:
 struct Automancy {
     state: GameState,
     window: Option<Arc<Window>>,
-    fps_limit: Option<i32>,
+    fps_limit: Option<Int>,
     closed: bool,
 }
 

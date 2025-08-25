@@ -1,6 +1,6 @@
 use std::{ffi::OsStr, fs::read_to_string, path::Path};
 
-use automancy_data::id::{Id, ModelId};
+use automancy_data::id::{Id, ModelId, deserialize::StrId};
 use serde::Deserialize;
 
 use crate::resources::{RON_EXT, ResourceManager, load_recursively};
@@ -13,8 +13,8 @@ pub struct ItemDef {
 
 #[derive(Debug, Deserialize)]
 struct Raw {
-    id: String,
-    model: String,
+    id: StrId,
+    model: StrId,
 }
 
 impl ResourceManager {
@@ -23,10 +23,10 @@ impl ResourceManager {
 
         let v = ron::from_str::<Raw>(&read_to_string(file)?)?;
 
-        let id = Id::parse(&v.id, &mut self.interner, Some(namespace)).unwrap();
-        let model = Id::parse(&v.model, &mut self.interner, Some(namespace)).unwrap();
+        let id = v.id.into_id(&mut self.interner, Some(namespace))?;
+        let model = v.model.into_id(&mut self.interner, Some(namespace))?;
 
-        self.registry.items.insert(
+        self.registry.item_defs.insert(
             id,
             ItemDef {
                 id,
@@ -48,7 +48,7 @@ impl ResourceManager {
     }
 
     pub fn ordered_items(&mut self) {
-        let mut ids = self.registry.items.keys().cloned().collect::<Vec<_>>();
+        let mut ids = self.registry.item_defs.keys().cloned().collect::<Vec<_>>();
 
         ids.sort_by_key(|id| self.item_name(*id));
 

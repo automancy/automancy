@@ -59,12 +59,12 @@ impl GameCamera {
         let world_pos = rendering::camera::pixel_to_world(main_pos, viewport_size, self.pos);
         let p = TileCoord::from_world_pos(world_pos.xy());
 
-        self.pointing_at = p.into();
+        self.pointing_at = p;
     }
 
     /// Gets the TileCoord the camera is pointing at.
     pub fn get_tile_coord(&self) -> TileCoord {
-        TileCoord::from_world_pos(Vec2::new(self.pos.x as Float, self.pos.y as Float)).into()
+        TileCoord::from_world_pos(Vec2::new(self.pos.x as Float, self.pos.y as Float))
     }
 
     /// Updates the movement state of the camera based on input.

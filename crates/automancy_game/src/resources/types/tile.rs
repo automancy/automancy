@@ -2,7 +2,10 @@ use std::{ffi::OsStr, fs::read_to_string, path::Path};
 
 use automancy_data::{
     game::generic::{DataMap, deserialize::DataMapStr},
-    id::{Id, TileId},
+    id::{
+        Id, TileId,
+        deserialize::{StrId, StrIdExt},
+    },
 };
 use serde::Deserialize;
 
@@ -11,17 +14,17 @@ use crate::resources::{RON_EXT, ResourceManager, load_recursively};
 #[derive(Debug, Clone)]
 pub struct TileDef {
     pub id: TileId,
-    pub function: Option<Id>,
+    pub script: Option<Id>,
     pub category: Option<Id>,
     pub data: DataMap,
 }
 
 #[derive(Debug, Deserialize)]
 struct Raw {
-    pub id: String,
-    pub function: Option<String>,
+    pub id: StrId,
+    pub script: Option<StrId>,
     #[serde(default)]
-    pub category: Option<String>,
+    pub category: Option<StrId>,
     pub data: DataMapStr,
 }
 
@@ -31,21 +34,16 @@ impl ResourceManager {
 
         let v = ron::from_str::<Raw>(&read_to_string(file)?)?;
 
-        let id = TileId(Id::parse(&v.id, &mut self.interner, Some(namespace)).unwrap());
-        let function = v
-            .function
-            .map(|v| Id::parse(&v, &mut self.interner, Some(namespace)).unwrap());
-        let category = v
-            .category
-            .map(|v| Id::parse(&v, &mut self.interner, Some(namespace)).unwrap());
+        let id = TileId(v.id.into_id(&mut self.interner, Some(namespace))?);
+        let script = v.script.into_id(&mut self.interner, Some(namespace))?;
+        let category = v.category.into_id(&mut self.interner, Some(namespace))?;
+        let data = v.data.into_data(&mut self.interner, Some(namespace))?;
 
-        let data = v.data.into_data(&mut self.interner, Some(namespace));
-
-        self.registry.tiles.insert(
+        self.registry.tile_defs.insert(
             id,
             TileDef {
                 id,
-                function,
+                script,
                 category,
                 data,
             },
@@ -65,7 +63,7 @@ impl ResourceManager {
     }
 
     pub fn ordered_tiles(&mut self) {
-        let mut ids = self.registry.tiles.keys().cloned().collect::<Vec<_>>();
+        let mut ids = self.registry.tile_defs.keys().cloned().collect::<Vec<_>>();
 
         ids.sort_by_key(|id| self.tile_name(*id));
 

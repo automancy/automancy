@@ -1,25 +1,65 @@
+use core::ops::Mul;
 use std::{borrow::Cow, collections::VecDeque, mem, sync::Arc, time::Instant};
 
 use arboard::{Clipboard, ImageData};
 use automancy_data::{
+    game::coord::TileCoord,
     id::{Id, ModelId},
-    math::{Matrix4, Vec2, Vec3, Vec4},
-    rendering::gpu::{GameMatrixData, Instance},
+    math::{Matrix4, Vec3, Vec4},
+};
+use automancy_game::{
+    actor::message::GameMsg, resources::ResourceManager, state::AutomancyGameState,
 };
 use hashbrown::HashMap;
+use ordermap::OrderMap;
 use yakui::{Rect, UVec2};
 use yakui_wgpu::SurfaceInfo;
 
-use crate::ui::game_object::GameObjectType;
+use crate::{data::GpuAnimationMatrixData, gpu::AutomancyRenderResources};
 
-pub type OverlayInstance = (Instance, ModelId, GameMatrixData<true>, usize);
-pub type GuiInstance = (
-    GameObjectType,
-    Instance,
-    GameMatrixData<false>,
-    (usize, Vec2),
-);
+pub type AnimationCache = HashMap<ModelId, HashMap<usize, Matrix4>>;
+pub type AnimationMatrixDataMap = OrderMap<(ModelId, usize), GpuAnimationMatrixData>;
 
+pub fn try_add_animation(
+    resource_man: &ResourceManager,
+    start_instant: Instant,
+    model: ModelId,
+    cache: &mut AnimationCache,
+) {
+    if !cache.contains_key(&model) {
+        if let Some((_, anims)) = resource_man.all_meshes_anims.get(&model) {
+            let elapsed = Instant::now().duration_since(start_instant).as_secs_f32();
+
+            let anims = anims
+                .iter()
+                .map(|anim| {
+                    let last = anim.inputs.last().unwrap();
+                    let wrapped = elapsed % last;
+                    let index = anim.inputs.partition_point(|&v| v < wrapped);
+
+                    (anim.target, anim.outputs[index])
+                })
+                .collect::<Vec<_>>();
+
+            let anims = anims
+                .binary_group_by_key(|(target, _)| *target)
+                .map(|grouped| {
+                    (
+                        grouped[0].0, // target
+                        grouped
+                            .iter()
+                            .map(|v| v.1)
+                            .fold(Matrix4::IDENTITY, Mul::mul),
+                    )
+                })
+                .collect::<HashMap<_, _>>();
+
+            cache.insert(model, anims);
+        }
+    }
+}
+
+/*
 pub struct YakuiRenderResources {
     pub instances: Option<Vec<GuiInstance>>,
 
@@ -35,28 +75,17 @@ pub struct YakuiRenderResources {
     pub packed_size: Option<UVec2>,
     pub rects: Vec<Option<crunch::Rect>>,
 }
+*/
 
 const WE_ONLY_USE_1_WORLD_MATRIX_IN_GAME_LOL: u32 = 0;
 
 pub struct GameRenderer {
-    pub vertices_init: Option<Vec<GpuVertex>>,
-    pub indices_init: Option<Vec<u16>>,
-
-    pub gpu: Gpu,
-    pub shared_resources: SharedResources,
-    pub render_resources: RenderResources,
-    pub global_resources: Arc<GlobalResources>,
-
-    pub overlay_instances: Vec<OverlayInstance>,
-
     pub tile_tints: HashMap<TileCoord, Vec4>,
     last_tile_tints: HashMap<TileCoord, Vec4>,
 
+    pub animation_cache: AnimationCache,
+    animation_matrix_data_map: AnimationMatrixDataMap,
     pub take_item_animations: HashMap<Id, VecDeque<(Instant, Rect)>>,
-
-    gui_opaque_draws: Option<Vec<(DrawIndexedIndirectArgs, usize)>>,
-    gui_non_opaque_draws: Option<Vec<(DrawIndexedIndirectArgs, usize)>>,
-    gui_animation_matrix_data_map: Option<AnimationMatrixDataMap>,
 
     gui_packed_size: Option<UVec2>,
     gui_rects: Vec<Option<crunch::Rect>>,
@@ -65,27 +94,14 @@ pub struct GameRenderer {
 }
 
 impl GameRenderer {
-    pub fn new(
-        gpu: Gpu,
-        shared_resources: SharedResources,
-        render_resources: RenderResources,
-        global_resources: Arc<GlobalResources>,
-    ) -> Self {
+    pub fn new() -> Self {
         Self {
-            gpu,
-            shared_resources,
-            render_resources,
-            global_resources,
-
             tile_tints: Default::default(),
             last_tile_tints: Default::default(),
-            overlay_instances: Default::default(),
 
+            animation_cache: Default::default(),
+            animation_matrix_data_map: Default::default(),
             take_item_animations: Default::default(),
-
-            gui_opaque_draws: Some(Default::default()),
-            gui_non_opaque_draws: Some(Default::default()),
-            gui_animation_matrix_data_map: Some(Default::default()),
 
             gui_packed_size: Default::default(),
             gui_rects: Default::default(),
@@ -93,133 +109,100 @@ impl GameRenderer {
             screenshot_clipboard: Clipboard::new().unwrap(),
         }
     }
-}
 
-pub fn render(state: &mut GameState, screenshotting: bool) -> Result<(), SurfaceError> {
-    let Some(renderer) = state.renderer.as_mut() else {
-        return Ok(());
-    };
+    pub fn render(
+        &mut self,
+        state: &AutomancyGameState,
+        render_resources: &AutomancyRenderResources,
+        screenshotting: bool,
+    ) -> Result<(), wgpu::SurfaceError> {
+        let size = render_resources.window.inner_size();
 
-    let size = renderer.gpu.window.inner_size();
+        if size.width == 0 || size.height == 0 {
+            return Ok(());
+        }
 
-    if size.width == 0 || size.height == 0 {
-        return Ok(());
-    }
+        let last_tile_tints = mem::take(&mut self.last_tile_tints);
+        let tile_tints = mem::take(&mut self.tile_tints);
 
-    renderer.animation_cache.clear();
+        let camera_pos = state.camera.get_pos();
+        let culling_range = state.camera.culling_range;
 
-    let last_tile_tints = mem::take(&mut renderer.last_tile_tints);
-    let tile_tints = mem::take(&mut renderer.tile_tints);
+        let render_commands = {
+            let game = state.game.clone();
 
-    let camera_pos = state.camera.get_pos();
-    let culling_range = state.camera.culling_range;
+            self.tokio
+                .block_on(game.call(
+                    |reply| GameMsg::GetAllRenderCommands {
+                        reply,
+                        culling_range,
+                    },
+                    None,
+                ))
+                .unwrap()
+                .unwrap()
+        };
 
-    let render_commands = {
-        let game = state.game.clone();
+        for (model, _) in self.animation_matrix_data_map.keys() {
+            try_add_animation(
+                &state.resource_man,
+                state.start_instant,
+                *model,
+                &mut self.animation_cache,
+            );
+        }
 
-        state
-            .tokio
-            .block_on(game.call(
-                |reply| GameSystemMessage::GetAllRenderCommands {
-                    reply,
-                    culling_range,
-                },
-                None,
-            ))
-            .unwrap()
-            .unwrap()
-    };
+        for (&model, anim) in &self.animation_cache {
+            for (&mesh_id, &matrix) in anim {
+                if let Some(data) = self.animation_matrix_data_map.get_mut(&(model, mesh_id)) {
+                    data.animation_matrix = matrix.to_cols_array_2d();
+                }
+            }
+        }
 
-    let overlay_instances = mem::take(&mut renderer.overlay_instances);
-    for &(_, model, _, mesh_index) in &overlay_instances {
-        if !renderer
-            .animation_matrix_data_map
-            .contains_key(&(model, mesh_index))
         {
-            renderer
-                .animation_matrix_data_map
-                .insert((model, mesh_index), GpuAnimationMatrixData::default());
-        }
-    }
+            for (coord, _) in last_tile_tints {
+                if tile_tints.contains_key(&coord) {
+                    continue;
+                };
 
-    for (model, _) in renderer.animation_matrix_data_map.keys() {
-        try_add_animation(
-            &state.resource_man,
-            state.start_instant,
-            *model,
-            &mut renderer.animation_cache,
-        );
-    }
+                let Some(keys) = self.coord_to_keys.get(&coord) else {
+                    continue;
+                };
 
-    for (&model, anim) in &renderer.animation_cache {
-        for (&mesh_id, &matrix) in anim {
-            if let Some(data) = renderer
-                .animation_matrix_data_map
-                .get_mut(&(model, mesh_id))
-            {
-                data.animation_matrix = matrix.to_cols_array_2d();
+                for &key in keys {
+                    let index = renderer
+                        .object_ids
+                        .get_index_of(&(coord, key.0, key.1, key.2))
+                        .unwrap();
+
+                    renderer.instances[index].color_offset = [0.0; 4];
+                    instances_changes.insert(index);
+                }
             }
-        }
-    }
 
-    {
-        for (coord, _) in last_tile_tints {
-            if tile_tints.contains_key(&coord) {
-                continue;
-            };
+            for (coord, tint) in &tile_tints {
+                let Some(keys) = renderer.coord_to_keys.get(coord) else {
+                    continue;
+                };
 
-            let Some(keys) = renderer.coord_to_keys.get(&coord) else {
-                continue;
-            };
+                for &key in keys {
+                    let index = renderer
+                        .object_ids
+                        .get_index_of(&(*coord, key.0, key.1, key.2))
+                        .unwrap();
 
-            for &key in keys {
-                let index = renderer
-                    .object_ids
-                    .get_index_of(&(coord, key.0, key.1, key.2))
-                    .unwrap();
-
-                renderer.instances[index].color_offset = [0.0; 4];
-                instances_changes.insert(index);
+                    renderer.instances[index].color_offset = tint.to_array();
+                    instances_changes.insert(index);
+                }
             }
         }
 
-        for (coord, tint) in &tile_tints {
-            let Some(keys) = renderer.coord_to_keys.get(coord) else {
-                continue;
-            };
+        automancy_ui::custom::reset_paint_state();
+        renderer.last_tile_tints = tile_tints;
 
-            for &key in keys {
-                let index = renderer
-                    .object_ids
-                    .get_index_of(&(*coord, key.0, key.1, key.2))
-                    .unwrap();
-
-                renderer.instances[index].color_offset = tint.to_array();
-                instances_changes.insert(index);
-            }
-        }
+        r
     }
-
-    let mut instances_changes = instances_changes.into_iter().collect::<Vec<_>>();
-    instances_changes.sort();
-    let mut matrix_data_changes = matrix_data_changes.into_iter().collect::<Vec<_>>();
-    matrix_data_changes.sort();
-
-    let r = renderer.inner_render(
-        state.resource_man.clone(),
-        state.gui.as_mut().unwrap(),
-        camera_pos,
-        state.camera.get_matrix(),
-        instances_changes,
-        matrix_data_changes,
-        overlay_instances,
-        screenshotting,
-    );
-
-    automancy_ui::custom::reset_paint_state();
-    renderer.last_tile_tints = tile_tints;
-
-    r
 }
 
 impl GameRenderer {

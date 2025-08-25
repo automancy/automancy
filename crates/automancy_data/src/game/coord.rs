@@ -7,7 +7,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    math::{Float, Matrix4, Vec2, Vec3, consts},
+    math::{Float, Int, Matrix4, Vec2, Vec3, consts},
     rendering,
 };
 
@@ -18,7 +18,7 @@ const TILE_GRID_LAYOUT: hexx::HexLayout = hexx::HexLayout {
 };
 
 /// The type that will be used to represent a tile's coordinates.
-pub type TileUnit = i32;
+pub type TileUnit = Int;
 
 /// The inner hex coordinate.
 pub type TileHex = hexx::Hex;
@@ -305,8 +305,8 @@ impl TileBounds {
 
 impl FromIterator<TileCoord> for TileBounds {
     fn from_iter<T: IntoIterator<Item = TileCoord>>(iter: T) -> Self {
-        let mut min = TileCoord::new(i32::MAX, i32::MAX);
-        let mut max = TileCoord::new(i32::MIN, i32::MIN);
+        let mut min = TileCoord::new(Int::MAX, Int::MAX);
+        let mut max = TileCoord::new(Int::MIN, Int::MIN);
 
         for hex in iter {
             min.0.x = min.x.min(hex.x);

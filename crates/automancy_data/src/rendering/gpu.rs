@@ -5,12 +5,12 @@ use crate::{
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Instance {
+pub struct GameDrawInstance {
     pub color_offset: Rgba,
     pub alpha: Float,
 }
 
-impl Default for Instance {
+impl Default for GameDrawInstance {
     fn default() -> Self {
         Self {
             color_offset: Rgba::zero(),
@@ -19,7 +19,7 @@ impl Default for Instance {
     }
 }
 
-impl Instance {
+impl GameDrawInstance {
     #[inline]
     pub fn add_alpha(mut self, alpha: Float) -> Self {
         self.alpha *= alpha;
@@ -43,42 +43,16 @@ impl Instance {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct GameMatrixData<const HAS_MESH_MATRIX: bool> {
+pub struct GameMatrixData {
     model_matrix: Matrix4,
     world_matrix: Matrix4,
-    mesh_matrix: Option<Matrix4>,
 }
 
-impl GameMatrixData<true> {
-    pub fn new(
-        model_matrix: Matrix4,
-        world_matrix: Matrix4,
-        mesh_matrix: Matrix4,
-    ) -> GameMatrixData<true> {
+impl GameMatrixData {
+    pub fn new(model_matrix: Matrix4, world_matrix: Matrix4) -> GameMatrixData {
         GameMatrixData {
             model_matrix,
             world_matrix,
-            mesh_matrix: Some(mesh_matrix),
-        }
-    }
-
-    pub fn model_matrix(&self) -> Matrix4 {
-        self.model_matrix
-    }
-    pub fn world_matrix(&self) -> Matrix4 {
-        self.world_matrix
-    }
-    pub fn mesh_matrix(&self) -> Matrix4 {
-        unsafe { self.mesh_matrix.unwrap_unchecked() }
-    }
-}
-
-impl GameMatrixData<false> {
-    pub fn new(model_matrix: Matrix4, world_matrix: Matrix4) -> GameMatrixData<false> {
-        GameMatrixData {
-            model_matrix,
-            world_matrix,
-            mesh_matrix: None,
         }
     }
 

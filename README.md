@@ -90,10 +90,6 @@ criteria:
 
 The rendering is single-threaded, the game logic is run with an actor system (ractor) on top of a Tokio runtime.
 
-"Scripts" are called "functions" as the name is taken in-game by what would otherwise be called "recipes."
-- The weird terminology comes from the fact that "recipes" doesn't make sense for machines.
-- TBD: rename?? this is sometimes stupidly hard to accomodate for because brainfarts. just don't call them functions or smth
-
 #### Write all tile logic in script-side
 
 If you can't feasibly do that, *implement more handling in source code, and then write the logic.*

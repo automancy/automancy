@@ -1,5 +1,5 @@
-use proc_macro2::{Ident, Span, TokenStream};
-use quote::{ToTokens, format_ident, quote};
+use proc_macro2::{Ident, Span, TokenStream, TokenTree};
+use quote::{ToTokens, TokenStreamExt, format_ident, quote};
 
 use crate::parse_ident;
 
@@ -30,15 +30,20 @@ pub fn derive_option_getter(item: TokenStream) -> TokenStream {
                         .expect("somehow the field doesn't have a name");
 
                     if attrs.contains(&get_ident) {
-                        items.push((
-                            name,
-                            field
-                                .ty
-                                .to_token_stream()
-                                .into_iter()
-                                .nth(2) // strip away *Cell < >
-                                .unwrap(),
-                        ));
+                        let mut vec =
+                            Vec::<TokenTree>::from_iter(field.ty.to_token_stream().into_iter());
+
+                        // Remove Option
+                        vec.remove(0);
+                        // Remove <
+                        vec.remove(0);
+                        // Remove >
+                        vec.pop();
+
+                        let mut tokens = TokenStream::new();
+                        tokens.append_all(&mut vec);
+
+                        items.push((name, tokens));
                     }
                 }
             }

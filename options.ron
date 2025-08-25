@@ -10,7 +10,7 @@
         music_volume: 0.5,
     ),
     gui: (
-        font: Some("Exo 2"),
+        font: "Exo 2",
     ),
     keymap: {
         Character("c"): (

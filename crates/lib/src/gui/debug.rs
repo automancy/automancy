@@ -1,5 +1,5 @@
 use automancy_data::colors::BACKGROUND_3;
-use automancy_ui::{DIVIER_HEIGHT, DIVIER_THICKNESS, col, label, movable, window};
+use automancy_ui::{col, label, movable, window, DIVIER_HEIGHT, DIVIER_THICKNESS};
 use ron::ser::PrettyConfig;
 use yakui::{divider, widgets::Layer};
 
@@ -12,8 +12,8 @@ pub fn debugger(state: &mut GameState) {
     let reg_tiles = state.resource_man.registry.tiles.len();
     let reg_items = state.resource_man.registry.items.len();
     let tags = state.resource_man.registry.tags.len();
-    let functions = state.resource_man.functions.len();
-    let scripts = state.resource_man.registry.scripts.len();
+    let scripts = state.resource_man.scripts.len();
+    let recipes = state.resource_man.registry.recipes.len();
     let audio = state.resource_man.audio.len();
     let meshes = state.resource_man.all_meshes_anims.len();
 
@@ -44,7 +44,7 @@ pub fn debugger(state: &mut GameState) {
 
                         divider(BACKGROUND_3, DIVIER_HEIGHT, DIVIER_THICKNESS);
 
-                        label(&format!("ResourceMan: Tiles={reg_tiles} Items={reg_items} Tags={tags} Functions={functions} Scripts={scripts} Audio={audio} Meshes={meshes}"));
+                        label(&format!("ResourceMan: Tiles={reg_tiles} Items={reg_items} Tags={tags} Scripts={scripts} Recipes={recipes} Audio={audio} Meshes={meshes}"));
 
                         divider(BACKGROUND_3, DIVIER_HEIGHT, DIVIER_THICKNESS);
 

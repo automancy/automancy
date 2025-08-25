@@ -51,8 +51,8 @@ impl GpuVertex {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, Default, PartialOrd, Pod, Zeroable, ByteHash, ByteEq)]
-pub struct GpuInstance {
+#[derive(Debug, Clone, Copy, Default, ByteEq, Pod, Zeroable, ByteHash)]
+pub struct GpuDrawInstance {
     pub color_offset: GpuColor,
     pub alpha: Float,
     pub matrix_index: u32,
@@ -60,7 +60,7 @@ pub struct GpuInstance {
     pub animation_matrix_index: u32,
 }
 
-impl GpuInstance {
+impl GpuDrawInstance {
     pub fn desc() -> wgpu::VertexBufferLayout<'static> {
         static ATTRIBUTES: &[wgpu::VertexAttribute] = &wgpu::vertex_attr_array![
             3 => Float32x4,
@@ -71,7 +71,7 @@ impl GpuInstance {
         ];
 
         wgpu::VertexBufferLayout {
-            array_stride: size_of::<GpuInstance>() as wgpu::BufferAddress,
+            array_stride: size_of::<GpuDrawInstance>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Instance,
             attributes: ATTRIBUTES,
         }

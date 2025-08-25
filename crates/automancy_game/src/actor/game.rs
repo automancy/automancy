@@ -105,7 +105,7 @@ impl GameActor {
 
             removed_data = Some(
                 tile.handle
-                    .call(|reply| TileMsg::TakeData(reply), None)
+                    .call(TileMsg::TakeData, None)
                     .await
                     .unwrap()
                     .unwrap(),
@@ -210,7 +210,8 @@ impl GameActor {
 
         self.insert_new_tile(myself.clone(), &mut game_data.map.tiles, coord, id)
             .await
-            .cast(TileMsg::SetData(data));
+            .cast(TileMsg::SetData(data))
+            .unwrap();
 
         removed_tile
     }
@@ -324,7 +325,12 @@ impl Actor for GameActor {
                 }
 
                 flat_tiles.into_par_iter().for_each(|(coord, (_, data))| {
-                    tiles[&coord].handle.cast(TileMsg::SetData(data));
+                    tiles
+                        .get(&coord)
+                        .unwrap()
+                        .handle
+                        .cast(TileMsg::SetData(data))
+                        .unwrap();
                 });
 
                 log::info!("Successfully loaded map {map_id}!");
@@ -474,7 +480,8 @@ impl Actor for GameActor {
                             for (coord, tile) in removed_tiles {
                                 let new_coord = coord + direction;
 
-                                self.place_tile(myself.clone(), game_data, new_coord, tile)
+                                let _ = self
+                                    .place_tile(myself.clone(), game_data, new_coord, tile)
                                     .await;
 
                                 undo.push(new_coord);
@@ -588,7 +595,7 @@ impl Actor for GameActor {
                     match **tile_error {
                         TileActorError::NonExistent(coord) => match &mut state.game_state {
                             GameState::Running(game_data) | GameState::Paused(game_data) => {
-                                self.remove_tile(game_data, coord).await;
+                                let _ = self.remove_tile(game_data, coord).await;
                             }
                             _ => {}
                         },
@@ -610,7 +617,7 @@ impl Actor for GameActor {
 pub fn try_category(resource_man: &ResourceManager, id: TileId, category_item: impl FnOnce(Id)) {
     if resource_man
         .registry
-        .tiles
+        .tile_defs
         .get(&id)
         .unwrap()
         .data
@@ -621,7 +628,7 @@ pub fn try_category(resource_man: &ResourceManager, id: TileId, category_item: i
 
     let Some(category) = resource_man
         .registry
-        .tiles
+        .tile_defs
         .get(&id)
         .and_then(|tile| tile.category)
     else {
@@ -630,7 +637,7 @@ pub fn try_category(resource_man: &ResourceManager, id: TileId, category_item: i
 
     let Some(item) = resource_man
         .registry
-        .categories
+        .categorie_defs
         .get(&category)
         .and_then(|category| category.item)
     else {
@@ -640,7 +647,7 @@ pub fn try_category(resource_man: &ResourceManager, id: TileId, category_item: i
     category_item(item);
 }
 
-// TODO replace this with a scripted function
+// TODO replace this with a script
 pub fn copy_auxiliary_data(resource_man: &ResourceManager, data: &DataMap) -> DataMap {
     let mut copied = DataMap::default();
 

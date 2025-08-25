@@ -53,13 +53,6 @@ pub fn ui_game_object(
 }
 
 #[derive(Debug, Clone)]
-pub struct GameObjectPaint {
-    pub props: GameObject,
-    pub clip_offset: Vec2,
-    pub clip_scale: Vec2,
-}
-
-#[derive(Debug, Clone)]
 pub struct GameObjectWidget {
     props: RefCell<Option<GameObject>>,
     clip: Cell<Rect>,

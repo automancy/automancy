@@ -1,6 +1,6 @@
 use std::{ffi::OsStr, fs::read_to_string, path::Path};
 
-use automancy_data::id::{Id, parse::parse_ids};
+use automancy_data::id::{Id, deserialize::StrId, parse::parse_ids};
 use hashbrown::HashSet;
 use serde::Deserialize;
 
@@ -24,8 +24,8 @@ impl TagDef {
 
 #[derive(Debug, Deserialize)]
 struct Raw {
-    pub id: String,
-    pub entries: Vec<String>,
+    pub id: StrId,
+    pub entries: Vec<StrId>,
 }
 
 impl ResourceManager {
@@ -34,13 +34,16 @@ impl ResourceManager {
 
         let v = ron::from_str::<Raw>(&read_to_string(file)?)?;
 
-        let id = Id::parse(&v.id, &mut self.interner, Some(namespace)).unwrap();
+        let id = v.id.into_id(&mut self.interner, Some(namespace))?;
 
-        self.registry.tags.insert(
+        self.registry.tag_defs.insert(
             id,
             TagDef {
                 id,
-                entries: parse_ids(v.entries.into_iter(), &mut self.interner, Some(namespace)),
+                entries: {
+                    parse_ids(v.entries.into_iter(), &mut self.interner, Some(namespace))
+                        .try_collect()?
+                },
             },
         );
 

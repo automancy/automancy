@@ -1,6 +1,6 @@
 use std::{ffi::OsStr, fs::read_to_string, path::Path};
 
-use automancy_data::id::{Id, ModelId};
+use automancy_data::id::{Id, ModelId, deserialize::StrId};
 use gltf;
 use log;
 use serde::Deserialize;
@@ -16,13 +16,13 @@ pub struct IndexRange {
 
 #[derive(Debug, Deserialize)]
 struct Raw {
-    pub id: String,
+    pub id: StrId,
     pub file: String,
 }
 
 impl ResourceManager {
     pub fn model_or_missing_tile(&self, id: &ModelId) -> ModelId {
-        if self.all_gltf_models.contains_key(id) {
+        if self.gltf_models.contains_key(id) {
             *id
         } else {
             ModelId(self.registry.model_ids.tile_missing)
@@ -30,7 +30,7 @@ impl ResourceManager {
     }
 
     pub fn model_or_missing_item(&self, id: &ModelId) -> ModelId {
-        if self.all_gltf_models.contains_key(id) {
+        if self.gltf_models.contains_key(id) {
             *id
         } else {
             ModelId(self.registry.model_ids.item_missing)
@@ -38,7 +38,7 @@ impl ResourceManager {
     }
 
     pub fn model_or_puzzle_space(&self, id: &ModelId) -> ModelId {
-        if self.all_gltf_models.contains_key(id) {
+        if self.gltf_models.contains_key(id) {
             *id
         } else {
             ModelId(self.registry.model_ids.puzzle_space)
@@ -46,30 +46,13 @@ impl ResourceManager {
     }
 
     pub fn item_model_or_missing(&self, id: &Id) -> ModelId {
-        if let Some(def) = self.registry.items.get(id) {
-            if self.all_gltf_models.contains_key(&def.model) {
-                return def.model;
-            }
+        if let Some(def) = self.registry.item_defs.get(id)
+            && self.gltf_models.contains_key(&def.model)
+        {
+            return def.model;
         }
 
         ModelId(self.registry.model_ids.item_missing)
-    }
-
-    pub fn mesh_or_missing_tile_mesh(
-        &self,
-        id: &ModelId,
-    ) -> (ModelId, &(Vec<Option<gltf::Mesh>>, Vec<gltf::Animation>)) {
-        self.all_gltf_models
-            .get(id)
-            .map(|v| (*id, v))
-            .unwrap_or_else(|| {
-                (
-                    ModelId(self.registry.model_ids.tile_missing),
-                    self.all_gltf_models
-                        .get(&ModelId(self.registry.model_ids.tile_missing))
-                        .expect("'missing tile' model is missing from namespace core"),
-                )
-            })
     }
 
     fn load_model(&mut self, file: &Path, namespace: &str) -> anyhow::Result<()> {
@@ -83,10 +66,9 @@ impl ResourceManager {
 
         let (document, buffers, _images) = gltf::import(file)?;
 
-        let id = Id::parse(&v.id, &mut self.interner, Some(namespace)).unwrap();
+        let id = v.id.into_id(&mut self.interner, Some(namespace))?;
 
-        self.all_gltf_models
-            .insert(ModelId(id), (document, buffers));
+        self.gltf_models.insert(ModelId(id), (document, buffers));
 
         Ok(())
     }
@@ -100,61 +82,4 @@ impl ResourceManager {
 
         Ok(())
     }
-
-    /*
-    pub fn compile_models(&mut self) -> (Vec<GpuVertex>, Vec<u16>) {
-        let mut vertices = vec![];
-        let mut indices = HashMap::new();
-
-        let mut base_vertex_count = 0;
-        self.all_meshes_anims
-            .iter_mut()
-            .for_each(|(id, (model, _))| {
-                model.iter_mut().flatten().for_each(|mesh| {
-                    indices.entry(*id).or_insert_with(Vec::new).push((
-                        mesh.index,
-                        mem::take(&mut mesh.indices),
-                        base_vertex_count,
-                    ));
-
-                    base_vertex_count += mesh.vertices.len() as i32;
-
-                    vertices.append(&mut mesh.vertices);
-                });
-            });
-
-        let mut offset_count = 0;
-
-        self.all_index_ranges = indices
-            .iter()
-            .map(|(id, indices)| {
-                let ranges = indices
-                    .iter()
-                    .map(|(index, v, base_vertex)| {
-                        let size = v.len() as u32;
-
-                        let range = IndexRange {
-                            pos: offset_count,
-                            count: size,
-                            base_vertex: *base_vertex,
-                        };
-
-                        offset_count += size;
-
-                        (*index, range)
-                    })
-                    .collect::<HashMap<_, _>>();
-
-                (*id, ranges)
-            })
-            .collect::<HashMap<_, _>>();
-
-        let indices = indices
-            .into_iter()
-            .flat_map(|(_, indices)| indices.into_iter().flat_map(move |v| v.1))
-            .collect();
-
-        (vertices, indices)
-    }
-     */
 }

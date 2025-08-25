@@ -2,11 +2,12 @@ use std::{ffi::OsStr, fs::read_to_string, path::Path};
 
 use automancy_data::{
     game::{
-        generic::{DataMap, serailize::DataMapRaw},
-        item::{ItemAmount, ItemStack},
+        generic::{DataMap, deserialize::DataMapStr},
+        item::{ItemStack, deserialize::ItemStackStr},
     },
     id::{
         Id, ModelId, TileId,
+        deserialize::{StrId, StrIdExt},
         parse::{parse_ids, parse_item_stacks},
     },
 };
@@ -31,16 +32,16 @@ pub struct ResearchDef {
 
 #[derive(Debug, Deserialize)]
 struct Raw {
-    id: String,
-    icon: String,
+    id: StrId,
+    icon: StrId,
     icon_mode: IconMode,
-    unlocks: Vec<String>,
-    depends_on: Option<String>,
-    name: String,
-    description: String,
-    completed_description: String,
-    required_items: Option<Vec<(String, ItemAmount)>>,
-    attached_puzzle: Option<(String, DataMapRaw)>,
+    unlocks: Vec<StrId>,
+    depends_on: Option<StrId>,
+    name: StrId,
+    description: StrId,
+    completed_description: StrId,
+    required_items: Option<Vec<ItemStackStr>>,
+    attached_puzzle: Option<(StrId, DataMapStr)>,
 }
 
 impl ResourceManager {
@@ -49,43 +50,44 @@ impl ResourceManager {
 
         let v = ron::from_str::<Raw>(&read_to_string(file)?)?;
 
-        let id = Id::parse(&v.id, &mut self.interner, Some(namespace)).unwrap();
+        let id = v.id.into_id(&mut self.interner, Some(namespace))?;
 
-        let unlocks: Vec<Id> =
-            parse_ids(v.unlocks.into_iter(), &mut self.interner, Some(namespace));
+        let unlocks = parse_ids(v.unlocks.into_iter(), &mut self.interner, Some(namespace))
+            .map(|v| v.map(TileId))
+            .try_collect()?;
 
-        let icon = Id::parse(&v.icon, &mut self.interner, Some(namespace)).unwrap();
+        let icon = v.icon.into_id(&mut self.interner, Some(namespace))?;
 
-        let depends_on = v
-            .depends_on
-            .map(|v| Id::parse(&v, &mut self.interner, Some(namespace)).unwrap());
+        let depends_on = v.depends_on.into_id(&mut self.interner, Some(namespace))?;
 
-        let name = Id::parse(&v.name, &mut self.interner, Some(namespace)).unwrap();
+        let name = v.name.into_id(&mut self.interner, Some(namespace))?;
 
-        let description = Id::parse(&v.description, &mut self.interner, Some(namespace)).unwrap();
+        let description = v.description.into_id(&mut self.interner, Some(namespace))?;
 
-        let completed_description = Id::parse(
-            &v.completed_description,
-            &mut self.interner,
-            Some(namespace),
-        )
-        .unwrap();
+        let completed_description = v
+            .completed_description
+            .into_id(&mut self.interner, Some(namespace))?;
 
-        let required_items = v
-            .required_items
-            .map(|v| parse_item_stacks(v.into_iter(), &mut self.interner, Some(namespace)));
+        let required_items = match v.required_items {
+            Some(v) => Some(
+                parse_item_stacks(v.into_iter(), &mut self.interner, Some(namespace))
+                    .try_collect()?,
+            ),
+            None => None,
+        };
 
-        let attached_puzzle = v.attached_puzzle.map(|(id, data)| {
-            (
-                Id::parse(&id, &mut self.interner, Some(namespace)).unwrap(),
-                data.intern_to_data(&mut self.interner, Some(namespace)),
-            )
-        });
+        let attached_puzzle = match v.attached_puzzle {
+            Some((id, data)) => Some((
+                id.into_id(&mut self.interner, Some(namespace))?,
+                data.into_data(&mut self.interner, Some(namespace))?,
+            )),
+            None => None,
+        };
         let icon_mode = v.icon_mode;
 
-        let index = self.registry.researches.add_node(ResearchDef {
+        let index = self.registry.researche_defs.add_node(ResearchDef {
             id,
-            unlocks: unlocks.into_iter().map(TileId).collect(),
+            unlocks,
             depends_on,
             icon: ModelId(icon),
             name,
@@ -98,7 +100,13 @@ impl ResourceManager {
 
         self.registry.researches_id_map.insert(id, index);
 
-        for unlock in &self.registry.researches.node_weight(index).unwrap().unlocks {
+        for unlock in &self
+            .registry
+            .researche_defs
+            .node_weight(index)
+            .unwrap()
+            .unlocks
+        {
             if self
                 .registry
                 .researches_unlock_map
@@ -130,22 +138,22 @@ impl ResourceManager {
         self.registry
             .researches_id_map
             .get(&id)
-            .and_then(|i| self.registry.researches.node_weight(*i))
+            .and_then(|i| self.registry.researche_defs.node_weight(*i))
     }
 
     pub fn get_research_by_unlock(&self, id: TileId) -> Option<&ResearchDef> {
         self.registry
             .researches_unlock_map
             .get(&id)
-            .and_then(|i| self.registry.researches.node_weight(*i))
+            .and_then(|i| self.registry.researche_defs.node_weight(*i))
     }
 
     pub fn compile_researches(&mut self) {
-        for (this, research) in self.registry.researches.clone().node_references() {
-            if let Some(prev) = &research.depends_on {
-                if let Some(prev) = self.registry.researches_id_map.get(prev).cloned() {
-                    self.registry.researches.add_edge(prev, this, ());
-                }
+        for (this, research) in self.registry.researche_defs.clone().node_references() {
+            if let Some(prev) = &research.depends_on
+                && let Some(prev) = self.registry.researches_id_map.get(prev).cloned()
+            {
+                self.registry.researche_defs.add_edge(prev, this, ());
             }
         }
     }
@@ -161,7 +169,7 @@ impl ResourceManager {
     }
 
     pub fn should_category_show(&self, category: Id, game_data: &mut DataMap) -> bool {
-        let Some(category) = self.registry.categories.get(&category) else {
+        let Some(category) = self.registry.categorie_defs.get(&category) else {
             return false;
         };
 
@@ -170,7 +178,7 @@ impl ResourceManager {
         };
 
         if tiles.iter().any(|id| {
-            self.registry.tiles[id]
+            self.registry.tile_defs[id]
                 .data
                 .bool_or_default(self.registry.data_ids.default_tile, false)
         }) {

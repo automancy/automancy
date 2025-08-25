@@ -4,7 +4,7 @@ use rhai::{Engine, Module, exported_module, plugin::*};
 use crate::resources::{ResourceManager, types::item::ItemDef};
 
 fn item_match(resource_man: &ResourceManager, id: Id, other: Id) -> bool {
-    if let Some(tag) = resource_man.registry.tags.get(&other) {
+    if let Some(tag) = resource_man.registry.tag_defs.get(&other) {
         return tag.of(&resource_man.registry, id);
     }
 
@@ -77,6 +77,6 @@ mod utils {
     }
 }
 
-pub(crate) fn register_functions(engine: &mut Engine) {
+pub(crate) fn register_script_stuff(engine: &mut Engine) {
     engine.register_global_module(exported_module!(utils).into());
 }

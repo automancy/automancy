@@ -1,6 +1,12 @@
 use std::{ffi::OsStr, fs::read_to_string, path::Path};
 
-use automancy_data::id::{Id, TileId};
+use automancy_data::{
+    id::{
+        Id, TileId,
+        deserialize::{StrId, StrIdExt},
+    },
+    math::Int,
+};
 use hashbrown::HashMap;
 use serde::Deserialize;
 
@@ -9,7 +15,7 @@ use crate::resources::{RON_EXT, ResourceManager, load_recursively, types::IconMo
 #[derive(Debug, Clone, Copy)]
 pub struct CategoryDef {
     pub id: Id,
-    pub ord: i32,
+    pub ord: Int,
     pub icon: Id,
     pub icon_mode: IconMode,
     pub item: Option<Id>,
@@ -17,11 +23,11 @@ pub struct CategoryDef {
 
 #[derive(Debug, Deserialize)]
 struct Raw {
-    pub id: String,
-    pub ord: i32,
-    pub icon: String,
+    pub id: StrId,
+    pub ord: Int,
+    pub icon: StrId,
     pub icon_mode: IconMode,
-    pub item: Option<String>,
+    pub item: Option<StrId>,
 }
 
 impl ResourceManager {
@@ -30,15 +36,13 @@ impl ResourceManager {
 
         let v = ron::from_str::<Raw>(&read_to_string(file)?)?;
 
-        let id = Id::parse(&v.id, &mut self.interner, Some(namespace)).unwrap();
+        let id = v.id.into_id(&mut self.interner, Some(namespace))?;
         let ord = v.ord;
-        let icon = Id::parse(&v.icon, &mut self.interner, Some(namespace)).unwrap();
+        let icon = v.icon.into_id(&mut self.interner, Some(namespace))?;
         let icon_mode = v.icon_mode;
-        let item = v
-            .item
-            .map(|v| Id::parse(&v, &mut self.interner, Some(namespace)).unwrap());
+        let item = v.item.into_id(&mut self.interner, Some(namespace))?;
 
-        self.registry.categories.insert(
+        self.registry.categorie_defs.insert(
             id,
             CategoryDef {
                 id,
@@ -63,13 +67,18 @@ impl ResourceManager {
     }
 
     pub fn compile_categories(&mut self) {
-        let mut ids = self.registry.categories.keys().cloned().collect::<Vec<_>>();
+        let mut ids = self
+            .registry
+            .categorie_defs
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
 
-        ids.sort_by_key(|v| self.registry.categories[v].ord);
+        ids.sort_by_key(|v| self.registry.categorie_defs[v].ord);
 
         let mut categories_tiles_map = HashMap::new();
 
-        for tile in self.registry.tiles.values() {
+        for tile in self.registry.tile_defs.values() {
             if let Some(category) = tile.category {
                 categories_tiles_map
                     .entry(category)
