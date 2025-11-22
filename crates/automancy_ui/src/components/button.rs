@@ -1,10 +1,10 @@
-use crate::{colored_label_text, label_text, symbol_text, ROUNDED_MEDIUM};
-use automancy_defs::colors;
+use automancy_data::colors;
 use yakui::{
-    opaque,
+    Color, Response, opaque,
     widgets::{Button, ButtonResponse, DynamicButtonStyle, Pad, Text},
-    Color, Response,
 };
+
+use crate::{ROUNDED_MEDIUM, colored_label_text, label_text, symbol_text};
 
 pub fn button_styled(text: Text, padding: Pad) -> Button {
     let mut button = Button::unstyled(text.text);

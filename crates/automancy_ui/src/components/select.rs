@@ -1,12 +1,12 @@
-use crate::{
-    button, center_row, col, interactive, scroll_vertical_bar_alignment, InteractiveResponse,
-    RoundRect, PADDING_MEDIUM,
-};
-use automancy_defs::colors;
+use automancy_data::colors;
 use yakui::{
-    colored_circle, reflow, use_state,
+    Alignment, Dim2, Pivot, Response, Vec2, colored_circle, reflow, use_state,
     widgets::{ButtonResponse, Circle, Layer, Pad},
-    Alignment, Dim2, Pivot, Response, Vec2,
+};
+
+use crate::{
+    InteractiveResponse, PADDING_MEDIUM, RoundRect, button, center_row, col, interactive,
+    scroll_vertical_bar_alignment,
 };
 
 #[track_caller]
@@ -24,8 +24,8 @@ pub fn selection_box<T: Clone + Eq, S: AsRef<str>>(
         }
 
         if open.get() {
-            reflow(Alignment::BOTTOM_LEFT, Pivot::TOP_LEFT, Dim2::ZERO, || {
-                Layer::new().show(|| {
+            Layer::new().show(|| {
+                reflow(Alignment::BOTTOM_LEFT, Pivot::TOP_LEFT, Dim2::ZERO, || {
                     RoundRect::new(8.0, colors::BACKGROUND_1).show_children(|| {
                         scroll_vertical_bar_alignment(
                             Vec2::ZERO,

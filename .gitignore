@@ -1,16 +1,19 @@
 **/target
 
-__pycache__
-.idea/
+/__pycache__
+/.idea
+/.direnv
 
-map
-options.ron
-misc_options.ron
-rhai
+/map
+/rhai
+/result
 
-.direnv
-result
+/options.ron
+/misc_options.ron
 
 /flamegraph.svg
 /perf.data
 /perf.data.old
+/log.txt
+
+/.env

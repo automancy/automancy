@@ -1,14 +1,14 @@
-use crate::parse_literal;
-use proc_macro2::TokenStream;
-use proc_macro2::{Literal, Span};
+use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
 use syn::Ident;
+
+use crate::parse_literal;
 
 /// # Examples
 ///
 /// ```
 /// use automancy_macros::IdReg;
-/// use automancy_defs::id::Id;
+/// use automancy_data::id::Id;
 ///
 /// #[derive(IdReg)]
 /// pub struct FooIds {
@@ -45,21 +45,14 @@ pub fn derive_id_reg(item: TokenStream) -> TokenStream {
                     let mut iter = field.attrs.iter();
                     let attrs @ [a, b] = [iter.next(), iter.next()];
 
-                    let [a_ident, b_ident] =
-                        attrs.map(|v| v.and_then(|v| v.path().get_ident().cloned()));
+                    let [a_ident, b_ident] = attrs.map(|v| v.and_then(|v| v.path().get_ident().cloned()));
 
                     let name = field.ident.clone().unwrap();
 
                     namespaces.push(if Some(&namespace_lit) == a_ident.as_ref() {
-                        (
-                            name.clone(),
-                            parse_literal(a.unwrap()).into_iter().next().unwrap(),
-                        )
+                        (name.clone(), parse_literal(a.unwrap()).into_iter().next().unwrap())
                     } else if Some(&namespace_lit) == b_ident.as_ref() {
-                        (
-                            name.clone(),
-                            parse_literal(b.unwrap()).into_iter().next().unwrap(),
-                        )
+                        (name.clone(), parse_literal(b.unwrap()).into_iter().next().unwrap())
                     } else {
                         (name.clone(), Literal::string("automancy"))
                     });
@@ -73,9 +66,9 @@ pub fn derive_id_reg(item: TokenStream) -> TokenStream {
                     });
                 }
             }
-            _ => panic!("must be a struct with named fields"),
+            _ => panic!("IdReg must be a struct with named fields"),
         },
-        _ => panic!("must be a struct"),
+        _ => panic!("IdReg must be a struct"),
     }
 
     let name = ast.ident;
@@ -85,14 +78,14 @@ pub fn derive_id_reg(item: TokenStream) -> TokenStream {
         .zip(names)
         .flat_map(|((field, namespace), name)| {
             quote! {
-                #field: automancy_defs::id::IdRaw::new(#namespace, #name).to_id(interner),
+                #field: automancy_data::id::deserialize::StrId::new(#namespace, #name).into_id(interner, None).unwrap(),
             }
         })
         .collect::<TokenStream>();
 
     quote! {
         impl #name {
-            pub fn new(interner: &mut automancy_defs::id::Interner) -> Self {
+            pub fn new(interner: &mut automancy_data::id::Interner) -> Self {
                 Self {
                     #items
                 }

@@ -1,8 +1,9 @@
-use crate::GameState;
-use automancy_defs::colors::BACKGROUND_3;
-use automancy_ui::{col, label, movable, window, DIVIER_HEIGHT, DIVIER_THICKNESS};
+use automancy_data::colors::BACKGROUND_3;
+use automancy_ui::{DIVIER_HEIGHT, DIVIER_THICKNESS, col, label, movable, window};
 use ron::ser::PrettyConfig;
 use yakui::{divider, widgets::Layer};
+
+use crate::GameState;
 
 /// Draws the debug menu (F3).
 pub fn debugger(state: &mut GameState) {
@@ -11,8 +12,8 @@ pub fn debugger(state: &mut GameState) {
     let reg_tiles = state.resource_man.registry.tiles.len();
     let reg_items = state.resource_man.registry.items.len();
     let tags = state.resource_man.registry.tags.len();
-    let functions = state.resource_man.functions.len();
-    let scripts = state.resource_man.registry.scripts.len();
+    let scripts = state.resource_man.scripts.len();
+    let recipes = state.resource_man.registry.recipes.len();
     let audio = state.resource_man.audio.len();
     let meshes = state.resource_man.all_meshes_anims.len();
 
@@ -34,7 +35,7 @@ pub fn debugger(state: &mut GameState) {
                         label(&format!("FPS: {fps:.1}"));
                         label(&format!(
                             "WGPU: {}",
-                            ron::ser::to_string_pretty(
+                            persistent::ron::ron_options().to_string_pretty(
                                 &state.renderer.as_ref().unwrap().gpu.adapter_info,
                                 PrettyConfig::default()
                             )
@@ -43,7 +44,7 @@ pub fn debugger(state: &mut GameState) {
 
                         divider(BACKGROUND_3, DIVIER_HEIGHT, DIVIER_THICKNESS);
 
-                        label(&format!("ResourceMan: Tiles={reg_tiles} Items={reg_items} Tags={tags} Functions={functions} Scripts={scripts} Audio={audio} Meshes={meshes}"));
+                        label(&format!("ResourceMan: Tiles={reg_tiles} Items={reg_items} Tags={tags} Scripts={scripts} Recipes={recipes} Audio={audio} Meshes={meshes}"));
 
                         divider(BACKGROUND_3, DIVIER_HEIGHT, DIVIER_THICKNESS);
 
@@ -51,7 +52,7 @@ pub fn debugger(state: &mut GameState) {
                         label(&format!("Save Time: {:?}", &map_info.save_time));
                         label(&format!(
                             "Info: {}",
-                            &ron::ser::to_string_pretty(
+                            persistent::ron::ron_options().to_string_pretty(
                                 &map_info.data.to_raw(&state.resource_man.interner),
                                 PrettyConfig::default(),
                             )

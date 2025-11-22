@@ -1,15 +1,14 @@
-use automancy_defs::colors;
-use yakui::widget::{EventContext, LayoutContext, PaintContext, Widget};
-use yakui::Response;
+use automancy_data::colors;
 use yakui::{
+    Response,
     event::{EventInterest, EventResponse, WidgetEvent},
-    util::widget,
-};
-use yakui::{
     geometry::{Constraints, Vec2},
+    input::MouseButton,
+    shapes,
     shapes::RoundedRectangle,
+    util::widget,
+    widget::{EventContext, LayoutContext, PaintContext, Widget},
 };
-use yakui::{input::MouseButton, shapes};
 
 const OUTER_SIZE: f32 = 24.0;
 const INNER_SIZE: f32 = 16.0;

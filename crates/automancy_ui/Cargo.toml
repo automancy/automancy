@@ -3,30 +3,31 @@ name = "automancy_ui"
 version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
+license = { workspace = true }
 
 [dependencies]
 automancy_macros = { workspace = true }
-automancy_defs = { workspace = true }
-automancy_resources = { workspace = true }
-automancy_system = { workspace = true }
 
-serde = { workspace = true }
+# logging
+log = { workspace = true }
+
+# parsing / data mangling / math / files
 ron = { workspace = true }
+serde = { workspace = true }
 
+# specialized data storage types
+hashbrown = { workspace = true }
+
+# rendering / windowing
 wgpu = { workspace = true }
-
 winit = { workspace = true }
 
+# user input / user interface
+cosmic-text = { workspace = true }
 yakui = { workspace = true }
 yakui-wgpu = { workspace = true }
 yakui-winit = { workspace = true }
-cosmic-text = { workspace = true }
-crunch = { workspace = true }
 
-log = { workspace = true }
-
-hashbrown = { workspace = true }
-
+# scripting / game logic / async runtime
 rhai = { workspace = true }
-
 tokio = { workspace = true }

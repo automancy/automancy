@@ -1,4 +1,4 @@
-use automancy_defs::math::Float;
+use automancy_data::math::Float;
 
 pub static SYMBOLS_FONT: &[u8] = include_bytes!("assets/SymbolsNerdFont-Regular.ttf");
 pub static SYMBOLS_FONT_KEY: &str = "Symbols Nerd Font Mono";
@@ -10,5 +10,7 @@ pub const LARGE_ICON_SIZE: Float = 96.0;
 
 pub const ROUNDED_MEDIUM: f32 = 6.0;
 
-mod components;
+pub(crate) mod components;
 pub use self::components::*;
+
+pub mod custom;

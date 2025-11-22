@@ -1,11 +1,14 @@
-use std::env::current_dir;
-use std::ffi::OsStr;
-use std::fs::metadata;
-use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::str;
-use std::str::FromStr;
-use std::thread;
+use std::{
+    env::current_dir,
+    ffi::OsStr,
+    fs::metadata,
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
+    str,
+    str::FromStr,
+    thread,
+};
+
 use walkdir::WalkDir;
 
 fn load_recursively(path: &Path, extension: &OsStr) -> Vec<PathBuf> {
@@ -34,18 +37,11 @@ fn file_check(path: &Path, out_path: &Path) -> bool {
         return true;
     };
 
-    !out_path.is_file()
-        || in_meta
-            .modified()
-            .and_then(|m| Ok(out_meta.modified()? < m))
-            .unwrap_or(true)
+    !out_path.is_file() || in_meta.modified().and_then(|m| Ok(out_meta.modified()? < m)).unwrap_or(true)
 }
 
 fn main() {
-    println!(
-        "Build script running in {:?}",
-        current_dir().unwrap().canonicalize().unwrap()
-    );
+    println!("Build script running in {:?}.", current_dir().unwrap().canonicalize().unwrap());
 
     if Command::new("blender").arg("--help").output().is_err() {
         println!("\n\n==============");
@@ -55,6 +51,7 @@ fn main() {
         panic!()
     }
 
+    let mut job_counter = 0;
     let resources = Path::new("resources/");
 
     // SVG blender runs (parallel)
@@ -65,20 +62,13 @@ fn main() {
         if file_check(&svg_path, &out_path) {
             svg_handles.push(thread::spawn(move || {
                 let output = Command::new("blender")
-                    .args([
-                        "--background",
-                        "--python-exit-code",
-                        "1",
-                        "--python",
-                        "scripts/export_svg.py",
-                        "--",
-                    ])
+                    .args(["--background", "--python-exit-code", "1", "--python", "scripts/export_svg.py", "--"])
                     .arg(svg_path)
                     .arg(out_path)
                     .stdout(Stdio::piped())
                     .stderr(Stdio::piped())
                     .spawn()
-                    .expect("blender processing couldn't start")
+                    .unwrap()
                     .wait_with_output()
                     .unwrap();
                 println!("{}", str::from_utf8(&output.stdout).unwrap());
@@ -97,6 +87,7 @@ fn main() {
         if handle.join().is_err() {
             panic!("Issue with svg to blend.");
         }
+        job_counter += 1;
     }
 
     // Model blender runs (parallel)
@@ -108,19 +99,12 @@ fn main() {
             model_handles.push(thread::spawn(move || {
                 let output = Command::new("blender")
                     .arg(blend_path)
-                    .args([
-                        "--background",
-                        "--python-exit-code",
-                        "1",
-                        "--python",
-                        "scripts/export_blender.py",
-                        "--",
-                    ])
+                    .args(["--background", "--python-exit-code", "1", "--python", "scripts/export_blender.py", "--"])
                     .arg(out_path)
                     .stdout(Stdio::piped())
                     .stderr(Stdio::piped())
                     .spawn()
-                    .expect("blender processing couldn't start")
+                    .unwrap()
                     .wait_with_output()
                     .unwrap();
                 println!("{}", str::from_utf8(&output.stdout).unwrap());
@@ -140,5 +124,13 @@ fn main() {
         if handle.join().is_err() {
             panic!("Issue with blend to gltf.");
         }
+        job_counter += 1;
     }
+
+    let job_status = if job_counter == 0 {
+        "No jobs done.".to_string()
+    } else {
+        format!("Jobs done: {}.", job_counter)
+    };
+    println!("Build script finished! ({})", job_status);
 }

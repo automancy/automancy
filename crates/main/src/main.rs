@@ -1,242 +1,235 @@
 #![windows_subsystem = "windows"]
-use automancy_lib::*;
 
-use camera::GameCamera;
-use color_eyre::config::HookBuilder;
-use cosmic_text::fontdb::Source;
-use game::{GameSystem, GameSystemMessage, TICK_INTERVAL};
-use glam::uvec2;
-use gpu::Gpu;
-use input::InputHandler;
-use kira::manager::{AudioManager, AudioManagerSettings};
-use kira::track::{TrackBuilder, TrackHandle};
-use kira::tween::Tween;
-use map::LoadMapOption;
-use options::{GameOptions, MiscOptions};
+use std::{
+    borrow::Cow,
+    env,
+    fs::File,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+
+use automancy_data::math::{UVec2, Vec2};
+use automancy_game::{
+    actor::{
+        game::{GameActor, TICK_INTERVAL},
+        message::GameMsg,
+    },
+    input::{InputHandler, camera::GameCamera},
+    persistent::{
+        map::GameMapId,
+        options::{GameOptions, MiscOptions},
+    },
+    state::{AutomancyGameState, GameDataStorage, ui::UiState},
+};
+use automancy_lib::integration::{self, WindowExt};
+use automancy_rendering::{
+    gpu,
+    gpu::RenderResources,
+    renderer::{AutomancyRenderState, AutomancyRendering},
+};
+use kira::{AudioManager, AudioManagerSettings, Tween, track::TrackBuilder};
 use ractor::Actor;
-use renderer::GameRenderer;
-use rendering::Vertex;
-use rfd::{MessageButtons, MessageDialog, MessageLevel};
-use std::fmt::Write;
-use std::fs::File;
-use std::path::Path;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-use std::{env, fs, panic};
 use tokio::runtime::Runtime;
-use ui_state::UiState;
-use uuid::Uuid;
 use winit::{
     application::ApplicationHandler,
-    event::{DeviceEvent, DeviceId, WindowEvent},
+    dpi::PhysicalSize,
+    event::{DeviceEvent, DeviceId, Event, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
-    window::WindowId,
+    window::{Window, WindowId},
 };
-use winit::{dpi::PhysicalSize, window::Window};
-use winit::{
-    event::Event,
-    window::{Fullscreen, Icon},
-};
-use yakui::paint::{Texture, TextureFilter};
 
-pub static LOGO: &[u8] = include_bytes!("logo.png");
+mod panic;
+mod util;
 
-/// Initialize the Resource Manager system, and loads all the resources in all namespaces.
-fn load_resources(
-    selected_language: &str,
-    track: TrackHandle,
-) -> (Arc<ResourceManager>, Vec<Vertex>, Vec<u16>) {
-    let mut resource_man = ResourceManager::new(track);
+#[cfg(debug_assertions)]
+mod debug;
+#[cfg(debug_assertions)]
+use debug::*;
 
-    fs::read_dir(RESOURCES_PATH)
-        .expect("The resources folder doesn't exist- this is very wrong")
-        .flatten()
-        .map(|v| v.path())
-        .filter(|v| v.is_dir())
-        .for_each(|dir| {
-            let namespace = dir.file_name().unwrap().to_str().unwrap().trim();
-            log::info!("Loading namespace {namespace}...");
+fn prepare_screenshot(res: &RenderResources, encoder: &mut wgpu::CommandEncoder, surface_size: wgpu::Extent3d) -> wgpu::Buffer {
+    let screenshot_pixel_data_size = gpu::util::copy_texture_size(surface_size, gpu::SCREENSHOT_FORMAT, gpu::SCREENSHOT_PIXEL_SIZE);
 
-            resource_man
-                .load_models(&dir, namespace)
-                .expect("Error loading models");
+    let buffer_size = gpu::util::pixel_data_buffer_size(screenshot_pixel_data_size);
 
-            resource_man.load_audio(&dir).expect("Error loading audio");
+    let texture = res.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("Screenshot Texture"),
+        size: surface_size,
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: gpu::SCREENSHOT_FORMAT,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
 
-            resource_man
-                .load_tiles(&dir, namespace)
-                .expect("Error loading tiles");
+    let buffer = res.device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("Screenshot Buffer"),
+        size: buffer_size,
+        usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
 
-            resource_man
-                .load_items(&dir, namespace)
-                .expect("Error loading items");
+    wgpu::util::TextureBlitter::new(&res.device, gpu::SCREENSHOT_FORMAT).copy(
+        &res.device,
+        encoder,
+        &res.present_res.present_texture.create_view(&wgpu::TextureViewDescriptor::default()),
+        &texture.create_view(&wgpu::TextureViewDescriptor::default()),
+    );
 
-            resource_man
-                .load_tags(&dir, namespace)
-                .expect("Error loading tags");
-            resource_man
-                .load_categories(&dir, namespace)
-                .expect("Error loading categories");
+    encoder.copy_texture_to_buffer(
+        texture.as_image_copy(),
+        wgpu::TexelCopyBufferInfo {
+            buffer: &buffer,
+            layout: wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(screenshot_pixel_data_size.width),
+                rows_per_image: Some(screenshot_pixel_data_size.height),
+            },
+        },
+        surface_size,
+    );
 
-            resource_man
-                .load_scripts(&dir, namespace)
-                .expect("Error loading scripts");
+    buffer
+}
 
-            resource_man
-                .load_translates(&dir, namespace, selected_language)
-                .expect("Error loading translates");
+fn copy_screenshot_to_clipboard(
+    res: &RenderResources,
+    screenshot_buffer: wgpu::Buffer,
+    surface_size: wgpu::Extent3d,
+    clipboard: &mut arboard::Clipboard,
+) {
+    let screenshot_pixel_data_size = gpu::util::copy_texture_size(surface_size, gpu::SCREENSHOT_FORMAT, gpu::SCREENSHOT_PIXEL_SIZE);
 
-            resource_man
-                .load_shaders(&dir)
-                .expect("Error loading shaders");
+    let slice = screenshot_buffer.slice(..);
+    slice.map_async(wgpu::MapMode::Read, move |result| {
+        result.unwrap();
+    });
+    res.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
 
-            resource_man.load_fonts(&dir).expect("Error loading fonts");
+    let padded_data = slice.get_mapped_range().to_vec();
+    let mut data = Vec::new();
 
-            resource_man
-                .load_functions(&dir, namespace)
-                .expect("Error loading functions");
+    let padded_width = (screenshot_pixel_data_size.width) as usize;
+    let unpadded_width = (surface_size.width * gpu::SCREENSHOT_PIXEL_SIZE) as usize;
 
-            resource_man
-                .load_researches(&dir, namespace)
-                .expect("Error loading researches");
+    #[cfg(debug_assertions)]
+    let mut count = 0u32;
 
-            log::info!("Loaded namespace {namespace}.");
-        });
+    for chunk in padded_data.chunks(padded_width) {
+        data.extend(&chunk[..unpadded_width]);
 
-    resource_man
-        .engine
-        .definitions()
-        .with_headers(true)
-        .include_standard_packages(false)
-        .write_to_dir("rhai")
+        #[cfg(debug_assertions)]
+        {
+            count += 1;
+        }
+    }
+
+    #[cfg(debug_assertions)]
+    debug_assert_eq!(count, surface_size.height);
+
+    clipboard
+        .set_image(arboard::ImageData {
+            width: surface_size.width as usize,
+            height: surface_size.height as usize,
+            bytes: Cow::Owned(data),
+        })
         .unwrap();
-
-    resource_man.compile_researches();
-    resource_man.ordered_tiles();
-    resource_man.ordered_items();
-    resource_man.compile_categories();
-
-    let (vertices, indices) = resource_man.compile_models();
-
-    (Arc::new(resource_man), vertices, indices)
-}
-
-/// Gets the game icon.
-fn get_icon() -> Icon {
-    let image = image::load_from_memory(LOGO).unwrap().to_rgba8();
-    let width = image.width();
-    let height = image.height();
-
-    let samples = image.into_flat_samples().samples;
-    Icon::from_rgba(samples, width, height).unwrap()
-}
-
-fn write_msg<P: AsRef<Path>>(buffer: &mut impl Write, file_path: P) -> std::fmt::Result {
-    writeln!(buffer, "Well, this is embarrassing.\n")?;
-    writeln!(
-        buffer,
-        "automancy had a problem and crashed. To help us diagnose the problem you can send us a crash report.\n"
-    )?;
-    writeln!(
-        buffer,
-        "We have generated a report file at\nfile://{}\n\nSubmit an issue or tag us on Fedi/Discord and include the report as an attachment.\n",
-        file_path.as_ref().display(),
-    )?;
-
-    writeln!(buffer, "- Git: https://github.com/automancy/automancy")?;
-    writeln!(buffer, "- Fedi(Mastodon): https://gamedev.lgbt/@automancy")?;
-    writeln!(buffer, "- Discord: https://discord.gg/ee9XebxNaa")?;
-
-    writeln!(
-        buffer,
-        "\nAlternatively, send an email to the main developer Madeline Sparkles (madeline@mouse.lgbt) directly.\n"
-    )?;
-
-    writeln!(
-        buffer,
-        "We take privacy seriously, and do not perform any automated error collection. In order to improve the software, we rely on people to submit reports.\n"
-    )?;
-    writeln!(buffer, "Thank you kindly!")?;
-
-    Ok(())
 }
 
 struct Automancy {
-    state: GameState,
     window: Option<Arc<Window>>,
-    fps_limit: Option<i32>,
+    game_state: AutomancyGameState,
+    render_state: AutomancyRenderState,
+    render: Option<AutomancyRendering>,
+
+    clipboard: arboard::Clipboard,
+
     closed: bool,
+
+    #[cfg(debug_assertions)]
+    debug_console_state: Option<DebugConsoleState>,
 }
 
 impl Automancy {
     fn try_sync_options(&mut self) {
-        if !self.state.options.synced {
+        if !self.game_state.options.synced {
             {
                 let font = self
-                    .state
+                    .game_state
                     .resource_man
                     .fonts
                     .get(
                         &self
-                            .state
+                            .game_state
                             .options
                             .gui
-                            .get_font(&self.state.resource_man)
-                            .expect("no fonts loaded!"),
+                            .get_font(&self.game_state.resource_man)
+                            .expect("the specified font should be loaded"),
                     )
                     .or_else(|| {
-                        self.state
-                            .options
-                            .gui
-                            .set_font(&self.state.resource_man, None);
+                        self.game_state.options.gui.set_font(&self.game_state.resource_man, None);
 
-                        self.state.resource_man.fonts.values().next()
+                        self.game_state.resource_man.fonts.values().next()
                     })
-                    .expect("no fonts loaded! at all! put one in there!");
+                    .expect("no fonts loaded at all, at least one font needs to be present");
 
-                self.state.gui.as_mut().unwrap().set_font(
+                /*
+                self.game_state.gui.as_mut().unwrap().set_font(
                     SYMBOLS_FONT_KEY,
                     &font.name,
                     Source::Binary(font.data.clone()),
                 );
+                 */
             }
 
-            self.state
+            self.game_state
                 .audio_man
                 .main_track()
-                .set_volume(self.state.options.audio.sfx_volume, Tween::default());
+                .set_volume(self.game_state.options.audio.sfx_volume, Tween::default());
 
-            self.state
-                .renderer
+            self.render
                 .as_mut()
                 .unwrap()
-                .gpu
-                .set_vsync(self.state.options.graphics.fps_limit == 0);
+                .res
+                .set_vsync(self.game_state.options.graphics.fps_limit == 0);
 
-            self.fps_limit = Some(self.state.options.graphics.fps_limit);
-
-            if self.state.options.graphics.fullscreen {
-                self.state
-                    .renderer
-                    .as_ref()
+            if self.game_state.options.graphics.fullscreen {
+                self.window
+                    .as_deref()
                     .unwrap()
-                    .gpu
-                    .window
-                    .set_fullscreen(Some(Fullscreen::Borderless(None)));
+                    .set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
             } else {
-                self.state
-                    .renderer
-                    .as_ref()
-                    .unwrap()
-                    .gpu
-                    .window
-                    .set_fullscreen(None);
+                self.window.as_deref().unwrap().set_fullscreen(None);
             }
 
-            self.state.options.synced = true;
+            self.game_state.options.synced = true;
 
             log::info!("Synced options!");
         }
+    }
+
+    fn shutdown_game(&mut self, event_loop: &ActiveEventLoop) {
+        event_loop.exit();
+
+        {
+            let game_handle = self.game_state.game_handle.clone();
+            let game_join_handle = self.game_state.game_join_handle.take().expect("game handle needs to be set");
+
+            self.game_state.tokio.block_on(async {
+                game_handle
+                    .call(GameMsg::SaveAndUnload, None)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .expect("the game needs to save the map on exit");
+                game_handle.stop(Some("game closed".to_string()));
+
+                game_join_handle.await.unwrap();
+            });
+        }
+
+        log::info!("Shut down gracefully.");
+        self.closed = true;
     }
 }
 
@@ -247,176 +240,337 @@ impl ApplicationHandler for Automancy {
 
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         log::info!("Creating window...");
-        let icon = get_icon();
-
+        let icon = util::get_window_icon();
         let window_attributes = Window::default_attributes()
             .with_title("automancy")
             .with_window_icon(Some(icon))
             .with_min_inner_size(PhysicalSize::new(200, 200));
-
-        self.window = Some(Arc::new(
-            event_loop
-                .create_window(window_attributes)
-                .expect("Failed to open window"),
-        ));
+        let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
+        window.set_ime_allowed(true);
+        self.window = Some(window);
         log::info!("Window created.");
 
-        let gpu = self.state.tokio.block_on(Gpu::new(
-            self.window.as_ref().unwrap().clone(),
-            self.state.options.graphics.fps_limit == 0,
-        ));
-
         log::info!("Setting up rendering...");
-        let (shared_resources, render_resources, global_resources) = gpu::init_gpu_resources(
-            &gpu.device,
-            &gpu.config,
-            &self.state.resource_man,
-            self.state.vertices_init.take().unwrap(),
-            self.state.indices_init.take().unwrap(),
-        );
-        let global_resources = Arc::new(global_resources);
-        let renderer = GameRenderer::new(
-            gpu,
-            shared_resources,
-            render_resources,
-            global_resources.clone(),
-        );
+        self.render = Some(self.game_state.tokio.block_on(AutomancyRendering::new(
+            &self.game_state.resource_man,
+            &self.render_state,
+            self.window.clone().unwrap(),
+        )));
+        self.render.as_mut().unwrap().res.resize(self.window.as_deref().unwrap().size_uvec2());
         log::info!("Render setup.");
 
         log::info!("Setting up gui...");
+        /* TODO reimpl
         let mut gui = GameGui::new(
             &renderer.gpu.device,
             &renderer.gpu.queue,
             &renderer.gpu.window,
         );
-
         gui.window.set_automatic_scale_factor(false);
         gui.yak.set_scale_factor(
-            (renderer.gpu.window.scale_factor() * self.state.options.graphics.ui_scale.to_f64())
-                as f32,
+            (renderer.gpu.window.scale_factor()
+                * self.game_state.options.graphics.ui_scale.to_f64()) as f32,
         );
 
         gui.fonts.insert(
             SYMBOLS_FONT_KEY.to_string(),
             cosmic_text::fontdb::Source::Binary(Arc::from(&SYMBOLS_FONT)),
         );
-        for (name, font) in self.state.resource_man.fonts.iter() {
+        for (name, font) in self.game_state.resource_man.fonts.iter() {
             gui.fonts.insert(
                 name.clone(),
                 cosmic_text::fontdb::Source::Binary(font.data.clone()),
             );
         }
+         */
         log::info!("Gui setup.");
 
-        let logo = image::load_from_memory(LOGO).unwrap();
-        let mut logo = Texture::new(
+        let logo = image::load_from_memory(util::GAME_LOGO).unwrap();
+        let mut logo = yakui::paint::Texture::new(
             yakui::paint::TextureFormat::Rgba8Srgb,
-            uvec2(logo.width(), logo.height()),
+            yakui::UVec2::new(logo.width(), logo.height()),
             logo.into_bytes(),
         );
-        logo.mag_filter = TextureFilter::Linear;
-        logo.min_filter = TextureFilter::Linear;
-        let logo = gui.yak.add_texture(logo);
+        logo.mag_filter = yakui::paint::TextureFilter::Linear;
+        logo.min_filter = yakui::paint::TextureFilter::Linear;
+        // TODO reimpl let logo = gui.yak.add_texture(logo);
 
-        self.state.logo = Some(logo);
-        self.state.gui = Some(gui);
-        self.state.renderer = Some(renderer);
+        #[cfg(debug_assertions)]
+        {
+            let mut debug = DebugConsoleState::new();
+            let window = self.window.as_deref().unwrap();
+            debug.resize(
+                window.size_uvec2(),
+                window.scale_factor() as f32,
+                &self.render.as_ref().unwrap().res.device,
+            );
 
+            self.debug_console_state = Some(debug);
+        }
         self.try_sync_options();
     }
 
-    fn window_event(
-        &mut self,
-        event_loop: &ActiveEventLoop,
-        window_id: WindowId,
-        event: WindowEvent,
-    ) {
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, window_id: WindowId, event: WindowEvent) {
+        self.try_sync_options();
+
+        if event == WindowEvent::CloseRequested {
+            log::info!("Window close event received! Shutting down the game now.");
+            self.shutdown_game(event_loop);
+            return;
+        }
+
         if !self.closed {
+            let window = self.window.as_deref().unwrap();
+            let render = self.render.as_mut().unwrap();
+
+            /*  TODO reimpl
             let consumed = {
-                let gui = self.state.gui.as_mut().unwrap();
+                let gui = self.game_state.gui.as_mut().unwrap();
                 gui.window.handle_window_event(&mut gui.yak, &event)
             };
 
             if consumed {
                 return;
             }
+            */
+            match event {
+                WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                    /* TODO reimpl
+                    state.gui.as_mut().unwrap().yak.set_scale_factor(
+                        (*scale_factor * state.options.graphics.ui_scale.to_f64()) as f32,
+                    );
+                    */
 
-            match event::on_event(
-                &mut self.state,
-                event_loop,
-                Event::WindowEvent { window_id, event },
-            ) {
-                Ok(closed) => {
-                    self.closed = closed;
+                    #[cfg(debug_assertions)]
+                    self.debug_console_state
+                        .as_mut()
+                        .unwrap()
+                        .resize(window.size_uvec2(), scale_factor as f32, &render.res.device);
+                    return;
                 }
+                WindowEvent::Resized(size) => {
+                    render.res.resize(UVec2::new(size.width, size.height));
+
+                    #[cfg(debug_assertions)]
+                    self.debug_console_state
+                        .as_mut()
+                        .unwrap()
+                        .resize(window.size_uvec2(), window.scale_factor() as f32, &render.res.device);
+                }
+                _ => (),
+            }
+
+            #[cfg(debug_assertions)]
+            {
+                use winit::{
+                    keyboard::{Key, NamedKey},
+                    platform::modifier_supplement::KeyEventExtModifierSupplement,
+                };
+
+                let debug = self.debug_console_state.as_mut().unwrap();
+
+                if let WindowEvent::KeyboardInput { event, .. } = &event
+                    && event.state.is_pressed()
+                    && event.key_without_modifiers() == Key::Named(NamedKey::F5)
+                {
+                    debug.active = !debug.active;
+                    debug.resize(window.size_uvec2(), window.scale_factor() as f32, &render.res.device);
+
+                    log::info!("Debug console state set to: {}", if debug.active { "Enabled" } else { "Disabled" });
+                }
+
+                if debug.handle_event(&mut self.game_state, &event, &mut self.clipboard) {
+                    return;
+                }
+            }
+
+            if event == WindowEvent::RedrawRequested {
+                let window_size = window.inner_size();
+                if window_size.width == 0 || window_size.height == 0 {
+                    return;
+                }
+
+                match render.res.surface.get_current_texture() {
+                    Ok(surface) => {
+                        let surface_size = surface.texture.size();
+                        if surface_size.width != window_size.width || surface_size.height != window_size.height {
+                            return;
+                        }
+
+                        let mut encoder = render.res.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("Render Encoder"),
+                        });
+
+                        integration::render(window, &surface, render, &mut self.game_state, &mut self.render_state, &mut encoder);
+
+                        let surface_view = surface.texture.create_view(&wgpu::TextureViewDescriptor {
+                            label: Some("Surface Texture"),
+                            usage: Some(wgpu::TextureUsages::RENDER_ATTACHMENT),
+                            ..Default::default()
+                        });
+
+                        #[allow(unused_mut)]
+                        let mut has_overlay_texture = false;
+
+                        #[cfg(debug_assertions)]
+                        {
+                            let debug = self.debug_console_state.as_mut().unwrap();
+                            if debug.active {
+                                let render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                                    label: Some("Debug Console Render Pass"),
+                                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                        view: &surface_view,
+                                        depth_slice: None,
+                                        resolve_target: None,
+                                        ops: wgpu::Operations {
+                                            load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                                            store: wgpu::StoreOp::Store,
+                                        },
+                                    })],
+                                    depth_stencil_attachment: None,
+                                    timestamp_writes: None,
+                                    occlusion_query_set: None,
+                                });
+
+                                debug.draw(
+                                    &render.res.device,
+                                    &render.res.queue,
+                                    &render.res.config,
+                                    &render.res.global_res,
+                                    &render
+                                        .res
+                                        .present_res
+                                        .present_texture
+                                        .create_view(&wgpu::TextureViewDescriptor::default()),
+                                    render_pass,
+                                );
+                                has_overlay_texture = true;
+                            }
+                        }
+
+                        if !has_overlay_texture {
+                            wgpu::util::TextureBlitter::new(&render.res.device, surface.texture.format()).copy(
+                                &render.res.device,
+                                &mut encoder,
+                                &render
+                                    .res
+                                    .present_res
+                                    .present_texture
+                                    .create_view(&wgpu::TextureViewDescriptor::default()),
+                                &surface_view,
+                            );
+                        }
+
+                        let screenshot_buffer = if render.screenshotting {
+                            render.screenshotting = false;
+                            Some(prepare_screenshot(&render.res, &mut encoder, surface_size))
+                        } else {
+                            None
+                        };
+
+                        render.res.queue.submit([encoder.finish()]);
+                        window.pre_present_notify();
+                        surface.present();
+
+                        if let Some(buffer) = screenshot_buffer {
+                            copy_screenshot_to_clipboard(&render.res, buffer, surface_size, &mut self.clipboard);
+                        }
+                    }
+                    Err(wgpu::SurfaceError::Lost) => {
+                        log::warn!("GPU surface is lost! Attempting to recreate the swapchain.");
+
+                        render.res.resize(window.size_uvec2());
+                    }
+                    Err(wgpu::SurfaceError::Outdated) => {
+                        log::warn!("GPU surface is outdated! Attempting to recreate the swapchain.");
+
+                        render.res.resize(window.size_uvec2());
+                    }
+                    Err(wgpu::SurfaceError::OutOfMemory) => {
+                        log::error!("GPU ran out of memory! Shutting down the game now.");
+
+                        self.shutdown_game(event_loop);
+                    }
+                    Err(e) => log::error!("GPU surface error: {e:?}"),
+                }
+
+                return;
+            }
+
+            match integration::handle_winit_event(window, render, &mut self.game_state, Event::WindowEvent { window_id, event }) {
+                Ok(_) => {}
                 Err(e) => {
                     log::warn!("Window event error: {e}");
                 }
             }
-
-            self.try_sync_options();
+        } else {
+            log::info!("Window event received after game closure: {event:?}");
         }
     }
 
-    fn device_event(
-        &mut self,
-        event_loop: &ActiveEventLoop,
-        device_id: DeviceId,
-        event: DeviceEvent,
-    ) {
+    fn device_event(&mut self, _event_loop: &ActiveEventLoop, device_id: DeviceId, event: DeviceEvent) {
         if !self.closed {
-            match event::on_event(
-                &mut self.state,
-                event_loop,
-                Event::DeviceEvent { device_id, event },
-            ) {
-                Ok(closed) => {
-                    self.closed = closed;
-                }
+            let window = self.window.as_deref().unwrap();
+            let render = self.render.as_mut().unwrap();
+
+            match integration::handle_winit_event(window, render, &mut self.game_state, Event::DeviceEvent { device_id, event }) {
+                Ok(_) => {}
                 Err(e) => {
                     log::warn!("Device event error: {e}");
                 }
             }
+        } else {
+            log::warn!("Device event received after game closure: {event:?}");
         }
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        let fps_limit = self.fps_limit.unwrap_or(0);
+        if !self.closed {
+            let fps_limit = self.game_state.options.graphics.fps_limit;
 
-        if fps_limit != 0 {
-            let frame_time = if fps_limit >= 250 {
-                Duration::ZERO
+            if fps_limit != 0 {
+                let frame_time = if fps_limit >= 250 {
+                    Duration::ZERO
+                } else {
+                    Duration::from_secs_f64(1.0 / fps_limit as f64)
+                };
+
+                let elapsed = self.render.as_ref().unwrap().frame_start.elapsed();
+                if elapsed < frame_time {
+                    let time_left = frame_time - elapsed;
+
+                    event_loop.set_control_flow(ControlFlow::wait_duration(time_left));
+                    return;
+                }
             } else {
-                Duration::from_secs_f64(1.0 / fps_limit as f64)
-            };
-
-            let elapsed = self.state.loop_store.frame_start.unwrap().elapsed();
-            if elapsed < frame_time {
-                let time_left = frame_time - elapsed;
-
-                event_loop.set_control_flow(ControlFlow::wait_duration(time_left));
-                return;
+                event_loop.set_control_flow(ControlFlow::Poll);
             }
-        } else {
-            event_loop.set_control_flow(ControlFlow::Poll);
-        }
 
-        self.window.as_ref().unwrap().request_redraw();
+            self.window.as_deref().unwrap().request_redraw();
+        }
     }
 }
 
 fn main() -> anyhow::Result<()> {
-    env::set_var("RUST_BACKTRACE", "full");
+    // SAFETY: we are on the main thread
+    unsafe {
+        env::set_var("RUST_BACKTRACE", "full");
+    }
 
     {
         let filter = "info,wgpu_core::device::resource=warn";
 
-        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(filter)).init();
+        let mut builder = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(filter));
+        if let Ok(file) = env::var("LOG_FILE") {
+            let file = Box::new(File::create(file).expect("log file needs to created"));
+
+            builder.target(env_logger::Target::Pipe(file));
+        }
+        builder.init();
 
         #[cfg(debug_assertions)]
         {
-            use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
-            use tracing_subscriber::EnvFilter;
+            use tracing_subscriber::{EnvFilter, prelude::__tracing_subscriber_SubscriberExt};
             use tracing_tracy::DefaultConfig;
 
             tracing::subscriber::set_global_default({
@@ -427,64 +581,9 @@ fn main() -> anyhow::Result<()> {
         }
     }
 
-    {
-        let eyre = HookBuilder::blank()
-            .capture_span_trace_by_default(true)
-            .display_env_section(false);
+    panic::install_panic_hook()?;
 
-        let (panic_hook, eyre_hook) = eyre.into_hooks();
-
-        eyre_hook.install()?;
-
-        panic::set_hook(Box::new(move |info| {
-            let file_path = {
-                let report = panic_hook.panic_report(info);
-
-                let uuid = Uuid::new_v4().hyphenated().to_string();
-                let tmp_dir = env::temp_dir();
-                let file_name = format!("automancy-report-{uuid}.txt");
-                let file_path = tmp_dir.join(file_name);
-                if let Ok(mut file) = File::create(&file_path) {
-                    use std::io::Write;
-
-                    _ = write!(
-                        file,
-                        "{}",
-                        strip_ansi_escapes::strip_str(report.to_string())
-                    );
-                }
-                eprintln!("{}", report);
-
-                file_path
-            };
-
-            if let Some(location) = info.location() {
-                if !["src/game.rs", "src/tile_entity.rs"].contains(&location.file()) {
-                    let message = {
-                        let mut message = String::new();
-                        _ = write_msg(&mut message, &file_path);
-
-                        message
-                    };
-
-                    {
-                        eprintln!("\n\n\n{}\n\n\n", message);
-
-                        _ = MessageDialog::new()
-                            .set_level(MessageLevel::Error)
-                            .set_buttons(MessageButtons::Ok)
-                            .set_title("automancy crash dialog")
-                            .set_description(message)
-                            .show();
-                    }
-                }
-            }
-        }));
-    }
-
-    let event_loop = EventLoop::new()?;
-
-    let mut state = {
+    let mut game_state = {
         let tokio = Runtime::new().unwrap();
 
         log::info!("Initializing audio backend...");
@@ -500,74 +599,77 @@ fn main() -> anyhow::Result<()> {
 
         let misc_options = MiscOptions::load();
 
-        let (resource_man, vertices, indices) = load_resources(&misc_options.language, track);
-        RESOURCE_MAN.write().unwrap().replace(resource_man.clone());
+        let resource_man = integration::load_resources(&misc_options.language, track);
         log::info!("Loaded resources.");
 
         let options = GameOptions::load(&resource_man);
-        let input_handler = InputHandler::new(&options);
-
-        let mut loop_store = EventLoopStorage::default();
-        let camera = GameCamera::new((1.0, 1.0)); // dummy value
 
         log::info!("Creating game...");
-        let (game, game_handle) = tokio.block_on(Actor::spawn(
+        let (game_handle, game_join_handle) = tokio.block_on(Actor::spawn(
             Some("game".to_string()),
-            GameSystem {
+            GameActor {
                 resource_man: resource_man.clone(),
             },
             (),
         ))?;
         {
-            let game = game.clone();
+            let game_handle = game_handle.clone();
             tokio.spawn(async move {
-                game.send_interval(TICK_INTERVAL, || GameSystemMessage::Tick);
+                game_handle.send_interval(TICK_INTERVAL, || GameMsg::Tick);
             });
         }
         log::info!("Game created.");
 
-        let start_instant = Instant::now();
-        ui_game_object::init_custom_paint_state(start_instant);
-        loop_store.frame_start = Some(start_instant);
+        // TODO reimpl ui_game_object::init_custom_paint_state(start_instant);
 
-        GameState {
+        AutomancyGameState {
+            resource_man,
+            audio_man,
+            tokio,
+
             ui_state: UiState::default(),
+
+            input_handler: InputHandler::new(&options),
+            camera: GameCamera::new(
+                Vec2::one(), // dummy value
+            ),
+
             options,
             misc_options,
-            resource_man,
-            input_handler,
-            loop_store,
-            tokio,
-            game,
-            camera,
-            audio_man,
-            start_instant,
 
-            gui: None,
-            renderer: None,
-            screenshotting: false,
+            game_data: GameDataStorage::default(),
 
-            logo: Default::default(),
-            input_hints: Default::default(),
-            puzzle_state: Default::default(),
+            game_handle,
+            game_join_handle: Some(game_join_handle),
 
-            game_handle: Some(game_handle),
-
-            vertices_init: Some(vertices),
-            indices_init: Some(indices),
+            start_instant: Instant::now(),
         }
     };
 
+    log::info!("Loading rendering resources...");
+    let mut render_state = AutomancyRenderState::default();
+    render_state.model_man.load_models(&game_state.resource_man);
+    log::info!("Loaded rendering resources.");
+
     // load the main menu
-    game_load_map_inner(&mut state, LoadMapOption::MainMenu);
+    // TODO debug map is temporary
+    game_state.load_map(GameMapId::MainMenu);
 
     let mut automancy = Automancy {
-        state,
         window: None,
-        fps_limit: None,
+        game_state,
+        render_state,
+        render: None,
+
+        clipboard: arboard::Clipboard::new().unwrap(),
+
         closed: false,
+
+        #[cfg(debug_assertions)]
+        debug_console_state: None,
     };
 
+    let event_loop = EventLoop::new()?;
     event_loop.run_app(&mut automancy)?;
 
     Ok(())

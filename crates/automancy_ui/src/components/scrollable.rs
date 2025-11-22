@@ -1,22 +1,20 @@
-use crate::{col, pad_x, pad_y, row, PaintRectLerpedColor, RoundRect};
-use automancy_defs::{
-    colors,
-    glam::{vec2, Vec2Swizzles},
-};
 use std::cell::Cell;
-use yakui::geometry::{Constraints, Vec2};
+
+use automancy_data::{
+    colors,
+    math::{Vec2Swizzles, vec2},
+};
 use yakui::{
-    constrained,
+    Alignment, Dim2, Pivot, Rect, Response, constrained,
+    event::{EventInterest, EventResponse, WidgetEvent},
+    geometry::{Constraints, Vec2},
     input::MouseButton,
     reflow,
-    widget::{EventContext, LayoutContext, Widget},
-    Alignment, Dim2, Rect,
-};
-use yakui::{
-    event::{EventInterest, EventResponse, WidgetEvent},
     util::widget_children,
+    widget::{EventContext, LayoutContext, PaintContext, Widget},
 };
-use yakui::{Pivot, Response};
+
+use crate::{PaintRectLerpedColor, RoundRect, col, pad_x, pad_y, row};
 
 const SCROLL_SIZE: f32 = 8.0;
 const SCROLL_RADIUS: f32 = 4.0;
@@ -184,8 +182,8 @@ impl Widget for ScrollableWidget {
         size
     }
 
-    fn paint(&self, mut ctx: yakui::widget::PaintContext<'_>) {
-        let clip = ctx.paint.get_current_clip().unwrap_or(Rect::ZERO);
+    fn paint(&self, mut ctx: PaintContext<'_>) {
+        let clip = ctx.clip;
 
         let node = ctx.dom.get_current();
         for &child in &node.children {
@@ -363,7 +361,7 @@ pub fn scroll_vertical_bar_alignment(
         let res = res.unwrap();
 
         if let Some(alignment) = alignment {
-            scroll_bar(res.into_inner(), alignment.as_vec2(), ScrollDirection::Y);
+            scroll_bar(res.into_inner(), alignment.as_Vec2::new(), ScrollDirection::Y);
         }
     });
 }
@@ -388,7 +386,7 @@ pub fn scroll_horizontal_bar_alignment(
         let res = res.unwrap();
 
         if let Some(alignment) = alignment {
-            scroll_bar(res.into_inner(), alignment.as_vec2(), ScrollDirection::X);
+            scroll_bar(res.into_inner(), alignment.as_Vec2::new(), ScrollDirection::X);
         }
     });
 }
@@ -430,9 +428,9 @@ fn scroll_bar(res: ScrollableResponse, alignment: Vec2, dir: ScrollDirection) {
                     );
 
                     rect.min_size = if dir == ScrollDirection::Y {
-                        vec2(SCROLL_SIZE, (res.size * ratio).floor())
+                        Vec2::new(SCROLL_SIZE, (res.size * ratio).floor())
                     } else {
-                        vec2((res.size * ratio).floor(), SCROLL_SIZE)
+                        Vec2::new((res.size * ratio).floor(), SCROLL_SIZE)
                     };
                     rect.show();
                 });
