@@ -1,0 +1,41 @@
+[package]
+name = "automancy_rendering"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+publish = { workspace = true }
+
+[features]
+profile = ["profiling"]
+
+[dependencies]
+automancy_data = { workspace = true }
+automancy_game = { workspace = true }
+automancy_macros = { workspace = true }
+
+# logging / profiling / tracing
+log = { workspace = true }
+profiling = { workspace = true, optional = true }
+
+# parsing / data mangling / math / files
+bytemuck = { workspace = true }
+gltf = { workspace = true }
+vek = { workspace = true }
+
+# specialized data storage types
+hashbrown = { workspace = true }
+smallvec = { workspace = true }
+
+# rendering / windowing
+wgpu = { workspace = true }
+
+# scripting / game logic / async runtime
+async-stream = { workspace = true }
+futures-util = { workspace = true }
+ractor = { workspace = true }
+tokio = { workspace = true }
+
+# utils
+anyhow = { workspace = true }
+rand = { workspace = true }

@@ -1,19 +1,83 @@
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [package]
 name = "automancy"
 version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
+license = { workspace = true }
+publish = { workspace = true }
 
+[features]
+profile = [
+    "automancy_data/profile",
+    "automancy_rendering/profile",
+    "automancy_ui/profile",
+    "tracing",
+    "tracing-subscriber",
+    "profiling",
+    "tokio/tracing",
+]
+profile-with-tracing = ["profile", "profiling/profile-with-tracing"]
+profile-with-tracy = ["profile", "profiling/profile-with-tracy", "tracing-tracy"]
 
 [dependencies]
-automancy_lib = { workspace = true }
+automancy_data = { workspace = true }
+automancy_game = { workspace = true }
+automancy_rendering = { workspace = true }
+automancy_ui = { workspace = true }
 
+# logging / profiling / tracing
+log = { workspace = true }
+profiling = { workspace = true, optional = true }
+
+# parsing / data mangling / math / files
+bytemuck = { workspace = true }
 image = { workspace = true }
 
+# specialized data storage types
+hashbrown = { workspace = true }
 
-color-eyre = "0.6.3"
-env_logger = "0.11.3"
-rfd = "0.15.0"
-human-panic = "2.0.0"
-strip-ansi-escapes = "0.2.0"
+# rendering / windowing
+wgpu = { workspace = true }
+winit = { workspace = true }
+
+# user input / user interface
+arboard = { workspace = true }
+kira = { workspace = true }
+open = { workspace = true }
+yakui = { workspace = true }
+yakui-wgpu = { workspace = true }
+yakui-winit = { workspace = true }
+
+# scripting / game logic / async runtime
+ractor = { workspace = true }
+tokio = { workspace = true }
+
+# utils
+anyhow = { workspace = true }
+fuzzy-matcher = { workspace = true }
+strum = { workspace = true }
+uuid = { workspace = true }
+
+# binary exclusive stuff
+color-eyre = "0.6.5"
+cosmic-text = "0.19.0"
+env_logger = "0.11.9"
+native-dialog = { version = "0.9.6", features = [
+    "windows_dpi_awareness",
+    "windows_visual_styles",
+] }
+strip-ansi-escapes = "0.2.1"
+tiny-skia = "0.12.0"
+
+tracing = { version = "0.1", optional = true }
+tracing-subscriber = { version = "0.3", default-features = false, features = [
+    "registry",
+    "env-filter",
+], optional = true }
+
+# tracy version v0.13.1
+tracing-tracy = { version = "=0.11.4", features = [
+    "demangle",
+    "ondemand",
+    "only-localhost",
+], optional = true }

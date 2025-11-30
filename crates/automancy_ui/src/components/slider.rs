@@ -1,38 +1,47 @@
-use crate::{center_row, pad_x, simple_textbox, PADDING_SMALL};
-use automancy_defs::colors;
-use automancy_system::util::num::NumTrait;
-use std::{cell::Cell, fmt::Debug, ops::RangeInclusive};
-use yakui::{
-    colored_box, colored_circle, draggable, use_state,
-    util::widget,
-    widget::{LayoutContext, PaintContext, Widget},
-    Color, Constraints, Rect, Response, Vec2,
-};
+use num_traits::{AsPrimitive, Num};
 
-const TRACK_COLOR: Color = colors::BACKGROUND_2;
-const KNOB_COLOR: Color = colors::ORANGE;
+use crate::*;
 
-const DEFAULT_WIDTH: f32 = 150.0;
 const TRACK_HEIGHT: f32 = 8.0;
 const KNOB_SIZE: f32 = 16.0;
-const TOTAL_HEIGHT: f32 = KNOB_SIZE * 1.5;
+const TOTAL_HEIGHT: f32 = KNOB_SIZE * 2.5;
 
-#[derive(Debug)]
-#[non_exhaustive]
-pub struct Slider<T: Copy> {
+#[derive(Debug, Clone, Copy, Default)]
+#[must_use = "yakui widgets do nothing if you don't `show` them"]
+pub struct Slider<T> {
     pub value: T,
     pub min: T,
     pub max: T,
     pub step: Option<T>,
 }
 
-impl<T: NumTrait> Slider<T> {
+impl<T> Slider<T>
+where
+    T: Num + RoundExt + Debug + AsPrimitive<f32>,
+    f32: AsPrimitive<T>,
+{
     pub fn new(value: T, min: T, max: T) -> Self {
         Slider {
             value,
             min,
             max,
             step: None,
+        }
+    }
+
+    pub fn new_with_range(value: T, range: RangeInclusive<T>) -> Self {
+        Slider {
+            value,
+            min: *range.start(),
+            max: *range.end(),
+            step: None,
+        }
+    }
+
+    pub fn step(self, step: Option<T>) -> Self {
+        Self {
+            step,
+            ..self
         }
     }
 
@@ -43,178 +52,195 @@ impl<T: NumTrait> Slider<T> {
 }
 
 #[derive(Debug)]
-#[non_exhaustive]
 pub struct SliderResponse<T> {
     pub value: Option<T>,
 }
 
 #[derive(Debug)]
-pub struct SliderWidget<T: Copy> {
+pub struct SliderWidget<T> {
     props: Slider<T>,
+    value: T,
+    dragging: bool,
+    value_changed: bool,
     rect: Cell<Option<Rect>>,
 }
 
-impl<T: NumTrait> Widget for SliderWidget<T> {
+impl<T> SliderWidget<T>
+where
+    T: Num + RoundExt + Debug + AsPrimitive<f32>,
+    f32: AsPrimitive<T>,
+{
+    fn update_value(&mut self, pos: f32) {
+        if let Some(rect) = self.rect.get() {
+            let min_pos = rect.pos().x;
+            let max_pos = rect.pos().x + rect.size().x;
+
+            let pos = pos.clamp(min_pos, max_pos);
+
+            let percentage = (pos - min_pos) / (max_pos - min_pos);
+            let min = self.props.min.as_();
+            let max = self.props.max.as_();
+
+            self.value = (percentage.mul_add(max - min, min)).as_();
+        }
+        self.value_changed = true;
+    }
+}
+
+impl<T> Widget for SliderWidget<T>
+where
+    T: Num + RoundExt + Debug + AsPrimitive<f32>,
+    f32: AsPrimitive<T>,
+{
     type Props<'a> = Slider<T>;
     type Response = SliderResponse<T>;
 
     fn new() -> Self {
         Self {
             props: Slider::new(T::zero(), T::zero(), T::one()),
+            value: T::zero(),
+            dragging: false,
+            value_changed: false,
             rect: Cell::new(None),
         }
     }
 
     fn update(&mut self, props: Self::Props<'_>) -> Self::Response {
+        if !self.value_changed {
+            self.value = props.value;
+        }
+        self.value_changed = false;
         self.props = props;
 
-        colored_box(TRACK_COLOR, [0.0, TRACK_HEIGHT]);
-        let res = draggable(|| {
-            colored_circle(KNOB_COLOR, KNOB_SIZE);
-        });
-
-        let mut value = T::clamp(self.props.value, self.props.min, self.props.max);
-
-        if let (Some(drag), Some(rect)) = (res.dragging, self.rect.get()) {
-            let min_pos = rect.pos().x;
-            let max_pos = rect.pos().x + rect.size().x - KNOB_SIZE;
-            let actual_pos = drag.current.x.clamp(min_pos, max_pos);
-
-            let percentage = ((actual_pos - min_pos) / (max_pos - min_pos)) as f64;
-            let min = self.props.min.to_f64();
-            let max = self.props.max.to_f64();
-
-            value = T::from_f64(min + percentage * (max - min));
-        }
-
         if let Some(step) = self.props.step {
-            value = round_to_step(value, step);
+            self.value = T::round_to_step(self.value, step);
         }
 
-        if value != self.props.value {
-            SliderResponse { value: Some(value) }
+        if self.value != self.props.value {
+            SliderResponse {
+                value: Some(self.value),
+            }
         } else {
-            SliderResponse { value: None }
+            SliderResponse {
+                value: None,
+            }
         }
     }
 
-    fn layout(&self, mut ctx: LayoutContext<'_>, constraints: Constraints) -> Vec2 {
-        let node = ctx.dom.get_current();
-        let size = Vec2::new(
-            constraints.constrain_width(DEFAULT_WIDTH).max(KNOB_SIZE),
+    fn layout(&self, _ctx: LayoutContext<'_>, constraints: Constraints) -> Vec2 {
+        Vec2::new(
+            constraints.constrain_width(KNOB_SIZE * 6.0) + KNOB_SIZE * 4.0,
             constraints.min.y.max(TOTAL_HEIGHT),
+        )
+    }
+
+    fn paint(&self, ctx: PaintContext<'_>) {
+        let layout = ctx.layout.get(ctx.dom.current()).unwrap();
+
+        let rect = Rect::from_pos_size(
+            layout.rect.pos() + Vec2::new(KNOB_SIZE, 0.0),
+            layout.rect.size() - Vec2::new(KNOB_SIZE * 2.0, 0.0),
         );
+        self.rect.set(Some(rect));
 
-        let track = node.children[0];
-        let knob = node.children[1];
+        shapes::PaintRoundRect::new(
+            Rect::from_pos_size(
+                rect.pos() + Vec2::new(0.0, (TOTAL_HEIGHT - TRACK_HEIGHT) / 2.0),
+                Vec2::new(rect.size().x, TRACK_HEIGHT),
+            ),
+            0.0,
+        )
+        .color(colors::BACKGROUND_2.yak())
+        .add(ctx.paint);
 
-        let track_constraints = Constraints::tight(Vec2::new(size.x - KNOB_SIZE, TRACK_HEIGHT));
-        ctx.calculate_layout(track, track_constraints);
-        ctx.layout.set_pos(
-            track,
-            Vec2::new(KNOB_SIZE / 2.0, (TOTAL_HEIGHT - TRACK_HEIGHT) / 2.0),
-        );
-
-        let min = self.props.min.to_f64();
-        let max = self.props.max.to_f64();
-        let value = self.props.value.to_f64();
+        let min = self.props.min.as_();
+        let max = self.props.max.as_();
+        let value = self.props.value.as_();
         let percentage = (value - min) / (max - min);
 
         let percentage = percentage.clamp(0.0, 1.0);
 
-        let knob_offset = (size.x - KNOB_SIZE) * percentage as f32;
-        let knob_pos = Vec2::new(knob_offset, (TOTAL_HEIGHT - KNOB_SIZE) / 2.0);
-        ctx.calculate_layout(knob, Constraints::none());
-        ctx.layout.set_pos(knob, knob_pos);
+        let knob_pos = Vec2::new(
+            (rect.size().x - KNOB_SIZE) * percentage + ((percentage * 2.0 - 1.0) * KNOB_SIZE / 2.0),
+            (TOTAL_HEIGHT - KNOB_SIZE) / 2.0,
+        );
 
-        size
+        shapes::PaintRoundRect::new(
+            Rect::from_pos_size(rect.pos() + knob_pos, Vec2::new(KNOB_SIZE, KNOB_SIZE)),
+            KNOB_SIZE / 2.0,
+        )
+        .color(colors::INTERACTIVE_2.yak())
+        .add(ctx.paint);
     }
 
-    fn paint(&self, mut ctx: PaintContext<'_>) {
-        // This is a little gross: stash our position from this frame's layout
-        // pass so that we can compare it against any drag updates that happen
-        // at the beginning of the next frame.
-        let layout = ctx.layout.get(ctx.dom.current()).unwrap();
-        self.rect.set(Some(layout.rect));
+    fn event_interest(&self) -> EventInterest {
+        EventInterest::MOUSE_ALL
+    }
 
-        let node = ctx.dom.get_current();
-        for &child in &node.children {
-            ctx.paint(child);
+    fn event(&mut self, _ctx: EventContext<'_>, event: &WidgetEvent) -> EventResponse {
+        match event {
+            WidgetEvent::MouseLeave => {
+                self.dragging = false;
+
+                EventResponse::Bubble
+            },
+            WidgetEvent::MouseMoved(position) => {
+                if self.dragging
+                    && let Some(position) = *position
+                {
+                    self.update_value(position.x);
+
+                    EventResponse::Sink
+                } else {
+                    EventResponse::Bubble
+                }
+            },
+            WidgetEvent::MouseButtonChanged {
+                button: MouseButton::One,
+                down,
+                inside,
+                position,
+                ..
+            } => {
+                self.dragging = false;
+
+                if *inside && *down {
+                    self.dragging = true;
+                    self.update_value(position.x);
+
+                    EventResponse::Sink
+                } else {
+                    EventResponse::Bubble
+                }
+            },
+            _ => EventResponse::Bubble,
         }
-    }
-}
-
-fn round_to_step<T: NumTrait>(value: T, step: T) -> T {
-    if step == T::zero() {
-        value
-    } else {
-        (value / step).generic_round() * step
     }
 }
 
 #[track_caller]
-pub fn num_input<T: NumTrait>(
-    value: &mut T,
-    value_changed: bool,
-    range: RangeInclusive<T>,
-    parse: impl Fn(&str) -> Option<T>,
-    to_string: impl Fn(&T) -> String,
-) {
-    let text = use_state(String::new);
+pub fn slider_with_input<T>(value: T, range: RangeInclusive<T>, step: Option<T>) -> Option<T>
+where
+    T: Num + FromStr + ToString + RoundExt + Debug + AsPrimitive<f32>,
+    f32: AsPrimitive<T>,
+{
+    let mut result = None;
 
-    let updated = use_state(|| false);
-
-    if value_changed {
-        updated.set(true);
-    }
-
-    let string_v = to_string(value);
-
-    let res = simple_textbox(
-        &string_v,
-        updated.get().then_some(&string_v),
-        Some(&string_v),
-    )
-    .into_inner();
-
-    if let Some(v) = res.text {
-        text.set(v);
-    }
-
-    updated.set(false);
-
-    if res.activated || res.lost_focus {
-        if let Some(v) = parse(text.borrow().as_str().trim()) {
-            *value = v.clamp(*range.start(), *range.end());
+    row_cross_center(|| {
+        if let Some(v) = Slider::new_with_range(result.unwrap_or(value), range.clone())
+            .step(step)
+            .show()
+            .value
+        {
+            result = Some(v);
         }
 
-        updated.set(true);
-    }
-}
-
-#[track_caller]
-pub fn slider<T: NumTrait>(
-    value: &mut T,
-    range: RangeInclusive<T>,
-    step: Option<T>,
-    parse: impl Fn(&str) -> Option<T>,
-    to_string: impl Fn(&T) -> String,
-) -> bool {
-    let mut updated = false;
-
-    center_row(|| {
-        let mut slider = Slider::new(*value, *range.start(), *range.end());
-        slider.step = step;
-
-        if let Some(v) = slider.show().value {
-            *value = v;
-            updated = true;
-        }
-
-        pad_x(PADDING_SMALL, 0.0).show(|| {
-            num_input(value, updated, range, parse, to_string);
+        Pad::none().left(sizing::PADDING_SMALL).show(|| {
+            if let Some(v) = NumberInput::new_with_range(result.unwrap_or(value), range).step(step).show().value {
+                result = Some(v);
+            }
         });
     });
 
-    updated
+    result
 }

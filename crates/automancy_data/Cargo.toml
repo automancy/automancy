@@ -1,0 +1,42 @@
+[package]
+name = "automancy_data"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+publish = { workspace = true }
+
+[features]
+profile = ["profiling"]
+
+[dependencies]
+# logging / profiling / tracing
+log = { workspace = true }
+profiling = { workspace = true, optional = true }
+
+# parsing / data mangling / math / files
+approx = { workspace = true }
+bytemuck = { workspace = true }
+const-hex = { workspace = true }
+fast-srgb8 = { workspace = true }
+ron = { workspace = true }
+serde = { workspace = true }
+serde_tuple = { workspace = true }
+vek = { workspace = true }
+
+# specialized data storage types
+boomphf = { workspace = true }
+hashbrown = { workspace = true }
+nohash-hasher = { workspace = true }
+string-interner = { workspace = true }
+
+# scripting / game logic / async runtime
+tokio = { workspace = true }
+
+# utils
+paste = { workspace = true }
+strum = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+ron = { workspace = true }

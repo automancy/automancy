@@ -1,108 +1,103 @@
-use crate::clamp_percentage_to_viewport;
-use std::{cell::Cell, fmt::Debug};
-use yakui::input::MouseButton;
-use yakui::{
-    event::{EventInterest, EventResponse, WidgetEvent},
-    util::widget_children,
-    Alignment,
-};
-use yakui::{geometry::Vec2, Constraints};
-use yakui::{
-    widget::{EventContext, Widget},
-    Flow,
-};
-use yakui::{Dim2, Response};
+use crate::*;
 
-#[derive(Debug, Clone, Copy)]
-#[non_exhaustive]
+#[derive(Debug, Clone, Copy, Default)]
+#[must_use = "yakui widgets do nothing if you don't `show` them"]
 pub struct Movable {
-    position: Vec2,
+    pos: Vec2,
+    drag_mouse_start: Option<Vec2>,
+    drag_start: Option<Vec2>,
 }
 
+auto_builders!(Movable {
+    drag_mouse_start: Option<Vec2>,
+    drag_start: Option<Vec2>,
+});
+
 impl Movable {
-    fn new(position: Vec2) -> Self {
-        Movable { position }
+    pub fn new(pos: Vec2) -> Self {
+        Movable {
+            pos,
+            ..Default::default()
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.drag_mouse_start = None;
+        self.drag_start = None;
     }
 
     #[track_caller]
-    fn show<F: FnOnce()>(self, children: F) -> Response<MovableResponse> {
+    pub fn show<F: FnOnce()>(self, children: F) -> Response<<MovableWidget as Widget>::Response> {
         widget_children::<MovableWidget, F>(children, self)
     }
 }
 
 #[derive(Debug)]
-#[non_exhaustive]
-pub struct MovableResponse {
-    pub position: Vec2,
-}
-
-#[derive(Debug)]
 pub struct MovableWidget {
-    props: Cell<Option<Movable>>,
-    dragging_start: Cell<Option<Vec2>>,
-    dragging_from: Cell<Option<Vec2>>,
-    size: Cell<Vec2>,
-}
-
-impl MovableWidget {
-    fn pos(&self) -> Vec2 {
-        self.props.get().map(|v| v.position).unwrap_or(Vec2::ZERO)
-    }
+    initialized: bool,
+    pos: Cell<Vec2>,
+    drag_mouse_start: Cell<Option<Vec2>>,
+    drag_start: Cell<Option<Vec2>>,
 }
 
 impl Widget for MovableWidget {
     type Props<'a> = Movable;
-    type Response = MovableResponse;
+    type Response = Movable;
 
     fn new() -> Self {
         Self {
-            props: Cell::default(),
-            dragging_start: Cell::default(),
-            dragging_from: Cell::default(),
-            size: Cell::default(),
+            initialized: false,
+            drag_mouse_start: Cell::default(),
+            drag_start: Cell::default(),
+            pos: Cell::default(),
         }
     }
 
     fn update(&mut self, props: Self::Props<'_>) -> Self::Response {
-        if self.props.get().is_none() {
-            self.props.set(Some(props));
+        if !self.initialized {
+            self.pos.set(props.pos);
+            self.drag_mouse_start.set(props.drag_mouse_start);
+            self.drag_start.set(props.drag_start);
+
+            self.initialized = true;
         }
 
-        MovableResponse {
-            position: self.pos(),
+        Self::Response {
+            pos: self.pos.get(),
+            drag_mouse_start: self.drag_mouse_start.get(),
+            drag_start: self.drag_start.get(),
         }
     }
 
-    fn flow(&self) -> Flow {
-        Flow::Absolute {
-            anchor: Alignment::new(self.pos().x, self.pos().y),
-            offset: Dim2::ZERO,
-        }
-    }
-
-    fn layout(
-        &self,
-        mut ctx: yakui::widget::LayoutContext<'_>,
-        _constraints: yakui::Constraints,
-    ) -> Vec2 {
+    fn layout(&self, mut ctx: LayoutContext<'_>, constraints: Constraints) -> Vec2 {
+        let constraints = Constraints::loose(constraints.max);
         let node = ctx.dom.get_current();
 
         let mut size = Vec2::ZERO;
         for &child in &node.children {
-            let child_size = ctx.calculate_layout(child, Constraints::none());
+            let child_size = ctx.calculate_layout(child, constraints);
             size = size.max(child_size);
         }
 
-        self.size.set(size);
+        let parent = ctx
+            .layout
+            .get(node.parent.unwrap())
+            .map(|parent| parent.clip)
+            .unwrap_or_else(|| ctx.layout.viewport());
 
-        if let Some(mut props) = self.props.get() {
-            props.position =
-                clamp_percentage_to_viewport(size, props.position, ctx.layout.viewport());
+        let max_offset = size * 0.5 / parent.size();
+        self.pos.set(self.pos.get().clamp(max_offset, Vec2::ONE - max_offset));
 
-            self.props.set(Some(props));
-        }
+        ctx.layout.set_clip_logic(
+            ctx.dom,
+            ClipLogic::Contain {
+                it: AbstractClipRect::LayoutRect,
+                parent: AbstractClipRect::ParentClip,
+                offset: (self.pos.get() * parent.size()) - size / 2.0,
+            },
+        );
 
-        size
+        constraints.constrain(size)
     }
 
     fn event_interest(&self) -> EventInterest {
@@ -111,6 +106,11 @@ impl Widget for MovableWidget {
 
     fn event(&mut self, ctx: EventContext<'_>, event: &WidgetEvent) -> EventResponse {
         match *event {
+            WidgetEvent::MouseEnter
+            | WidgetEvent::MouseLeave
+            | WidgetEvent::MouseScroll {
+                ..
+            } => EventResponse::Sink,
             WidgetEvent::MouseButtonChanged {
                 button: MouseButton::One,
                 down,
@@ -119,48 +119,37 @@ impl Widget for MovableWidget {
                 ..
             } => {
                 if inside && down {
-                    self.dragging_start.set(Some(position));
+                    self.drag_mouse_start.set(Some(position));
+                    self.drag_start.set(None);
 
                     EventResponse::Sink
                 } else {
-                    self.dragging_start.set(None);
+                    self.drag_mouse_start.set(None);
+                    self.drag_start.set(None);
 
                     EventResponse::Bubble
                 }
-            }
-            WidgetEvent::MouseMoved(Some(position)) => {
-                if let Some((start, props)) =
-                    self.dragging_start.get().zip(self.props.get_mut().as_mut())
-                {
+            },
+            WidgetEvent::MouseMoved(Some(mouse_current)) => {
+                if let Some(mouse_start) = self.drag_mouse_start.get() {
+                    let pos = self.pos.get_mut();
                     let viewport = ctx.layout.viewport();
 
-                    if self.dragging_from.get().is_none() {
-                        self.dragging_from.set(Some(props.position));
+                    if self.drag_start.get().is_none() {
+                        self.drag_start.set(Some(*pos));
                     }
+                    let drag_start = self.drag_start.get().unwrap();
 
-                    let p = (self.dragging_from.get().unwrap() * viewport.size()).floor()
-                        + (position - start);
+                    let delta = (mouse_current - mouse_start) / viewport.size();
 
-                    props.position = clamp_percentage_to_viewport(
-                        self.size.get(),
-                        p / viewport.size(),
-                        viewport,
-                    );
+                    self.pos.set(drag_start + delta);
                 } else {
-                    self.dragging_from.set(None);
+                    self.drag_start.set(None);
                 }
 
                 EventResponse::Bubble
-            }
+            },
             _ => EventResponse::Bubble,
         }
     }
-}
-
-pub fn movable(position: &mut Vec2, children: impl FnOnce()) -> Response<MovableResponse> {
-    let r = Movable::new(*position).show(children);
-
-    *position = r.position;
-
-    r
 }

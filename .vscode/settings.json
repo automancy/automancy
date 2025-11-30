@@ -1,5 +1,51 @@
 {
+    "files.exclude": {
+        "*.lock": true,
+
+        ".envrc": true,
+        "about.hbs": true,
+        "about.toml": true,
+        "rust-toolchain.toml": true,
+        "README-LICENSE.html": true,
+        "LICENSE": true,
+
+        "map/": true,
+        "promotion/": true,
+        "rhai/": true,
+
+        "**/*.glb": true,
+        "**/*.gltf": true,
+        "**/*.blend1": true
+    },
+    "search.exclude": {
+        ".vscode/": true,
+        ".cargo/": true,
+        "build_script/": true,
+
+        ".editorconfig": true,
+        ".gitignore": true,
+        ".gitmodules": true,
+        "justfile": true,
+        "rustfmt.toml": true,
+
+        "**/*.html": true,
+        "**/*.md": true,
+        "**/*.txt": true,
+        "**/*.py": true,
+        "**/*.nix": true,
+        "**/*.lock": true,
+        "**/*.log": true,
+        "**/*.ttf": true,
+        "**/*.ttc": true,
+        "**/*.otf": true,
+        "**/*.otc": true,
+        "**/*.ogg": true
+    },
+
     "rust-analyzer.linkedProjects": ["./Cargo.toml"],
+
+    "rust-analyzer.cargo.features": ["automancy/profile-with-tracy"],
+    "rust-analyzer.cargo.cfgs": ["debug_assertions"],
 
     "rust-analyzer.imports.granularity.group": "module",
     "rust-analyzer.imports.granularity.enforce": true,

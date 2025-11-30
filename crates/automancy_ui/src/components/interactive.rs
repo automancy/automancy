@@ -1,12 +1,7 @@
-use yakui::{
-    event::{EventInterest, EventResponse, WidgetEvent},
-    input::MouseButton,
-    util::widget_children,
-    widget::{EventContext, Widget},
-    Response,
-};
+use crate::*;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Copy, Default)]
+#[must_use = "yakui widgets do nothing if you don't `show` them"]
 pub struct Interactive {}
 
 impl Interactive {
@@ -68,36 +63,27 @@ impl Widget for InteractiveWidget {
             WidgetEvent::MouseEnter => {
                 self.hovering = true;
                 EventResponse::Sink
-            }
+            },
             WidgetEvent::MouseLeave => {
                 self.hovering = false;
                 EventResponse::Sink
-            }
-            WidgetEvent::MouseButtonChanged {
+            },
+            &WidgetEvent::MouseButtonChanged {
                 button: MouseButton::One,
                 down,
                 inside,
                 ..
             } => {
-                if *inside {
-                    if *down {
-                        self.mouse_down = true;
-                        EventResponse::Sink
-                    } else if self.mouse_down {
-                        self.mouse_down = false;
-                        self.clicked = true;
-                        EventResponse::Sink
-                    } else {
-                        EventResponse::Bubble
-                    }
-                } else {
-                    if !*down {
-                        self.mouse_down = false;
-                    }
+                let prev_down = self.mouse_down;
+                self.mouse_down = down;
 
-                    EventResponse::Bubble
+                if inside && down && !prev_down {
+                    self.clicked = true;
+                    return EventResponse::Sink;
                 }
-            }
+
+                EventResponse::Bubble
+            },
             _ => EventResponse::Bubble,
         }
     }

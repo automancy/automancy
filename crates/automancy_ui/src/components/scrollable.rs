@@ -1,56 +1,54 @@
-use crate::{col, pad_x, pad_y, row, PaintRectLerpedColor, RoundRect};
-use automancy_defs::{
-    colors,
-    glam::{vec2, Vec2Swizzles},
-};
-use std::cell::Cell;
-use yakui::geometry::{Constraints, Vec2};
-use yakui::{
-    constrained,
-    input::MouseButton,
-    reflow,
-    widget::{EventContext, LayoutContext, Widget},
-    Alignment, Dim2, Rect,
-};
-use yakui::{
-    event::{EventInterest, EventResponse, WidgetEvent},
-    util::widget_children,
-};
-use yakui::{Pivot, Response};
+use crate::*;
 
-const SCROLL_SIZE: f32 = 8.0;
-const SCROLL_RADIUS: f32 = 4.0;
-
-#[derive(Debug)]
-#[non_exhaustive]
+#[derive(Debug, Clone, Copy)]
+#[must_use = "yakui widgets do nothing if you don't `show` them"]
 pub struct Scrollable {
-    pub direction: Option<ScrollDirection>,
-    pub min: Vec2,
-    pub max: f32,
+    pub direction: ScrollDirection,
+    pub child_size: Constraints,
+    pub min_child_size: Constraints,
+    pub radius: BorderRadius,
+    pub scrollbar_pos: Option<ScrollbarPosition>,
+}
+
+auto_builders!(Scrollable {
+    direction: ScrollDirection,
+    child_size: Constraints,
+    min_child_size: Constraints,
+    radius: BorderRadius,
+    scrollbar_pos: Option<ScrollbarPosition>,
+});
+
+impl Default for Scrollable {
+    fn default() -> Self {
+        Self {
+            direction: Default::default(),
+            child_size: Constraints::none(),
+            min_child_size: Constraints::loose(Vec2::ZERO),
+            radius: Default::default(),
+            scrollbar_pos: Some(ScrollbarPosition::default()),
+        }
+    }
 }
 
 impl Scrollable {
-    pub fn none() -> Self {
+    pub fn vertical() -> Self {
         Scrollable {
-            direction: None,
-            min: Vec2::default(),
-            max: 0.0,
+            direction: ScrollDirection::Y,
+            ..Default::default()
         }
     }
 
-    fn vertical(min: Vec2, max: f32) -> Self {
+    pub fn horizontal() -> Self {
         Scrollable {
-            direction: Some(ScrollDirection::Y),
-            min,
-            max,
+            direction: ScrollDirection::X,
+            ..Default::default()
         }
     }
 
-    fn horizontal(min: Vec2, max: f32) -> Self {
+    pub fn xy() -> Self {
         Scrollable {
-            direction: Some(ScrollDirection::X),
-            min,
-            max,
+            direction: ScrollDirection::XY,
+            ..Default::default()
         }
     }
 
@@ -60,29 +58,46 @@ impl Scrollable {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ScrollDirection {
+    #[default]
     Y,
     X,
+    XY,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ScrollbarPosition {
+    #[default]
+    End,
+    Start,
+}
+
+impl ScrollbarPosition {
+    pub fn percent(self) -> f32 {
+        match self {
+            ScrollbarPosition::End => 1.0,
+            ScrollbarPosition::Start => 0.0,
+        }
+    }
 }
 
 #[derive(Debug)]
-#[non_exhaustive]
 pub struct ScrollableWidget {
     props: Scrollable,
-    dragging: bool,
     last_drag_pos: Option<Vec2>,
     scroll_position: Cell<Vec2>,
     canvas_size: Cell<Vec2>,
     size: Cell<Vec2>,
+    scroll_percentage: Cell<Vec2>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Copy, Default)]
 
 pub struct ScrollableResponse {
-    pub pos_percentage: f32,
-    pub canvas_size: f32,
-    pub size: f32,
+    pub canvas_size: Vec2,
+    pub size: Vec2,
+    pub scroll_percentage: Vec2,
 }
 
 impl Widget for ScrollableWidget {
@@ -91,48 +106,22 @@ impl Widget for ScrollableWidget {
 
     fn new() -> Self {
         Self {
-            props: Scrollable::none(),
-            dragging: false,
+            props: Scrollable::default(),
             last_drag_pos: None,
             scroll_position: Cell::new(Vec2::ZERO),
             canvas_size: Cell::new(Vec2::ZERO),
             size: Cell::new(Vec2::ZERO),
+            scroll_percentage: Cell::new(Vec2::ZERO),
         }
     }
 
     fn update(&mut self, props: Self::Props<'_>) -> Self::Response {
         self.props = props;
 
-        match self.props.direction {
-            Some(ScrollDirection::Y) => {
-                let canvas_size = self.canvas_size.get().y;
-                let size = self.size.get().y;
-
-                ScrollableResponse {
-                    pos_percentage: if canvas_size == size {
-                        0.0
-                    } else {
-                        self.scroll_position.get().y / (canvas_size - size)
-                    },
-                    canvas_size,
-                    size,
-                }
-            }
-            Some(ScrollDirection::X) => {
-                let canvas_size = self.canvas_size.get().x;
-                let size = self.size.get().x;
-
-                ScrollableResponse {
-                    pos_percentage: if canvas_size == size {
-                        0.0
-                    } else {
-                        self.scroll_position.get().x / (canvas_size - size)
-                    },
-                    canvas_size,
-                    size,
-                }
-            }
-            _ => ScrollableResponse::default(),
+        ScrollableResponse {
+            canvas_size: self.canvas_size.get(),
+            size: self.size.get(),
+            scroll_percentage: self.scroll_percentage.get(),
         }
     }
 
@@ -142,16 +131,22 @@ impl Widget for ScrollableWidget {
         let node = ctx.dom.get_current();
         let mut canvas_size = Vec2::ZERO;
 
+        let child_size_min = self.props.min_child_size.min.max(constraints.min.max(self.props.child_size.min));
+        let child_size_max = self.props.min_child_size.max.max(constraints.max.min(self.props.child_size.max));
+
         let child_constraints = match self.props.direction {
-            Some(ScrollDirection::Y) => Constraints {
-                min: constraints.min.max(self.props.min),
-                max: Vec2::new(self.props.max.min(constraints.max.x), f32::INFINITY),
+            ScrollDirection::Y => Constraints {
+                min: child_size_min,
+                max: Vec2::new(child_size_max.x, f32::INFINITY),
             },
-            Some(ScrollDirection::X) => Constraints {
-                min: constraints.min.max(self.props.min),
-                max: Vec2::new(f32::INFINITY, self.props.max.min(constraints.max.y)),
+            ScrollDirection::X => Constraints {
+                min: child_size_min,
+                max: Vec2::new(f32::INFINITY, child_size_max.y),
             },
-            None => constraints,
+            ScrollDirection::XY => Constraints {
+                min: child_size_min,
+                max: child_size_max,
+            },
         };
 
         for &child in &node.children {
@@ -159,7 +154,7 @@ impl Widget for ScrollableWidget {
             canvas_size = canvas_size.max(child_size);
         }
 
-        let size = constraints.constrain(canvas_size);
+        let size = constraints.constrain(canvas_size).min(self.props.child_size.max);
 
         self.canvas_size.set(canvas_size);
         self.size.set(size);
@@ -167,9 +162,9 @@ impl Widget for ScrollableWidget {
         let mut pos = self.scroll_position.get();
 
         match self.props.direction {
-            None => self.scroll_position.set(Vec2::ZERO),
-            Some(ScrollDirection::Y) => pos.x = 0.0,
-            Some(ScrollDirection::X) => pos.y = 0.0,
+            ScrollDirection::Y => pos.x = 0.0,
+            ScrollDirection::X => pos.y = 0.0,
+            ScrollDirection::XY => {},
         }
 
         let max_scroll_position = (canvas_size - size).max(Vec2::ZERO);
@@ -180,86 +175,209 @@ impl Widget for ScrollableWidget {
         }
 
         self.scroll_position.set(pos);
+        self.scroll_percentage.set(if canvas_size == size {
+            Vec2::ZERO
+        } else {
+            pos / (canvas_size - size)
+        });
 
         size
     }
 
-    fn paint(&self, mut ctx: yakui::widget::PaintContext<'_>) {
-        let clip = ctx.paint.get_current_clip().unwrap_or(Rect::ZERO);
+    fn paint(&self, mut ctx: PaintContext<'_>) {
+        const SHADOW_SIZE: f32 = 16.0;
+        const THRESHOLD: f32 = 10.0;
+        const ALPHA: f32 = 0.6;
+
+        fn paint_shadow_top(ctx: &mut PaintContext<'_>, start: Vec2, rect: Rect, shadow_size: Vec2, radius: BorderRadius) {
+            let mul = ((start.y - THRESHOLD) / SHADOW_SIZE).clamp(0.0, 1.0);
+
+            if mul > 0.0 {
+                shapes::PaintRoundRect::new(
+                    Rect::from_pos_size(rect.pos(), shadow_size),
+                    BorderRadius {
+                        top_left: radius.top_left,
+                        top_right: radius.top_right,
+                        ..Default::default()
+                    },
+                )
+                .color_y((
+                    colors::BACKGROUND_INACTIVE.linear.with_alpha(ALPHA * mul).yak(),
+                    colors::TRANSPARENT.yak(),
+                ))
+                .add(ctx.paint);
+            }
+        }
+        fn paint_shadow_bottom(ctx: &mut PaintContext<'_>, end: Vec2, rect: Rect, shadow_size: Vec2, radius: BorderRadius) {
+            let mul = ((end.y - THRESHOLD) / SHADOW_SIZE).clamp(0.0, 1.0);
+
+            if mul > 0.0 {
+                shapes::PaintRoundRect::new(
+                    Rect::from_pos_size(rect.pos() + (rect.size() - shadow_size), shadow_size),
+                    BorderRadius {
+                        bottom_left: radius.bottom_left,
+                        bottom_right: radius.bottom_right,
+                        ..Default::default()
+                    },
+                )
+                .color_y((
+                    colors::TRANSPARENT.yak(),
+                    colors::BACKGROUND_INACTIVE.linear.with_alpha(ALPHA * mul).yak(),
+                ))
+                .add(ctx.paint);
+            }
+        }
+        fn paint_shadow_left(ctx: &mut PaintContext<'_>, start: Vec2, rect: Rect, shadow_size: Vec2, radius: BorderRadius) {
+            let mul = ((start.x - THRESHOLD) / SHADOW_SIZE).clamp(0.0, 1.0);
+
+            if mul > 0.0 {
+                shapes::PaintRoundRect::new(
+                    Rect::from_pos_size(rect.pos(), shadow_size),
+                    BorderRadius {
+                        top_left: radius.top_left,
+                        bottom_left: radius.bottom_left,
+                        ..Default::default()
+                    },
+                )
+                .color_x((
+                    colors::BACKGROUND_INACTIVE.linear.with_alpha(ALPHA * mul).yak(),
+                    colors::TRANSPARENT.yak(),
+                ))
+                .add(ctx.paint);
+            }
+        }
+        fn paint_shadow_right(ctx: &mut PaintContext<'_>, end: Vec2, rect: Rect, shadow_size: Vec2, radius: BorderRadius) {
+            let mul = ((end.x - THRESHOLD) / SHADOW_SIZE).clamp(0.0, 1.0);
+
+            if mul > 0.0 {
+                shapes::PaintRoundRect::new(
+                    Rect::from_pos_size(rect.pos() + (rect.size() - shadow_size), shadow_size),
+                    BorderRadius {
+                        top_right: radius.top_right,
+                        bottom_right: radius.bottom_right,
+                        ..Default::default()
+                    },
+                )
+                .color_x((
+                    colors::TRANSPARENT.yak(),
+                    colors::BACKGROUND_INACTIVE.linear.with_alpha(ALPHA * mul).yak(),
+                ))
+                .add(ctx.paint);
+            }
+        }
+
+        let rect = ctx.layout.get(ctx.dom.current()).unwrap().rect;
+
+        let canvas_size = self.canvas_size.get();
+        let pos = self.scroll_position.get();
+        let size = self.size.get();
+        let scroll_percentage = self.scroll_percentage.get();
+
+        ctx.paint.layers.push();
+        {
+            let start = pos;
+            let end = canvas_size - (size + pos);
+
+            match self.props.direction {
+                ScrollDirection::Y => {
+                    let shadow_size = Vec2::new(rect.size().x, SHADOW_SIZE);
+
+                    paint_shadow_top(&mut ctx, start, rect, shadow_size, self.props.radius);
+                    paint_shadow_bottom(&mut ctx, end, rect, shadow_size, self.props.radius);
+                },
+                ScrollDirection::X => {
+                    let shadow_size = Vec2::new(SHADOW_SIZE, rect.size().y);
+
+                    paint_shadow_left(&mut ctx, start, rect, shadow_size, self.props.radius);
+                    paint_shadow_right(&mut ctx, end, rect, shadow_size, self.props.radius);
+                },
+                ScrollDirection::XY => {
+                    {
+                        let shadow_size = Vec2::new(rect.size().x, SHADOW_SIZE);
+
+                        paint_shadow_top(&mut ctx, start, rect, shadow_size, self.props.radius);
+                        paint_shadow_bottom(&mut ctx, end, rect, shadow_size, self.props.radius);
+                    }
+
+                    {
+                        let shadow_size = Vec2::new(SHADOW_SIZE, rect.size().y);
+
+                        paint_shadow_left(&mut ctx, start, rect, shadow_size, self.props.radius);
+                        paint_shadow_right(&mut ctx, end, rect, shadow_size, self.props.radius);
+                    }
+                },
+            }
+        }
+        ctx.paint.layers.pop();
+
+        ctx.paint.layers.push();
+        if let Some(scrollbar_pos) = self.props.scrollbar_pos {
+            const SCROLLBAR_COLORS: (Color, Color) = (colors::INTERACTIVE_1.yak(), colors::INTERACTIVE_2.yak());
+            const SCROLLBAR_SIZE: f32 = 4.0;
+            const SCROLLBAR_RADIUS: f32 = 8.0;
+
+            let ratio = size / canvas_size;
+            let diff = canvas_size - size;
+            let offset = diff * ratio * scroll_percentage;
+
+            let paint_bar_x = |ctx: &mut PaintContext<'_>| {
+                if diff.x > 0.01 {
+                    let percent = Vec2::new(0.0, scrollbar_pos.percent());
+
+                    let scrollbar_size = Vec2::new((size.x * ratio.x).floor(), SCROLLBAR_SIZE);
+                    let scrollbar_rect = Rect::from_pos_size(
+                        (rect.pos() + (percent * rect.size()) + (percent * -SCROLLBAR_SIZE) + Vec2::new(offset.x, 0.0)).round(),
+                        scrollbar_size,
+                    );
+
+                    shapes::PaintRoundRect::new(scrollbar_rect, SCROLLBAR_RADIUS)
+                        .color_x(SCROLLBAR_COLORS)
+                        .add(ctx.paint);
+                }
+            };
+
+            let paint_bar_y = |ctx: &mut PaintContext<'_>| {
+                if diff.y > 0.01 {
+                    let percent = Vec2::new(scrollbar_pos.percent(), 0.0);
+
+                    let scrollbar_size = Vec2::new(SCROLLBAR_SIZE, (size.y * ratio.y).floor());
+                    let scrollbar_rect = Rect::from_pos_size(
+                        (rect.pos() + (percent * rect.size()) + (percent * -SCROLLBAR_SIZE) + Vec2::new(0.0, offset.y)).round(),
+                        scrollbar_size,
+                    );
+
+                    shapes::PaintRoundRect::new(scrollbar_rect, SCROLLBAR_RADIUS)
+                        .color_y(SCROLLBAR_COLORS)
+                        .add(ctx.paint);
+                }
+            };
+
+            match self.props.direction {
+                ScrollDirection::Y => {
+                    paint_bar_y(&mut ctx);
+                },
+                ScrollDirection::X => {
+                    paint_bar_x(&mut ctx);
+                },
+                ScrollDirection::XY => {
+                    paint_bar_y(&mut ctx);
+                    paint_bar_x(&mut ctx);
+                },
+            }
+        }
+        ctx.paint.layers.pop();
 
         let node = ctx.dom.get_current();
         for &child in &node.children {
             ctx.paint(child);
         }
-
-        let Some(dir) = self.props.direction else {
-            return;
-        };
-
-        let layout_pos = ctx.layout.get(ctx.dom.current()).unwrap().rect.pos();
-
-        let scroll_min = Vec2::ZERO;
-        let scroll_max = self.canvas_size.get();
-
-        let canvas_min = self.scroll_position.get();
-        let canvas_max = canvas_min + self.size.get();
-
-        let min = ((canvas_min - scroll_min).abs() / 30.0).clamp(Vec2::ZERO, Vec2::ONE);
-        let max = ((canvas_max - scroll_max).abs() / 30.0).clamp(Vec2::ZERO, Vec2::ONE);
-
-        const SIZE: f32 = 20.0;
-        let dir_size = match dir {
-            ScrollDirection::Y => Vec2::new(scroll_max.x, SIZE),
-            ScrollDirection::X => Vec2::new(SIZE, scroll_max.y),
-        };
-
-        let a = Rect::from_pos_size(layout_pos, dir_size);
-        let b = Rect::from_pos_size(layout_pos + self.size.get() - dir_size, dir_size);
-
-        const MUL: f32 = 0.5;
-
-        {
-            let mut rect = PaintRectLerpedColor::new(match dir {
-                ScrollDirection::Y => a,
-                ScrollDirection::X => b,
-            });
-
-            let size = clip.constrain(rect.rect).size();
-            if size.x >= SIZE && size.y >= SIZE {
-                let x0 = colors::BLACK.with_alpha(max.x * MUL);
-                let x1 = colors::TRANSPARENT;
-                let y0 = colors::BLACK.with_alpha(min.y * MUL);
-                let y1 = colors::TRANSPARENT;
-
-                rect.color = (x0, y0, x1, y1);
-                rect.add(ctx.paint);
-            }
-        }
-
-        {
-            let mut rect = PaintRectLerpedColor::new(match dir {
-                ScrollDirection::Y => b,
-                ScrollDirection::X => a,
-            });
-
-            let size = clip.constrain(rect.rect).size();
-            if size.x >= SIZE && size.y >= SIZE {
-                let x0 = colors::BLACK.with_alpha(min.x * MUL);
-                let x1 = colors::TRANSPARENT;
-                let y0 = colors::BLACK.with_alpha(max.y * MUL);
-                let y1 = colors::TRANSPARENT;
-
-                rect.color = (x1, y1, x0, y0);
-                rect.add(ctx.paint);
-            }
-        }
     }
 
     fn event_interest(&self) -> EventInterest {
-        EventInterest::MOUSE_INSIDE | EventInterest::MOUSE_MOVE | EventInterest::MOUSE_OUTSIDE
+        EventInterest::MOUSE_ALL
     }
 
-    fn event(&mut self, _ctx: EventContext<'_>, event: &WidgetEvent) -> EventResponse {
+    fn event(&mut self, ctx: EventContext<'_>, event: &WidgetEvent) -> EventResponse {
         match *event {
             WidgetEvent::MouseButtonChanged {
                 button: MouseButton::One,
@@ -268,29 +386,25 @@ impl Widget for ScrollableWidget {
                 ..
             } => {
                 self.last_drag_pos = None;
-
-                if inside {
-                    self.dragging = down;
-
-                    if down {
-                        EventResponse::Sink
-                    } else {
-                        EventResponse::Bubble
-                    }
-                } else {
-                    self.dragging = false;
-
-                    EventResponse::Bubble
+                if ctx.input.selection() == Some(ctx.dom.current()) {
+                    ctx.input.set_selection(None);
                 }
-            }
+
+                if inside && down {
+                    ctx.input.set_selection(Some(ctx.dom.current()));
+
+                    return EventResponse::Sink;
+                }
+
+                EventResponse::Bubble
+            },
             WidgetEvent::MouseMoved(Some(mouse)) => {
-                if self.dragging {
+                if ctx.input.selection() == Some(ctx.dom.current()) {
                     if let Some(start) = self.last_drag_pos {
                         let pos = self.scroll_position.get();
                         let pos = pos - (mouse - start);
 
-                        let max_scroll_position =
-                            (self.canvas_size.get() - self.size.get()).max(Vec2::ZERO);
+                        let max_scroll_position = (self.canvas_size.get() - self.size.get()).max(Vec2::ZERO);
 
                         let pos = pos.min(max_scroll_position).max(Vec2::ZERO);
 
@@ -303,7 +417,7 @@ impl Widget for ScrollableWidget {
                 } else {
                     EventResponse::Bubble
                 }
-            }
+            },
             WidgetEvent::MouseScroll {
                 mut delta,
                 modifiers,
@@ -312,131 +426,41 @@ impl Widget for ScrollableWidget {
                     delta = delta.yx();
                 }
 
+                if modifiers.ctrl() {
+                    delta *= 10.0;
+                }
+
                 match self.props.direction {
-                    Some(ScrollDirection::Y) => {
+                    ScrollDirection::Y => {
                         if delta.y.abs() < 0.01 {
                             return EventResponse::Bubble;
                         }
-                    }
-                    Some(ScrollDirection::X) => {
+                    },
+                    ScrollDirection::X => {
+                        delta = delta.yx();
+
                         if delta.x.abs() < 0.01 {
                             return EventResponse::Bubble;
                         }
-                    }
-                    None => {}
+                    },
+                    ScrollDirection::XY => {
+                        if delta.x.abs() < 0.01 && delta.y.abs() < 0.01 {
+                            return EventResponse::Bubble;
+                        }
+                    },
                 }
 
-                let pos = self.scroll_position.get();
-                let pos = pos + delta;
+                let max_scroll_position = (self.canvas_size.get() - self.size.get()).max(Vec2::ZERO);
+                if max_scroll_position == Vec2::ZERO {
+                    return EventResponse::Bubble;
+                }
 
-                let max_scroll_position =
-                    (self.canvas_size.get() - self.size.get()).max(Vec2::ZERO);
-
-                let pos = pos.min(max_scroll_position).max(Vec2::ZERO);
-
-                self.scroll_position.set(pos);
+                self.scroll_position
+                    .update(|pos| (pos + delta).min(max_scroll_position).max(Vec2::ZERO));
 
                 EventResponse::Sink
-            }
-            WidgetEvent::MouseLeave => {
-                self.dragging = false;
-                self.last_drag_pos = None;
-                EventResponse::Sink
-            }
+            },
             _ => EventResponse::Bubble,
         }
     }
-}
-
-#[track_caller]
-pub fn scroll_vertical_bar_alignment(
-    min: Vec2,
-    max: Vec2,
-    alignment: Option<Alignment>,
-    children: impl FnOnce(),
-) {
-    row(|| {
-        let mut res = None;
-        constrained(Constraints::loose(Vec2::new(f32::INFINITY, max.y)), || {
-            res = Some(Scrollable::vertical(min, max.x).show(children));
-        });
-        let res = res.unwrap();
-
-        if let Some(alignment) = alignment {
-            scroll_bar(res.into_inner(), alignment.as_vec2(), ScrollDirection::Y);
-        }
-    });
-}
-
-#[track_caller]
-pub fn scroll_vertical(min: Vec2, max: Vec2, children: impl FnOnce()) {
-    scroll_vertical_bar_alignment(min, max, Some(Alignment::TOP_RIGHT), children)
-}
-
-#[track_caller]
-pub fn scroll_horizontal_bar_alignment(
-    min: Vec2,
-    max: Vec2,
-    alignment: Option<Alignment>,
-    children: impl FnOnce(),
-) {
-    col(|| {
-        let mut res = None;
-        constrained(Constraints::loose(Vec2::new(max.x, f32::INFINITY)), || {
-            res = Some(Scrollable::horizontal(min, max.y).show(children));
-        });
-        let res = res.unwrap();
-
-        if let Some(alignment) = alignment {
-            scroll_bar(res.into_inner(), alignment.as_vec2(), ScrollDirection::X);
-        }
-    });
-}
-
-#[track_caller]
-pub fn scroll_horizontal(min: Vec2, max: Vec2, children: impl FnOnce()) {
-    scroll_horizontal_bar_alignment(min, max, Some(Alignment::BOTTOM_LEFT), children)
-}
-
-#[track_caller]
-fn scroll_bar(res: ScrollableResponse, alignment: Vec2, dir: ScrollDirection) {
-    let ratio = res.size / res.canvas_size;
-    let diff = res.canvas_size - res.size;
-
-    reflow(
-        Alignment::new(alignment.x, alignment.y),
-        Pivot::new(alignment.x, alignment.y),
-        Dim2::ZERO,
-        || {
-            RoundRect::new(SCROLL_RADIUS, colors::BACKGROUND_3).show_children(|| {
-                let pad_f = if dir == ScrollDirection::Y {
-                    pad_y
-                } else {
-                    pad_x
-                };
-
-                pad_f(
-                    diff * ratio * res.pos_percentage,
-                    diff * ratio * (1.0 - res.pos_percentage),
-                )
-                .show(|| {
-                    let mut rect = if dir == ScrollDirection::Y {
-                        RoundRect::colored_y
-                    } else {
-                        RoundRect::colored_x
-                    }(
-                        SCROLL_RADIUS,
-                        (colors::ORANGE, colors::ORANGE.adjust(1.0 + (1.0 - ratio))),
-                    );
-
-                    rect.min_size = if dir == ScrollDirection::Y {
-                        vec2(SCROLL_SIZE, (res.size * ratio).floor())
-                    } else {
-                        vec2((res.size * ratio).floor(), SCROLL_SIZE)
-                    };
-                    rect.show();
-                });
-            });
-        },
-    );
 }

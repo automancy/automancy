@@ -1,83 +1,78 @@
-use crate::{colored_label_text, label_text, symbol_text, ROUNDED_MEDIUM};
-use automancy_defs::colors;
-use yakui::{
-    opaque,
-    widgets::{Button, ButtonResponse, DynamicButtonStyle, Pad, Text},
-    Color, Response,
-};
+use crate::*;
 
-pub fn button_styled(text: Text, padding: Pad) -> Button {
-    let mut button = Button::unstyled(text.text);
+pub trait ButtonExt {
+    fn with_text(text: Text) -> Button;
 
-    let text_style = text.style.clone();
-
-    button.padding = padding;
-
-    button.border_radius = ROUNDED_MEDIUM;
-
-    button.style = DynamicButtonStyle {
-        text: text_style.clone(),
-        fill: colors::LIGHT_GRAY,
-    };
-
-    button.hover_style = DynamicButtonStyle {
-        text: text_style.clone(),
-        fill: colors::LIGHT_GRAY.adjust(1.2),
-    };
-
-    button.down_style = DynamicButtonStyle {
-        text: text_style.clone(),
-        fill: colors::LIGHT_BLUE.adjust(0.8),
-    };
-
-    button
+    fn simple(text: Text) -> Button;
 }
 
-pub fn button_text(text: Text) -> Button {
-    button_styled(text, Pad::all(8.0))
+impl ButtonExt for Button {
+    fn with_text(text: Text) -> Button {
+        let text_style = text.style.clone().align(TextAlignment::Center);
+
+        Button::unstyled(text.text)
+            .border_radius(sizing::ROUNDED_MEDIUM)
+            .style(DynamicButtonStyle {
+                text: text_style.clone(),
+                fill: colors::BACKGROUND_2.yak(),
+                border: None,
+            })
+            .hover_style(DynamicButtonStyle {
+                text: text_style.clone(),
+                fill: colors::BUTTON_HOVERED.yak(),
+                border: None,
+            })
+            .down_style(DynamicButtonStyle {
+                text: text_style.clone(),
+                fill: colors::BUTTON_PRESSED.yak(),
+                border: None,
+            })
+    }
+
+    fn simple(text: Text) -> Button {
+        Self::with_text(text).padding(Pad::all(sizing::PADDING_MEDIUM))
+    }
 }
 
 #[track_caller]
-pub fn selectable_symbol_button(
-    symbol: &str,
-    color: Color,
-    selected: bool,
-) -> Response<ButtonResponse> {
-    let mut button = button_styled(symbol_text(symbol, color), Pad::all(2.0));
+pub fn selectable_symbol_button<S: Into<Cow<'static, str>>>(symbol: S, color: Color, selected: bool) -> Response<ButtonResponse> {
+    let mut button = Button::simple(Text::symbol(symbol).color(color)).padding(Pad::all(sizing::PADDING_XSMALL));
 
     if selected {
-        button.style.fill = colors::LIGHT_BLUE;
-        button.hover_style.fill = colors::LIGHT_BLUE.adjust(1.5);
+        button.style.fill = colors::BUTTON_HOVERED.yak();
+        button.hover_style.fill = colors::BUTTON_PRESSED.yak();
     }
 
     button.show()
 }
 
 #[track_caller]
-pub fn symbol_button(symbol: &str, color: Color) -> Response<ButtonResponse> {
+pub fn symbol_button<S: Into<Cow<'static, str>>>(symbol: S, color: Color) -> Response<ButtonResponse> {
     selectable_symbol_button(symbol, color, false)
 }
 
 #[track_caller]
-pub fn inactive_button(text: &str) -> Response<ButtonResponse> {
-    let mut r = None;
+pub fn inactive_button<S: Into<Cow<'static, str>>>(text: S) -> Response<ButtonResponse> {
+    let mut response = None;
 
-    opaque(|| {
-        Pad::all(2.0).show(|| {
-            r = Some(button_text(colored_label_text(text, colors::GRAY)).show());
+    Opaque::new().show(|| {
+        Pad::all(sizing::PADDING_XSMALL).show(|| {
+            response = Some(Button::simple(Text::normal(text).color(colors::BACKGROUND_INACTIVE.yak())).show());
         });
     });
 
-    r.unwrap()
+    let mut response = response.unwrap();
+    response.clicked = false;
+    response
 }
 
 #[track_caller]
-pub fn button(text: &str) -> Response<ButtonResponse> {
-    let mut r = None;
+pub fn button<S: Into<Cow<'static, str>>>(text: S) -> Response<ButtonResponse> {
+    let mut response = None;
 
-    Pad::all(2.0).show(|| {
-        r = Some(button_text(label_text(text)).show());
+    Pad::all(sizing::PADDING_XSMALL).show(|| {
+        response = Some(Button::simple(Text::normal(text)).show());
     });
 
-    r.unwrap()
+    response.unwrap()
 }

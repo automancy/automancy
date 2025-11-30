@@ -1,35 +1,35 @@
-use std::cell::Cell;
-use yakui::{util::widget_children, widget::Widget, Rect, Response, Vec2};
+use crate::*;
 
-#[derive(Debug, Default)]
-pub struct PositionRecord {}
+#[derive(Debug, Clone, Copy, Default)]
+#[must_use = "yakui widgets do nothing if you don't `show` them"]
+pub struct RectRecorder {}
 
-impl PositionRecord {
+impl RectRecorder {
     pub fn new() -> Self {
-        Self::default()
+        Self {}
     }
 
     #[track_caller]
     pub fn show<F: FnOnce()>(self, children: F) -> Response<PositionRecordResponse> {
-        widget_children::<PositionRecordWidget, F>(children, self)
+        widget_children::<RectRecorderWidget, F>(children, self)
     }
 }
 
 #[derive(Debug)]
-pub struct PositionRecordWidget {
-    props: PositionRecord,
+pub struct RectRecorderWidget {
+    props: RectRecorder,
     rect: Cell<Option<Rect>>,
 }
 
-pub type PositionRecordResponse = Option<Vec2>;
+pub type PositionRecordResponse = Option<Rect>;
 
-impl Widget for PositionRecordWidget {
-    type Props<'a> = PositionRecord;
+impl Widget for RectRecorderWidget {
+    type Props<'a> = RectRecorder;
     type Response = PositionRecordResponse;
 
     fn new() -> Self {
         Self {
-            props: PositionRecord::new(),
+            props: RectRecorder::new(),
             rect: Cell::default(),
         }
     }
@@ -37,14 +37,10 @@ impl Widget for PositionRecordWidget {
     fn update(&mut self, props: Self::Props<'_>) -> Self::Response {
         self.props = props;
 
-        self.rect.get().as_ref().map(Rect::pos)
+        self.rect.get()
     }
 
-    fn layout(
-        &self,
-        ctx: yakui::widget::LayoutContext<'_>,
-        constraints: yakui::Constraints,
-    ) -> Vec2 {
+    fn layout(&self, ctx: yakui::widget::LayoutContext<'_>, constraints: yakui::Constraints) -> Vec2 {
         if let Some(layout_node) = ctx.layout.get(ctx.dom.current()) {
             self.rect.set(Some(layout_node.rect));
         }

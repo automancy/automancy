@@ -1,2 +1,2 @@
 [build]
-rustflags = ["-C", "force-unwind-tables"]
+rustflags = ["--cfg", "tokio_unstable"]

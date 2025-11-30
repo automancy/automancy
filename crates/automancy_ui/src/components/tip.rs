@@ -1,19 +1,29 @@
-use crate::{interactive, label_text, symbol};
-use automancy_defs::colors;
-use std::cell::Cell;
-use yakui::widgets::Text;
+use crate::*;
 
 thread_local! {
-    pub static HOVER_TIP: Cell<Option<Text>> = Cell::default();
+    static HOVER_TIP: Cell<Option<Text>> = Cell::default();
 }
 
 #[track_caller]
-pub fn info_tip(info: &str) {
+pub fn info_tip<S: Into<Cow<'static, str>>>(info: S) {
     let label = interactive(|| {
-        symbol("\u{f449}", colors::BLACK);
+        symbol("\u{f449}", colors::TEXT_ACTIVE.yak());
     });
 
     if label.hovering {
-        HOVER_TIP.set(Some(label_text(info)));
+        HOVER_TIP.set(Some(Text::normal(info)));
     }
+}
+
+#[cfg_attr(feature = "profile", profiling::function)]
+pub fn render_info_tip() {
+    Layer::new().show(|| {
+        if let Some(tip) = HOVER_TIP.take() {
+            hover_tip(|| {
+                constrained(Constraints::loose(Vec2::new(360.0, f32::INFINITY)), || {
+                    tip.show();
+                });
+            });
+        }
+    });
 }

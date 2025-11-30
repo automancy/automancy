@@ -1,1 +1,11 @@
+max_width = 140
+reorder_imports = true
+reorder_modules = true
+match_block_trailing_comma = true
+
 unstable_features = true
+group_imports = "StdExternalCrate"
+imports_granularity = "Crate"
+struct_lit_single_line = false
+trailing_semicolon = true
+trailing_comma = "Vertical"
