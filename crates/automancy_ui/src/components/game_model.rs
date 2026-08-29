@@ -78,19 +78,18 @@ impl Widget for GameObjectWidget {
         clip_rect.set_size(clip_rect.size() * ctx.layout.scale_factor());
 
         let mut layout_rect = Rect::from_pos_size(layout_node.rect.pos(), layout_node.rect.size());
-        layout_rect.set_pos(layout_rect.pos() * ctx.layout.scale_factor());
-        layout_rect.set_size(layout_rect.size() * ctx.layout.scale_factor());
 
         if let Some(layer) = ctx.paint.layers.current_mut() {
             const SUPER_SAMPLE_FACTOR: f32 = 2.0 + (2.0 / 3.0);
 
             let props: GameModel = std::mem::take(unsafe { &mut *self.props.get() });
 
-            let (texture_id, rect) = ctx.paint.globals.get_mut().get_mut(custom::CustomRenderer::default).add(
-                layout_rect,
-                props.size.round() * SUPER_SAMPLE_FACTOR * ctx.layout.scale_factor(),
-                props.into(),
-            );
+            let (texture_id, rect) = ctx
+                .paint
+                .globals
+                .get_mut()
+                .get_mut(custom::CustomRenderer::default)
+                .add(props.size.round() * SUPER_SAMPLE_FACTOR * ctx.layout.scale_factor(), props.into());
 
             shapes::PaintRect::new(layout_rect).texture((texture_id, rect)).add(ctx.paint);
         }

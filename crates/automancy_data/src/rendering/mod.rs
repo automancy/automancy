@@ -73,9 +73,9 @@ pub mod deserialize {
     impl StrGenericModel {
         pub fn into_icon(self, interner: &mut IdInterner, fallback_namespace: Option<&str>) -> Result<GenericModel, StrIdParseError> {
             Ok(match self {
-                StrGenericModel::Plain(id) => GenericModel::Plain(ModelId(interner.get_or_intern(id, fallback_namespace)?)),
-                StrGenericModel::Item(id) => GenericModel::Item(ItemId(interner.get_or_intern(id, fallback_namespace)?)),
-                StrGenericModel::Tile(id) => GenericModel::Tile(TileId(interner.get_or_intern(id, fallback_namespace)?)),
+                StrGenericModel::Plain(id) => GenericModel::Plain(ModelId(interner.get_or_intern(&id, fallback_namespace)?)),
+                StrGenericModel::Item(id) => GenericModel::Item(ItemId(interner.get_or_intern(&id, fallback_namespace)?)),
+                StrGenericModel::Tile(id) => GenericModel::Tile(TileId(interner.get_or_intern(&id, fallback_namespace)?)),
             })
         }
     }

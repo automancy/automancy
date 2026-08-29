@@ -25,19 +25,13 @@ static ERROR_MAN: RwLock<ErrorManager> = RwLock::new(ErrorManager {
 
 #[cfg_attr(feature = "profile", profiling::all_functions)]
 impl ErrorManager {
-    /// Gets the unlocalized name of an error's Id.
-    pub fn error_id_to_name(resource_man: &ResourceManager, id: Id) -> &str {
-        resource_man.interner.resolve(id).unwrap_or("")
-    }
-
     /// Pushes a new error to the stack.
     pub fn push_err<'a, T>(resource_man: &ResourceManager, id: Id, fmt: T)
     where
         T: Debug + Copy + IntoIterator<Item = (&'a str, Formattable<'a>)>,
     {
-        let key = Self::error_id_to_name(resource_man, id);
         let context = FormatContext::from_iter(fmt);
-        log::debug!("<Raw> Recording game error: {key}{context}");
+        log::debug!("<Raw> Recording game error: {id}{context}");
 
         let message = context.format_str(resource_man.translates.error[&id]);
         log::error!("Recording game error: {message}",);

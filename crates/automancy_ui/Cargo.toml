@@ -57,4 +57,4 @@ include_dir = { workspace = true }
 interpolator = { workspace = true }
 
 # from yakui
-glam = "0.32.1"
+glam = "0.33.0"

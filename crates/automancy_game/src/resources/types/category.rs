@@ -1,7 +1,7 @@
 use std::{fs::read_to_string, path::Path};
 
 use automancy_data::{
-    id::{CategoryId, ItemId, ResearchId, TileId, deserialize::StrId},
+    id::{CategoryId, IdInterner, ItemId, ResearchId, TileId, deserialize::StrId},
     id_map::IdMap,
     math::Int,
     rendering::{GenericModel, deserialize::StrGenericModel},
@@ -31,22 +31,22 @@ struct Raw {
 
 #[cfg_attr(feature = "profile", profiling::all_functions)]
 impl MutableResourceManager {
-    fn load_category_file(&mut self, file: &Path, namespace: &str) -> Result<(), ResourceError> {
-        log::info!("Loading category at: {}.", file.display());
+    fn load_category_file(&mut self, interner: &mut IdInterner, path: &Path, namespace: &str) -> Result<(), ResourceError> {
+        log::info!("Loading category at: {}.", path.display());
 
-        let v = persistent::ron::ron_options().from_str::<Raw>(&read_to_string(file)?)?;
+        let v = persistent::ron::ron_options().from_str::<Raw>(&read_to_string(path)?)?;
 
-        let id = CategoryId(self.interner.get_or_intern(v.id, Some(namespace))?);
+        let id = CategoryId(interner.get_or_intern(&v.id, Some(namespace))?);
         if id.is_built_in() {
             return Err(ResourceError::BuiltInRedefined {
                 ty: "category",
-                file: file.to_path_buf(),
-                name: self.interner.resolve(*id).unwrap().to_string(),
+                file: path.to_path_buf(),
+                name: interner.resolve(*id).unwrap().to_string(),
             });
         }
         let ord = v.ord;
-        let icon = v.icon.into_icon(&mut self.interner, Some(namespace))?;
-        let item = ItemId(self.interner.get_or_intern_opt(v.item, Some(namespace))?);
+        let icon = v.icon.into_icon(interner, Some(namespace))?;
+        let item = ItemId(interner.get_or_intern_opt(v.item.as_deref(), Some(namespace))?);
 
         self.registry.category_defs.insert(
             id,
@@ -61,15 +61,17 @@ impl MutableResourceManager {
         Ok(())
     }
 
-    pub fn load_category_files(&mut self, dir: &Path, namespace: &str) {
-        let path = dir.join("categories");
+    pub fn load_category_files(dir: &Path, namespace: &str) {
+        MutableResourceManager::with_interner(|resource_man, interner| {
+            let path = dir.join("categories");
 
-        for file in read_recursively(&path, RON_EXTS) {
-            match self.load_category_file(&file, namespace) {
-                Ok(_) => {},
-                Err(err) => err.log_err(),
+            for entry in read_recursively(&path, RON_EXTS) {
+                match resource_man.load_category_file(interner, entry.path(), namespace) {
+                    Ok(_) => {},
+                    Err(err) => err.log_err(),
+                }
             }
-        }
+        })
     }
 
     pub fn compile_categories(&self) -> (Vec<CategoryId>, IdMap<CategoryId, Vec<TileId>>) {

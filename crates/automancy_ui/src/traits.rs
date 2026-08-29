@@ -17,7 +17,7 @@ pub const trait IntoOurs {
     fn unyak(self) -> Self::OurType;
 }
 
-impl const IntoYakui for SRgbaU8 {
+const impl IntoYakui for SRgbaU8 {
     type YakuiType = yakui::Color;
 
     fn yak(self) -> Self::YakuiType {
@@ -30,7 +30,7 @@ impl const IntoYakui for SRgbaU8 {
     }
 }
 
-impl const IntoYakui for Rgba {
+const impl IntoYakui for Rgba {
     type YakuiType = <SRgbaU8 as IntoYakui>::YakuiType;
 
     fn yak(self) -> Self::YakuiType {
@@ -38,7 +38,7 @@ impl const IntoYakui for Rgba {
     }
 }
 
-impl const IntoYakui for ComplexRgba {
+const impl IntoYakui for ComplexRgba {
     type YakuiType = yakui::Color;
 
     fn yak(self) -> Self::YakuiType {
@@ -46,7 +46,7 @@ impl const IntoYakui for ComplexRgba {
     }
 }
 
-impl const IntoYakui for Vec2 {
+const impl IntoYakui for Vec2 {
     type YakuiType = yakui::Vec2;
 
     fn yak(self) -> Self::YakuiType {
@@ -54,7 +54,7 @@ impl const IntoYakui for Vec2 {
     }
 }
 
-impl const IntoOurs for yakui::Vec2 {
+const impl IntoOurs for yakui::Vec2 {
     type OurType = Vec2;
 
     fn unyak(self) -> Self::OurType {
@@ -62,7 +62,7 @@ impl const IntoOurs for yakui::Vec2 {
     }
 }
 
-impl const IntoYakui for UVec2 {
+const impl IntoYakui for UVec2 {
     type YakuiType = yakui::UVec2;
 
     fn yak(self) -> Self::YakuiType {
@@ -70,7 +70,7 @@ impl const IntoYakui for UVec2 {
     }
 }
 
-impl const IntoOurs for yakui::UVec2 {
+const impl IntoOurs for yakui::UVec2 {
     type OurType = UVec2;
 
     fn unyak(self) -> Self::OurType {

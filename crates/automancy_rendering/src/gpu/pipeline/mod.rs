@@ -36,6 +36,6 @@ impl Default for BufferInitArg<'_> {
 }
 
 #[inline]
-pub(crate) fn new_bufer_size(gpu_size: u64, cpu_size: u64) -> u64 {
+pub(crate) fn new_buffer_size(gpu_size: u64, cpu_size: u64) -> u64 {
     gpu_size.max(cpu_size + (cpu_size >> 1))
 }

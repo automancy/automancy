@@ -30,7 +30,7 @@ enum BufStatus {
 ///         - Advance the current index by one
 ///         - Set the status to `Idle`
 /// - If `status` == `Uninit`:
-///     - The same as `status` == `Idle`, however, wait for the task to finish and return the inital value.
+///     - The same as `status` == `Idle`, however, wait for the task to finish and return the initial value.
 /// - If `status` == `Updating`:
 ///     - Return the newest available value.
 ///
@@ -108,7 +108,7 @@ where
             })
         };
 
-        // if the buffer is uninitalized, block until `new` has value.
+        // if the buffer is uninitialized, block until `new` has value.
         if status == BufStatus::Uninit as u8 {
             Handle::current().block_on(async move {
                 handle.await.unwrap();

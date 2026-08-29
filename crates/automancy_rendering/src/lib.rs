@@ -1,3 +1,6 @@
+#![feature(const_convert)]
+#![feature(const_trait_impl)]
+
 pub mod gpu;
 pub mod renderer;
 

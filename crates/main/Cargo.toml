@@ -50,6 +50,7 @@ yakui-winit = { workspace = true }
 
 # scripting / game logic / async runtime
 ractor = { workspace = true }
+rhai = { workspace = true }
 tokio = { workspace = true }
 
 # utils

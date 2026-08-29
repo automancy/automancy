@@ -1,6 +1,6 @@
 use std::{fs::read_to_string, path::Path};
 
-use automancy_data::id::{ItemId, ModelId, deserialize::StrId};
+use automancy_data::id::{IdInterner, ItemId, ModelId, deserialize::StrId};
 use gltf;
 use log;
 use serde::Deserialize;
@@ -18,14 +18,14 @@ struct Raw {
 
 #[cfg_attr(feature = "profile", profiling::all_functions)]
 impl MutableResourceManager {
-    fn load_model_file(&mut self, file: &Path, namespace: &str) -> Result<(), ResourceError> {
-        log::info!("Loading model at: {}.", file.display());
+    fn load_model_file(&mut self, interner: &mut IdInterner, path: &Path, namespace: &str) -> Result<(), ResourceError> {
+        log::info!("Loading model at: {}.", path.display());
 
-        let v = persistent::ron::ron_options().from_str::<Raw>(&read_to_string(file)?)?;
+        let v = persistent::ron::ron_options().from_str::<Raw>(&read_to_string(path)?)?;
 
-        let id = ModelId(self.interner.get_or_intern(v.id, Some(namespace))?);
+        let id = ModelId(interner.get_or_intern(&v.id, Some(namespace))?);
 
-        let file = file.parent().unwrap().join("files").join(v.file.as_str());
+        let file = path.parent().unwrap().join("files").join(v.file.as_str());
         log::info!("Loading model file at: {}.", file.display());
         let (document, buffers, _images) = gltf::import(file)?;
 
@@ -34,15 +34,17 @@ impl MutableResourceManager {
         Ok(())
     }
 
-    pub fn load_model_files(&mut self, dir: &Path, namespace: &str) {
-        let path = dir.join("models");
+    pub fn load_model_files(dir: &Path, namespace: &str) {
+        MutableResourceManager::with_interner(|resource_man, interner| {
+            let path = dir.join("models");
 
-        for file in read_recursively(&path, RON_EXTS) {
-            match self.load_model_file(&file, namespace) {
-                Ok(_) => {},
-                Err(err) => err.log_err(),
+            for entry in read_recursively(&path, RON_EXTS) {
+                match resource_man.load_model_file(interner, entry.path(), namespace) {
+                    Ok(_) => {},
+                    Err(err) => err.log_err(),
+                }
             }
-        }
+        })
     }
 }
 

@@ -1,14 +1,17 @@
 use core::{
-    cell::UnsafeCell,
+    cell::RefCell,
     fmt::{Debug, Display},
+    num::NonZeroU32,
 };
-use std::{hash::Hash, ops::Deref};
+use std::{
+    hash::Hash,
+    ops::Deref,
+    sync::{Arc, LazyLock, RwLock},
+};
 
-use bytemuck::{Pod, Zeroable};
+use bytemuck::{Pod, TransparentWrapper, Zeroable};
 use serde::{Deserialize, Serialize};
 pub use string_interner::Symbol as InternSymbol;
-
-use crate::id::deserialize::StrIdRef;
 
 // TODO investigate perf
 #[repr(transparent)]
@@ -16,8 +19,10 @@ use crate::id::deserialize::StrIdRef;
 pub struct IdInterner(string_interner::StringInterner<string_interner::backend::BucketBackend<Id>>);
 
 thread_local! {
-    pub static GLOBAL_INTERNER: UnsafeCell<IdInterner> = UnsafeCell::new(IdInterner::new());
+    pub static MUTABLE_GLOBAL_INTERNER: RefCell<Option<IdInterner>> = const { RefCell::new(None) };
 }
+
+pub static GLOBAL_INTERNER: LazyLock<RwLock<Arc<IdInterner>>> = LazyLock::new(|| RwLock::new(Arc::new(IdInterner::new())));
 
 impl Default for IdInterner {
     fn default() -> Self {
@@ -59,11 +64,11 @@ impl IdInterner {
     ///
     /// Can be used to query if a string has already been interned without interning.
     #[inline]
-    pub fn get<'a>(&self, string: StrIdRef<'a>) -> Option<Id> {
+    pub fn get(&self, string: &str) -> Option<Id> {
         self.0.get(string)
     }
 
-    fn parse_string_id<'a>(
+    pub fn parse_string_id<'a>(
         string: &'a str,
         fallback_namespace: Option<&'a str>,
     ) -> Result<(&'a str, &'a str), deserialize::StrIdParseError> {
@@ -89,12 +94,8 @@ impl IdInterner {
     /// If the interner already interns the maximum number of strings possible
     /// by the chosen symbol type.
     #[inline]
-    pub fn get_or_intern<'a>(
-        &mut self,
-        string: StrIdRef<'a>,
-        fallback_namespace: Option<&str>,
-    ) -> Result<Id, deserialize::StrIdParseError> {
-        let (namespace, name) = Self::parse_string_id(&string, fallback_namespace)?;
+    pub fn get_or_intern(&mut self, string: &str, fallback_namespace: Option<&str>) -> Result<Id, deserialize::StrIdParseError> {
+        let (namespace, name) = Self::parse_string_id(string, fallback_namespace)?;
 
         match name {
             deserialize::NONE => Ok(Id::none()),
@@ -104,13 +105,13 @@ impl IdInterner {
     }
 
     #[inline]
-    pub fn get_or_intern_opt<'a>(
+    pub fn get_or_intern_opt(
         &mut self,
-        string: Option<StrIdRef<'a>>,
+        string: Option<&str>,
         fallback_namespace: Option<&str>,
     ) -> Result<Id, deserialize::StrIdParseError> {
         if let Some(string) = string {
-            self.get_or_intern(string, fallback_namespace)
+            self.get_or_intern(string.as_ref(), fallback_namespace)
         } else {
             Ok(Id::none())
         }
@@ -154,97 +155,119 @@ assert_eq!(*tile_id, Id::from(0));
 ```
 */
 macro_rules! impl_id_newtype {
-    ($ty:ident) => {
-        #[must_use]
-        #[repr(transparent)]
-        #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Pod, Zeroable)]
-        pub struct $ty(pub Id);
+    ($( $ty:ident ),*) => {
+        $(
+            #[must_use]
+            #[repr(transparent)]
+            #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Hash, Serialize, Deserialize, Pod, Zeroable)]
+            pub struct $ty(pub Id);
 
-        impl Deref for $ty {
-            type Target = Id;
+            impl_id!($ty);
 
-            fn deref(&self) -> &Self::Target {
-                &self.0
+            impl IdNewType for $ty {}
+
+            const impl Deref for $ty {
+                type Target = Id;
+
+                fn deref(&self) -> &Self::Target {
+                    &self.0
+                }
+            }
+
+            const impl From<Id> for $ty {
+                fn from(value: Id) -> Self {
+                    Self(value)
+                }
+            }
+
+            const impl From<$ty> for Id {
+                fn from(value: $ty) -> Self {
+                    *value
+                }
+            }
+
+            impl $ty {
+                /// Returns the internal integer Id as an `u32`.
+                #[inline]
+                pub const fn into_inner(self) -> u32 {
+                    self.0.into_inner()
+                }
+
+                /// Represents an invalid Id.
+                #[inline]
+                pub const fn invalid() -> Self {
+                    Self(Id::invalid())
+                }
+
+                /// Static Id named [`none`](deserialize::NONE), with no namespace.
+                ///
+                /// Any Ids with the same *name* will be converted to this, regardless of namespace.
+                #[inline]
+                pub const fn none() -> Self {
+                    Self(Id::none())
+                }
+
+                /// Static Id named [`any`](deserialize::ANY), with no namespace.
+                ///
+                /// Any Ids with the same *name* will be converted to this, regardless of namespace.
+                #[inline]
+                pub const fn any() -> Self {
+                    Self(Id::any())
+                }
+            }
+        )*
+
+        paste::paste! {
+            #[macro_export]
+            macro_rules! for_each_id_new_type {
+                {
+                    NewType::$ident:ident$args:tt;
+                } => {
+                    $(
+                        $ty::$ident$args;
+                    )*
+                };
+
+                {
+                    NewType::$ident:ident$args:tt?;
+                } => {
+                    $(
+                        $ty::$ident$args?;
+                    )*
+                };
+
+                {
+                    $ident:ident!(NewType);
+                } => {
+                    $(
+                        $ident!($ty);
+                    )*
+                };
             }
         }
-
-        impl From<Id> for $ty {
-            fn from(value: Id) -> Self {
-                Self(value)
-            }
-        }
-
-        impl From<$ty> for Id {
-            fn from(value: $ty) -> Self {
-                *value
-            }
-        }
-
-        impl Debug for $ty {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                f.write_fmt(format_args!(concat!(stringify!($ty), "({})"), self.0.0))
-            }
-        }
-
-        impl Display for $ty {
-            #[cfg_attr(feature = "profile", profiling::function)]
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                f.write_str(concat!(stringify!($ty), "("))?;
-                GLOBAL_INTERNER.with(|interner| {
-                    let interner = unsafe { &*interner.get() };
-                    if let Some(s) = interner.resolve(**self) {
-                        f.write_str(s)
-                    } else {
-                        f.write_str("invalid")
-                    }
-                })?;
-                f.write_str(")")?;
-                Ok(())
-            }
-        }
-
-        impl $ty {
-            /// Represents an invalid Id.
-            pub const fn invalid() -> Self {
-                Self(Id::invalid())
-            }
-
-            /// Static Id named [`none`](deserialize::StrId::NONE), with no namespace.
-            ///
-            /// Any Ids with the same *name* will be converted to this, regardless of namespace.
-            pub const fn none() -> Self {
-                Self(Id::none())
-            }
-
-            /// Static Id named [`any`](deserialize::StrId::ANY), with no namespace.
-            ///
-            /// Any Ids with the same *name* will be converted to this, regardless of namespace.
-            pub const fn any() -> Self {
-                Self(Id::any())
-            }
-        }
-
-        impl IdLike for $ty {}
     };
-
-    ($ty: ident, $($tys: ident),+) => {
-        impl_id_newtype!($ty);
-        impl_id_newtype!($($tys),*);
-    }
 }
 
 #[must_use]
 #[repr(transparent)]
 #[derive(Clone, Copy, Eq, PartialOrd, Ord, Serialize, Deserialize, Pod, Zeroable)]
 #[serde(transparent)]
-pub struct Id(u32);
+pub struct Id(Option<NonZeroU32>);
 
-pub trait IdLike: Into<Id> + From<Id> + Copy + Eq + Ord + Hash {}
-impl IdLike for Id {}
+/// Helper trait for blanket impl for [`Id`] + all [`Id`] new-types.
+///
+/// See also: [`impl_id_newtype`]
+pub trait IdLike: Into<Id> + From<Id> + Copy + Eq + Ord + Hash + Display {}
+
+/// Helper trait for blanket impl for all [`Id`] new-types.
+/// Only use this if there's an impl conflict with using [`IdLike`].
+///
+/// See also: [`impl_id_newtype`]
+pub trait IdNewType: IdLike {}
 
 impl Hash for Id {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        state.write_u32(self.0);
+        state.write_u32(self.into_inner());
     }
 }
 
@@ -263,83 +286,133 @@ impl Default for Id {
 }
 
 impl Id {
+    /// Returns the internal integer Id as an `u32`.
+    #[inline]
+    pub const fn into_inner(self) -> u32 {
+        match self.0 {
+            Some(v) => v.get(),
+            None => 0,
+        }
+    }
+
     /// Represents an invalid Id.
+    #[inline]
     pub const fn invalid() -> Self {
-        Self(u32::MAX)
+        Self(Some(NonZeroU32::MAX))
     }
 
-    /// Static Id named [`none`](deserialize::StrId::NONE), with no namespace.
+    /// Static Id named [`none`](deserialize::NONE), with no namespace.
     ///
-    /// Any Ids with the same *name* will be converted to this, regardless of namespace.   #[inline]
+    /// Any Ids with the same *name* will be converted to this, regardless of namespace.
+    #[inline]
     pub const fn none() -> Self {
-        Self(0)
+        Self(None)
     }
 
-    /// Static Id named [`any`](deserialize::StrId::ANY), with no namespace.
+    /// Static Id named [`any`](deserialize::ANY), with no namespace.
     ///
-    /// Any Ids with the same *name* will be converted to this, regardless of namespace.  #[inline]
+    /// Any Ids with the same *name* will be converted to this, regardless of namespace.
+    #[inline]
     pub const fn any() -> Self {
-        Self(1)
+        Self(NonZeroU32::new(1))
     }
 
+    #[inline]
     pub fn is_invalid(&self) -> bool {
         self.0 == Self::invalid().0
     }
 
+    #[inline]
     pub fn is_none(&self) -> bool {
         self.0 == Self::none().0
     }
 
+    #[inline]
     pub fn is_any(&self) -> bool {
         self.0 == Self::any().0
     }
 
+    #[inline]
     pub fn is_built_in(&self) -> bool {
         self.is_none() || self.is_any()
     }
 }
 
-impl From<u32> for Id {
+const impl From<u32> for Id {
     fn from(value: u32) -> Self {
-        Self(value)
-    }
-}
-
-impl Debug for Id {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("Id({})", self.0))
-    }
-}
-
-impl Display for Id {
-    #[cfg_attr(feature = "profile", profiling::function)]
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Id(")?;
-        GLOBAL_INTERNER.with(|interner| {
-            let interner = unsafe { &*interner.get() };
-            if let Some(s) = interner.resolve(*self) {
-                f.write_str(s)
-            } else {
-                f.write_str("invalid")
-            }
-        })?;
-        f.write_str(")")?;
-        Ok(())
+        Self(NonZeroU32::new(value))
     }
 }
 
 impl InternSymbol for Id {
     fn try_from_usize(index: usize) -> Option<Self> {
-        Some(Self(index as u32))
+        Some(Self::from(index as u32))
     }
 
     fn to_usize(self) -> usize {
-        self.0 as usize
+        self.into_inner() as usize
     }
 }
 
+macro_rules! impl_id {
+    ($ty:ident) => {
+        unsafe impl TransparentWrapper<Id> for $ty {}
+
+        impl IdLike for $ty {}
+
+        impl Debug for $ty {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_fmt(format_args!(concat!(stringify!($ty), "({})"), self.into_inner()))
+            }
+        }
+
+        impl Display for $ty {
+            #[cfg_attr(feature = "profile", profiling::function)]
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str(stringify!($ty))?;
+                f.write_str("(")?;
+
+                // prefer the mutable interner
+                MUTABLE_GLOBAL_INTERNER.with_borrow(|interner| match interner {
+                    Some(interner) => {
+                        if let Some(s) = interner.resolve(Id::from(*self)) {
+                            f.write_str(s)
+                        } else {
+                            f.write_str("invalid")
+                        }
+                    },
+                    None => {
+                        let interner = GLOBAL_INTERNER.read().unwrap();
+                        if let Some(s) = interner.resolve(Id::from(*self)) {
+                            f.write_str(s)
+                        } else {
+                            f.write_str("invalid")
+                        }
+                    },
+                })?;
+
+                f.write_str(")")?;
+                Ok(())
+            }
+        }
+    };
+}
+
+impl_id!(Id);
+
 impl_id_newtype!(
-    TileId, ItemId, RecipeId, TagId, CategoryId, ResearchId, ScriptId, ModelId, RenderId, UiRenderId
+    TileId,
+    ItemId,
+    RecipeId,
+    TagId,
+    CategoryId,
+    ResearchId,
+    ScriptId,
+    ModelId,
+    RenderId,
+    UiRenderId,
+    GuiTranslateId,
+    ResearchTranslateId
 );
 
 pub mod deserialize {
@@ -379,7 +452,7 @@ pub mod parse {
         interner: &mut IdInterner,
         namespace: Option<&str>,
     ) -> impl Iterator<Item = Result<Id, StrIdParseError>> {
-        iter.map(move |id| interner.get_or_intern(id, namespace).map(From::from))
+        iter.map(move |id| interner.get_or_intern(&id, namespace).map(From::from))
     }
 
     #[cfg_attr(feature = "profile", profiling::function)]
@@ -388,7 +461,7 @@ pub mod parse {
         interner: &mut IdInterner,
         namespace: Option<&str>,
     ) -> impl Iterator<Item = Result<(Id, ResultItem), StrIdParseError>> {
-        iter.map(move |(id, item)| interner.get_or_intern(id, namespace).map(|id| (Id::from(id), item.into())))
+        iter.map(move |(id, item)| interner.get_or_intern(&id, namespace).map(|id| (Id::from(id), item.into())))
     }
 
     #[cfg_attr(feature = "profile", profiling::function)]
@@ -397,7 +470,11 @@ pub mod parse {
         interner: &mut IdInterner,
         namespace: Option<&str>,
     ) -> impl Iterator<Item = Result<(Id, &'static str), StrIdParseError>> {
-        iter.map(move |(id, item)| interner.get_or_intern(id, namespace).map(|id| (Id::from(id), &*item.into().leak())))
+        iter.map(move |(id, item)| {
+            interner
+                .get_or_intern(&id, namespace)
+                .map(|id| (Id::from(id), &*item.into().leak()))
+        })
     }
 
     #[cfg_attr(feature = "profile", profiling::function)]
@@ -406,7 +483,7 @@ pub mod parse {
         interner: &mut IdInterner,
         namespace: Option<&str>,
     ) -> impl Iterator<Item = Result<(ResultItem, Id), StrIdParseError>> {
-        iter.map(move |(item, id)| interner.get_or_intern(id, namespace).map(|id| (item.into(), Id::from(id))))
+        iter.map(move |(item, id)| interner.get_or_intern(&id, namespace).map(|id| (item.into(), Id::from(id))))
     }
 
     #[cfg_attr(feature = "profile", profiling::function)]
@@ -416,7 +493,7 @@ pub mod parse {
         namespace: Option<&str>,
     ) -> impl Iterator<Item = Result<ItemStack, StrIdParseError>> {
         iter.map(move |stack| {
-            interner.get_or_intern(stack.id, namespace).map(|id| ItemStack {
+            interner.get_or_intern(&stack.id, namespace).map(|id| ItemStack {
                 id: ItemId(id),
                 amount: stack.amount,
             })

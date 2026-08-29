@@ -1,7 +1,7 @@
 use std::{fs::read_to_string, path::Path};
 
 use automancy_data::{
-    id::{Id, TagId, deserialize::StrId, parse::parse_ids},
+    id::{Id, IdInterner, TagId, deserialize::StrId, parse::parse_ids},
     id_map::ImmutableIdSet,
 };
 use serde::Deserialize;
@@ -31,20 +31,20 @@ struct Raw {
 
 #[cfg_attr(feature = "profile", profiling::all_functions)]
 impl MutableResourceManager {
-    fn load_tag_file(&mut self, file: &Path, namespace: &str) -> Result<(), ResourceError> {
-        log::info!("Loading tag at: {}.", file.display());
+    fn load_tag_file(&mut self, interner: &mut IdInterner, path: &Path, namespace: &str) -> Result<(), ResourceError> {
+        log::info!("Loading tag at: {}.", path.display());
 
-        let v = persistent::ron::ron_options().from_str::<Raw>(&read_to_string(file)?)?;
+        let v = persistent::ron::ron_options().from_str::<Raw>(&read_to_string(path)?)?;
 
-        let id = TagId(self.interner.get_or_intern(v.id, Some(namespace))?);
+        let id = TagId(interner.get_or_intern(&v.id, Some(namespace))?);
         if id.is_built_in() {
             return Err(ResourceError::BuiltInRedefined {
                 ty: "tag",
-                file: file.to_path_buf(),
-                name: self.interner.resolve(*id).unwrap().to_string(),
+                file: path.to_path_buf(),
+                name: interner.resolve(*id).unwrap().to_string(),
             });
         }
-        let entries = parse_ids(v.entries.into_iter(), &mut self.interner, Some(namespace)).try_collect()?;
+        let entries = parse_ids(v.entries.into_iter(), interner, Some(namespace)).try_collect()?;
 
         self.registry.tag_defs.insert(
             id,
@@ -57,14 +57,16 @@ impl MutableResourceManager {
         Ok(())
     }
 
-    pub fn load_tag_files(&mut self, dir: &Path, namespace: &str) {
-        let path = dir.join("tags");
+    pub fn load_tag_files(dir: &Path, namespace: &str) {
+        MutableResourceManager::with_interner(|resource_man, interner| {
+            let path = dir.join("tags");
 
-        for file in read_recursively(&path, RON_EXTS) {
-            match self.load_tag_file(&file, namespace) {
-                Ok(_) => {},
-                Err(err) => err.log_err(),
+            for entry in read_recursively(&path, RON_EXTS) {
+                match resource_man.load_tag_file(interner, entry.path(), namespace) {
+                    Ok(_) => {},
+                    Err(err) => err.log_err(),
+                }
             }
-        }
+        })
     }
 }

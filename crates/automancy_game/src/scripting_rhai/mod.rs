@@ -14,9 +14,7 @@ pub fn rhai_call_options<'a>(state: &'a mut Dynamic) -> CallFnOptions<'a> {
 }
 
 pub fn rhai_log_err(called_func: &str, script_id: &str, err: &rhai::EvalAltResult, coord: Option<TileCoord>) {
-    let coord = coord
-        .map(|v| v.to_minimal_string())
-        .unwrap_or_else(|| "(no coord available)".to_string());
+    let coord = coord.map(|v| v.to_minimal_string()).unwrap_or_else(|| "(no coord)".to_string());
 
     match err {
         rhai::EvalAltResult::ErrorFunctionNotFound(name, ..) => {

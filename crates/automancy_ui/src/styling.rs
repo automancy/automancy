@@ -42,7 +42,7 @@ const FONT_KEY_SYMBOLS: FontKey = FontKey {
     weight: FontWeight::NORMAL,
 };
 
-impl const TextStyleExt for TextStyle {
+const impl TextStyleExt for TextStyle {
     fn normal() -> TextStyle {
         TextStyle {
             font_size: sizing::NORMAL_TEXT,

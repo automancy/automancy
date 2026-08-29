@@ -31,13 +31,13 @@ use crate::{
     actor,
     actor::{
         FlatTiles, TileEntry, TileMap,
-        message::{GameMsg, GameRenderCommands, PlaceTileResponse, TileMsg},
+        message::{GameMsg, GameRenderCommands, PlaceTileParams, PlaceTileResponse, PlaceTilesParams, TileMsg},
         tile_entity::{TileActor, TileActorError},
         util::multi_call_iter,
     },
     persistent::{map, map::GameMap},
     resources::ResourceManager,
-    scripting::render,
+    scripting_rhai::render,
 };
 
 pub struct GameData {
@@ -82,7 +82,7 @@ impl GameActor {
         coord: TileCoord,
         cleanup_render_commands: &mut GameRenderCommands,
         last_culling_bounds: TileCoordBounds,
-    ) -> Option<(TileId, DataMap)> {
+    ) -> Option<(TileId, Box<DataMap>)> {
         let removed_tile = game_data.map.tiles.remove(&coord);
         let mut removed_data = None;
 
@@ -93,7 +93,7 @@ impl GameActor {
                     .map
                     .map_info
                     .data
-                    .inventory_mut(self.resource_man.registry.data_ids.player_inventory);
+                    .inventory_mut_or_default(self.resource_man.registry.data_ids.player_inventory);
 
                 inventory.add(item, 1);
             });
@@ -162,8 +162,8 @@ impl GameActor {
         render_commands: &mut GameRenderCommands,
         cleanup_render_commands: &mut GameRenderCommands,
         last_culling_bounds: TileCoordBounds,
-        (id, data): (TileId, DataMap),
-    ) -> Option<(TileId, DataMap)> {
+        (id, data): (TileId, Box<DataMap>),
+    ) -> Option<(TileId, Box<DataMap>)> {
         let mut requirement_unmet = false;
 
         // take build material if needed
@@ -172,7 +172,7 @@ impl GameActor {
                 .map
                 .map_info
                 .data
-                .inventory_mut(self.resource_man.registry.data_ids.player_inventory);
+                .inventory_mut_or_default(self.resource_man.registry.data_ids.player_inventory);
 
             if inventory.get(item) > 0 {
                 inventory.take(item, 1);
@@ -330,7 +330,7 @@ impl Actor for GameActor {
                     reply.send(game_data.map.map_info.data.clone())?;
                 },
                 _ => {
-                    reply.send(DataMap::new())?;
+                    reply.send(Box::new(DataMap::new()))?;
                 },
             },
 
@@ -411,9 +411,13 @@ impl Actor for GameActor {
                             }
                         },
                         GameMsg::PlaceTile {
-                            coord,
-                            tile: (id, data),
-                            record,
+                            params:
+                                PlaceTileParams {
+                                    coord,
+                                    id,
+                                    data,
+                                    record,
+                                },
                             reply,
                         } => {
                             if !in_game {
@@ -465,21 +469,27 @@ impl Actor for GameActor {
                                 }
                             }
 
-                            if let Some(tile) = removed_tile
+                            if let Some((id, data)) = removed_tile
                                 && record
                             {
                                 game_data.undo_steps.push_back(vec![GameMsg::PlaceTile {
-                                    coord,
-                                    tile,
-                                    record: false,
+                                    params: PlaceTileParams {
+                                        coord,
+                                        id,
+                                        data,
+                                        record: false,
+                                    },
                                     reply: None,
                                 }]);
                             }
                         },
                         GameMsg::PlaceTiles {
-                            tiles,
-                            replace,
-                            record,
+                            params:
+                                PlaceTilesParams {
+                                    tiles,
+                                    replace,
+                                    record,
+                                },
                             reply,
                         } => {
                             let mut removed_tiles = FlatTiles::default();
@@ -514,9 +524,11 @@ impl Actor for GameActor {
                                 reply.send(removed_tiles)?;
                             } else if record {
                                 game_data.undo_steps.push_back(vec![GameMsg::PlaceTiles {
-                                    tiles: removed_tiles,
-                                    replace,
-                                    record: false,
+                                    params: PlaceTilesParams {
+                                        tiles: removed_tiles,
+                                        replace,
+                                        record: false,
+                                    },
                                     reply: None,
                                 }]);
                             }

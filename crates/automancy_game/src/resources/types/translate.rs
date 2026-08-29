@@ -1,7 +1,10 @@
 use std::{ffi::OsStr, fmt::Debug, path::Path};
 
 use automancy_data::{
-    id::{CategoryId, Id, ItemId, RecipeId, TileId, deserialize::StrId, parse::parse_map_id_static_str},
+    id::{
+        CategoryId, GuiTranslateId, Id, IdInterner, ItemId, RecipeId, ResearchTranslateId, TileId, deserialize::StrId,
+        parse::parse_map_id_static_str,
+    },
     id_map::{IdMap, ImmutableIdMap},
 };
 use hashbrown::HashMap;
@@ -25,9 +28,9 @@ pub struct TranslateDef {
     pub(crate) tiles: ImmutableIdMap<TileId, Str>,
     pub(crate) categories: ImmutableIdMap<CategoryId, Str>,
     pub(crate) recipes: ImmutableIdMap<RecipeId, Str>,
-    pub(crate) researches: ImmutableIdMap<Id, Str>,
 
-    pub(crate) gui: ImmutableIdMap<Id, Str>,
+    pub(crate) researches: ImmutableIdMap<ResearchTranslateId, Str>,
+    pub(crate) gui: ImmutableIdMap<GuiTranslateId, Str>,
     pub(crate) error: ImmutableIdMap<Id, Str>,
     pub(crate) keys: ImmutableIdMap<Id, Str>,
 }
@@ -41,9 +44,9 @@ pub struct MutableTranslateDef {
     pub(crate) tiles: IdMap<TileId, Str>,
     pub(crate) categories: IdMap<CategoryId, Str>,
     pub(crate) recipes: IdMap<RecipeId, Str>,
-    pub(crate) researches: IdMap<Id, Str>,
 
-    pub(crate) gui: IdMap<Id, Str>,
+    pub(crate) researches: IdMap<ResearchTranslateId, Str>,
+    pub(crate) gui: IdMap<GuiTranslateId, Str>,
     pub(crate) keys: IdMap<Id, Str>,
     pub(crate) error: IdMap<Id, Str>,
 }
@@ -76,23 +79,23 @@ struct Raw {
 
 #[cfg_attr(feature = "profile", profiling::all_functions)]
 impl MutableResourceManager {
-    fn load_translate_file(&mut self, file: &Path, namespace: &str) -> Result<(), ResourceError> {
-        log::info!("Loading translation definition at: {}.", file.display());
+    fn load_translate_file(&mut self, interner: &mut IdInterner, path: &Path, namespace: &str) -> Result<(), ResourceError> {
+        log::info!("Loading translation definition at: {}.", path.display());
 
-        let v = persistent::ron::ron_options().from_str::<Raw>(&std::fs::read_to_string(file)?)?;
+        let v = persistent::ron::ron_options().from_str::<Raw>(&std::fs::read_to_string(path)?)?;
 
         // we leak memory here to make everything else easier :)
         let new = MutableTranslateDef {
             none: v.none.unwrap_or_default().leak(),
             unnamed: v.unnamed.unwrap_or_default().leak(),
-            items: { parse_map_id_static_str(v.items.into_iter(), &mut self.interner, Some(namespace)).try_collect()? },
-            tiles: { parse_map_id_static_str(v.tiles.into_iter(), &mut self.interner, Some(namespace)).try_collect()? },
-            categories: { parse_map_id_static_str(v.categories.into_iter(), &mut self.interner, Some(namespace)).try_collect()? },
-            recipes: { parse_map_id_static_str(v.recipes.into_iter(), &mut self.interner, Some(namespace)).try_collect()? },
-            gui: { parse_map_id_static_str(v.gui.into_iter(), &mut self.interner, Some(namespace)).try_collect()? },
-            keys: { parse_map_id_static_str(v.keys.into_iter(), &mut self.interner, Some(namespace)).try_collect()? },
-            error: { parse_map_id_static_str(v.error.into_iter(), &mut self.interner, Some(namespace)).try_collect()? },
-            researches: parse_map_id_static_str(v.research.into_iter(), &mut self.interner, Some(namespace)).try_collect()?,
+            items: { parse_map_id_static_str(v.items.into_iter(), interner, Some(namespace)).try_collect()? },
+            tiles: { parse_map_id_static_str(v.tiles.into_iter(), interner, Some(namespace)).try_collect()? },
+            categories: { parse_map_id_static_str(v.categories.into_iter(), interner, Some(namespace)).try_collect()? },
+            recipes: { parse_map_id_static_str(v.recipes.into_iter(), interner, Some(namespace)).try_collect()? },
+            gui: { parse_map_id_static_str(v.gui.into_iter(), interner, Some(namespace)).try_collect()? },
+            keys: { parse_map_id_static_str(v.keys.into_iter(), interner, Some(namespace)).try_collect()? },
+            error: { parse_map_id_static_str(v.error.into_iter(), interner, Some(namespace)).try_collect()? },
+            researches: parse_map_id_static_str(v.research.into_iter(), interner, Some(namespace)).try_collect()?,
         };
 
         if self.translates.none.is_empty() {
@@ -115,25 +118,27 @@ impl MutableResourceManager {
         Ok(())
     }
 
-    pub fn load_translate_files(&mut self, dir: &Path, namespace: &str, selected_language: &str) {
-        let selected_language = OsStr::new(selected_language);
-        let path = dir.join("translates");
+    pub fn load_translate_files(dir: &Path, namespace: &str, selected_language: &str) {
+        MutableResourceManager::with_interner(|resource_man, interner| {
+            let selected_language = OsStr::new(selected_language);
+            let path = dir.join("translates");
 
-        for file in read_recursively(&path, RON_EXTS) {
-            if file.file_stem() == Some(selected_language) {
-                match self.load_translate_file(&file, namespace) {
-                    Ok(_) => {},
-                    Err(err) => err.log_err(),
+            for entry in read_recursively(&path, RON_EXTS) {
+                if entry.path().file_stem() == Some(selected_language) {
+                    match resource_man.load_translate_file(interner, entry.path(), namespace) {
+                        Ok(_) => {},
+                        Err(err) => err.log_err(),
+                    }
                 }
             }
-        }
 
-        log::warn!("Notice: The game leaks memory when loading translation files!");
-        log::warn!(
-            "Leaking the translation strings allows the game to run more efficiently, but if you're having memory issues, it may be due to this."
-        );
-        log::warn!("This shouldn't be a problem unless you repeatedly reload the resources without closing the game.");
-        log::warn!("If you're a modder and you're reloading the game often, please keep note of this.");
+            log::warn!("Notice: The game leaks memory when loading translation files!");
+            log::warn!(
+                "Leaking the translation strings allows the game to run more efficiently, but if you're having memory issues, it may be due to this."
+            );
+            log::warn!("This shouldn't be a problem unless you repeatedly reload the resources without closing the game.");
+            log::warn!("If you're a modder and you're reloading the game often, please keep note of this.");
+        });
     }
 }
 
@@ -216,14 +221,14 @@ macro_rules! impl_translate_utils {
                 }
             }
 
-            pub fn gui_str(&self, id: Id) -> StrRef {
+            pub fn gui_str(&self, id: GuiTranslateId) -> StrRef {
                 match self.translates.gui.get(&id) {
                     Some(v) => v,
                     None => self.translates.unnamed,
                 }
             }
 
-            pub fn gui_fmt<'a, T>(&self, id: Id, fmt: T) -> String
+            pub fn gui_fmt<'a, T>(&self, id: GuiTranslateId, fmt: T) -> String
             where
                 T: Debug + IntoIterator<Item = (&'a str, Formattable<'a>)>,
             {
@@ -235,7 +240,7 @@ macro_rules! impl_translate_utils {
                 }
             }
 
-            pub fn research_str(&self, id: Id) -> StrRef {
+            pub fn research_str(&self, id: ResearchTranslateId) -> StrRef {
                 match self.translates.researches.get(&id) {
                     Some(v) => v,
                     None => self.translates.unnamed,

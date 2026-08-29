@@ -58,8 +58,7 @@ zstd = "0.13.3"
 # specialized data storage types
 arraydeque = "0.5.1"
 boomphf = { git = "https://github.com/automancy/boomphf" }
-enum-map = "2.7.3"
-fingertrees = "0.2.11"
+enum-map = "3.1.0"
 hashbrown = { version = "0.17.1", features = ["serde", "rayon"] }
 nohash-hasher = "0.2.0"
 petgraph = "0.8.2"
@@ -67,7 +66,7 @@ smallvec = "1.15.1"
 string-interner = { git = "https://github.com/automancy/string-interner" }
 
 # rendering / windowing
-wgpu = { version = "29.0.0", features = ["serde"] }
+wgpu = { version = "30.0.0", features = ["serde"] }
 winit = { version = "0.30", features = ["serde"] }
 
 # user input / user interface
@@ -81,7 +80,7 @@ yakui-winit = { git = "https://github.com/automancy/yakui.git" }
 # scripting / game logic / async runtime
 async-stream = { version = "0.3.6" }
 futures-util = { version = "0.3.32" }
-ractor = "0.15.10"
+ractor = "0.16.5"
 rayon = "1.11.0"
 rhai = { version = "1.25.1", features = [
     "sync",

@@ -101,8 +101,8 @@ fn copy_screenshot_to_clipboard(
     });
     res.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
 
-    let padded_data = slice.get_mapped_range().to_vec();
-    let mut data = Vec::new();
+    let padded_data = slice.get_mapped_range().unwrap();
+    let mut data = Vec::with_capacity(padded_data.len());
 
     let padded_width = (screenshot_pixel_data_size.width) as usize;
     let unpadded_width = (surface_size.width * gpu::SCREENSHOT_PIXEL_SIZE) as usize;
@@ -151,6 +151,12 @@ struct Automancy {
 #[cfg_attr(feature = "profile", profiling::all_functions)]
 impl Automancy {
     fn sync_options(&mut self) {
+        self.gui
+            .as_mut()
+            .unwrap()
+            .yak
+            .set_scale_factor(self.window.as_deref().unwrap().scale_factor() as f32 * self.game_state.options.graphics.ui_scale.to_f32());
+
         if self.game_state.options.gui.system_fonts() {
             self.gui.as_mut().unwrap().use_system_fonts();
         } else {
@@ -418,7 +424,7 @@ impl Automancy {
         }
 
         window.pre_present_notify();
-        surface_texture.present();
+        render.res.queue.present(surface_texture);
 
         render.frame_count = render.frame_count.wrapping_add(1);
 
@@ -637,7 +643,6 @@ impl ApplicationHandler for Automancy {
             log::info!("Closing game...");
             self.closing = false;
             self.shutdown_game(event_loop);
-            return;
         }
     }
 
@@ -676,7 +681,6 @@ impl ApplicationHandler for Automancy {
             log::info!("Closing game...");
             self.closing = false;
             self.shutdown_game(event_loop);
-            return;
         }
     }
 
@@ -703,6 +707,8 @@ fn main() -> anyhow::Result<()> {
         let mut builder = env_logger::Builder::new();
         builder
             .filter(Some("wgpu_core::device::resource"), log::LevelFilter::Warn)
+            .filter(Some("yakui_core"), log::LevelFilter::Info)
+            .filter(Some("cosmic_text"), log::LevelFilter::Info)
             .filter_level(log::LevelFilter::Info)
             .parse_default_env();
 

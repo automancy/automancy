@@ -23,7 +23,7 @@ use crate::{
         options::{GameOptions, MiscOptions},
     },
     resources::ResourceManager,
-    scripting::ui::RhaiUiUnit,
+    script::UiElement,
 };
 
 pub mod error;
@@ -41,14 +41,14 @@ pub struct GameDataStorage {
     pub map_infos: Vec<(String, (GameMapInfoRaw, Option<SystemTime>))>,
 
     pub loaded_map: AsyncSwapBuf<Option<(GameMapId, GameMapInfo)>>,
-    pub config_open: AsyncSwapBuf<Option<(TileEntry, DataMap, RhaiUiUnit)>>,
+    pub config_open: AsyncSwapBuf<Option<(TileEntry, Box<DataMap>, UiElement)>>,
     pub pointing_at: AsyncSwapBuf<Option<TileEntry>>,
 
-    /// Note: this field is read-only, modifiying this field has no effect to the game.
+    /// Note: this field is read-only, modifying this field has no effect to the game.
     ///
     /// If you want to modify it, please use [`GameDataStorage::set_map_datum`], [`GameDataStorage::add_map_datum`], or [`GameDataStorage::sub_map_datum`].
-    pub map_data: DataMap,
-    map_data_buf: AsyncSwapBuf<DataMap>,
+    pub map_data: Box<DataMap>,
+    map_data_buf: AsyncSwapBuf<Box<DataMap>>,
     map_data_changes: Vec<DatumChange>,
 }
 
@@ -114,7 +114,7 @@ impl GameDataStorage {
                 if let Ok(CallResult::Success(data)) = game_handle.call(GameMsg::GetMapData, None).await {
                     data
                 } else {
-                    DataMap::new()
+                    Box::new(DataMap::new())
                 }
             }
         };

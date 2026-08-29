@@ -21,8 +21,8 @@ impl<T: 'static> State<T> {
     }
 }
 
-impl<T> fmt::Debug for State<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl<T> Debug for State<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.pad("State")
     }
 }
@@ -87,8 +87,8 @@ impl<T: 'static> Widget for StateWidget<T> {
     }
 }
 
-impl<T> fmt::Debug for StateWidget<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl<T> Debug for StateWidget<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.pad("StateWidget")
     }
 }

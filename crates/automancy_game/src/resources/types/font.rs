@@ -53,16 +53,16 @@ pub struct FontData {
 
 #[cfg_attr(feature = "profile", profiling::all_functions)]
 impl MutableResourceManager {
-    fn load_font_file(&mut self, file: &Path) -> Result<(), ResourceError> {
-        log::info!("Loading font {}.", file.display());
+    fn load_font_file(&mut self, path: &Path) -> Result<(), ResourceError> {
+        log::info!("Loading font {}.", path.display());
 
         let mut data: Vec<u8> = Vec::new();
-        File::open(file)?.read_to_end(&mut data)?;
+        File::open(path)?.read_to_end(&mut data)?;
         let bytes = Arc::new(data);
 
-        let face = ttf_parser::Face::parse(&bytes, 0).map_err(|err| ResourceError::CouldNotParseFont(file.to_path_buf(), err))?;
+        let face = ttf_parser::Face::parse(&bytes, 0).map_err(|err| ResourceError::CouldNotParseFont(path.to_path_buf(), err))?;
 
-        let name = font_name(face.names()).ok_or_else(|| ResourceError::CouldNotGetFontName(file.to_path_buf()))?;
+        let name = font_name(face.names()).ok_or_else(|| ResourceError::CouldNotGetFontName(path.to_path_buf()))?;
 
         let weight = face.weight();
         let style = face.style();
@@ -81,14 +81,16 @@ impl MutableResourceManager {
         Ok(())
     }
 
-    pub fn load_font_files(&mut self, dir: &Path) {
-        let path = dir.join("fonts");
+    pub fn load_font_files(dir: &Path) {
+        MutableResourceManager::with(|resource_man| {
+            let path = dir.join("fonts");
 
-        for file in read_recursively(&path, FONT_EXTS) {
-            match self.load_font_file(&file) {
-                Ok(_) => {},
-                Err(err) => err.log_err(),
+            for entry in read_recursively(&path, FONT_EXTS) {
+                match resource_man.load_font_file(entry.path()) {
+                    Ok(_) => {},
+                    Err(err) => err.log_err(),
+                }
             }
-        }
+        })
     }
 }

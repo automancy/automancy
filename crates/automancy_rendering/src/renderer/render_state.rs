@@ -6,7 +6,6 @@ use automancy_data::{
         generic::DataMap,
     },
     id::{ModelId, RenderId, UiRenderId},
-    id_map::IdSet,
     math::{Matrix4, Vec2},
     rendering::{GenericModel, draw::GameDrawInstance},
 };
@@ -15,8 +14,9 @@ use automancy_game::{
         game_entity,
         message::{GameMsg, GameRenderCommands},
         tile_entity,
+        tile_entity::TileActorState,
     },
-    scripting::render,
+    scripting_rhai::render,
     state::AutomancyGameState,
 };
 use ractor::rpc::CallResult;
@@ -36,7 +36,7 @@ pub type InstanceIdMap<Index> = BTreeMap<(TileCoord, Index), BTreeSet<(ModelId, 
 
 pub mod util {
     use automancy_data::{game::coord::TileCoord, rendering::draw::GameDrawInstance};
-    use automancy_game::scripting::render::RenderCommand;
+    use automancy_game::script::RenderCommand;
 
     use crate::{
         GameInstanceManager, ModelManager,
@@ -285,7 +285,7 @@ impl AutomancyRenderState {
         coord: TileCoord,
         model: GenericModel,
         ui_render_id: UiRenderId,
-        data_map: Option<&mut DataMap>,
+        mut data_map: Option<&mut Box<DataMap>>,
         instance: GameDrawInstance,
     ) {
         match model {
@@ -333,16 +333,30 @@ impl AutomancyRenderState {
             },
             GenericModel::Tile(tile_id) => {
                 let commands = if !tile_id.is_none() {
-                    if let Some(commands) = tile_entity::collect_render_commands(
-                        &game_state.resource_man,
-                        tile_id,
-                        coord,
-                        data_map.unwrap_or(&mut DataMap::new()),
-                        &mut IdSet::new(),
-                        true,
-                        false,
-                    ) {
-                        commands
+                    if let Some(tile_def) = game_state.resource_man.registry.tile_defs.get(&tile_id)
+                        && let Some(script) = game_state.resource_man.rhai_scripts.get(&tile_def.script)
+                    {
+                        let mut state = TileActorState {
+                            data: match data_map.as_deref_mut() {
+                                Some(v) => std::mem::take(v),
+                                None => Default::default(),
+                            },
+                            rhai: Some(script.clone()),
+                            rendering: true,
+                            ..Default::default()
+                        };
+
+                        if let Some(commands) =
+                            tile_entity::collect_render_commands(&game_state.resource_man, tile_id, coord, &mut state, true, false)
+                        {
+                            if let Some(v) = data_map {
+                                *v = state.data
+                            }
+
+                            commands
+                        } else {
+                            return;
+                        }
                     } else {
                         return;
                     }

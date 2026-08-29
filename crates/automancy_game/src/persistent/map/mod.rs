@@ -1,4 +1,4 @@
-use core::{fmt, ops::Deref};
+use core::{fmt::Display, ops::Deref};
 use std::{path::PathBuf, time::SystemTime};
 
 use automancy_data::game::generic::DataMap;
@@ -12,8 +12,8 @@ pub static MAP_DATA_EXT: &str = "ron";
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SaveFileName(String);
 
-impl fmt::Display for SaveFileName {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for SaveFileName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)?;
 
         Ok(())
@@ -59,8 +59,8 @@ pub enum GameMapId {
     Debug,
 }
 
-impl fmt::Display for GameMapId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for GameMapId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             GameMapId::Empty => f.write_str("<empty map>"),
             GameMapId::SaveFile(v) => f.write_fmt(format_args!("{v}")),
@@ -76,7 +76,7 @@ pub struct GameMapInfo {
     /// the last modified time.
     pub mtime: Option<SystemTime>,
 
-    pub data: DataMap,
+    pub data: Box<DataMap>,
 }
 
 #[derive(Debug, Clone)]
@@ -192,7 +192,7 @@ pub mod serialize {
 
             for (coord, unmapped_id, data_raw) in self.tiles {
                 let id = self.id_map.resolve(unmapped_id, interner)?;
-                let mut data = DataMap::new();
+                let mut data = Box::new(DataMap::new());
 
                 for (unmapped_id, datum) in data_raw.into_inner() {
                     let id = self.id_map.resolve(unmapped_id, interner)?;
@@ -210,7 +210,7 @@ pub mod serialize {
         pub fn insert(&mut self, coord: TileCoord, id: TileId, data: DataMap, interner: &IdInterner) {
             self.id_map.insert(*id, interner);
             for id in data.keys() {
-                self.id_map.insert(*id, interner);
+                self.id_map.insert(id, interner);
             }
 
             let data = data.into_raw(&mut self.id_map, interner);
@@ -305,7 +305,7 @@ pub mod serialize {
 
             for (idx, &tile) in resource_man.ordered_tiles.iter().enumerate() {
                 if !tile.is_none() {
-                    tiles.insert(TileCoord::new(idx as i32, 0), (tile, DataMap::default()));
+                    tiles.insert(TileCoord::new(idx as i32, 0), (tile, Box::new(DataMap::default())));
                 }
             }
 
@@ -317,7 +317,7 @@ pub mod serialize {
 
         let map_info = GameMapInfo {
             mtime,
-            data: map_raw.decode_data(map_data_raw.data, &resource_man.interner)?,
+            data: Box::new(map_raw.decode_data(map_data_raw.data, &resource_man.interner)?),
         };
         let flat_tiles = map_raw.into_tiles(&resource_man.interner)?;
 
@@ -348,7 +348,7 @@ pub mod serialize {
                 .unwrap();
 
                 for (coord, tile) in map.tiles.iter() {
-                    map_raw.insert(*coord, tile.id, tiles_data.remove(coord).unwrap(), interner);
+                    map_raw.insert(*coord, tile.id, *tiles_data.remove(coord).unwrap(), interner);
                 }
             }
 
@@ -356,7 +356,7 @@ pub mod serialize {
                 .to_io_writer(
                     &mut data_file,
                     &GameMapInfoRaw {
-                        data: map_raw.encode_data(map.map_info.data.clone(), interner),
+                        data: map_raw.encode_data(*map.map_info.data.clone(), interner),
                         tile_count: map.tiles.len() as u32,
                     },
                 )

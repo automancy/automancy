@@ -16,11 +16,7 @@ fn item_match(resource_man: &ResourceManager, id: ItemId, other: Id) -> bool {
         return tag.contains(*id);
     }
 
-    if *id == other {
-        return true;
-    }
-
-    false
+    *id == other
 }
 
 fn item_matches(resource_man: &ResourceManager, id: ItemId, mut others: impl Iterator<Item = ItemDef>) -> Option<ItemDef> {
