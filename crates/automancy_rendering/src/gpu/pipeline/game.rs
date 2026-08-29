@@ -292,7 +292,7 @@ impl GamePipeline {
             vertex: wgpu::VertexState {
                 module: &global_res.game_shader,
                 entry_point: None,
-                buffers: &[gpu::data::GpuGameVertex::desc()],
+                buffers: &[Some(gpu::data::GpuGameVertex::desc())],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {

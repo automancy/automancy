@@ -40,7 +40,6 @@ pub(crate) struct RenderObjectChange {
 #[derive(Debug, Default)]
 pub(crate) struct CustomRenderer {
     pub(crate) game_model_renderer: UiGameModelRenderer,
-    pub(crate) layout_rects: Vec<yakui::Rect>,
     pub(crate) atlas_man: AtlasManager,
 
     prev_objects: Vec<RenderObject>,
@@ -269,8 +268,6 @@ impl AtlasManager {
 #[cfg_attr(feature = "profile", profiling::all_functions)]
 impl CustomRenderer {
     pub fn finish(&mut self, res: &RenderResources, model_man: &ModelManager) {
-        self.layout_rects.clear();
-
         let texture_id_changes = self.atlas_man.pack(res, &mut self.objects);
         self.game_model_renderer.move_texture_ids(model_man, &texture_id_changes);
 
@@ -307,9 +304,7 @@ impl CustomRenderer {
         changes
     }
 
-    pub fn add(&mut self, layout_rect: yakui::Rect, size: yakui::Vec2, ty: RenderObjectType) -> (yakui::TextureId, Rect) {
-        self.layout_rects.push(layout_rect);
-
+    pub fn add(&mut self, size: yakui::Vec2, ty: RenderObjectType) -> (yakui::TextureId, Rect) {
         // we haven't pushed the object in yet. index should be last_index + 1, but because we haven't pushed it yet, it's equivalent to .len().
         let index = self.objects.len();
         let id = index as UserPaintCallId;

@@ -35,7 +35,7 @@ impl TileMap {
     }
 }
 
-impl Deref for TileMap {
+const impl Deref for TileMap {
     type Target = BTreeMap<TileCoord, TileEntry>;
 
     fn deref(&self) -> &Self::Target {
@@ -43,7 +43,7 @@ impl Deref for TileMap {
     }
 }
 
-impl DerefMut for TileMap {
+const impl DerefMut for TileMap {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }

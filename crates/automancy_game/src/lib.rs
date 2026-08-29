@@ -1,4 +1,8 @@
+#![feature(trim_prefix_suffix)]
 #![feature(iterator_try_collect)]
+#![feature(const_format_args)]
+#![feature(const_cmp)]
+#![feature(const_convert)]
 #![feature(const_trait_impl)]
 #![feature(const_option_ops)]
 
@@ -16,7 +20,8 @@ pub mod format;
 pub mod input;
 pub mod persistent;
 pub mod resources;
-pub mod scripting;
+pub mod script;
+pub mod scripting_rhai;
 pub mod state;
 
 #[cfg(miri)]

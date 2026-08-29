@@ -97,7 +97,7 @@ pub fn layout_ui(ctx: &mut UiContext) {
                     GenericModel::None
                 },
                 ctx.game_state.resource_man.registry.render_ids.selected_tile,
-                None,
+                &mut DataMap::new(),
                 GameDrawInstance {
                     alpha: 0.75,
                     ..Default::default()
@@ -112,7 +112,7 @@ pub fn layout_ui(ctx: &mut UiContext) {
                     *coord,
                     GenericModel::Plain(ctx.game_state.resource_man.registry.model_ids.cube1x1),
                     ctx.game_state.resource_man.registry.render_ids.linking_line,
-                    None,
+                    &mut DataMap::new(),
                     GameDrawInstance {
                         color_offset: colors::IMPORTANT.packed,
                         ..Default::default()
@@ -147,7 +147,7 @@ pub fn layout_ui(ctx: &mut UiContext) {
                     start,
                     GenericModel::Plain(ctx.game_state.resource_man.registry.model_ids.cube1x1),
                     ctx.game_state.resource_man.registry.render_ids.pasting_line,
-                    None,
+                    &mut DataMap::new(),
                     GameDrawInstance {
                         color_offset: colors::INPUT.packed,
                         ..Default::default()
@@ -160,7 +160,7 @@ pub fn layout_ui(ctx: &mut UiContext) {
                         coord,
                         GenericModel::Tile(*tile_id),
                         ctx.game_state.resource_man.registry.render_ids.pasting_content,
-                        Some(data_map),
+                        data_map,
                         GameDrawInstance {
                             alpha: 0.75,
                             ..Default::default()

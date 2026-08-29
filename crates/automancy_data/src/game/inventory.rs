@@ -1,4 +1,4 @@
-use core::ops::Neg;
+use core::{fmt::Display, ops::Neg};
 use std::{
     collections::{BTreeMap, btree_map},
     ops::{Deref, DerefMut},
@@ -35,12 +35,18 @@ impl From<(ItemId, ItemAmount)> for ItemStack {
     }
 }
 
+impl Display for ItemStack {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{} * {}", self.id, self.amount))
+    }
+}
+
 #[must_use]
 #[repr(transparent)]
 #[derive(Debug, Default, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct Inventory(BTreeMap<ItemId, ItemAmount>);
 
-impl Deref for Inventory {
+const impl Deref for Inventory {
     type Target = BTreeMap<ItemId, ItemAmount>;
 
     fn deref(&self) -> &Self::Target {
@@ -48,7 +54,7 @@ impl Deref for Inventory {
     }
 }
 
-impl DerefMut for Inventory {
+const impl DerefMut for Inventory {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
@@ -100,8 +106,16 @@ impl Inventory {
         self.get(stack.id) >= stack.amount
     }
 
+    pub fn contains_item(&self, id: ItemId) -> bool {
+        self.0.contains_key(&id)
+    }
+
     pub fn add(&mut self, id: ItemId, amount: ItemAmount) {
         *self.get_mut(id) += amount;
+    }
+
+    pub fn push(&mut self, stack: ItemStack) {
+        self.add(stack.id, stack.amount);
     }
 
     pub fn take(&mut self, id: ItemId, amount: ItemAmount) -> ItemAmount {
@@ -111,6 +125,28 @@ impl Inventory {
         *stored -= taking;
 
         taking
+    }
+}
+
+impl Display for Inventory {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.is_empty() {
+            f.write_str("{}")?;
+        } else {
+            f.write_str("{ ")?;
+            for (&id, &amount) in self.iter() {
+                f.write_fmt(format_args!(
+                    "{}, ",
+                    ItemStack {
+                        id,
+                        amount
+                    }
+                ))?;
+            }
+            f.write_str("}")?;
+        }
+
+        Ok(())
     }
 }
 
@@ -133,7 +169,7 @@ pub mod serialize {
     #[serde(transparent)]
     pub struct InventoryRaw(Vec<(Id, ItemAmount)>);
 
-    impl Deref for InventoryRaw {
+    const impl Deref for InventoryRaw {
         type Target = Vec<(Id, ItemAmount)>;
 
         fn deref(&self) -> &Self::Target {
@@ -141,7 +177,7 @@ pub mod serialize {
         }
     }
 
-    impl DerefMut for InventoryRaw {
+    const impl DerefMut for InventoryRaw {
         fn deref_mut(&mut self) -> &mut Self::Target {
             &mut self.0
         }
@@ -240,7 +276,7 @@ pub mod deserialize {
             let mut r = Inventory::default();
 
             for (id, amount) in self.0.into_iter() {
-                r.set(ItemId(interner.get_or_intern(id, fallback_namespace)?), amount);
+                r.set(ItemId(interner.get_or_intern(&id, fallback_namespace)?), amount);
             }
 
             Ok(r)

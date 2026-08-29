@@ -31,13 +31,13 @@ use crate::{
     actor,
     actor::{
         FlatTiles, TileEntry, TileMap,
-        message::{GameMsg, GameRenderCommands, PlaceTileResponse, TileMsg},
+        message::{GameMsg, GameRenderCommands, PlaceTileParams, PlaceTileResponse, PlaceTilesParams, TileMsg},
         tile_entity::{TileActor, TileActorError},
         util::multi_call_iter,
     },
     persistent::{map, map::GameMap},
     resources::ResourceManager,
-    scripting::render,
+    scripting_rhai::render,
 };
 
 pub struct GameData {
@@ -93,7 +93,7 @@ impl GameActor {
                     .map
                     .map_info
                     .data
-                    .inventory_mut(self.resource_man.registry.data_ids.player_inventory);
+                    .inventory_mut_or_default(self.resource_man.registry.data_ids.player_inventory);
 
                 inventory.add(item, 1);
             });
@@ -172,7 +172,7 @@ impl GameActor {
                 .map
                 .map_info
                 .data
-                .inventory_mut(self.resource_man.registry.data_ids.player_inventory);
+                .inventory_mut_or_default(self.resource_man.registry.data_ids.player_inventory);
 
             if inventory.get(item) > 0 {
                 inventory.take(item, 1);
@@ -202,7 +202,7 @@ impl GameActor {
 
         // add new tile
         let handle = self.insert_new_tile(myself.clone(), &mut game_data.map.tiles, coord, id).await;
-        handle.cast(TileMsg::SetData(data)).unwrap();
+        handle.cast(TileMsg::SetData(Box::new(data))).unwrap();
 
         // track render if in range
         if last_culling_bounds.contains(coord) {
@@ -299,7 +299,7 @@ impl Actor for GameActor {
                 }
 
                 flat_tiles.into_par_iter().for_each(|(coord, (_, data))| {
-                    tiles.get(&coord).unwrap().handle.cast(TileMsg::SetData(data)).unwrap();
+                    tiles.get(&coord).unwrap().handle.cast(TileMsg::SetData(Box::new(data))).unwrap();
                 });
 
                 log::info!("Successfully loaded map '{map_id}'!");
@@ -411,11 +411,16 @@ impl Actor for GameActor {
                             }
                         },
                         GameMsg::PlaceTile {
-                            coord,
-                            tile: (id, data),
-                            record,
+                            params,
                             reply,
                         } => {
+                            let PlaceTileParams {
+                                coord,
+                                id,
+                                data,
+                                record,
+                            } = *params;
+
                             if !in_game {
                                 if let Some(reply) = reply {
                                     reply.send(PlaceTileResponse::Ignored)?;
@@ -465,23 +470,30 @@ impl Actor for GameActor {
                                 }
                             }
 
-                            if let Some(tile) = removed_tile
+                            if let Some((id, data)) = removed_tile
                                 && record
                             {
                                 game_data.undo_steps.push_back(vec![GameMsg::PlaceTile {
-                                    coord,
-                                    tile,
-                                    record: false,
+                                    params: Box::new(PlaceTileParams {
+                                        coord,
+                                        id,
+                                        data,
+                                        record: false,
+                                    }),
                                     reply: None,
                                 }]);
                             }
                         },
                         GameMsg::PlaceTiles {
-                            tiles,
-                            replace,
-                            record,
+                            params,
                             reply,
                         } => {
+                            let PlaceTilesParams {
+                                tiles,
+                                replace,
+                                record,
+                            } = *params;
+
                             let mut removed_tiles = FlatTiles::default();
                             if !in_game {
                                 if let Some(reply) = reply {
@@ -514,9 +526,11 @@ impl Actor for GameActor {
                                 reply.send(removed_tiles)?;
                             } else if record {
                                 game_data.undo_steps.push_back(vec![GameMsg::PlaceTiles {
-                                    tiles: removed_tiles,
-                                    replace,
-                                    record: false,
+                                    params: Box::new(PlaceTilesParams {
+                                        tiles: removed_tiles,
+                                        replace,
+                                        record: false,
+                                    }),
                                     reply: None,
                                 }]);
                             }

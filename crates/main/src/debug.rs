@@ -1342,10 +1342,10 @@ mod cosmic_text_util {
                             let glyph = tiny_skia::Pixmap::from_vec(
                                 image
                                     .data
-                                    .chunks_exact(4)
-                                    .flat_map(|v| {
-                                        let &[r, g, b, a] = v else { unreachable!() };
-
+                                    .as_chunks::<4>()
+                                    .0
+                                    .iter()
+                                    .flat_map(|&[r, g, b, a]| {
                                         bytemuck::cast::<_, [u8; 4]>(tiny_skia::ColorU8::from_rgba(r, g, b, a).premultiply())
                                     })
                                     .collect(),

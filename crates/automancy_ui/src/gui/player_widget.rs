@@ -1,14 +1,14 @@
 use automancy_data::id_map::IdSet;
-use automancy_game::scripting;
+use automancy_game::scripting_rhai;
 use petgraph::visit::Topo;
 use rhai::{Dynamic, Scope};
 
 use crate::*;
 
-const PUZZEL_HEX_SIZE: Vec2 = Vec2::new(sizing::TINY_ICON_SIZE, sizing::TINY_ICON_SIZE);
+const PUZZLE_HEX_SIZE: Vec2 = Vec2::new(sizing::TINY_ICON_SIZE, sizing::TINY_ICON_SIZE);
 const PUZZLE_HEX_GRID_LAYOUT: TileLayout = TileLayout {
-    origin: vek::Vec2::new(PUZZEL_HEX_SIZE.x, 0.0),
-    scale: vek::Vec2::new(PUZZEL_HEX_SIZE.x, PUZZEL_HEX_SIZE.y),
+    origin: vek::Vec2::new(PUZZLE_HEX_SIZE.x, 0.0),
+    scale: vek::Vec2::new(PUZZLE_HEX_SIZE.x, PUZZLE_HEX_SIZE.y),
 };
 
 #[cfg_attr(feature = "profile", profiling::function)]
@@ -183,7 +183,7 @@ fn research_board_tiles<'a>(game_state: &mut AutomancyGameState, tiles: impl Int
                 let model_id = game_state.resource_man.model_or_puzzle_space(id);
 
                 reflow(Alignment::TOP_LEFT, Pivot::TOP_LEFT, Dim2::pixels(pos.x, pos.y), || {
-                    GameModel::new(GenericModel::Plain(model_id), PUZZEL_HEX_SIZE * 2.0).show();
+                    GameModel::new(GenericModel::Plain(model_id), PUZZLE_HEX_SIZE * 2.0).show();
                 });
             }
         });
@@ -227,13 +227,13 @@ fn research_puzzle(ctx: &mut UiContext) -> Option<Rect> {
         .selected_research
         .and_then(|id| ctx.game_state.resource_man.get_research(id))
         .and_then(|research| research.attached_puzzle.as_ref())
-        .and_then(|(id, setup)| ctx.game_state.resource_man.scripts.get(id).zip(Some(setup)))
+        .and_then(|(id, setup)| ctx.game_state.resource_man.rhai_scripts.get(id).zip(Some(setup)))
     {
         let puzzle_state = ctx.gui.puzzle_state.get_or_insert_with(|| {
             let mut rhai_state = Dynamic::from(DataMap::default());
 
-            let result = ctx.game_state.resource_man.engine.call_fn_with_options::<()>(
-                scripting::rhai_call_options(&mut rhai_state),
+            let result = ctx.game_state.resource_man.rhai.call_fn_with_options::<()>(
+                scripting_rhai::rhai_call_options(&mut rhai_state),
                 &mut Scope::default(),
                 &script.ast,
                 "pre_setup",
@@ -241,7 +241,7 @@ fn research_puzzle(ctx: &mut UiContext) -> Option<Rect> {
             );
 
             if let Err(err) = result {
-                scripting::rhai_log_err("pre_setup", &script.metadata.str_id, &err, None)
+                scripting_rhai::rhai_log_err("pre_setup", &script.metadata.str_id, &err, None)
             }
 
             (rhai_state.take().cast::<DataMap>(), true)
@@ -250,8 +250,8 @@ fn research_puzzle(ctx: &mut UiContext) -> Option<Rect> {
         if puzzle_state.1 {
             let mut rhai_state = Dynamic::from(std::mem::take(&mut puzzle_state.0));
 
-            let result = ctx.game_state.resource_man.engine.call_fn_with_options::<bool>(
-                scripting::rhai_call_options(&mut rhai_state),
+            let result = ctx.game_state.resource_man.rhai.call_fn_with_options::<bool>(
+                scripting_rhai::rhai_call_options(&mut rhai_state),
                 &mut Scope::new(),
                 &script.ast,
                 "evaluate",
@@ -269,15 +269,15 @@ fn research_puzzle(ctx: &mut UiContext) -> Option<Rect> {
                         );
                     }
                 },
-                Err(err) => scripting::rhai_log_err("evaluate", &script.metadata.str_id, &err, None),
+                Err(err) => scripting_rhai::rhai_log_err("evaluate", &script.metadata.str_id, &err, None),
             }
         }
 
         if let Some(selected) = ctx.gui.state.selected_research_puzzle_tile {
             let mut rhai_state = Dynamic::from(std::mem::take(&mut puzzle_state.0));
 
-            let result = ctx.game_state.resource_man.engine.call_fn_with_options::<Dynamic>(
-                scripting::rhai_call_options(&mut rhai_state),
+            let result = ctx.game_state.resource_man.rhai.call_fn_with_options::<Dynamic>(
+                scripting_rhai::rhai_call_options(&mut rhai_state),
                 &mut Scope::new(),
                 &script.ast,
                 "selection_at_coord",
@@ -299,7 +299,7 @@ fn research_puzzle(ctx: &mut UiContext) -> Option<Rect> {
                     ctx.gui.state.selected_research_puzzle_tile = None;
                 },
                 Err(err) => {
-                    scripting::rhai_log_err("selection_at_coord", &script.metadata.str_id, &err, None);
+                    scripting_rhai::rhai_log_err("selection_at_coord", &script.metadata.str_id, &err, None);
                     ctx.gui.state.research_puzzle_selections = None;
                 },
             }
@@ -337,7 +337,7 @@ fn research_puzzle(ctx: &mut UiContext) -> Option<Rect> {
             && clicked
             && let Some(board_rect) = board_rect
         {
-            let p = ctx.game_state.input_handler.main_pos.yak() - board_rect.pos() - PUZZEL_HEX_SIZE;
+            let p = ctx.game_state.input_handler.main_pos.yak() - board_rect.pos() - PUZZLE_HEX_SIZE;
             let p = TileCoord::from_world_pos_with(p.unyak(), PUZZLE_HEX_GRID_LAYOUT);
 
             ctx.gui.state.selected_research_puzzle_tile = Some(p);
@@ -459,8 +459,8 @@ pub fn player_widget(ctx: &mut UiContext) {
             });
         });
 
-    if let Some((puzzel_data, dirty)) = &mut ctx.gui.puzzle_state {
-        let board_tiles = puzzel_data.map_coord_model_id_mut(ctx.game_state.resource_man.registry.data_ids.research_board_tiles);
+    if let Some((puzzle_data, dirty)) = &mut ctx.gui.puzzle_state {
+        let board_tiles = puzzle_data.map_coord_model_id_mut_or_default(ctx.game_state.resource_man.registry.data_ids.research_board_tiles);
         let mut select_result = None;
 
         if let Some((coord, model_ids)) = &ctx.gui.state.research_puzzle_selections
@@ -484,7 +484,7 @@ pub fn player_widget(ctx: &mut UiContext) {
                                                 let model_id = ctx.game_state.resource_man.model_or_missing_item(model_id);
 
                                                 let select = interactive(|| {
-                                                    GameModel::new(GenericModel::Plain(model_id), PUZZEL_HEX_SIZE * 2.0).show();
+                                                    GameModel::new(GenericModel::Plain(model_id), PUZZLE_HEX_SIZE * 2.0).show();
                                                 });
 
                                                 if select.clicked {

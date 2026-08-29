@@ -1,4 +1,5 @@
-use automancy_game::scripting::ui::RhaiUiUnit;
+use automancy_data::game::generic::DatumType;
+use automancy_game::script::UiElement;
 
 use crate::*;
 
@@ -80,24 +81,24 @@ fn takeable_items(ctx: &mut UiContext, mut buffer: Inventory, buffer_id: Id, til
 
 #[cfg_attr(feature = "profile", profiling::function)]
 #[track_caller]
-pub fn rhai_ui(ctx: &mut UiContext, tile_entity: ActorRef<TileMsg>, data: &DataMap, ui: &RhaiUiUnit) {
+pub fn rhai_ui(ctx: &mut UiContext, tile_entity: ActorRef<TileMsg>, data: &DataMap, ui: &UiElement) {
     match ui {
-        &RhaiUiUnit::Label {
+        &UiElement::Label {
             id,
         } => {
-            Text::normal(ctx.game_state.resource_man.gui_str(id)).show();
+            Text::normal(ctx.game_state.resource_man.gui_str(GuiTranslateId(id))).show();
         },
-        &RhaiUiUnit::InfoTip {
+        &UiElement::InfoTip {
             id,
         } => {
-            info_tip(ctx.game_state.resource_man.gui_str(id));
+            info_tip(ctx.game_state.resource_man.gui_str(GuiTranslateId(id)));
         },
-        &RhaiUiUnit::LabelAmount {
+        &UiElement::LabelAmount {
             amount,
         } => {
             Text::normal(amount.to_string()).show();
         },
-        &RhaiUiUnit::InputAmount {
+        &UiElement::InputAmount {
             id,
             max,
         } => {
@@ -107,7 +108,7 @@ pub fn rhai_ui(ctx: &mut UiContext, tile_entity: ActorRef<TileMsg>, data: &DataM
                 tile_entity.send_message(TileMsg::SetDatum(id, Datum::Int(new_amount))).unwrap();
             }
         },
-        &RhaiUiUnit::SliderAmount {
+        &UiElement::SliderAmount {
             id,
             max,
         } => {
@@ -117,10 +118,10 @@ pub fn rhai_ui(ctx: &mut UiContext, tile_entity: ActorRef<TileMsg>, data: &DataM
                 tile_entity.send_message(TileMsg::SetDatum(id, Datum::Int(new_amount))).unwrap();
             }
         },
-        &RhaiUiUnit::HexDirInput {
+        &UiElement::HexDirInput {
             id,
         } => {
-            let current_dir = data.tile_coord(id).copied();
+            let current_dir = data.coord(id).copied();
             let mut new_dir = current_dir;
 
             col_cross_center(|| {
@@ -153,16 +154,16 @@ pub fn rhai_ui(ctx: &mut UiContext, tile_entity: ActorRef<TileMsg>, data: &DataM
                 if let Some(coord) = new_dir {
                     tile_entity.send_message(TileMsg::SetDatum(id, Datum::TileCoord(coord))).unwrap();
                 } else {
-                    tile_entity.send_message(TileMsg::RemoveDatum(id)).unwrap();
+                    tile_entity.send_message(TileMsg::RemoveDatum(id, DatumType::TileCoord)).unwrap();
                 }
             }
         },
-        RhaiUiUnit::SelectableItems {
+        UiElement::SelectableItems {
             data_id,
             hint_id,
             ids,
         } => {
-            let hint = ctx.game_state.resource_man.gui_str(*hint_id);
+            let hint = ctx.game_state.resource_man.gui_str(GuiTranslateId(*hint_id));
 
             let old_id = data.item_id(*data_id).copied();
             let mut current_id = old_id;
@@ -181,12 +182,12 @@ pub fn rhai_ui(ctx: &mut UiContext, tile_entity: ActorRef<TileMsg>, data: &DataM
                 tile_entity.send_message(TileMsg::SetDatum(*data_id, Datum::ItemId(id))).unwrap();
             }
         },
-        RhaiUiUnit::SelectableRecipes {
+        UiElement::SelectableRecipes {
             data_id,
             hint_id,
             ids,
         } => {
-            let hint = ctx.game_state.resource_man.gui_str(*hint_id);
+            let hint = ctx.game_state.resource_man.gui_str(GuiTranslateId(*hint_id));
 
             let old_id = data.recipe_id(*data_id).copied();
             let mut current_id = old_id;
@@ -209,7 +210,7 @@ pub fn rhai_ui(ctx: &mut UiContext, tile_entity: ActorRef<TileMsg>, data: &DataM
                 draw_recipe_info(ctx.game_state, recipe_id, sizing::SMALL_ICON_SIZE);
             }
         },
-        &RhaiUiUnit::Inventory {
+        &UiElement::Inventory {
             id,
             empty_text,
         } => {
@@ -219,16 +220,16 @@ pub fn rhai_ui(ctx: &mut UiContext, tile_entity: ActorRef<TileMsg>, data: &DataM
                 if !stacks.is_empty() {
                     takeable_items(ctx, stacks, id, tile_entity.clone());
                 } else {
-                    Text::normal(ctx.game_state.resource_man.gui_str(empty_text)).show();
+                    Text::normal(ctx.game_state.resource_man.gui_str(GuiTranslateId(empty_text))).show();
                 }
             });
         },
-        &RhaiUiUnit::Linkage {
+        &UiElement::Linkage {
             id,
             coord,
             button_text,
         } => {
-            if button(ctx.game_state.resource_man.gui_str(button_text)).clicked
+            if button(ctx.game_state.resource_man.gui_str(GuiTranslateId(button_text))).clicked
                 && let Some(tile) = ctx
                     .game_state
                     .tokio
@@ -239,7 +240,7 @@ pub fn rhai_ui(ctx: &mut UiContext, tile_entity: ActorRef<TileMsg>, data: &DataM
                 ctx.gui.state.linking_tile = Some((coord, id, tile));
             };
         },
-        RhaiUiUnit::Row {
+        UiElement::Row {
             e,
         } => {
             row(|| {
@@ -248,7 +249,7 @@ pub fn rhai_ui(ctx: &mut UiContext, tile_entity: ActorRef<TileMsg>, data: &DataM
                 }
             });
         },
-        RhaiUiUnit::CenterRow {
+        UiElement::CenterRow {
             e,
         } => {
             row_cross_center(|| {
@@ -257,7 +258,7 @@ pub fn rhai_ui(ctx: &mut UiContext, tile_entity: ActorRef<TileMsg>, data: &DataM
                 }
             });
         },
-        RhaiUiUnit::Col {
+        UiElement::Col {
             e,
         } => {
             list_col().item_spacing(sizing::PADDING_XSMALL).show(|| {

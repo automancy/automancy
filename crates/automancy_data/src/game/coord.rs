@@ -1,10 +1,10 @@
 #![doc = include_str!("LICENSE-hexx.md")]
 
-use core::cmp::{max, min};
-use std::{
-    fmt::{Display, Formatter},
-    ops::{Add, Div, Mul, Neg, Sub},
+use core::{
+    cmp::{max, min},
+    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
+use std::fmt::Display;
 
 use bytemuck::{Pod, Zeroable};
 use serde::{Deserialize, Serialize};
@@ -686,7 +686,7 @@ impl TileCoord {
 }
 
 impl Display for TileCoord {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("[{}, {}]", self.q, self.r))
     }
 }
@@ -699,11 +699,23 @@ impl Add for TileCoord {
     }
 }
 
+impl AddAssign for TileCoord {
+    fn add_assign(&mut self, rhs: Self) {
+        *self = *self + rhs;
+    }
+}
+
 impl Sub for TileCoord {
     type Output = TileCoord;
 
     fn sub(self, rhs: TileCoord) -> Self::Output {
         self.sub(rhs)
+    }
+}
+
+impl SubAssign for TileCoord {
+    fn sub_assign(&mut self, rhs: Self) {
+        *self = *self - rhs;
     }
 }
 
@@ -715,11 +727,23 @@ impl Mul<TileUnit> for TileCoord {
     }
 }
 
+impl MulAssign<TileUnit> for TileCoord {
+    fn mul_assign(&mut self, rhs: TileUnit) {
+        *self = *self * rhs;
+    }
+}
+
 impl Mul<UnsignedTileUnit> for TileCoord {
     type Output = TileCoord;
 
     fn mul(self, rhs: UnsignedTileUnit) -> Self::Output {
         self.mul(rhs.cast_signed())
+    }
+}
+
+impl MulAssign<UnsignedTileUnit> for TileCoord {
+    fn mul_assign(&mut self, rhs: UnsignedTileUnit) {
+        *self = *self * rhs;
     }
 }
 
@@ -736,6 +760,12 @@ impl Div<TileUnit> for TileCoord {
 
     fn div(self, rhs: TileUnit) -> Self::Output {
         self.div(rhs)
+    }
+}
+
+impl DivAssign<TileUnit> for TileCoord {
+    fn div_assign(&mut self, rhs: TileUnit) {
+        *self = *self / rhs;
     }
 }
 
@@ -916,6 +946,20 @@ impl TileCoordBounds {
             TileCoordBounds::Radial(v) => v.contains(coord),
             TileCoordBounds::Rect(v) => v.contains(coord),
             TileCoordBounds::OffsetRect(v) => v.contains(coord),
+        }
+    }
+}
+
+impl Display for TileCoordBounds {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TileCoordBounds::Empty => f.write_str("Empty"),
+            TileCoordBounds::Radial(v) => f.write_fmt(format_args!("Radial({} ~ {})", v.center, v.radius)),
+            TileCoordBounds::Rect(v) => f.write_fmt(format_args!("Rect({} => {})", v.min, v.max)),
+            TileCoordBounds::OffsetRect(v) => f.write_fmt(format_args!(
+                "OffsetRect({},{} => {},{})",
+                v.min_col, v.min_row, v.max_col, v.max_row,
+            )),
         }
     }
 }

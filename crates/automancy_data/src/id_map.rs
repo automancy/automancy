@@ -2,6 +2,8 @@ mod immutable_map {
     use core::{fmt::Debug, marker::PhantomData, ops::Index};
     use std::sync::Arc;
 
+    use bytemuck::TransparentWrapper;
+
     use crate::{
         id::{Id, IdLike},
         id_map::IdMap,
@@ -9,6 +11,7 @@ mod immutable_map {
 
     type InnerImmutableMap<K, V> = boomphf::hashmap::BoomHashMap<K, V>;
 
+    #[repr(transparent)]
     #[derive(Debug, Clone)]
     pub struct ImmutableIdMap<K, V>
     where
@@ -88,14 +91,19 @@ mod immutable_map {
             }
         }
     }
+
+    unsafe impl<K: IdLike, IV, V: TransparentWrapper<IV>> TransparentWrapper<ImmutableIdMap<Id, IV>> for ImmutableIdMap<K, V> {}
 }
 
 mod immutable_set {
+    use bytemuck::TransparentWrapper;
+
     use crate::{
-        id::IdLike,
+        id::{Id, IdLike},
         id_map::{IdSet, ImmutableIdMap},
     };
 
+    #[repr(transparent)]
     #[derive(Debug, Clone)]
     pub struct ImmutableIdSet<K>(ImmutableIdMap<K, ()>)
     where
@@ -148,17 +156,24 @@ mod immutable_set {
             Self(ImmutableIdMap::from_iter(iter.into_iter().map(|key| (key, ()))))
         }
     }
+
+    unsafe impl<K: IdLike> TransparentWrapper<ImmutableIdSet<Id>> for ImmutableIdSet<K> {}
 }
 
 mod map {
-    use core::ops::{Deref, DerefMut};
+    use core::{
+        fmt::Display,
+        ops::{Deref, DerefMut},
+    };
 
+    use bytemuck::TransparentWrapper;
     use hashbrown::{HashMap, hash_map};
 
     use crate::id::{Id, IdLike};
 
     type InnerMutableMap<K, V> = HashMap<K, V, nohash_hasher::BuildNoHashHasher<Id>>;
 
+    #[repr(transparent)]
     #[derive(Debug, Clone)]
     pub struct IdMap<K, V>
     where
@@ -254,17 +269,40 @@ mod map {
             }
         }
     }
+
+    impl<K: IdLike, V: Display> Display for IdMap<K, V> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            if self.is_empty() {
+                f.write_str("{}")?;
+            } else {
+                f.write_str("{ ")?;
+                for (k, v) in self.iter() {
+                    f.write_fmt(format_args!("{k}: {v}, "))?;
+                }
+                f.write_str("}")?;
+            }
+
+            Ok(())
+        }
+    }
+
+    unsafe impl<K: IdLike, IV, V: TransparentWrapper<IV>> TransparentWrapper<IdMap<Id, IV>> for IdMap<K, V> {}
 }
 
 mod set {
-    use core::ops::{Deref, DerefMut};
+    use core::{
+        fmt::Display,
+        ops::{Deref, DerefMut},
+    };
 
+    use bytemuck::TransparentWrapper;
     use hashbrown::HashSet;
 
     use crate::id::{Id, IdLike};
 
     type InnerMutableSet<K> = HashSet<K, nohash_hasher::BuildNoHashHasher<Id>>;
 
+    #[repr(transparent)]
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct IdSet<K>
     where
@@ -290,6 +328,10 @@ mod set {
     {
         pub fn new() -> Self {
             Self::default()
+        }
+
+        pub fn push(&mut self, v: K) -> bool {
+            self.insert(v)
         }
     }
 
@@ -347,8 +389,146 @@ mod set {
             }
         }
     }
+
+    impl<K: IdLike> Display for IdSet<K> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            if self.is_empty() {
+                f.write_str("{}")?;
+            } else {
+                f.write_str("{ ")?;
+                for k in self.iter() {
+                    f.write_fmt(format_args!("{k}, "))?;
+                }
+                f.write_str("}")?;
+            }
+
+            Ok(())
+        }
+    }
+
+    unsafe impl<K: IdLike> TransparentWrapper<IdSet<Id>> for IdSet<K> {}
 }
 
+mod coord {
+    use core::{
+        fmt::Display,
+        ops::{Deref, DerefMut},
+    };
+    use std::collections::btree_map::BTreeMap;
+
+    use bytemuck::TransparentWrapper;
+
+    use crate::{
+        game::coord::TileCoord,
+        id::{Id, IdLike},
+    };
+
+    type InnerIdCoordMap<K> = BTreeMap<TileCoord, K>;
+
+    #[repr(transparent)]
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct IdCoordMap<K>
+    where
+        K: IdLike,
+    {
+        inner: InnerIdCoordMap<K>,
+    }
+
+    impl<K> Default for IdCoordMap<K>
+    where
+        K: IdLike,
+    {
+        fn default() -> Self {
+            Self {
+                inner: InnerIdCoordMap::default(),
+            }
+        }
+    }
+
+    impl<K> IdCoordMap<K>
+    where
+        K: IdLike,
+    {
+        pub fn new() -> Self {
+            Self::default()
+        }
+    }
+
+    impl<K> Deref for IdCoordMap<K>
+    where
+        K: IdLike,
+    {
+        type Target = InnerIdCoordMap<K>;
+
+        fn deref(&self) -> &Self::Target {
+            &self.inner
+        }
+    }
+
+    impl<K> DerefMut for IdCoordMap<K>
+    where
+        K: IdLike,
+    {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            &mut self.inner
+        }
+    }
+
+    impl<K> IntoIterator for IdCoordMap<K>
+    where
+        K: IdLike,
+    {
+        type Item = (TileCoord, K);
+        type IntoIter = <InnerIdCoordMap<K> as IntoIterator>::IntoIter;
+
+        fn into_iter(self) -> Self::IntoIter {
+            self.inner.into_iter()
+        }
+    }
+
+    impl<'a, K> IntoIterator for &'a IdCoordMap<K>
+    where
+        K: IdLike,
+    {
+        type Item = (&'a TileCoord, &'a K);
+        type IntoIter = <&'a InnerIdCoordMap<K> as IntoIterator>::IntoIter;
+
+        fn into_iter(self) -> Self::IntoIter {
+            self.iter()
+        }
+    }
+
+    impl<K> FromIterator<(TileCoord, K)> for IdCoordMap<K>
+    where
+        K: IdLike,
+    {
+        fn from_iter<T: IntoIterator<Item = (TileCoord, K)>>(iter: T) -> Self {
+            Self {
+                inner: InnerIdCoordMap::from_iter(iter),
+            }
+        }
+    }
+
+    impl<K: IdLike> Display for IdCoordMap<K> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            if self.is_empty() {
+                f.write_str("{}")?;
+            } else {
+                f.write_str("{ ")?;
+                for (k, v) in self.iter() {
+                    f.write_fmt(format_args!("{k}: {v}, "))?;
+                }
+                f.write_str("}")?;
+            }
+
+            Ok(())
+        }
+    }
+
+    unsafe impl<K: IdLike> TransparentWrapper<IdCoordMap<Id>> for IdCoordMap<K> {}
+}
+
+pub use coord::*;
 pub use immutable_map::*;
 pub use immutable_set::*;
 pub use map::*;

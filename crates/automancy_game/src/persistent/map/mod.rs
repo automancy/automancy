@@ -1,4 +1,4 @@
-use core::{fmt, ops::Deref};
+use core::{fmt::Display, ops::Deref};
 use std::{path::PathBuf, time::SystemTime};
 
 use automancy_data::game::generic::DataMap;
@@ -12,8 +12,8 @@ pub static MAP_DATA_EXT: &str = "ron";
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SaveFileName(String);
 
-impl fmt::Display for SaveFileName {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for SaveFileName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)?;
 
         Ok(())
@@ -59,8 +59,8 @@ pub enum GameMapId {
     Debug,
 }
 
-impl fmt::Display for GameMapId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for GameMapId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             GameMapId::Empty => f.write_str("<empty map>"),
             GameMapId::SaveFile(v) => f.write_fmt(format_args!("{v}")),
@@ -210,7 +210,7 @@ pub mod serialize {
         pub fn insert(&mut self, coord: TileCoord, id: TileId, data: DataMap, interner: &IdInterner) {
             self.id_map.insert(*id, interner);
             for id in data.keys() {
-                self.id_map.insert(*id, interner);
+                self.id_map.insert(id, interner);
             }
 
             let data = data.into_raw(&mut self.id_map, interner);

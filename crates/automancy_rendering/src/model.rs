@@ -6,7 +6,7 @@ use automancy_data::{
     id_map::IdMap,
     math::{Matrix4, Quat, Transform, Vec3, Vec4},
 };
-use automancy_game::resources::{ResourceManager, global::debug_id};
+use automancy_game::resources::ResourceManager;
 use bytemuck::{Pod, Zeroable};
 use gltf::animation::util::ReadOutputs;
 
@@ -16,7 +16,7 @@ use crate::{AnimPrimitive, AnimationChannel, AnimationFrame, Interpolation, gpu}
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Zeroable, Pod)]
 struct GltfNodeId(u16);
 
-impl From<u16> for GltfNodeId {
+const impl From<u16> for GltfNodeId {
     fn from(value: u16) -> Self {
         Self(value)
     }
@@ -26,7 +26,7 @@ impl From<u16> for GltfNodeId {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Zeroable, Pod)]
 pub struct MeshId(u32);
 
-impl From<u32> for MeshId {
+const impl From<u32> for MeshId {
     fn from(value: u32) -> Self {
         Self(value)
     }
@@ -118,7 +118,7 @@ impl ModelManager {
     #[inline]
     pub fn get_model_mesh_ids(&self, model_id: &ModelId) -> &[MeshId] {
         let Some(ids) = self.model_id_map.get(model_id) else {
-            panic!("ModelId({}) should contain meshes", debug_id(*model_id))
+            panic!("ModelId({}) should contain meshes", model_id)
         };
 
         ids

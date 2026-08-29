@@ -115,10 +115,7 @@ mod data {
             Data: Copy,
         {
             self.modified = true;
-
-            for v in &mut self.buffer {
-                *v = matrix;
-            }
+            self.buffer.fill(matrix);
         }
     }
 
@@ -975,17 +972,17 @@ impl<Index: InstanceIndex> GameInstanceManager<Index> {
                         gpu::pipeline::GamePipelineArgs {
                             buffer: gpu::pipeline::GamePipelineBuffersArgs {
                                 model_matrix_buffer: gpu::pipeline::BufferInitArg::RecreateIfNeeded {
-                                    min_size: gpu::pipeline::new_bufer_size(model_matrix_buffer_size, model_matrices_size),
+                                    min_size: gpu::pipeline::new_buffer_size(model_matrix_buffer_size, model_matrices_size),
                                     buffer: game_res.game_pipeline.model_matrix_buffer.clone(),
                                     cpu_buffer: &[(0, model_matrices)],
                                 },
                                 world_matrix_buffer: gpu::pipeline::BufferInitArg::RecreateIfNeeded {
-                                    min_size: gpu::pipeline::new_bufer_size(world_matrix_buffer_size, world_matrices_size),
+                                    min_size: gpu::pipeline::new_buffer_size(world_matrix_buffer_size, world_matrices_size),
                                     buffer: game_res.game_pipeline.world_matrix_buffer.clone(),
                                     cpu_buffer: &[(0, world_matrices)],
                                 },
                                 animation_matrix_buffer: gpu::pipeline::BufferInitArg::RecreateIfNeeded {
-                                    min_size: gpu::pipeline::new_bufer_size(animation_matrix_buffer_size, animation_matrices_size),
+                                    min_size: gpu::pipeline::new_buffer_size(animation_matrix_buffer_size, animation_matrices_size),
                                     buffer: game_res.game_pipeline.animation_matrix_buffer.clone(),
                                     cpu_buffer: &[(0, animation_matrices)],
                                 },

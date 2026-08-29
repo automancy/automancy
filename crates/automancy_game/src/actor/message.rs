@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use automancy_data::{
     game::{
         coord::{TileCoord, TileCoordBounds},
-        generic::{DataMap, Datum, DatumChange},
+        generic::{DataMap, Datum, DatumChange, DatumType},
         inventory::ItemStack,
     },
     id::{Id, TileId},
@@ -13,7 +13,7 @@ use ractor::RpcReplyPort;
 use crate::{
     actor::{FlatTile, FlatTiles, TileEntry, TileMap, game_entity::TickUnit},
     persistent::map,
-    scripting::{render::RenderCommand, ui::RhaiUiUnit},
+    script::{RenderCommand, UiElement},
 };
 
 pub type GameRenderCommands = BTreeMap<TileCoord, Vec<RenderCommand>>;
@@ -73,6 +73,21 @@ pub enum PlaceTileResponse {
     Ignored,
 }
 
+#[derive(Debug, Clone)]
+pub struct PlaceTileParams {
+    pub coord: TileCoord,
+    pub id: TileId,
+    pub data: DataMap,
+    pub record: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct PlaceTilesParams {
+    pub tiles: FlatTiles,
+    pub replace: bool,
+    pub record: bool,
+}
+
 /// Represents a message the game receives
 pub enum GameMsg {
     /// tick the tiles once
@@ -85,15 +100,11 @@ pub enum GameMsg {
     GetMap(RpcReplyPort<Option<(map::GameMapId, map::GameMapInfo)>>),
 
     PlaceTile {
-        coord: TileCoord,
-        tile: (TileId, DataMap),
-        record: bool,
+        params: Box<PlaceTileParams>,
         reply: Option<RpcReplyPort<PlaceTileResponse>>,
     },
     PlaceTiles {
-        tiles: FlatTiles,
-        replace: bool,
-        record: bool,
+        params: Box<PlaceTilesParams>,
         reply: Option<RpcReplyPort<FlatTiles>>,
     },
     MoveTiles(Vec<TileCoord>, TileCoord, bool),
@@ -141,13 +152,14 @@ pub enum TileMsg {
         requested_from_coord: TileCoord,
     },
 
-    GetTileConfigUi(RpcReplyPort<Option<RhaiUiUnit>>),
+    GetTileConfigUi(RpcReplyPort<Option<UiElement>>),
 
     GetData(RpcReplyPort<DataMap>),
-    GetDatum(Id, RpcReplyPort<Option<Datum>>),
-    SetData(DataMap),
-    SetDatum(Id, Datum),
+    SetData(Box<DataMap>),
     TakeData(RpcReplyPort<DataMap>),
-    RemoveDatum(Id),
-    ReadData(Box<dyn FnOnce(&mut DataMap) + Send + Sync>),
+    SetDatum(Id, Datum),
+    RemoveDatum(Id, DatumType),
+    ChangeData(DatumChange),
+    FnData(Box<dyn FnOnce(&mut DataMap) + Send + Sync>),
+    FnDataStatic(&'static (dyn Fn(&mut DataMap) + Send + Sync)),
 }

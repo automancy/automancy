@@ -1,5 +1,5 @@
 use automancy_data::rendering::draw::GameUniformData;
-use automancy_game::scripting::render::RenderCommand;
+use automancy_game::{actor::tile_entity::TileActorState, script::RenderCommand, scripting_rhai};
 use automancy_rendering::{GameInstanceId, GameInstanceManager, ModelManager};
 
 use crate::*;
@@ -8,7 +8,6 @@ use crate::*;
 struct UiGameInstanceIndex {
     paint_id: UserPaintCallId,
     render_id: RenderId,
-    __p: u32,
 }
 type UiGameInstanceIdMap = BTreeMap<UserPaintCallId, BTreeSet<(ModelId, UiGameInstanceIndex)>>;
 
@@ -128,21 +127,26 @@ impl UiGameModelRenderer {
             GenericModel::None => {},
             GenericModel::Tile(id) => {
                 let commands = if !id.is_none() {
-                    let Some(commands) = tile_entity::collect_render_commands(
-                        resource_man,
-                        id,
-                        TileCoord::ZERO,
-                        &mut DataMap::new(),
-                        &mut Default::default(),
-                        true,
-                        false,
-                    ) else {
+                    if let Some(tile) = resource_man.registry.tile_defs.get(&id)
+                        && let Some(script) = resource_man.rhai_scripts.get(&tile.script)
+                        && let Some(commands) = tile_entity::collect_render_commands(
+                            resource_man,
+                            id,
+                            TileCoord::ZERO,
+                            &mut TileActorState {
+                                rhai: Some(script.clone()),
+                                ..Default::default()
+                            },
+                            true,
+                            false,
+                        )
+                    {
+                        commands
+                    } else {
                         return;
-                    };
-
-                    commands
+                    }
                 } else {
-                    automancy_game::scripting::render::util::track_none(resource_man, TileCoord::ZERO).to_vec()
+                    scripting_rhai::render::util::track_none(resource_man, TileCoord::ZERO).to_vec()
                 };
 
                 for command in commands {
@@ -161,7 +165,6 @@ impl UiGameModelRenderer {
                                     index: UiGameInstanceIndex {
                                         paint_id,
                                         render_id,
-                                        __p: 0,
                                     },
                                 },
                             );
@@ -178,7 +181,6 @@ impl UiGameModelRenderer {
                                     index: UiGameInstanceIndex {
                                         paint_id,
                                         render_id,
-                                        __p: 0,
                                     },
                                 },
                                 (Some(model_matrix), None),
@@ -191,7 +193,6 @@ impl UiGameModelRenderer {
                             let index = UiGameInstanceIndex {
                                 paint_id,
                                 render_id,
-                                __p: 0,
                             };
 
                             instance_man.remove(GameInstanceId {
@@ -218,7 +219,6 @@ impl UiGameModelRenderer {
                         index: UiGameInstanceIndex {
                             paint_id,
                             render_id,
-                            __p: 0,
                         },
                     },
                 );
@@ -236,7 +236,6 @@ impl UiGameModelRenderer {
                         index: UiGameInstanceIndex {
                             paint_id,
                             render_id,
-                            __p: 0,
                         },
                     },
                 );
@@ -271,11 +270,11 @@ impl UiGameModelRenderer {
                     format: wgpu::TextureFormat::Rgba8UnormSrgb,
                     width: atlas.texture_size.x,
                     height: atlas.texture_size.y,
-                    // these shouldn't matter
                     present_mode: wgpu::PresentMode::default(),
                     desired_maximum_frame_latency: 2,
                     alpha_mode: wgpu::CompositeAlphaMode::default(),
                     view_formats: vec![],
+                    color_space: wgpu::SurfaceColorSpace::Auto,
                 };
 
                 let game_res = gpu::GameRenderResources::new(

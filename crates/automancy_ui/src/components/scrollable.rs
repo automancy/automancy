@@ -386,12 +386,12 @@ impl Widget for ScrollableWidget {
                 ..
             } => {
                 self.last_drag_pos = None;
-                if ctx.input.selection() == Some(ctx.dom.current()) {
-                    ctx.input.set_selection(None);
+                if ctx.input.focus() == Some(ctx.dom.current()) {
+                    ctx.input.set_focus(None);
                 }
 
                 if inside && down {
-                    ctx.input.set_selection(Some(ctx.dom.current()));
+                    ctx.input.set_focus(Some(ctx.dom.current()));
 
                     return EventResponse::Sink;
                 }
@@ -399,7 +399,7 @@ impl Widget for ScrollableWidget {
                 EventResponse::Bubble
             },
             WidgetEvent::MouseMoved(Some(mouse)) => {
-                if ctx.input.selection() == Some(ctx.dom.current()) {
+                if ctx.input.focus() == Some(ctx.dom.current()) {
                     if let Some(start) = self.last_drag_pos {
                         let pos = self.scroll_position.get();
                         let pos = pos - (mouse - start);

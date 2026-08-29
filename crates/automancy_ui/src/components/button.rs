@@ -27,6 +27,11 @@ impl ButtonExt for Button {
                 fill: colors::BUTTON_PRESSED.yak(),
                 border: None,
             })
+            .focus_style(DynamicButtonStyle {
+                text: text_style.clone(),
+                fill: colors::BACKGROUND_2.yak(),
+                border: Some(Border::new(colors::BACKGROUND_3.yak(), sizing::PADDING_XSMALL)),
+            })
     }
 
     fn simple(text: Text) -> Button {

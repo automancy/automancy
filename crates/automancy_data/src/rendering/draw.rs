@@ -62,7 +62,7 @@ impl Default for GameUniformData {
     fn default() -> Self {
         Self {
             camera_pos: Vec3::new(0.0, 0.0, 1.0),
-            light_color: Rgba::white(),
+            light_color: colors::ALL_WHITE.linear,
             light_strength: 1.0,
             camera_bounds: Rect::default(),
             view_matrix: Matrix4::default(),

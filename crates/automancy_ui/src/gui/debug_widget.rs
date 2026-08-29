@@ -1,5 +1,4 @@
 use automancy_data::game::generic::serailize::IdMapping;
-use automancy_game::resources::global::debug_id;
 
 use crate::*;
 
@@ -18,7 +17,7 @@ pub fn debug_widget(ctx: &mut UiContext) {
     let item_count = ctx.game_state.resource_man.registry.item_defs.len();
     let tag_count = ctx.game_state.resource_man.registry.tag_defs.len();
     let recipe_count = ctx.game_state.resource_man.registry.recipe_defs.len();
-    let script_count = ctx.game_state.resource_man.scripts.len();
+    let script_count = ctx.game_state.resource_man.rhai_scripts.len();
     let audio_count = ctx.game_state.resource_man.audio.len();
 
     let fps = (1.0 / ctx.render.frame_time.as_secs_f32()).round();
@@ -57,11 +56,12 @@ pub fn debug_widget(ctx: &mut UiContext) {
                     if let Some((map_id, map_info)) = ctx.game_data.loaded_map.read_latest() {
                         let map_data = map_info
                             .data
-                            .iter()
+                            .clone()
+                            .into_iter()
                             .map(|(key, datum)| {
                                 format!(
                                     "\"{}\": {}",
-                                    debug_id(*key),
+                                    key,
                                     persistent::ron::to_string_pretty(
                                         &datum.clone().into_raw(&mut IdMapping::new(), &ctx.game_state.resource_man.interner)
                                     )

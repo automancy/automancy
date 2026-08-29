@@ -59,6 +59,7 @@ pub fn init_buffer(device: &wgpu::Device, desc: &wgpu::BufferDescriptor, data: &
 
         buffer
             .get_mapped_range_mut(offset..(offset + slice.len() as u64))
+            .unwrap()
             .copy_from_slice(slice);
     }
     buffer.unmap();

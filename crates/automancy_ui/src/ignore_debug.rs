@@ -1,6 +1,6 @@
+use core::fmt::Debug;
 use std::{
     any::type_name,
-    fmt,
     ops::{Deref, DerefMut},
 };
 
@@ -8,8 +8,8 @@ use std::{
 #[repr(transparent)]
 pub struct IgnoreDebug<T>(pub T);
 
-impl<T> fmt::Debug for IgnoreDebug<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl<T> Debug for IgnoreDebug<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "opaque {}", type_name::<T>())
     }
 }

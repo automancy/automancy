@@ -1,5 +1,7 @@
+#![feature(impl_trait_in_assoc_type)]
 #![feature(iterator_try_collect)]
 #![feature(const_cmp)]
+#![feature(const_convert)]
 #![feature(const_trait_impl)]
 #![feature(more_float_constants)]
 

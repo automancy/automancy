@@ -30,14 +30,8 @@ fn options_menu_items(
                     Constraints::loose(Vec2::new(160.0, 180.0)),
                 );
 
-                if let Some(new_scale) = new_scale
-                    && new_scale != ctx.game_state.options.graphics.ui_scale
-                {
+                if let Some(new_scale) = new_scale {
                     ctx.game_state.options.graphics.ui_scale = new_scale;
-
-                    ctx.gui
-                        .yak
-                        .set_scale_factor(ctx.game_state.options.graphics.ui_scale.to_f32() * ctx.winit_window.scale_factor() as f32);
                 }
             });
 

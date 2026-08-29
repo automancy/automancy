@@ -13,9 +13,9 @@ use thiserror::Error;
 
 use crate::{
     actor::message::{GameMsg, TileMsg, TileResult, TileTransactionResult},
-    resources::{ResourceManager, types::script::ScriptData},
-    scripting,
-    scripting::render::RenderCommand,
+    resources::{ResourceManager, types::script::RhaiScriptData},
+    script::RenderCommand,
+    scripting_rhai,
 };
 
 #[derive(Debug, Clone)]
@@ -30,15 +30,17 @@ pub struct TileActor {
 
 #[derive(Debug, Clone)]
 pub struct TileActorState {
-    data: DataMap,
-    rendering: bool,
-    field_changes_since_render: IdSet<Id>,
+    pub data: DataMap,
+    pub rhai: Option<RhaiScriptData>,
+    pub rendering: bool,
+    pub field_changes_since_render: IdSet<Id>,
 }
 
-impl TileActorState {
-    fn new() -> Self {
+impl Default for TileActorState {
+    fn default() -> Self {
         Self {
             data: DataMap::new(),
+            rhai: None,
             rendering: false,
             field_changes_since_render: Default::default(),
         }
@@ -52,7 +54,7 @@ impl TileActor {
         match self.game.send_message(GameMsg::SendTileMsg(coord, msg)) {
             Ok(_) => {},
             Err(_) => {
-                state.field_changes_since_render.extend(state.data.keys().copied());
+                state.field_changes_since_render.extend(state.data.keys());
                 state.data = Default::default();
             },
         }
@@ -176,11 +178,13 @@ impl TileActor {
         root_coord: TileCoord,
         root_id: TileId,
     ) -> Option<GameMsg> {
-        let tile_def = self.resource_man.registry.tile_defs.get(&self.id)?;
-
-        if let Some(script) = self.resource_man.scripts.get(&tile_def.script)
-            && let Some(result) = self.run_tile_script(
-                state,
+        if let Some(script) = &state.rhai
+            && let Some(result) = run_tile_script(
+                &self.resource_man,
+                self.id,
+                self.coord,
+                &mut state.data,
+                &mut state.field_changes_since_render,
                 script,
                 [
                     ("source_coord", Dynamic::from(source_coord)),
@@ -200,35 +204,7 @@ impl TileActor {
 
     #[inline]
     pub fn collect_render_commands(&self, state: &mut TileActorState, loading: bool, unloading: bool) -> Option<Vec<RenderCommand>> {
-        collect_render_commands(
-            &self.resource_man,
-            self.id,
-            self.coord,
-            &mut state.data,
-            &mut state.field_changes_since_render,
-            loading,
-            unloading,
-        )
-    }
-
-    #[inline]
-    pub fn run_tile_script<Result: 'static, const SIZE: usize>(
-        &self,
-        state: &mut TileActorState,
-        script: &ScriptData,
-        args: [(&'static str, Dynamic); SIZE],
-        function_name: &'static str,
-    ) -> Option<Result> {
-        run_tile_script(
-            &self.resource_man,
-            self.id,
-            self.coord,
-            &mut state.data,
-            &mut state.field_changes_since_render,
-            script,
-            args,
-            function_name,
-        )
+        collect_render_commands(&self.resource_man, self.id, self.coord, state, loading, unloading)
     }
 }
 
@@ -241,7 +217,7 @@ pub fn run_tile_script<Result: 'static, const SIZE: usize>(
     coord: TileCoord,
     data: &mut DataMap,
     field_changes_since_render: &mut IdSet<Id>,
-    script: &ScriptData,
+    script: &RhaiScriptData,
     args: [(&'static str, Dynamic); SIZE],
     function_name: &'static str,
 ) -> Option<Result> {
@@ -263,17 +239,17 @@ pub fn run_tile_script<Result: 'static, const SIZE: usize>(
         .map(|(k, v)| (rhai::Identifier::from(k), v)),
     );
 
-    let old_keys = data.keys().copied().collect::<IdSet<_>>();
+    let old_keys = data.keys().collect::<IdSet<_>>();
     let mut rhai_state = Dynamic::from(std::mem::take(data));
-    let result = resource_man.engine.call_fn_with_options::<Dynamic>(
-        scripting::rhai_call_options(&mut rhai_state),
+    let result = resource_man.rhai.call_fn_with_options::<Dynamic>(
+        scripting_rhai::rhai_call_options(&mut rhai_state),
         &mut Scope::new(),
         &script.ast,
         function_name,
         (input,),
     );
     *data = rhai_state.cast::<DataMap>();
-    for key in data.keys().copied() {
+    for key in data.keys() {
         if !old_keys.contains(&key) {
             field_changes_since_render.insert(key);
         }
@@ -282,7 +258,7 @@ pub fn run_tile_script<Result: 'static, const SIZE: usize>(
     match result {
         Ok(result) => result.try_cast::<Result>(),
         Err(err) => {
-            scripting::rhai_log_err(function_name, &script.metadata.str_id, &err, Some(coord));
+            scripting_rhai::rhai_log_err(function_name, &script.metadata.str_id, &err, Some(coord));
             None
         },
     }
@@ -295,24 +271,22 @@ pub fn collect_render_commands(
     resource_man: &ResourceManager,
     id: TileId,
     coord: TileCoord,
-    data: &mut DataMap,
-    field_changes_since_render: &mut IdSet<Id>,
+    state: &mut TileActorState,
     loading: bool,
     unloading: bool,
 ) -> Option<Vec<RenderCommand>> {
-    if !(loading || unloading || !field_changes_since_render.is_empty()) {
+    if !(loading || unloading || !state.field_changes_since_render.is_empty()) {
         return None;
     }
 
-    let tile_def = resource_man.registry.tile_defs.get(&id)?;
-    if let Some(script) = resource_man.scripts.get(&tile_def.script) {
-        let field_changes = std::mem::take(field_changes_since_render);
+    if let Some(script) = &state.rhai {
+        let field_changes = std::mem::take(&mut state.field_changes_since_render);
         if let Some(result) = run_tile_script(
             resource_man,
             id,
             coord,
-            data,
-            field_changes_since_render,
+            &mut state.data,
+            &mut state.field_changes_since_render,
             script,
             [
                 ("loading", Dynamic::from_bool(loading)),
@@ -381,7 +355,20 @@ impl Actor for TileActor {
     type Arguments = ();
 
     async fn pre_start(&self, _myself: ActorRef<Self::Msg>, _args: Self::Arguments) -> Result<Self::State, ActorProcessingErr> {
-        Ok(TileActorState::new())
+        let tile_def = self
+            .resource_man
+            .registry
+            .tile_defs
+            .get(&self.id)
+            .ok_or(Box::new(TileActorError::NonExistent(self.coord)))?;
+
+        let mut state = TileActorState::default();
+
+        if let Some(data) = self.resource_man.rhai_scripts.get(&tile_def.script) {
+            state.rhai = Some(data.clone());
+        }
+
+        Ok(state)
     }
 
     async fn handle(&self, _myself: ActorRef<Self::Msg>, message: Self::Msg, state: &mut Self::State) -> Result<(), ActorProcessingErr> {
@@ -400,15 +387,17 @@ impl Actor for TileActor {
             TileMsg::Tick {
                 tick_count: _tick_count,
             } => {
-                let tile_def = self
-                    .resource_man
-                    .registry
-                    .tile_defs
-                    .get(&self.id)
-                    .ok_or(Box::new(TileActorError::NonExistent(self.coord)))?;
-
-                if let Some(script) = self.resource_man.scripts.get(&tile_def.script)
-                    && let Some(result) = self.run_tile_script(state, script, [], "handle_tick")
+                if let Some(script) = &state.rhai
+                    && let Some(result) = run_tile_script(
+                        &self.resource_man,
+                        self.id,
+                        self.coord,
+                        &mut state.data,
+                        &mut state.field_changes_since_render,
+                        script,
+                        [],
+                        "handle_tick",
+                    )
                 {
                     self.handle_rhai_result(state, result);
                 }
@@ -444,32 +433,30 @@ impl Actor for TileActor {
             TileMsg::TransactionResult {
                 result,
             } => {
-                let tile_def = self
-                    .resource_man
-                    .registry
-                    .tile_defs
-                    .get(&self.id)
-                    .ok_or(Box::new(TileActorError::NonExistent(self.coord)))?;
-
-                if let Some(script) = self.resource_man.scripts.get(&tile_def.script) {
-                    let _: Option<()> =
-                        self.run_tile_script(state, script, [("transferred", Dynamic::from(result))], "handle_transaction_result");
+                if let Some(script) = &state.rhai {
+                    let _: Option<()> = run_tile_script(
+                        &self.resource_man,
+                        self.id,
+                        self.coord,
+                        &mut state.data,
+                        &mut state.field_changes_since_render,
+                        script,
+                        [("transferred", Dynamic::from(result))],
+                        "handle_transaction_result",
+                    );
                 }
             },
             TileMsg::ExtractRequest {
                 requested_from_id,
                 requested_from_coord,
             } => {
-                let tile_def = self
-                    .resource_man
-                    .registry
-                    .tile_defs
-                    .get(&self.id)
-                    .ok_or(Box::new(TileActorError::NonExistent(self.coord)))?;
-
-                if let Some(script) = self.resource_man.scripts.get(&tile_def.script)
-                    && let Some(result) = self.run_tile_script(
-                        state,
+                if let Some(script) = &state.rhai
+                    && let Some(result) = run_tile_script(
+                        &self.resource_man,
+                        self.id,
+                        self.coord,
+                        &mut state.data,
+                        &mut state.field_changes_since_render,
                         script,
                         [
                             ("requested_from_coord", Dynamic::from(requested_from_coord)),
@@ -483,15 +470,17 @@ impl Actor for TileActor {
             },
 
             TileMsg::GetTileConfigUi(reply) => {
-                let tile_def = self
-                    .resource_man
-                    .registry
-                    .tile_defs
-                    .get(&self.id)
-                    .ok_or(Box::new(TileActorError::NonExistent(self.coord)))?;
-
-                if let Some(script) = self.resource_man.scripts.get(&tile_def.script) {
-                    if let Some(result) = self.run_tile_script(state, script, [], "tile_config") {
+                if let Some(script) = &state.rhai {
+                    if let Some(result) = run_tile_script(
+                        &self.resource_man,
+                        self.id,
+                        self.coord,
+                        &mut state.data,
+                        &mut state.field_changes_since_render,
+                        script,
+                        [],
+                        "tile_config",
+                    ) {
                         reply.send(Some(result))?;
                     } else {
                         reply.send(None)?;
@@ -502,28 +491,30 @@ impl Actor for TileActor {
             TileMsg::GetData(reply) => {
                 reply.send(state.data.clone())?;
             },
-            TileMsg::GetDatum(key, reply) => {
-                reply.send(state.data.get(key).cloned())?;
-            },
             TileMsg::SetData(data) => {
-                state.field_changes_since_render.extend(state.data.keys().copied());
-                state.data = data;
-                state.field_changes_since_render.extend(state.data.keys().copied());
-            },
-            TileMsg::SetDatum(key, value) => {
-                state.field_changes_since_render.insert(key);
-                state.data.set(key, value);
+                state.field_changes_since_render.extend(state.data.keys());
+                state.data = *data;
+                state.field_changes_since_render.extend(state.data.keys());
             },
             TileMsg::TakeData(reply) => {
-                state.field_changes_since_render.extend(state.data.keys().copied());
+                state.field_changes_since_render.extend(state.data.keys());
                 reply.send(std::mem::take(&mut state.data))?;
             },
-            TileMsg::RemoveDatum(key) => {
-                state.field_changes_since_render.insert(key);
-                state.data.remove(key);
+            TileMsg::SetDatum(id, datum) => {
+                state.data.set(id, datum);
             },
-            TileMsg::ReadData(f) => {
-                state.field_changes_since_render.extend(state.data.keys().copied());
+            TileMsg::RemoveDatum(id, datum) => {
+                state.data.remove(id, datum);
+            },
+            TileMsg::ChangeData(change) => {
+                state.data.handle_change(change);
+            },
+            TileMsg::FnData(f) => {
+                state.field_changes_since_render.extend(state.data.keys());
+                f(&mut state.data);
+            },
+            TileMsg::FnDataStatic(f) => {
+                state.field_changes_since_render.extend(state.data.keys());
                 f(&mut state.data);
             },
         }

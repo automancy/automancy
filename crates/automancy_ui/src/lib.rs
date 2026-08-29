@@ -28,7 +28,7 @@ mod prelude {
     #[allow(unused)]
     pub use core::{
         cell::{Cell, Ref, RefCell, RefMut, UnsafeCell},
-        fmt::{self, Debug},
+        fmt::Debug,
         hash::Hash,
         marker::PhantomData,
         ops::{Deref, DerefMut, RangeInclusive},
@@ -101,7 +101,7 @@ mod prelude {
         util::{widget, *},
         widget::{Widget, *},
     };
-    pub use yakui_wgpu::YakuiWgpu;
+    pub use yakui_wgpu::{Buffers as YakuiBuffers, YakuiWgpu};
     pub use yakui_winit::YakuiWinit;
 
     pub use crate::{AutomancyUiContext as UiContext, components::*, ignore_debug::*, script::*, state::*, styling::*, traits::*, util::*};
@@ -159,6 +159,7 @@ pub struct AutomancyGui {
     pub puzzle_state: Option<(DataMap, bool)>,
 
     pub yak: Yakui,
+    pub yakui_buffers: YakuiBuffers,
     pub yakui_wgpu: YakuiWgpu,
     pub yakui_winit: YakuiWinit,
 
@@ -259,7 +260,7 @@ impl AutomancyGui {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, window: &WinitWindow, logo: yakui::paint::Texture) -> Self {
         let mut yak = Yakui::new();
 
-        let yakui_wgpu = yakui_wgpu::YakuiWgpu::new(device, queue);
+        let yakui_wgpu = yakui_wgpu::YakuiWgpu::new(device.clone(), queue.clone());
         let mut yakui_winit = yakui_winit::YakuiWinit::new(window);
 
         yakui_winit.set_automatic_scale_factor(false);
@@ -275,6 +276,7 @@ impl AutomancyGui {
             puzzle_state: None,
 
             yak,
+            yakui_buffers: yakui_wgpu.buffers(),
             yakui_wgpu,
             yakui_winit,
 
@@ -316,7 +318,7 @@ pub fn render(
     gui.yakui_wgpu.set_paint_limits(&mut gui.yak);
     let paint = gui.yak.paint();
 
-    gui.yakui_wgpu.update_textures(&render.res.device, paint, &render.res.queue);
+    gui.yakui_wgpu.update_textures(paint);
 
     // If there's nothing to paint, well... don't paint!
     let layers = &paint.layers;
@@ -329,8 +331,8 @@ pub fn render(
         return;
     }
 
-    gui.yakui_wgpu.vertices.clear();
-    gui.yakui_wgpu.indices.clear();
+    gui.yakui_buffers.vertices.clear();
+    gui.yakui_buffers.indices.clear();
     gui.yakui_wgpu.texture_bindgroup_cache.clear();
 
     let mut draw_calls = Vec::with_capacity(layers.len());
@@ -344,7 +346,7 @@ pub fn render(
     for (clip, call) in layers.iter().flat_map(|layer| &layer.calls) {
         match call {
             PaintCall::Internal(call) => {
-                draw_calls.push(gui.yakui_wgpu.build_draw_call(&render.res.device, *clip, call));
+                draw_calls.push(gui.yakui_wgpu.build_draw_call(&mut gui.yakui_buffers, *clip, call));
             },
             PaintCall::User(id) => {
                 draw_calls.push((*clip, DrawCall::User(*id)));
@@ -432,8 +434,8 @@ pub fn render(
     }
 
     // --- yakui ---
-    let vertices = gui.yakui_wgpu.vertices.upload(&render.res.device, &render.res.queue);
-    let indices = gui.yakui_wgpu.indices.upload(&render.res.device, &render.res.queue);
+    let vertices = gui.yakui_buffers.vertices.upload(&render.res.device, &render.res.queue);
+    let indices = gui.yakui_buffers.indices.upload(&render.res.device, &render.res.queue);
     // --- yakui ---
 
     {

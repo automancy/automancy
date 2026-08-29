@@ -6,7 +6,7 @@ use automancy_data::{
         inventory::{ItemStack, deserialize::ItemStackStr},
     },
     id::{
-        CategoryId, Id, ResearchId, ScriptId, TileId,
+        CategoryId, IdInterner, ResearchId, ResearchTranslateId, ScriptId, TileId,
         deserialize::StrId,
         parse::{parse_ids, parse_item_stacks},
     },
@@ -27,9 +27,9 @@ pub struct ResearchDef {
     pub icon: GenericModel,
     pub unlocks: Vec<TileId>,
     pub depends_on: ResearchId,
-    pub name: Id,
-    pub description: Id,
-    pub completed_description: Id,
+    pub name: ResearchTranslateId,
+    pub description: ResearchTranslateId,
+    pub completed_description: ResearchTranslateId,
     pub required_items: Option<Vec<ItemStack>>,
     pub attached_puzzle: Option<(ScriptId, DataMap)>,
 }
@@ -50,35 +50,35 @@ struct Raw {
 
 #[cfg_attr(feature = "profile", profiling::all_functions)]
 impl MutableResourceManager {
-    fn load_research_file(&mut self, file: &Path, namespace: &str) -> Result<(), ResourceError> {
-        log::info!("Loading research entry at: {}.", file.display());
+    fn load_research_file(&mut self, interner: &mut IdInterner, path: &Path, namespace: &str) -> Result<(), ResourceError> {
+        log::info!("Loading research entry at: {}.", path.display());
 
-        let v = persistent::ron::ron_options().from_str::<Raw>(&read_to_string(file)?)?;
+        let v = persistent::ron::ron_options().from_str::<Raw>(&read_to_string(path)?)?;
 
-        let id = ResearchId(self.interner.get_or_intern(v.id, Some(namespace))?);
+        let id = ResearchId(interner.get_or_intern(&v.id, Some(namespace))?);
         if id.is_built_in() {
             return Err(ResourceError::BuiltInRedefined {
                 ty: "research",
-                file: file.to_path_buf(),
-                name: self.interner.resolve(*id).unwrap().to_string(),
+                file: path.to_path_buf(),
+                name: interner.resolve(*id).unwrap().to_string(),
             });
         }
-        let unlocks = parse_ids(v.unlocks.into_iter(), &mut self.interner, Some(namespace))
+        let unlocks = parse_ids(v.unlocks.into_iter(), interner, Some(namespace))
             .map(|v| v.map(TileId))
             .try_collect()?;
-        let icon = v.icon.into_icon(&mut self.interner, Some(namespace))?;
-        let depends_on = ResearchId(self.interner.get_or_intern_opt(v.depends_on, Some(namespace))?);
-        let name = self.interner.get_or_intern(v.name, Some(namespace))?;
-        let description = self.interner.get_or_intern(v.description, Some(namespace))?;
-        let completed_description = self.interner.get_or_intern(v.completed_description, Some(namespace))?;
+        let icon = v.icon.into_icon(interner, Some(namespace))?;
+        let depends_on = ResearchId(interner.get_or_intern_opt(v.depends_on.as_deref(), Some(namespace))?);
+        let name = ResearchTranslateId(interner.get_or_intern(&v.name, Some(namespace))?);
+        let description = ResearchTranslateId(interner.get_or_intern(&v.description, Some(namespace))?);
+        let completed_description = ResearchTranslateId(interner.get_or_intern(&v.completed_description, Some(namespace))?);
         let required_items = match v.required_items {
-            Some(v) => Some(parse_item_stacks(v.into_iter(), &mut self.interner, Some(namespace)).try_collect()?),
+            Some(v) => Some(parse_item_stacks(v.into_iter(), interner, Some(namespace)).try_collect()?),
             None => None,
         };
         let attached_puzzle = match v.attached_puzzle {
             Some((id, data)) => Some((
-                ScriptId(self.interner.get_or_intern(id, Some(namespace))?),
-                data.into_data(&mut self.interner, Some(namespace))?,
+                ScriptId(interner.get_or_intern(&id, Some(namespace))?),
+                data.into_data(interner, Some(namespace))?,
             )),
             None => None,
         };
@@ -99,15 +99,17 @@ impl MutableResourceManager {
         Ok(())
     }
 
-    pub fn load_research_files(&mut self, dir: &Path, namespace: &str) {
-        let path = dir.join("researches");
+    pub fn load_research_files(dir: &Path, namespace: &str) {
+        MutableResourceManager::with_interner(|resource_man, interner| {
+            let path = dir.join("researches");
 
-        for file in read_recursively(&path, RON_EXTS) {
-            match self.load_research_file(&file, namespace) {
-                Ok(_) => {},
-                Err(err) => err.log_err(),
+            for entry in read_recursively(&path, RON_EXTS) {
+                match resource_man.load_research_file(interner, entry.path(), namespace) {
+                    Ok(_) => {},
+                    Err(err) => err.log_err(),
+                }
             }
-        }
+        })
     }
 
     pub fn compile_researches(&mut self) -> IdMap<TileId, NodeIndex> {
@@ -124,12 +126,7 @@ impl MutableResourceManager {
                 if let Some(old_index) = research_unlock_map.insert(unlock, index) {
                     let old_id = self.registry.research_defs.node_weight(old_index).unwrap().id;
 
-                    log::warn!(
-                        "Unlock for {:?} is overritten by {:?}! (was {:?})",
-                        self.interner.resolve(*unlock),
-                        self.interner.resolve(*id),
-                        self.interner.resolve(*old_id),
-                    )
+                    log::warn!("Unlock for {unlock} is overwritten by {id}! (was {old_id})")
                 }
             }
         }

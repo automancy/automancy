@@ -1,51 +1,61 @@
-use std::sync::Arc;
+use std::{env, path::Path, sync::Arc};
 
 use automancy_data::{game::generic::DataMap, id::TileId};
 use automancy_game::{
-    actor::{FlatTiles, message::GameMsg},
+    actor::{
+        FlatTiles,
+        message::{GameMsg, PlaceTilesParams},
+    },
     input::{ActionType, GameInputEvent},
-    resources::{MutableResourceManager, RESOURCES_PATH, ResourceManager},
+    resources::{MutableResourceManager, RESOURCES_AUTOMANCY_PATH, RESOURCES_CORE_PATH, RESOURCES_PATH, ResourceManager},
 };
 use automancy_ui::{AutomancyUiContext, state::Screen};
 use winit::event::Event;
 
 mod ui_ext {
     use automancy_data::{
-        game::{
-            coord::TileCoord,
-            generic::{DataMap, Datum},
-        },
+        game::{coord::TileCoord, generic::DataMap},
         id::{Id, TileId},
     };
     use automancy_game::actor::{
         TileEntry,
-        message::{GameMsg, PlaceTileResponse, TileMsg},
+        message::{GameMsg, PlaceTileParams, PlaceTileResponse, TileMsg},
     };
     use automancy_ui::AutomancyUiContext as UiContext;
-    use ractor::rpc::CallResult;
+    use tokio::sync::oneshot;
 
     #[cfg_attr(feature = "profile", profiling::function)]
     #[inline]
     pub fn link_tile(ctx: &mut UiContext, datum_id: Id, link_from: TileEntry, link_to: TileCoord) -> anyhow::Result<()> {
-        let Ok(CallResult::Success(old)) = ctx
-            .game_state
-            .tokio
-            .block_on(link_from.handle.call(|reply| TileMsg::GetDatum(datum_id, reply), None))
-        else {
-            return Ok(());
-        };
+        #[derive(Debug, Clone, Copy)]
+        enum LinkStatus {
+            Unlinked,
+            Linked,
+        }
 
-        if old.is_some() {
-            link_from.handle.send_message(TileMsg::RemoveDatum(datum_id))?;
+        let (status_tx, status_rx) = oneshot::channel::<LinkStatus>();
 
-            ctx.game_state.audio_man.play(ctx.game_state.resource_man.audio["click"].clone())?;
-            // TODO click2
-        } else {
-            link_from
-                .handle
-                .send_message(TileMsg::SetDatum(datum_id, Datum::TileCoord(link_to)))?;
+        link_from.handle.cast(TileMsg::FnData(Box::new(move |data| {
+            let old = data.coord(datum_id);
 
-            ctx.game_state.audio_man.play(ctx.game_state.resource_man.audio["click"].clone())?;
+            if old.is_some() {
+                data.remove_coord(datum_id);
+                status_tx.send(LinkStatus::Unlinked).unwrap();
+            } else {
+                data.insert_coord(datum_id, link_to);
+                status_tx.send(LinkStatus::Linked).unwrap();
+            }
+        })))?;
+
+        let status = ctx.game_state.tokio.block_on(status_rx)?;
+        match status {
+            LinkStatus::Unlinked => {
+                // TODO click2
+                ctx.game_state.audio_man.play(ctx.game_state.resource_man.audio["click"].clone())?;
+            },
+            LinkStatus::Linked => {
+                ctx.game_state.audio_man.play(ctx.game_state.resource_man.audio["click"].clone())?;
+            },
         }
 
         Ok(())
@@ -59,9 +69,12 @@ mod ui_ext {
             .tokio
             .block_on(ctx.game_state.game_handle.call(
                 |reply| GameMsg::PlaceTile {
-                    coord,
-                    tile: (id, DataMap::new()),
-                    record: true,
+                    params: Box::new(PlaceTileParams {
+                        coord,
+                        id,
+                        data: DataMap::new(),
+                        record: true,
+                    }),
                     reply: Some(reply),
                 },
                 None,
@@ -204,16 +217,13 @@ pub fn handle_winit_event(ctx: &mut AutomancyUiContext, event: Event<()>) -> any
                             .game_state
                             .tokio
                             .block_on(ctx.game_state.game_handle.call(
-                                |reply| {
-                                    GameMsg::PlaceTiles {
-                                        tiles: coords
-                                            .into_iter()
-                                            .map(|coord| (coord, (TileId::none(), DataMap::new())))
-                                            .collect::<FlatTiles>(),
+                                |reply| GameMsg::PlaceTiles {
+                                    params: Box::new(PlaceTilesParams {
+                                        tiles: coords.into_iter().map(|coord| (coord, (TileId::none(), DataMap::new()))).collect(),
                                         replace: true,
                                         record: true,
-                                        reply: Some(reply),
-                                    }
+                                    }),
+                                    reply: Some(reply),
                                 },
                                 None,
                             ))?
@@ -235,16 +245,18 @@ pub fn handle_winit_event(ctx: &mut AutomancyUiContext, event: Event<()>) -> any
                     let direction = ctx.game_state.camera.cursor_coord - start;
 
                     ctx.game_state.game_handle.send_message(GameMsg::PlaceTiles {
-                        tiles: ctx
-                            .gui
-                            .state
-                            .paste_content
-                            .clone()
-                            .into_iter()
-                            .map(|(coord, tile)| (coord + direction, tile))
-                            .collect::<FlatTiles>(),
-                        replace: false,
-                        record: true,
+                        params: Box::new(PlaceTilesParams {
+                            tiles: ctx
+                                .gui
+                                .state
+                                .paste_content
+                                .clone()
+                                .into_iter()
+                                .map(|(coord, tile)| (coord + direction, tile))
+                                .collect::<FlatTiles>(),
+                            replace: false,
+                            record: true,
+                        }),
                         reply: None,
                     })?;
 
@@ -271,40 +283,59 @@ pub fn handle_winit_event(ctx: &mut AutomancyUiContext, event: Event<()>) -> any
 
 #[cfg_attr(feature = "profile", profiling::function)]
 pub fn load_resources(lang: &str) -> Arc<ResourceManager> {
-    let mut resource_man = MutableResourceManager::new();
+    let mut rhai = rhai::Engine::new();
 
-    for dir in std::fs::read_dir(RESOURCES_PATH)
+    MutableResourceManager::setup(&mut rhai);
+
+    if env::var("AUTOMANCY_UNIT_TESTS")
+        .ok()
+        .and_then(|v| v.parse::<bool>().ok())
+        .unwrap_or_default()
+    {
+        MutableResourceManager::enable_unit_tests();
+    }
+
+    let mut load_namespace = |dir: &Path, namespace: &str| {
+        log::info!("Loading namespace {namespace}...");
+
+        MutableResourceManager::load_model_files(dir, namespace);
+        MutableResourceManager::load_tile_files(dir, namespace);
+        MutableResourceManager::load_item_files(dir, namespace);
+        MutableResourceManager::load_tag_files(dir, namespace);
+        MutableResourceManager::load_category_files(dir, namespace);
+        MutableResourceManager::load_recipe_files(dir, namespace);
+        MutableResourceManager::load_research_files(dir, namespace);
+        MutableResourceManager::load_translate_files(dir, namespace, lang);
+        MutableResourceManager::load_shader_files(dir);
+        #[cfg(not(miri))]
+        MutableResourceManager::load_audio_files(dir);
+        #[cfg(not(miri))]
+        MutableResourceManager::load_font_files(dir);
+        MutableResourceManager::load_script_files(dir, namespace, &mut rhai);
+
+        log::info!("Loaded namespace {namespace}!");
+    };
+
+    let resources_folder = Path::new(RESOURCES_PATH);
+
+    load_namespace(&resources_folder.join(RESOURCES_CORE_PATH), RESOURCES_CORE_PATH);
+    load_namespace(&resources_folder.join(RESOURCES_AUTOMANCY_PATH), RESOURCES_AUTOMANCY_PATH);
+
+    for dir in std::fs::read_dir(resources_folder)
         .expect("the resources folder needs to exist and be readable")
         .flatten()
         .map(|v| v.path())
         .filter(|v| v.is_dir())
     {
         let namespace = dir.file_name().unwrap().to_str().unwrap().trim();
-        log::info!("Loading namespace {namespace}...");
 
-        #[cfg(miri)]
-        if namespace != "core" {
-            log::debug!("Only namespace core is loaded when using miri.");
+        // we load core and automancy in hardcoded order first, before any other namespaces
+        if namespace == RESOURCES_CORE_PATH || namespace == RESOURCES_AUTOMANCY_PATH {
             continue;
         }
 
-        resource_man.load_model_files(&dir, namespace);
-        #[cfg(not(miri))]
-        resource_man.load_audio_files(&dir);
-        resource_man.load_tile_files(&dir, namespace);
-        resource_man.load_item_files(&dir, namespace);
-        resource_man.load_tag_files(&dir, namespace);
-        resource_man.load_category_files(&dir, namespace);
-        resource_man.load_recipe_files(&dir, namespace);
-        resource_man.load_translate_files(&dir, namespace, lang);
-        resource_man.load_shader_files(&dir);
-        #[cfg(not(miri))]
-        resource_man.load_font_files(&dir);
-        resource_man.load_script_files(&dir, namespace);
-        resource_man.load_research_files(&dir, namespace);
-
-        log::info!("Loaded namespace {namespace}!");
+        load_namespace(&dir, namespace)
     }
 
-    MutableResourceManager::compile(resource_man)
+    MutableResourceManager::compile(rhai)
 }

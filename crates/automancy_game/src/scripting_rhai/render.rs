@@ -4,26 +4,11 @@ use automancy_data::{
 };
 use rhai::{Engine, exported_module, plugin::*};
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum RenderCommand {
-    Track {
-        render_id: RenderId,
-        model_id: ModelId,
-    },
-    Transform {
-        render_id: RenderId,
-        model_id: ModelId,
-        model_matrix: Matrix4,
-    },
-    Untrack {
-        render_id: RenderId,
-        model_id: ModelId,
-    },
-}
-
 #[allow(non_snake_case)]
 #[export_module]
 mod render_stuff {
+    use crate::script::RenderCommand;
+
     pub fn Track(render_id: Id, model_id: Id) -> RenderCommand {
         RenderCommand::Track {
             render_id: RenderId(render_id),
@@ -48,7 +33,7 @@ mod render_stuff {
 pub mod util {
     use automancy_data::game::coord::TileCoord;
 
-    use crate::{resources::ResourceManager, scripting::render::RenderCommand};
+    use crate::{resources::ResourceManager, script::RenderCommand};
 
     pub fn track_none(resource_man: &ResourceManager, coord: TileCoord) -> [RenderCommand; 2] {
         [

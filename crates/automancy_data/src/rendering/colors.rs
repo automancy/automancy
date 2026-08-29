@@ -1,9 +1,122 @@
+use core::{
+    fmt::Display,
+    ops::{Add, AddAssign, Deref, DerefMut, Div, DivAssign, Mul, MulAssign, Sub, SubAssign},
+};
+
+use bytemuck::{Pod, Zeroable};
+
 use crate::math::Float;
 
 /// An [`vek::Rgba`] type of floating point component, in linear RGB.
 ///
 /// Note: **Is not premultiplied!**
-pub type Rgba = vek::Rgba<Float>;
+#[repr(transparent)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Pod, Zeroable)]
+pub struct Rgba(vek::Rgba<Float>);
+
+const impl Deref for Rgba {
+    type Target = vek::Rgba<Float>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+const impl DerefMut for Rgba {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl Add for Rgba {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self(self.0 + rhs.0)
+    }
+}
+
+impl Sub for Rgba {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self(self.0 - rhs.0)
+    }
+}
+
+impl Mul for Rgba {
+    type Output = Self;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        Self(self.0 * rhs.0)
+    }
+}
+
+impl Mul<Float> for Rgba {
+    type Output = Self;
+
+    fn mul(self, rhs: Float) -> Self::Output {
+        Self(self.0 * rhs)
+    }
+}
+
+impl Div for Rgba {
+    type Output = Self;
+
+    fn div(self, rhs: Self) -> Self::Output {
+        Self(self.0 / rhs.0)
+    }
+}
+
+impl Div<Float> for Rgba {
+    type Output = Self;
+
+    fn div(self, rhs: Float) -> Self::Output {
+        Self(self.0 / rhs)
+    }
+}
+
+impl AddAssign for Rgba {
+    fn add_assign(&mut self, rhs: Self) {
+        *self = *self + rhs
+    }
+}
+
+impl SubAssign for Rgba {
+    fn sub_assign(&mut self, rhs: Self) {
+        *self = *self - rhs
+    }
+}
+
+impl MulAssign for Rgba {
+    fn mul_assign(&mut self, rhs: Self) {
+        *self = *self * rhs
+    }
+}
+
+impl MulAssign<Float> for Rgba {
+    fn mul_assign(&mut self, rhs: Float) {
+        *self = *self * rhs
+    }
+}
+
+impl DivAssign for Rgba {
+    fn div_assign(&mut self, rhs: Self) {
+        *self = *self / rhs
+    }
+}
+
+impl DivAssign<Float> for Rgba {
+    fn div_assign(&mut self, rhs: Float) {
+        *self = *self / rhs
+    }
+}
+
+impl Display for Rgba {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&encode_srgb_u8(self.to_srgb_u8()))
+    }
+}
 
 /// An [`vek::Rgba`] type of `u8` component, in sRGB.
 ///
@@ -30,7 +143,7 @@ pub const trait ColorExt {
     fn to_packed(self) -> PackedRgba;
 }
 
-impl const ColorExt for Rgba {
+const impl ColorExt for Rgba {
     type ComponentType = Float;
 
     fn mul_alpha(mut self, a: Float) -> Self {
@@ -42,21 +155,21 @@ impl const ColorExt for Rgba {
         self
     }
     fn adjust(self, v: Float) -> Self {
-        Rgba {
+        Rgba(vek::Rgba {
             r: self.r * v,
             g: self.g * v,
             b: self.b * v,
             a: self.a,
-        }
+        })
     }
 
     fn from_srgb_u8(color: SRgbaU8) -> Self {
-        Rgba {
+        Rgba(vek::Rgba {
             r: fast_srgb8::srgb8_to_f32(color.r),
             g: fast_srgb8::srgb8_to_f32(color.g),
             b: fast_srgb8::srgb8_to_f32(color.b),
             a: (color.a as Float) / 255.0,
-        }
+        })
     }
 
     fn to_srgb_u8(self) -> SRgbaU8 {
@@ -195,6 +308,8 @@ impl ComplexRgba {
 }
 
 pub const TRANSPARENT: ComplexRgba = ComplexRgba::from_str("#00000000");
+pub const ALL_BLACK: ComplexRgba = ComplexRgba::from_str("#000000ff");
+pub const ALL_WHITE: ComplexRgba = ComplexRgba::from_str("#ffffffff");
 
 pub const BACKGROUND_1: ComplexRgba = ComplexRgba::from_str("#ffffffaa");
 pub const BACKGROUND_2: ComplexRgba = ComplexRgba::from_str("#d4d4d4");

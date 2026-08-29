@@ -31,10 +31,7 @@ pub fn error_widget(ctx: &mut UiContext) {
                 Text::normal(gui_str!(
                     ctx.game_state,
                     error_menu_error_id,
-                    [(
-                        "id_str",
-                        Formattable::display(&ErrorManager::error_id_to_name(&ctx.game_state.resource_man, id))
-                    )]
+                    [("id_str", Formattable::display(&id))]
                 ))
                 .show();
 

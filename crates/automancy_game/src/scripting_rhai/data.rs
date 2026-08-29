@@ -8,7 +8,7 @@ use automancy_data::{
         inventory::{Inventory, ItemAmount, ItemStack},
     },
     id::{Id, ItemId, ModelId, RecipeId, RenderId, TagId, TileId},
-    id_map::{IdMap, IdSet},
+    id_map::{IdCoordMap, IdMap, IdSet},
     rendering::colors::Rgba,
 };
 use rhai::{Dynamic, Engine};
@@ -69,10 +69,14 @@ fn data_into_dynamic(v: Datum) -> Dynamic {
         Datum::Inventory(v) => Dynamic::from(v),
 
         Datum::Color(v) => Dynamic::from(v),
+        Datum::VecColor(v) => Dynamic::from(v),
 
         Datum::Int(v) => Dynamic::from_int(v),
+        Datum::VecInt(v) => Dynamic::from(v),
         Datum::UInt(v) => Dynamic::from(v),
+        Datum::VecUInt(v) => Dynamic::from(v),
         Datum::Float(v) => Dynamic::from(v),
+        Datum::VecFloat(v) => Dynamic::from(v),
         Datum::Bool(v) => Dynamic::from_bool(v),
     }
 }
@@ -104,12 +108,12 @@ fn data_from_dynamic(v: Dynamic) -> Option<Datum> {
         Datum::SetId => IdSet<Id>,
         Datum::MapSetId => IdMap<Id, IdSet<Id>>,
 
+        Datum::MapCoordId => IdCoordMap<Id>,
+        Datum::MapCoordModelId => IdCoordMap<ModelId>,
+
         Datum::TileCoord => TileCoord,
         Datum::VecTileCoord => Vec<TileCoord>,
         Datum::TileCoordBounds => TileCoordBounds,
-
-        Datum::MapCoordId => BTreeMap<TileCoord, Id>,
-        Datum::MapCoordModelId => BTreeMap<TileCoord, ModelId>,
 
         Datum::Int => ItemAmount,
         Datum::Bool => bool,
@@ -119,7 +123,7 @@ fn data_from_dynamic(v: Dynamic) -> Option<Datum> {
 }
 
 fn rhai_get(data: &mut DataMap, id: Id) -> Dynamic {
-    if let Some(datum) = data.get(id).cloned() {
+    if let Some(datum) = data.get(id) {
         data_into_dynamic(datum)
     } else {
         Dynamic::UNIT
@@ -136,7 +140,9 @@ pub(crate) fn register_data_stuff(engine: &mut Engine) {
     engine
         .register_type_with_name::<DataMap>("DataMap")
         .register_indexer_get_set(rhai_get, rhai_set)
-        .register_fn("get_or_new_inventory", |v: &mut DataMap, id: Id| v.inventory_mut(id).clone());
+        .register_fn("get_or_new_inventory", |v: &mut DataMap, id: Id| {
+            v.inventory_mut_or_default(id).clone()
+        });
 
     engine
         .register_type_with_name::<Inventory>("Inventory")
@@ -293,26 +299,26 @@ pub(crate) fn register_data_stuff(engine: &mut Engine) {
     engine.register_type_with_name::<TileDef>("TileDef");
     engine.register_type_with_name::<TagDef>("TagDef");
 
-    engine.register_fn("as_recipe", |id: RecipeId| {
-        match resources::global::resource_man().registry.recipe_defs.get(&id).cloned() {
+    engine.register_fn("as_recipe", |id: Id| {
+        match resources::global::resource_man().registry.recipe_defs.get(&RecipeId(id)).cloned() {
             Some(v) => Dynamic::from(v),
             None => Dynamic::UNIT,
         }
     });
-    engine.register_fn("as_tile", |id: TileId| {
-        match resources::global::resource_man().registry.tile_defs.get(&id).cloned() {
+    engine.register_fn("as_tile", |id: Id| {
+        match resources::global::resource_man().registry.tile_defs.get(&TileId(id)).cloned() {
             Some(v) => Dynamic::from(v),
             None => Dynamic::UNIT,
         }
     });
-    engine.register_fn("as_item", |id: ItemId| {
-        match resources::global::resource_man().registry.item_defs.get(&id).cloned() {
+    engine.register_fn("as_item", |id: Id| {
+        match resources::global::resource_man().registry.item_defs.get(&ItemId(id)).cloned() {
             Some(v) => Dynamic::from(v),
             None => Dynamic::UNIT,
         }
     });
-    engine.register_fn("as_tag", |id: TagId| {
-        match resources::global::resource_man().registry.tag_defs.get(&id).cloned() {
+    engine.register_fn("as_tag", |id: Id| {
+        match resources::global::resource_man().registry.tag_defs.get(&TagId(id)).cloned() {
             Some(v) => Dynamic::from(v),
             None => Dynamic::UNIT,
         }

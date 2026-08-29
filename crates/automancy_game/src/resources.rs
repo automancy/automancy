@@ -1,40 +1,40 @@
 pub mod registry;
 pub mod types;
 
-use core::mem::ManuallyDrop;
+use core::cell::{Cell, RefCell};
 use std::{
     collections::BTreeMap,
-    ffi::OsString,
-    fmt,
-    fmt::{Debug, Formatter},
+    ffi::OsStr,
+    fmt::Debug,
     path::{Path, PathBuf},
     sync::Arc,
 };
 
 use automancy_data::{
-    id,
-    id::{CategoryId, GLOBAL_INTERNER, IdInterner, ItemId, ModelId, ScriptId, TileId},
+    self, id,
+    id::{CategoryId, GLOBAL_INTERNER, IdInterner, ItemId, MUTABLE_GLOBAL_INTERNER, ModelId, ScriptId, TileId},
     id_map::{IdMap, ImmutableIdMap},
 };
 use hashbrown::HashMap;
 use kira::sound::static_sound::StaticSoundData;
-use rhai::Engine;
 use thiserror::Error;
-use walkdir::WalkDir;
+use walkdir::{DirEntry, WalkDir};
 
-use crate::{
-    resources::{
-        registry::{MutableRegistry, Registry},
-        types::{
-            font::FontData,
-            script::ScriptData,
-            translate::{MutableTranslateDef, TranslateDef},
-        },
+use crate::resources::{
+    registry::{MutableRegistry, Registry},
+    types::{
+        font::FontData,
+        script::RhaiScriptData,
+        translate::{MutableTranslateDef, TranslateDef},
     },
-    scripting,
 };
 
 pub static RESOURCES_PATH: &str = "resources";
+pub static RESOURCES_CORE_PATH: &str = "core";
+pub static RESOURCES_AUTOMANCY_PATH: &str = "automancy";
+
+pub(crate) static SCRIPTS_PATH: &str = "scripts";
+pub(crate) static RHAI_EXT: &str = "rhai";
 
 pub(crate) static FONT_EXTS: [&str; 4] = ["ttf", "otf", "ttc", "otc"];
 pub(crate) static RON_EXTS: [&str; 1] = ["ron"];
@@ -44,20 +44,14 @@ pub(crate) static SHADER_EXTS: [&str; 1] = ["wgsl"];
 /// TODO more audio formats are supported
 pub(crate) static AUDIO_EXTS: [&str; 1] = ["ogg"];
 
-pub(crate) fn read_recursively<const LEN: usize, S: Into<OsString>>(path: &Path, valid_exts: [S; LEN]) -> Vec<PathBuf> {
-    let valid_exts = valid_exts.map(Into::into);
+pub(crate) fn read_recursively<const LEN: usize>(path: &Path, valid_exts: [&'static str; LEN]) -> impl Iterator<Item = DirEntry> {
+    let valid_exts = valid_exts.map(OsStr::new);
 
-    WalkDir::new(path)
-        .follow_links(false)
-        .into_iter()
-        .flatten()
-        .filter(|entry| {
-            let ext = entry.path().extension().unwrap_or_default();
+    WalkDir::new(path).follow_links(false).into_iter().flatten().filter(move |entry| {
+        let ext = entry.path().extension();
 
-            valid_exts.iter().any(|valid| ext.eq_ignore_ascii_case(valid))
-        })
-        .map(|entry| entry.path().to_path_buf())
-        .collect()
+        ext.is_some_and(|ext| valid_exts.iter().any(|valid| ext.eq_ignore_ascii_case(valid)))
+    })
 }
 
 #[derive(Debug, Error)]
@@ -66,6 +60,8 @@ pub enum ResourceError {
     NoFileStem(PathBuf),
     #[error("file \"{0}\" is invalid: could not convert OsString to String")]
     OsStringError(PathBuf),
+    #[error("file \"{0}\" is invalid: path cannot contain '.' (dot), please rename your files")]
+    PathContainsDot(PathBuf),
 
     #[error("font file \"{0}\" is invalid: could not parse font: {1}")]
     CouldNotParseFont(PathBuf, ttf_parser::FaceParsingError),
@@ -100,6 +96,15 @@ impl ResourceError {
                 log::error!("Error loading resources: {err}.");
                 log::error!("Ignoring redefined built-in item.");
             },
+            err @ ResourceError::RhaiParseError(..) => {
+                log::error!("Error parsing rhai script: {err}.");
+            },
+            err @ ResourceError::RhaiEvalError(..) => {
+                log::error!("Error evaluating rhai: {err}.");
+            },
+            err @ ResourceError::KiraParseError(..) => {
+                log::error!("Error loading audio file: {err}.");
+            },
             err => {
                 log::error!("Error loading resources: {err}.");
             },
@@ -109,8 +114,6 @@ impl ResourceError {
 
 pub mod global {
     use std::sync::{Arc, RwLock};
-
-    use automancy_data::id::IdLike;
 
     use super::ResourceManager;
 
@@ -123,19 +126,15 @@ pub mod global {
     pub fn set_resource_man(resource_man: Arc<ResourceManager>) {
         RESOURCE_MAN.write().unwrap().replace(resource_man);
     }
-
-    pub fn debug_id<Id: IdLike>(id: Id) -> String {
-        resource_man().interner.resolve(id.into()).unwrap_or("invalid").to_string()
-    }
 }
 
 /// Represents a "Resource Manager", which contains all resources (apart from maps) loaded from disk dynamically.
 pub struct ResourceManager {
-    pub interner: IdInterner,
+    pub interner: Arc<IdInterner>,
     pub registry: Registry,
 
-    pub engine: Engine,
-    pub scripts: ImmutableIdMap<ScriptId, ScriptData>,
+    pub rhai: rhai::Engine,
+    pub rhai_scripts: ImmutableIdMap<ScriptId, RhaiScriptData>,
 
     pub translates: TranslateDef,
     pub models: ImmutableIdMap<ModelId, (gltf::Document, Vec<gltf::buffer::Data>)>,
@@ -149,19 +148,21 @@ pub struct ResourceManager {
 }
 
 impl Debug for ResourceManager {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("<resource manager>")
     }
 }
 
+thread_local! {
+    static MUTABLE_RESOURCE_MAN: RefCell<Option<MutableResourceManager>> = const { RefCell::new(None) };
+    pub(crate) static UNIT_TESTS_ENABLED: Cell<bool> = const { Cell::new(false) };
+}
+
 /// Mutable version of [`ResourceManager`].
 pub struct MutableResourceManager {
-    /// SAFETY: the `MutableResourceManager` should never be shared between threads.
-    pub(crate) interner: ManuallyDrop<&'static mut IdInterner>,
     pub(crate) registry: MutableRegistry,
 
-    pub(crate) engine: Engine,
-    pub(crate) scripts: IdMap<ScriptId, ScriptData>,
+    pub(crate) rhai_scripts: IdMap<ScriptId, RhaiScriptData>,
 
     pub(crate) translates: MutableTranslateDef,
     pub(crate) models: IdMap<ModelId, (gltf::Document, Vec<gltf::buffer::Data>)>,
@@ -173,54 +174,94 @@ pub struct MutableResourceManager {
 
 #[cfg_attr(feature = "profile", profiling::all_functions)]
 impl MutableResourceManager {
-    #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
-        let mut interner = ManuallyDrop::new(unsafe { &mut *GLOBAL_INTERNER.with(|interner| interner.get()) });
+    pub fn enable_unit_tests() {
+        log::info!("Unit tests are enabled in this environment! The game will crash if tests fail.");
+        UNIT_TESTS_ENABLED.set(true);
+    }
+
+    pub fn setup(rhai: &mut rhai::Engine) {
+        let mut interner = IdInterner::new();
         let registry = MutableRegistry::new(&mut interner);
+        // make sure to immediately set the interner after initialization
+        MUTABLE_GLOBAL_INTERNER.set(Some(interner));
 
-        let mut engine = Engine::new();
-        engine.set_max_expr_depths(0, 0);
-        engine.set_fast_operators(true);
+        {
+            rhai.set_max_expr_depths(0, 0);
+            rhai.set_fast_operators(true);
 
-        scripting::coord::register_coord_stuff(&mut engine);
-        scripting::data::register_data_stuff(&mut engine);
-        scripting::math::register_math_stuff(&mut engine);
-        scripting::render::register_render_stuff(&mut engine);
-        scripting::tile::register_tile_stuff(&mut engine);
-        scripting::ui::register_ui_stuff(&mut engine);
-        scripting::util::register_script_stuff(&mut engine);
+            use crate::scripting_rhai;
 
-        Self {
-            interner,
+            scripting_rhai::coord::register_coord_stuff(rhai);
+            scripting_rhai::data::register_data_stuff(rhai);
+            scripting_rhai::math::register_math_stuff(rhai);
+            scripting_rhai::render::register_render_stuff(rhai);
+            scripting_rhai::tile::register_tile_stuff(rhai);
+            scripting_rhai::ui::register_ui_stuff(rhai);
+            scripting_rhai::util::register_script_stuff(rhai);
+        }
+
+        MUTABLE_RESOURCE_MAN.set(Some(Self {
             registry,
 
-            engine,
-            scripts: Default::default(),
+            rhai_scripts: Default::default(),
 
             translates: Default::default(),
             audio: Default::default(),
             shaders: Default::default(),
             fonts: Default::default(),
             models: Default::default(),
-        }
+        }));
     }
 
-    pub fn compile(mut resource_man: Self) -> Arc<ResourceManager> {
-        resource_man
-            .engine
-            .definitions()
-            .with_headers(true)
-            .include_standard_packages(false)
-            .write_to_dir("rhai")
-            .unwrap();
+    #[inline]
+    pub fn with<F, R>(f: F) -> R
+    where
+        F: FnOnce(&mut MutableResourceManager) -> R,
+    {
+        MUTABLE_RESOURCE_MAN.with_borrow_mut(|resource_man| {
+            let resource_man = resource_man
+                .as_mut()
+                .expect("MutableResourceManager::with must be called after MutableResourceManager::setup has been called.");
 
+            f(resource_man)
+        })
+    }
+
+    #[inline]
+    pub fn with_interner<F, R>(f: F) -> R
+    where
+        F: FnOnce(&mut MutableResourceManager, &mut IdInterner) -> R,
+    {
+        MUTABLE_RESOURCE_MAN.with_borrow_mut(|resource_man| {
+            MUTABLE_GLOBAL_INTERNER.with_borrow_mut(|interner| {
+                let (resource_man, interner) = resource_man
+                    .as_mut()
+                    .zip(interner.as_mut())
+                    .expect("MutableResourceManager::with_interner must be called after MutableResourceManager::setup has been called.");
+
+                f(resource_man, interner)
+            })
+        })
+    }
+
+    pub fn compile(rhai: rhai::Engine) -> Arc<ResourceManager> {
+        {
+            rhai.definitions()
+                .with_headers(true)
+                .include_standard_packages(false)
+                .write_to_dir("rhai")
+                .unwrap();
+        }
+
+        let mut resource_man = MUTABLE_RESOURCE_MAN.take().unwrap();
         let (ordered_categories, category_tiles_map) = resource_man.compile_categories();
         let research_unlock_map = resource_man.compile_researches();
         let ordered_items = resource_man.compile_ordered_items();
         let ordered_tiles = resource_man.compile_ordered_tiles();
 
         let resource_man = Arc::new(ResourceManager {
-            interner: Clone::clone(&resource_man.interner),
+            // make sure to only move the interner out as we initialize the resource manager
+            interner: Arc::new(Clone::clone(&MUTABLE_GLOBAL_INTERNER.take().unwrap())),
             registry: Registry {
                 tile_defs: resource_man.registry.tile_defs.into(),
                 item_defs: resource_man.registry.item_defs.into(),
@@ -241,8 +282,8 @@ impl MutableResourceManager {
                 research_unlock_map: research_unlock_map.into(),
             },
 
-            engine: resource_man.engine,
-            scripts: resource_man.scripts.into(),
+            rhai,
+            rhai_scripts: resource_man.rhai_scripts.into(),
 
             translates: TranslateDef {
                 none: resource_man.translates.none,
@@ -269,6 +310,7 @@ impl MutableResourceManager {
         });
 
         global::set_resource_man(resource_man.clone());
+        *GLOBAL_INTERNER.write().unwrap() = resource_man.interner.clone();
 
         resource_man
     }
