@@ -7,8 +7,9 @@ default:
     @just --choose
 
 [private]
+[no-exit-message]
 cargo_cmd cmd profile:
-    BUILD_PROFILE='{{profile}}' cargo '{{cmd}}' --package=automancy --profile='{{profile}}' --features '{{tracy_feature}}'
+    -BUILD_PROFILE='{{profile}}' cargo '{{cmd}}' --package=automancy --profile='{{profile}}' --features '{{tracy_feature}}'
 
 buildscript:
     @echo 'Running build script.'
