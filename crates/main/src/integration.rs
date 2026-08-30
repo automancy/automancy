@@ -289,8 +289,13 @@ pub fn handle_winit_event(ctx: &mut AutomancyUiContext, event: Event<()>) -> any
 #[cfg_attr(feature = "profile", profiling::function)]
 pub fn load_resources(lang: &str) -> Arc<ResourceManager> {
     let mut rhai = rhai::Engine::new();
+    let lua = mlua::Lua::new_with(
+        mlua::StdLib::TABLE | mlua::StdLib::BIT | mlua::StdLib::MATH | mlua::StdLib::PACKAGE,
+        mlua::LuaOptions::new(),
+    )
+    .unwrap();
 
-    MutableResourceManager::setup(&mut rhai);
+    MutableResourceManager::setup(&mut rhai, &lua);
 
     if env::var("AUTOMANCY_UNIT_TESTS")
         .ok()
@@ -304,7 +309,7 @@ pub fn load_resources(lang: &str) -> Arc<ResourceManager> {
         log::info!("Loading namespace {namespace}...");
 
         MutableResourceManager::load_model_files(dir, namespace);
-        MutableResourceManager::load_tile_files(dir, namespace);
+        MutableResourceManager::load_tile_files(dir, namespace, &lua);
         MutableResourceManager::load_item_files(dir, namespace);
         MutableResourceManager::load_tag_files(dir, namespace);
         MutableResourceManager::load_category_files(dir, namespace);
@@ -316,7 +321,7 @@ pub fn load_resources(lang: &str) -> Arc<ResourceManager> {
         MutableResourceManager::load_audio_files(dir);
         #[cfg(not(miri))]
         MutableResourceManager::load_font_files(dir);
-        MutableResourceManager::load_script_files(dir, namespace, &mut rhai);
+        MutableResourceManager::load_script_files(dir, namespace, &mut rhai, &lua);
 
         log::info!("Loaded namespace {namespace}!");
     };
@@ -342,5 +347,5 @@ pub fn load_resources(lang: &str) -> Arc<ResourceManager> {
         load_namespace(&dir, namespace)
     }
 
-    MutableResourceManager::compile(rhai)
+    MutableResourceManager::compile(rhai, lua)
 }

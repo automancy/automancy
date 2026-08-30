@@ -333,3 +333,75 @@ pub const TEXT_BG_SELECTED: ComplexRgba = ComplexRgba::from_str("#c0f2ff");
 pub const INPUT: ComplexRgba = ComplexRgba::from_str("#61d0ff");
 pub const OUTPUT: ComplexRgba = ComplexRgba::from_str("#ff9f50");
 pub const IMPORTANT: ComplexRgba = ComplexRgba::from_str("#ff2e2e");
+
+#[allow(non_upper_case_globals)]
+pub mod lua {
+    use core::any::type_name;
+
+    use super::{ColorExt, Rgba, SRgbaU8};
+
+    pub mod types {
+        pub const Rgba: &str = "Rgba";
+    }
+
+    pub mod fields {
+        pub const R: &str = "r";
+        pub const G: &str = "g";
+        pub const B: &str = "b";
+        pub const A: &str = "a";
+    }
+
+    pub mod singleton {
+        pub const NEW: &str = "new";
+    }
+
+    pub mod doc {
+        use const_format::formatcp;
+
+        use super::{fields::*, types::*};
+
+        #[rustfmt::skip]
+        pub const RGBA: &str = formatcp!(
+"---@class (exact) {Rgba}
+---@field {R} number
+---@field {G} number
+---@field {B} number
+---@field {A} number");
+    }
+
+    impl mlua::IntoLua for Rgba {
+        fn into_lua(self, lua: &mlua::Lua) -> mlua::Result<mlua::Value> {
+            use fields::*;
+
+            let rgba = self.to_srgb_u8();
+
+            Ok(mlua::Value::Table(lua.create_table_from([
+                (R, rgba.r),
+                (G, rgba.g),
+                (B, rgba.b),
+                (A, rgba.a),
+            ])?))
+        }
+    }
+
+    impl mlua::FromLua for Rgba {
+        fn from_lua(value: mlua::Value, _lua: &mlua::Lua) -> mlua::Result<Self> {
+            use fields::*;
+
+            let Some(v) = value.as_table() else {
+                return Err(mlua::Error::FromLuaConversionError {
+                    from: value.type_name(),
+                    to: type_name::<Self>().to_string(),
+                    message: None,
+                });
+            };
+
+            Ok(Rgba::from_srgb_u8(SRgbaU8 {
+                r: v.raw_get(R)?,
+                g: v.raw_get(G)?,
+                b: v.raw_get(B)?,
+                a: v.raw_get(A)?,
+            }))
+        }
+    }
+}

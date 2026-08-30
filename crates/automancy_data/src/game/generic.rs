@@ -272,6 +272,11 @@ macro_rules! define_datum {
                 $(,)?
             };
         };
+
+        into_lua($into_lua_self:ident, $into_lua_lua:ident) {
+            $( $into_lua_pat:pat => $into_lua_expr: expr ),*
+            $(,)?
+        };
     ) => {
         paste::paste! {
             /// Represents a generic Data type.
@@ -497,6 +502,172 @@ macro_rules! define_datum {
                 }
             }
         }
+
+        #[allow(non_upper_case_globals)]
+        pub mod lua {
+            use core::any::type_name;
+
+            use super::*;
+
+            pub mod types {
+                pub const DataMap: &str = "DataMap";
+            }
+
+            pub mod fields {
+                pub const ID: &str = "id";
+                pub const ID_SET: &str = "id_set";
+                pub const ID_SETS: &str = "id_sets";
+                pub const COORD_TO_ID: &str = "coord_to_id";
+                pub const COORD: &str = "coord";
+                pub const VEC_COORD: &str = "vec_coord";
+                pub const COORD_BOUNDS: &str = "coord_bounds";
+                pub const ITEM: &str = "item";
+                pub const INVENTORY: &str = "inventory";
+                pub const COLOR: &str = "color";
+                pub const VEC_COLOR: &str = "vec_color";
+                pub const INT: &str = "int";
+                pub const VEC_INT: &str = "vec_int";
+                pub const UINT: &str = "uint";
+                pub const VEC_UINT: &str = "vec_uint";
+                pub const FLOAT: &str = "float";
+                pub const VEC_FLOAT: &str = "vec_float";
+                pub const BOOL: &str = "bool";
+            }
+
+            pub mod doc {
+                use const_format::formatcp;
+
+                use super::{fields::*, types::*};
+                use crate::{
+                    game::{coord::lua::types::*, inventory::lua::types::*},
+                    id::lua::types::*,
+                    rendering::colors::lua::types::*,
+                };
+
+                #[rustfmt::skip]
+                pub const DATA_MAP: &str = formatcp!(
+"---@class (exact) {DataMap}
+---@field {ID} table<{Id}, {Id}>
+---@field {ID_SET} table<{Id}, table<{Id}, boolean>>
+---@field {ID_SETS} table<{Id}, table<{Id}, table<{Id}, boolean>>>
+---@field {COORD_TO_ID} table<{Id}, table<{TileCoord}, {Id}>>
+---@field {COORD} table<{Id}, {TileCoord}>
+---@field {VEC_COORD} table<{Id}, {TileCoord}[]>
+---@field {COORD_BOUNDS} table<{Id}, {TileCoordBounds}>
+---@field {ITEM} table<{Id}, {ItemStack}>
+---@field {INVENTORY} table<{Id}, {Inventory}>
+---@field {COLOR} table<{Id}, {Rgba}>
+---@field {VEC_COLOR} table<{Id}, {Rgba}[]>
+---@field {INT} table<{Id}, integer>
+---@field {VEC_INT} table<{Id}, integer[]>
+---@field {UINT} table<{Id}, integer>
+---@field {VEC_UINT} table<{Id}, integer[]>
+---@field {FLOAT} table<{Id}, number>
+---@field {VEC_FLOAT} table<{Id}, number[]>
+---@field {BOOL} table<{Id}, boolean>"
+                );
+            }
+
+            impl mlua::IntoLua for Datum {
+                fn into_lua($into_lua_self, $into_lua_lua: &mlua::Lua) -> mlua::Result<mlua::Value> {
+                    paste::paste!{
+                        match $into_lua_self {
+                            $(
+                                Datum::$id_name(v) => {
+                                    v.into_lua($into_lua_lua)
+                                },
+                                Datum::[<Set $id_name>](v) => {
+                                    Ok(mlua::Value::Table($into_lua_lua.create_table_from(v.into_iter().map(|id| (id, true)))?))
+                                },
+                                Datum::[<MapSet $id_name>](v) => {
+                                    Ok(mlua::Value::Table(
+                                        $into_lua_lua.create_table_from(
+                                            v.into_iter()
+                                                .flat_map(|(id, v)| {
+                                                    Some((
+                                                        id,
+                                                        $into_lua_lua.create_table_from(v.into_iter().map(|id| (id, true))).ok()?
+                                                    ))
+                                                })
+                                        )?
+                                    ))
+                                },
+                                Datum::[<MapCoord $id_name>](v) => {
+                                    Ok(mlua::Value::Table($into_lua_lua.create_table_from(v.into_iter())?))
+                                },
+                            )*
+
+
+                            $(
+                                $into_lua_pat => $into_lua_expr,
+                            )*
+                        }
+                    }
+                }
+            }
+
+            impl mlua::IntoLua for DataMap {
+                fn into_lua(self, lua: &mlua::Lua) -> mlua::Result<mlua::Value> {
+                    use fields::*;
+
+                    Ok(mlua::Value::Table(lua.create_table_from([
+                        (ID, lua.create_table_from(self.id)?),
+                        (ID_SET, lua.create_table_from(self.id_set)?),
+                        (ID_SETS, lua.create_table_from(self.id_sets)?),
+                        (COORD_TO_ID, lua.create_table_from(self.coord_to_id)?),
+                        (COORD, lua.create_table_from(self.coord)?),
+                        (VEC_COORD, lua.create_table_from(self.vec_coord)?),
+                        (COORD_BOUNDS, lua.create_table_from(self.coord_bounds)?),
+                        (ITEM, lua.create_table_from(self.item)?),
+                        (INVENTORY, lua.create_table_from(self.inventory)?),
+                        (COLOR, lua.create_table_from(self.color)?),
+                        (VEC_COLOR, lua.create_table_from(self.vec_color)?),
+                        (INT, lua.create_table_from(self.int)?),
+                        (VEC_INT, lua.create_table_from(self.vec_int)?),
+                        (UINT, lua.create_table_from(self.uint)?),
+                        (VEC_UINT, lua.create_table_from(self.vec_uint)?),
+                        (FLOAT, lua.create_table_from(self.float)?),
+                        (VEC_FLOAT, lua.create_table_from(self.vec_float)?),
+                        (BOOL, lua.create_table_from(self.bool)?),
+                    ])?))
+                }
+            }
+
+            impl mlua::FromLua for DataMap {
+                fn from_lua(value: mlua::Value, _lua: &mlua::Lua) -> mlua::Result<Self> {
+                    use fields::*;
+
+                    let Some(table) = value.as_table() else {
+                        return Err(mlua::Error::FromLuaConversionError {
+                            from: value.type_name(),
+                            to: type_name::<Self>().to_string(),
+                            message: None,
+                        });
+                    };
+
+                    Ok(Self {
+                        id: table.raw_get::<mlua::Table>(ID)?.pairs().flatten().collect(),
+                        id_set: table.raw_get::<mlua::Table>(ID_SET)?.pairs().flatten().collect(),
+                        id_sets: table.raw_get::<mlua::Table>(ID_SETS)?.pairs().flatten().collect(),
+                        coord_to_id: table.raw_get::<mlua::Table>(COORD_TO_ID)?.pairs().flatten().collect(),
+                        coord: table.raw_get::<mlua::Table>(COORD)?.pairs().flatten().collect(),
+                        vec_coord: table.raw_get::<mlua::Table>(VEC_COORD)?.pairs().flatten().collect(),
+                        coord_bounds: table.raw_get::<mlua::Table>(COORD_BOUNDS)?.pairs().flatten().collect(),
+                        item: table.raw_get::<mlua::Table>(ITEM)?.pairs().flatten().collect(),
+                        inventory: table.raw_get::<mlua::Table>(INVENTORY)?.pairs().flatten().collect(),
+                        color: table.raw_get::<mlua::Table>(COLOR)?.pairs().flatten().collect(),
+                        vec_color: table.raw_get::<mlua::Table>(VEC_COLOR)?.pairs().flatten().collect(),
+                        int: table.raw_get::<mlua::Table>(INT)?.pairs().flatten().collect(),
+                        vec_int: table.raw_get::<mlua::Table>(VEC_INT)?.pairs().flatten().collect(),
+                        uint: table.raw_get::<mlua::Table>(UINT)?.pairs().flatten().collect(),
+                        vec_uint: table.raw_get::<mlua::Table>(VEC_UINT)?.pairs().flatten().collect(),
+                        float: table.raw_get::<mlua::Table>(FLOAT)?.pairs().flatten().collect(),
+                        vec_float: table.raw_get::<mlua::Table>(VEC_FLOAT)?.pairs().flatten().collect(),
+                        bool: table.raw_get::<mlua::Table>(BOOL)?.pairs().flatten().collect(),
+                    })
+                }
+            }
+        }
     }
 }
 
@@ -626,6 +797,60 @@ define_datum! {
                 self.add_float(key, -v);
             },
         };
+    };
+
+    into_lua(self, lua) {
+        Datum::TileCoord(v) => {
+            v.into_lua(lua)
+        },
+        Datum::VecTileCoord(v) => {
+            v.into_lua(lua)
+        },
+        Datum::TileCoordBounds(v) => {
+            v.into_lua(lua)
+        },
+
+        Datum::ItemStack(v) => {
+            v.into_lua(lua)
+        },
+        Datum::Inventory(v) => {
+            v.into_lua(lua)
+        },
+
+        Datum::Color(v) => {
+            use colors::ColorExt;
+
+            Ok(mlua::Value::Integer(v.to_packed() as mlua::Integer))
+        },
+        Datum::VecColor(v) => {
+            use colors::ColorExt;
+
+            let v = lua.create_table_from(v.into_iter().map(|v| v.to_packed() as mlua::Integer).enumerate())?;
+
+            Ok(mlua::Value::Table(v))
+        },
+
+        Datum::Int(v) => {
+            Ok(mlua::Value::Integer(v as _))
+        },
+        Datum::VecInt(v) => {
+            v.into_lua(lua)
+        },
+        Datum::UInt(v) => {
+            Ok(mlua::Value::Integer(v as _))
+        },
+        Datum::VecUInt(v) => {
+            v.into_lua(lua)
+        },
+        Datum::Float(v) => {
+            Ok(mlua::Value::Number(v as _))
+        },
+        Datum::VecFloat(v) => {
+            v.into_lua(lua)
+        },
+        Datum::Bool(v) => {
+            Ok(mlua::Value::Boolean(v))
+        }
     };
 }
 

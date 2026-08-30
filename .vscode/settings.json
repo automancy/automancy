@@ -12,6 +12,7 @@
         "map/": true,
         "promotion/": true,
         "rhai/": true,
+        "lua/": true,
 
         "**/*.glb": true,
         "**/*.gltf": true,
@@ -56,5 +57,7 @@
 
     "rust-analyzer.assist.expressionFillDefault": "default",
     "rust-analyzer.check.command": "clippy",
-    "rust-analyzer.assist.emitMustUse": true
+    "rust-analyzer.assist.emitMustUse": true,
+
+    "Lua.workspace.library": ["lua"]
 }

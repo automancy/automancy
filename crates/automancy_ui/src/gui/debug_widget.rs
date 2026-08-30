@@ -17,7 +17,7 @@ pub fn debug_widget(ctx: &mut UiContext) {
     let item_count = ctx.game_state.resource_man.registry.item_defs.len();
     let tag_count = ctx.game_state.resource_man.registry.tag_defs.len();
     let recipe_count = ctx.game_state.resource_man.registry.recipe_defs.len();
-    let script_count = ctx.game_state.resource_man.rhai_scripts.len();
+    let script_count = ctx.game_state.resource_man.rhai_scripts.len() + ctx.game_state.resource_man.lua_scripts.len();
     let audio_count = ctx.game_state.resource_man.audio.len();
 
     let fps = (1.0 / ctx.render.frame_time.as_secs_f32()).round();

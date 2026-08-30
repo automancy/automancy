@@ -163,3 +163,43 @@ pub enum TileMsg {
     FnData(Box<dyn FnOnce(&mut DataMap) + Send + Sync>),
     FnDataStatic(&'static (dyn Fn(&mut DataMap) + Send + Sync)),
 }
+
+#[allow(non_upper_case_globals)]
+pub mod lua {
+    pub mod types {
+        use const_format::formatcp;
+
+        pub const TileMsg: &str = "TileMsg";
+        pub const TileMsg_MakeTransaction: &str = formatcp!("{TileMsg}_MakeTransaction");
+    }
+
+    pub mod fields {
+        pub const STACK: &str = "stack";
+        pub const SOURCE_COORD: &str = "source_coord";
+        pub const SOURCE_ID: &str = "source_id";
+        pub const ROOT_COORD: &str = "root_coord";
+        pub const ROOT_ID: &str = "root_id";
+    }
+
+    pub mod doc {
+        use automancy_data::{
+            game::{coord::lua::types::TileCoord, inventory::lua::types::ItemStack},
+            id::lua::types::TileId,
+        };
+        use const_format::formatcp;
+        use fields::*;
+        use types::*;
+
+        use super::*;
+
+        #[rustfmt::skip]
+        pub const TILE_ENTITY: &str = formatcp!(
+            "---@class {TileMsg_MakeTransaction}
+            ---@field {STACK} {ItemStack}
+            ---@field {SOURCE_COORD} {TileCoord}?
+            ---@field {SOURCE_ID} {TileId}?
+            ---@field {ROOT_COORD} {TileCoord}
+            ---@field {ROOT_ID} {TileId}"
+        );
+    }
+}

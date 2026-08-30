@@ -80,6 +80,13 @@ yakui-winit = { git = "https://github.com/automancy/yakui.git" }
 # scripting / game logic / async runtime
 async-stream = { version = "0.3.6" }
 futures-util = { version = "0.3.32" }
+mlua = { version = "0.12.0", features = [
+    "luajit",
+    "macros",
+    "async",
+    "send",
+    "error-send",
+] }
 ractor = "0.16.5"
 rayon = "1.11.0"
 rhai = { version = "1.25.1", features = [
@@ -97,6 +104,7 @@ tokio = { version = "1.52.3", features = ["full"] }
 # utils
 anyhow = "1.0.98"
 chrono = "0.4.41"
+const_format = "0.2.36"
 fuzzy-matcher = { version = "0.3.7", features = ["compact"] }
 include_dir = "0.7.4"
 interpolator = { version = "0.5.0", features = ["number"] }

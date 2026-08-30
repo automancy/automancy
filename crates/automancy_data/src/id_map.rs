@@ -533,3 +533,90 @@ pub use immutable_map::*;
 pub use immutable_set::*;
 pub use map::*;
 pub use set::*;
+
+pub mod lua {
+    use core::any::type_name;
+
+    use crate::{
+        game::coord::TileCoord,
+        id::IdLike,
+        id_map::{IdCoordMap, IdMap, IdSet},
+    };
+
+    impl<K: IdLike + mlua::IntoLua, V: mlua::IntoLua> mlua::IntoLua for IdMap<K, V> {
+        fn into_lua(self, lua: &mlua::Lua) -> mlua::Result<mlua::Value> {
+            Ok(mlua::Value::Table(lua.create_table_from(self)?))
+        }
+    }
+
+    impl<K: IdLike + mlua::FromLua, V: mlua::FromLua> mlua::FromLua for IdMap<K, V> {
+        fn from_lua(value: mlua::Value, _lua: &mlua::Lua) -> mlua::Result<Self> {
+            let Some(table) = value.as_table() else {
+                return Err(mlua::Error::FromLuaConversionError {
+                    from: value.type_name(),
+                    to: type_name::<Self>().to_string(),
+                    message: None,
+                });
+            };
+
+            let mut v = Self::default();
+            for pair in table.pairs::<K, V>() {
+                let (key, value) = pair?;
+                v.insert(key, value);
+            }
+            Ok(v)
+        }
+    }
+
+    impl<K: IdLike + mlua::IntoLua> mlua::IntoLua for IdSet<K> {
+        fn into_lua(self, lua: &mlua::Lua) -> mlua::Result<mlua::Value> {
+            Ok(mlua::Value::Table(lua.create_table_from(self.into_iter().map(|k| (k, true)))?))
+        }
+    }
+
+    impl<K: IdLike + mlua::FromLua> mlua::FromLua for IdSet<K> {
+        fn from_lua(value: mlua::Value, _lua: &mlua::Lua) -> mlua::Result<Self> {
+            let Some(table) = value.as_table() else {
+                return Err(mlua::Error::FromLuaConversionError {
+                    from: value.type_name(),
+                    to: type_name::<Self>().to_string(),
+                    message: None,
+                });
+            };
+
+            let mut v = Self::default();
+            for pair in table.pairs::<K, bool>() {
+                let (key, value) = pair?;
+                if value {
+                    v.insert(key);
+                }
+            }
+            Ok(v)
+        }
+    }
+
+    impl<K: IdLike + mlua::IntoLua> mlua::IntoLua for IdCoordMap<K> {
+        fn into_lua(self, lua: &mlua::Lua) -> mlua::Result<mlua::Value> {
+            Ok(mlua::Value::Table(lua.create_table_from(self)?))
+        }
+    }
+
+    impl<K: IdLike + mlua::FromLua> mlua::FromLua for IdCoordMap<K> {
+        fn from_lua(value: mlua::Value, _lua: &mlua::Lua) -> mlua::Result<Self> {
+            let Some(table) = value.as_table() else {
+                return Err(mlua::Error::FromLuaConversionError {
+                    from: value.type_name(),
+                    to: type_name::<Self>().to_string(),
+                    message: None,
+                });
+            };
+
+            let mut v = Self::default();
+            for pair in table.pairs::<TileCoord, K>() {
+                let (key, value) = pair?;
+                v.insert(key, value);
+            }
+            Ok(v)
+        }
+    }
+}

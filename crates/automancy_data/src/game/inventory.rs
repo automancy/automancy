@@ -283,3 +283,87 @@ pub mod deserialize {
         }
     }
 }
+
+#[allow(non_upper_case_globals)]
+pub mod lua {
+    use core::any::type_name;
+
+    use super::*;
+
+    pub mod types {
+        pub const ItemAmount: &str = "ItemAmount";
+        pub const ItemStack: &str = "ItemStack";
+        pub const Inventory: &str = "Inventory";
+    }
+
+    pub mod fields {
+        pub const ID: &str = "id";
+        pub const AMOUNT: &str = "amount";
+    }
+
+    pub mod doc {
+        use const_format::formatcp;
+
+        use super::{fields::*, types::*};
+        use crate::id::lua::types::ItemId;
+
+        pub const ITEM_AMOUNT: &str = formatcp!("---@alias {ItemAmount} integer");
+        pub const ITEM_STACK: &str = formatcp!("---@alias {ItemStack} {{ {ID}: {ItemId}, {AMOUNT}: {ItemAmount} }}",);
+        pub const INVENTORY: &str = formatcp!("---@alias {Inventory} table<{ItemId}, {ItemAmount}>");
+    }
+
+    impl mlua::IntoLua for ItemStack {
+        fn into_lua(self, lua: &mlua::Lua) -> mlua::Result<mlua::Value> {
+            use fields::*;
+
+            Ok(mlua::Value::Table(lua.create_table_from([
+                (ID, self.id.into_lua(lua)?),
+                (AMOUNT, mlua::Value::Integer(self.amount as _)),
+            ])?))
+        }
+    }
+
+    impl mlua::FromLua for ItemStack {
+        fn from_lua(value: mlua::Value, _lua: &mlua::Lua) -> mlua::Result<Self> {
+            use fields::*;
+
+            let Some(v) = value.as_table() else {
+                return Err(mlua::Error::FromLuaConversionError {
+                    from: value.type_name(),
+                    to: type_name::<Self>().to_string(),
+                    message: None,
+                });
+            };
+
+            Ok(ItemStack {
+                id: v.raw_get::<ItemId>(ID)?,
+                amount: v.raw_get::<ItemAmount>(AMOUNT)?,
+            })
+        }
+    }
+
+    impl mlua::IntoLua for Inventory {
+        fn into_lua(self, lua: &mlua::Lua) -> mlua::Result<mlua::Value> {
+            Ok(mlua::Value::Table(lua.create_table_from(self)?))
+        }
+    }
+
+    impl mlua::FromLua for Inventory {
+        fn from_lua(value: mlua::Value, _lua: &mlua::Lua) -> mlua::Result<Self> {
+            let Some(table) = value.as_table() else {
+                return Err(mlua::Error::FromLuaConversionError {
+                    from: value.type_name(),
+                    to: type_name::<Self>().to_string(),
+                    message: None,
+                });
+            };
+
+            let mut v = Self::default();
+            for pair in table.pairs::<ItemId, ItemAmount>() {
+                let (key, value) = pair?;
+                v.insert(key, value);
+            }
+            Ok(v)
+        }
+    }
+}

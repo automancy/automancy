@@ -31,9 +31,11 @@ nohash-hasher = { workspace = true }
 string-interner = { workspace = true }
 
 # scripting / game logic / async runtime
+mlua = { workspace = true }
 tokio = { workspace = true }
 
 # utils
+const_format = { workspace = true }
 paste = { workspace = true }
 strum = { workspace = true }
 thiserror = { workspace = true }

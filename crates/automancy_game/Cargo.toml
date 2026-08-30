@@ -37,6 +37,7 @@ winit = { workspace = true }
 kira = { workspace = true }
 
 # scripting / game logic / async runtime
+mlua = { workspace = true }
 ractor = { workspace = true }
 rayon = { workspace = true }
 rhai = { workspace = true }
@@ -44,6 +45,7 @@ tokio = { workspace = true }
 
 # utils
 anyhow = { workspace = true }
+const_format = { workspace = true }
 interpolator = { workspace = true }
 rand = { workspace = true }
 sanitize-filename = { workspace = true }

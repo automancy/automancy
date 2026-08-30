@@ -49,6 +49,7 @@ yakui-wgpu = { workspace = true }
 yakui-winit = { workspace = true }
 
 # scripting / game logic / async runtime
+mlua = { workspace = true }
 ractor = { workspace = true }
 rhai = { workspace = true }
 tokio = { workspace = true }

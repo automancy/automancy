@@ -1147,3 +1147,141 @@ impl IntoIterator for TileCoordBounds {
         ExactSizeCoordIterator::new(self)
     }
 }
+
+#[allow(non_upper_case_globals)]
+pub mod lua {
+    use core::any::type_name;
+
+    use super::*;
+
+    pub mod types {
+        pub const TileUnit: &str = "TileUnit";
+        pub const TileCoord: &str = "TileCoord";
+        pub const TileCoordBounds: &str = "TileCoordBounds";
+    }
+
+    pub mod fields {
+        pub const Q: &str = "q";
+        pub const R: &str = "r";
+    }
+
+    pub mod singleton {
+        use const_format::formatcp;
+
+        use super::types::TileCoord;
+
+        pub(super) const MetatableTileCoord: &str = formatcp!("__metatable_{TileCoord}");
+
+        pub const NEW: &str = "new";
+        pub const ZERO: &str = "zero";
+        pub const TOP_RIGHT: &str = "top_right";
+        pub const TOP_LEFT: &str = "top_left";
+        pub const LEFT: &str = "left";
+        pub const BOTTOM_LEFT: &str = "bottom_left";
+        pub const BOTTOM_RIGHT: &str = "bottom_right";
+        pub const RIGHT: &str = "right";
+    }
+
+    pub mod doc {
+        use const_format::formatcp;
+
+        use super::types::*;
+
+        pub const TYPE_DOC: &str =
+            "Check out https://www.redblobgames.com/grids/hexagons/#coordinates-cube for how this coordinate system works.";
+
+        pub const TILE_UNIT: &str = formatcp!("---@alias {TileUnit} integer");
+        pub const TILE_COORD_BOUNDS: &str = formatcp!("---@alias {TileCoordBounds} userdata");
+
+        #[rustfmt::skip]
+        pub const TILE_COORD: &str = formatcp!(
+"---@class (exact) {TileCoord}
+---@field q {TileUnit}
+---@field r {TileUnit}
+---@operator add(TileCoord): TileCoord
+---@operator sub(TileCoord): TileCoord
+---@operator mul(TileUnit): TileCoord
+---@operator div(TileUnit): TileCoord
+---@operator unm(): TileCoord"
+);
+    }
+
+    impl mlua::IntoLua for TileCoord {
+        fn into_lua(self, lua: &mlua::Lua) -> mlua::Result<mlua::Value> {
+            use fields::*;
+
+            let metatable = match lua.globals().raw_get::<mlua::Table>(singleton::MetatableTileCoord) {
+                Ok(v) => v,
+                _ => {
+                    let table = lua.create_table()?;
+
+                    table.raw_set(
+                        mlua::MetaMethod::Eq.as_ref(),
+                        lua.create_function(|_lua, (a, b): (TileCoord, TileCoord)| Ok(a == b))?,
+                    )?;
+                    table.raw_set(
+                        mlua::MetaMethod::Add.as_ref(),
+                        lua.create_function(|_lua, (a, b): (TileCoord, TileCoord)| Ok(a + b))?,
+                    )?;
+                    table.raw_set(
+                        mlua::MetaMethod::Sub.as_ref(),
+                        lua.create_function(|_lua, (a, b): (TileCoord, TileCoord)| Ok(a - b))?,
+                    )?;
+                    table.raw_set(
+                        mlua::MetaMethod::Mul.as_ref(),
+                        lua.create_function(|_lua, (a, b): (TileCoord, TileUnit)| Ok(a * b))?,
+                    )?;
+                    table.raw_set(
+                        mlua::MetaMethod::Div.as_ref(),
+                        lua.create_function(|_lua, (a, b): (TileCoord, TileUnit)| Ok(a / b))?,
+                    )?;
+                    table.raw_set(mlua::MetaMethod::Unm.as_ref(), lua.create_function(|_lua, v: TileCoord| Ok(-v))?)?;
+
+                    lua.globals().raw_set(singleton::MetatableTileCoord, table.clone())?;
+
+                    table
+                },
+            };
+
+            let table = lua.create_table_from([(Q, mlua::Value::Integer(self.q as _)), (R, mlua::Value::Integer(self.r as _))])?;
+            table.set_metatable(Some(metatable))?;
+
+            Ok(mlua::Value::Table(table))
+        }
+    }
+
+    impl mlua::FromLua for TileCoord {
+        fn from_lua(value: mlua::Value, _lua: &mlua::Lua) -> mlua::Result<Self> {
+            use fields::*;
+
+            let Some(v) = value.as_table() else {
+                return Err(mlua::Error::FromLuaConversionError {
+                    from: value.type_name(),
+                    to: type_name::<Self>().to_string(),
+                    message: None,
+                });
+            };
+
+            Ok(TileCoord {
+                q: v.raw_get::<TileUnit>(Q)?,
+                r: v.raw_get::<TileUnit>(R)?,
+            })
+        }
+    }
+
+    impl mlua::UserData for super::TileCoordBounds {}
+
+    impl mlua::FromLua for super::TileCoordBounds {
+        fn from_lua(value: mlua::Value, _lua: &mlua::Lua) -> mlua::Result<Self> {
+            let Some(v) = value.as_userdata() else {
+                return Err(mlua::Error::FromLuaConversionError {
+                    from: value.type_name(),
+                    to: type_name::<Self>().to_string(),
+                    message: None,
+                });
+            };
+
+            v.take()
+        }
+    }
+}

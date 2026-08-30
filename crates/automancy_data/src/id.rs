@@ -500,3 +500,42 @@ pub mod parse {
         })
     }
 }
+
+#[allow(non_upper_case_globals)]
+pub mod lua {
+    use super::*;
+
+    pub mod types {
+        pub const Id: &str = "Id";
+        pub const ItemId: &str = "ItemId";
+        pub const TileId: &str = "ItemId";
+    }
+
+    macro_rules! impl_id {
+        ($ty:ident) => {
+            impl mlua::IntoLua for $ty {
+                fn into_lua(self, _lua: &mlua::Lua) -> mlua::Result<mlua::Value> {
+                    Ok(mlua::Value::Integer(self.into_inner() as _))
+                }
+            }
+
+            impl mlua::FromLua for $ty {
+                fn from_lua(value: mlua::Value, _lua: &mlua::Lua) -> mlua::Result<Self> {
+                    let v = value.as_integer().ok_or(mlua::Error::FromLuaConversionError {
+                        from: value.type_name(),
+                        to: stringify!($ty).to_string(),
+                        message: None,
+                    })?;
+
+                    Ok(Self::from(Id::from(v as u32)))
+                }
+            }
+        };
+    }
+
+    impl_id!(Id);
+
+    for_each_id_new_type! {
+        impl_id!(NewType);
+    }
+}

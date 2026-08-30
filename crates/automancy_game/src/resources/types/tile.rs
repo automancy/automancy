@@ -17,6 +17,8 @@ pub struct TileDef {
     pub script: ScriptId,
     pub category: CategoryId,
     pub data: DataMap,
+
+    pub lua_def: mlua::Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -31,7 +33,7 @@ struct Raw {
 
 #[cfg_attr(feature = "profile", profiling::all_functions)]
 impl MutableResourceManager {
-    fn load_tile_file(&mut self, interner: &mut IdInterner, path: &Path, namespace: &str) -> Result<(), ResourceError> {
+    fn load_tile_file(&mut self, interner: &mut IdInterner, path: &Path, namespace: &str, lua: &mlua::Lua) -> Result<(), ResourceError> {
         log::info!("Loading tile definition at {}.", path.display());
 
         let v = persistent::ron::ron_options().from_str::<Raw>(&read_to_string(path)?)?;
@@ -59,6 +61,15 @@ impl MutableResourceManager {
         let category = CategoryId(interner.get_or_intern_opt(v.category.as_deref(), Some(namespace))?);
         let data = v.data.into_data(interner, Some(namespace))?;
 
+        let lua_def = {
+            use crate::actor::tile_entity::lua::fields::DEF_DATA;
+
+            let table = lua.create_table()?;
+            table.raw_set(DEF_DATA, data.clone())?;
+
+            mlua::Value::Table(table)
+        };
+
         self.registry.tile_defs.insert(
             id,
             TileDef {
@@ -66,18 +77,20 @@ impl MutableResourceManager {
                 script,
                 category,
                 data,
+
+                lua_def,
             },
         );
 
         Ok(())
     }
 
-    pub fn load_tile_files(dir: &Path, namespace: &str) {
+    pub fn load_tile_files(dir: &Path, namespace: &str, lua: &mlua::Lua) {
         MutableResourceManager::with_interner(|resource_man, interner| {
             let path = dir.join("tiles");
 
             for entry in read_recursively(&path, RON_EXTS) {
-                match resource_man.load_tile_file(interner, entry.path(), namespace) {
+                match resource_man.load_tile_file(interner, entry.path(), namespace, lua) {
                     Ok(_) => {},
                     Err(err) => err.log_err(),
                 }

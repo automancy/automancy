@@ -67,6 +67,8 @@ impl MutableRegistry {
                     script: ScriptId::none(),
                     category: CategoryId::none(),
                     data: DataMap::new(),
+
+                    lua_def: mlua::Nil,
                 },
             )]),
             item_defs: IdMap::from_iter([(

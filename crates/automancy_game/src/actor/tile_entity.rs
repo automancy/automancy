@@ -6,6 +6,7 @@ use automancy_data::{
     id_map::IdSet,
     math::Int,
 };
+use mlua::ObjectLike;
 use ractor::{Actor, ActorProcessingErr, ActorRef};
 use rand::Rng;
 use rhai::{Dynamic, Scope};
@@ -13,9 +14,12 @@ use thiserror::Error;
 
 use crate::{
     actor::message::{GameMsg, TileMsg, TileResult, TileTransactionResult},
-    resources::{ResourceManager, types::script::RhaiScriptData},
+    resources::{
+        ResourceManager,
+        types::script::{LuaScriptData, RhaiScriptData},
+    },
     script::RenderCommand,
-    scripting_rhai,
+    scripting_lua, scripting_rhai,
 };
 
 #[derive(Debug, Clone)]
@@ -32,6 +36,8 @@ pub struct TileActor {
 pub struct TileActorState {
     pub data: Box<DataMap>,
     pub rhai: Option<RhaiScriptData>,
+    pub lua: Option<LuaScriptData>,
+    pub message_queue: Vec<(TileCoord, TileMsg)>,
     pub rendering: bool,
     // TODO axe this entire thing and let script side rerender itself, just send rerender message when changing config
     pub field_changes_since_render: IdSet<Id>,
@@ -201,6 +207,41 @@ impl TileActor {
 #[cfg_attr(feature = "profile", profiling::function)]
 #[allow(clippy::too_many_arguments)]
 #[inline]
+pub async fn run_lua_tile_script<Out: mlua::FromLuaMulti>(
+    coord: TileCoord,
+    data: &mut DataMap,
+    field_changes_since_render: &mut IdSet<Id>,
+    script: &LuaScriptData,
+    function_name: &'static str,
+) -> Option<Out> {
+    if let Ok(table) = script.module.raw_get::<mlua::Table>(lua::types::TileEntity) {
+        let old_keys = data.keys().collect::<IdSet<_>>();
+
+        table.raw_set(lua::fields::DATA, std::mem::take(data)).unwrap();
+        let result = table.call_async_method::<Out>(function_name, ()).await;
+        *data = table.raw_get::<DataMap>(lua::fields::DATA).unwrap();
+
+        for key in data.keys() {
+            if !old_keys.contains(&key) {
+                field_changes_since_render.insert(key);
+            }
+        }
+
+        match result {
+            Ok(result) => Some(result),
+            Err(err) => {
+                scripting_lua::lua_log_err(function_name, script.metadata.str_id, &err, Some(coord));
+                None
+            },
+        }
+    } else {
+        None
+    }
+}
+
+#[cfg_attr(feature = "profile", profiling::function)]
+#[allow(clippy::too_many_arguments)]
+#[inline]
 pub fn run_rhai_tile_script<Out: 'static, const SIZE: usize>(
     resource_man: &ResourceManager,
     id: TileId,
@@ -354,7 +395,13 @@ impl Actor for TileActor {
 
         let mut state = TileActorState::default();
 
-        if let Some(data) = self.resource_man.rhai_scripts.get(&tile_def.script) {
+        if let Some(data) = self.resource_man.lua_scripts.get(&tile_def.script) {
+            let data = data.deep_clone(&self.resource_man.lua)?;
+            data.module.raw_set(lua::fields::ID, self.id)?;
+            data.module.raw_set(lua::fields::COORD, self.coord)?;
+            data.module.raw_set(lua::fields::DEF, tile_def.lua_def.clone())?;
+            state.lua = Some(data);
+        } else if let Some(data) = self.resource_man.rhai_scripts.get(&tile_def.script) {
             state.rhai = Some(data.clone());
         }
 
@@ -390,6 +437,17 @@ impl Actor for TileActor {
                     )
                 {
                     self.handle_rhai_result(state, result);
+                }
+
+                if let Some(script) = &state.lua {
+                    run_lua_tile_script::<()>(
+                        self.coord,
+                        &mut state.data,
+                        &mut state.field_changes_since_render,
+                        script,
+                        lua::fields::HANDLE_TICK,
+                    )
+                    .await;
                 }
 
                 if state.rendering {
@@ -510,5 +568,55 @@ impl Actor for TileActor {
         }
 
         Ok(())
+    }
+}
+
+#[allow(non_upper_case_globals)]
+pub mod lua {
+    pub mod types {
+        pub const TileEntity: &str = "TileEntity";
+        pub const TileDefinition: &str = "TileDefinition";
+    }
+
+    pub mod fields {
+        pub const DATA: &str = "data";
+        pub const ID: &str = "id";
+        pub const COORD: &str = "coord";
+        pub const HANDLE_TICK: &str = "handle_tick";
+
+        pub const DEF: &str = "def";
+        pub const DEF_DATA: &str = "data";
+    }
+
+    pub mod singleton {
+        pub const NEW: &str = "new";
+    }
+
+    pub mod doc {
+        use automancy_data::{
+            game::{coord::lua::types::TileCoord, generic::lua::types::*},
+            id::lua::types::TileId,
+        };
+        use const_format::formatcp;
+        use fields::*;
+        use types::*;
+
+        use super::*;
+
+        #[rustfmt::skip]
+        pub const TILE_DEFINITION: &str = formatcp!(
+"---@class (exact) {TileDefinition}
+---@field {DEF_DATA} {DataMap}"
+        );
+
+        #[rustfmt::skip]
+        pub const TILE_ENTITY: &str = formatcp!(
+"---@class (exact) {TileEntity}
+---@field {DEF} {TileDefinition}
+---@field {DATA} {DataMap}
+---@field {ID} {TileId}
+---@field {COORD} {TileCoord}
+---@field {HANDLE_TICK}? fun(self: {TileEntity})"
+        );
     }
 }
