@@ -13,7 +13,7 @@ cargo_cmd cmd profile:
 
 buildscript:
     @echo 'Running build script.'
-    SKIP_CHECK='{{skip_check}}' cargo run --package=build_script --release
+    SKIP_CHECK='{{skip_check}}' cargo run --package=build-script --release
 
 build profile="dev": buildscript
     @echo
