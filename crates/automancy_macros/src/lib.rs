@@ -1,26 +1,34 @@
-use proc_macro2::{Literal, TokenTree};
-use syn::{Attribute, Meta};
-
-fn parse_literal(attr: &Attribute) -> Vec<Literal> {
-    match &attr.meta {
-        Meta::List(list) => Some(
-            list.tokens
-                .clone()
-                .into_iter()
-                .flat_map(|v| match v {
-                    TokenTree::Literal(v) => Some(v),
-                    _ => None,
-                })
-                .collect::<Vec<_>>(),
-        ),
-        _ => None,
-    }
-    .expect("should be a literal")
-}
-
 mod ids;
 
+/**
+Derives an Id registry with a convenient constructor that interns static strings as Ids.
+
+Examples:
+```
+use automancy_macros::IdReg;
+use automancy_data::id::Id;
+
+#[derive(IdReg)]
+pub struct FooIds {
+    id_foo: Id,
+    #[namespace("core")]
+    id_bar: Id,
+    #[namespace("meowzer")]
+    #[name("zoo")]
+    id_zoo: Id,
+}
+```
+
+Invalid usages:
+```compile_fail
+#[derive(automancy_macros::IdReg)]
+pub enum Foo {}
+
+#[derive(automancy_macros::IdReg)]
+pub struct Bar();
+```
+*/
 #[proc_macro_derive(IdReg, attributes(name, namespace))]
-pub fn derive_id_reg(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    ids::derive_id_reg(tokens.into()).into()
+pub fn derive_id_reg(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    ids::derive_id_reg(input)
 }
