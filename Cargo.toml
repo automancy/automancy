@@ -25,7 +25,6 @@ automancy_data = { path = "crates/automancy_data" }
 automancy_game = { path = "crates/automancy_game" }
 automancy_macros = { path = "crates/automancy_macros" }
 automancy_rendering = { path = "crates/automancy_rendering" }
-automancy_system = { path = "crates/automancy_system" }
 automancy_ui = { path = "crates/automancy_ui" }
 
 # logging / profiling / tracing

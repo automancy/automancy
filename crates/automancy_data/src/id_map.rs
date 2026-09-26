@@ -423,20 +423,20 @@ mod coord {
         id::{Id, IdLike},
     };
 
-    type InnerIdCoordMap<K> = BTreeMap<TileCoord, K>;
+    type InnerIdCoordMap<V> = BTreeMap<TileCoord, V>;
 
     #[repr(transparent)]
     #[derive(Debug, Clone, PartialEq, Eq)]
-    pub struct IdCoordMap<K>
+    pub struct IdCoordMap<V>
     where
-        K: IdLike,
+        V: IdLike,
     {
-        inner: InnerIdCoordMap<K>,
+        inner: InnerIdCoordMap<V>,
     }
 
-    impl<K> Default for IdCoordMap<K>
+    impl<V> Default for IdCoordMap<V>
     where
-        K: IdLike,
+        V: IdLike,
     {
         fn default() -> Self {
             Self {
@@ -445,71 +445,71 @@ mod coord {
         }
     }
 
-    impl<K> IdCoordMap<K>
+    impl<V> IdCoordMap<V>
     where
-        K: IdLike,
+        V: IdLike,
     {
         pub fn new() -> Self {
             Self::default()
         }
     }
 
-    impl<K> Deref for IdCoordMap<K>
+    impl<V> Deref for IdCoordMap<V>
     where
-        K: IdLike,
+        V: IdLike,
     {
-        type Target = InnerIdCoordMap<K>;
+        type Target = InnerIdCoordMap<V>;
 
         fn deref(&self) -> &Self::Target {
             &self.inner
         }
     }
 
-    impl<K> DerefMut for IdCoordMap<K>
+    impl<V> DerefMut for IdCoordMap<V>
     where
-        K: IdLike,
+        V: IdLike,
     {
         fn deref_mut(&mut self) -> &mut Self::Target {
             &mut self.inner
         }
     }
 
-    impl<K> IntoIterator for IdCoordMap<K>
+    impl<V> IntoIterator for IdCoordMap<V>
     where
-        K: IdLike,
+        V: IdLike,
     {
-        type Item = (TileCoord, K);
-        type IntoIter = <InnerIdCoordMap<K> as IntoIterator>::IntoIter;
+        type Item = (TileCoord, V);
+        type IntoIter = <InnerIdCoordMap<V> as IntoIterator>::IntoIter;
 
         fn into_iter(self) -> Self::IntoIter {
             self.inner.into_iter()
         }
     }
 
-    impl<'a, K> IntoIterator for &'a IdCoordMap<K>
+    impl<'a, V> IntoIterator for &'a IdCoordMap<V>
     where
-        K: IdLike,
+        V: IdLike,
     {
-        type Item = (&'a TileCoord, &'a K);
-        type IntoIter = <&'a InnerIdCoordMap<K> as IntoIterator>::IntoIter;
+        type Item = (&'a TileCoord, &'a V);
+        type IntoIter = <&'a InnerIdCoordMap<V> as IntoIterator>::IntoIter;
 
         fn into_iter(self) -> Self::IntoIter {
             self.iter()
         }
     }
 
-    impl<K> FromIterator<(TileCoord, K)> for IdCoordMap<K>
+    impl<V> FromIterator<(TileCoord, V)> for IdCoordMap<V>
     where
-        K: IdLike,
+        V: IdLike,
     {
-        fn from_iter<T: IntoIterator<Item = (TileCoord, K)>>(iter: T) -> Self {
+        fn from_iter<T: IntoIterator<Item = (TileCoord, V)>>(iter: T) -> Self {
             Self {
                 inner: InnerIdCoordMap::from_iter(iter),
             }
         }
     }
 
-    impl<K: IdLike> Display for IdCoordMap<K> {
+    impl<V: IdLike> Display for IdCoordMap<V> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             if self.is_empty() {
                 f.write_str("{}")?;

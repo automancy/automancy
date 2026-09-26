@@ -140,7 +140,7 @@ impl ModelManager {
     #[inline]
     pub fn get_model_mesh_ids(&self, model_id: &ModelId) -> &[MeshId] {
         let Some(ids) = self.model_id_map.get(model_id) else {
-            panic!("ModelId({}) should contain meshes", model_id)
+            panic!("{} should contain meshes", model_id)
         };
 
         ids

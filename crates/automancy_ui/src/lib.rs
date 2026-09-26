@@ -15,7 +15,8 @@ pub(crate) use yakui_shorthands::*;
 mod yakui_shorthands {
     #[allow(unused)]
     pub use yakui::{
-        align, colored_box, colored_box_container, colored_circle, constrained, divider, draggable, offset, reflow, spacer, stack,
+        align, colored_box, colored_box_container, colored_circle, constrained, divider, draggable, flexible, offset, reflow, spacer,
+        stack,
         widgets::{
             Button, ButtonResponse, Circle, ColoredBox, ConstrainedBox, CountGrid, DynamicButtonStyle, Flexible, Image, ImageFit, Layer,
             List, Opaque, Pad, Text, TextBox, TextBoxResponse, TextResponse, measure_text_width,

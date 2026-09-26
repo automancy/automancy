@@ -855,7 +855,7 @@ impl Display for DataMap {
                 .join(", ")
         ))?;
         f.write_fmt(format_args!(
-            "\n\tfloat: {},",
+            "\n\tfloat: {{ {} }},",
             self.float.iter().map(|(k, v)| format!("{k}: {v}")).collect::<Vec<_>>().join(", ")
         ))?;
         f.write_fmt(format_args!(

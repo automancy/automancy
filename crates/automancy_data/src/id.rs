@@ -219,26 +219,40 @@ macro_rules! impl_id_newtype {
 
         paste::paste! {
             #[macro_export]
-            macro_rules! for_each_id_new_type {
+            macro_rules! all_ids {
                 {
-                    NewType::$ident:ident$args:tt;
+                    $ident:ident!(..);
                 } => {
+                    $ident!(Id, $($ty, )*);
+                };
+            }
+        }
+
+        paste::paste! {
+            #[macro_export]
+            macro_rules! for_each_id {
+                {
+                    Id::$ident:ident$args:tt;
+                } => {
+                    Id::$ident$args;
                     $(
                         $ty::$ident$args;
                     )*
                 };
 
                 {
-                    NewType::$ident:ident$args:tt?;
+                    Id::$ident:ident$args:tt?;
                 } => {
+                    Id::$ident$args;
                     $(
                         $ty::$ident$args?;
                     )*
                 };
 
                 {
-                    $ident:ident!(NewType);
+                    $ident:ident!(Id);
                 } => {
+                    $ident!(Id);
                     $(
                         $ident!($ty);
                     )*
