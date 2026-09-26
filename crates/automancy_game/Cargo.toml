@@ -44,6 +44,8 @@ tokio = { workspace = true }
 
 # utils
 anyhow = { workspace = true }
+const_format = { workspace = true }
+derive_more = { workspace = true }
 interpolator = { workspace = true }
 rand = { workspace = true }
 sanitize-filename = { workspace = true }

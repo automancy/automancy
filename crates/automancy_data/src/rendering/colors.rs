@@ -11,7 +11,7 @@ use crate::math::Float;
 ///
 /// Note: **Is not premultiplied!**
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, Default, Pod, Zeroable)]
+#[derive(Debug, Clone, Copy, Default, Pod, Zeroable, derive_more::PartialEq, derive_more::From, derive_more::Into)]
 pub struct Rgba(vek::Rgba<Float>);
 
 const impl Deref for Rgba {

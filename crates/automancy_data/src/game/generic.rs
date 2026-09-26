@@ -877,7 +877,6 @@ impl Display for DataMap {
 }
 
 pub mod serailize {
-    use core::ops::{Deref, DerefMut};
     use std::collections::BTreeMap;
 
     use serde::{Deserialize, Serialize};
@@ -1160,29 +1159,22 @@ pub mod serailize {
 
     #[must_use]
     #[repr(transparent)]
-    #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+    #[derive(
+        Debug,
+        Clone,
+        Default,
+        Serialize,
+        Deserialize,
+        derive_more::From,
+        derive_more::Into,
+        derive_more::AsRef,
+        derive_more::AsMut,
+        derive_more::Deref,
+        derive_more::DerefMut,
+        derive_more::IntoIterator,
+    )]
     #[serde(transparent)]
     pub struct DataMapRaw(BTreeMap<Id, DatumRaw>);
-
-    const impl Deref for DataMapRaw {
-        type Target = BTreeMap<Id, DatumRaw>;
-
-        fn deref(&self) -> &Self::Target {
-            &self.0
-        }
-    }
-
-    const impl DerefMut for DataMapRaw {
-        fn deref_mut(&mut self) -> &mut Self::Target {
-            &mut self.0
-        }
-    }
-
-    const impl From<BTreeMap<Id, DatumRaw>> for DataMapRaw {
-        fn from(value: BTreeMap<Id, DatumRaw>) -> Self {
-            Self(value)
-        }
-    }
 
     impl DataMapRaw {
         pub fn into_inner(self) -> BTreeMap<Id, DatumRaw> {
@@ -1226,8 +1218,6 @@ pub mod serailize {
 }
 
 pub mod deserialize {
-    use core::ops::{Deref, DerefMut};
-
     use serde::Deserialize;
 
     use super::*;
@@ -1518,29 +1508,20 @@ pub mod deserialize {
 
     #[must_use]
     #[repr(transparent)]
-    #[derive(Debug, Default, Deserialize)]
+    #[derive(
+        Debug,
+        Default,
+        Deserialize,
+        derive_more::From,
+        derive_more::Into,
+        derive_more::AsRef,
+        derive_more::AsMut,
+        derive_more::Deref,
+        derive_more::DerefMut,
+        derive_more::IntoIterator,
+    )]
     #[serde(transparent)]
     pub struct DataMapStr(BTreeMap<StrId, DatumStr>);
-
-    const impl Deref for DataMapStr {
-        type Target = BTreeMap<StrId, DatumStr>;
-
-        fn deref(&self) -> &Self::Target {
-            &self.0
-        }
-    }
-
-    const impl DerefMut for DataMapStr {
-        fn deref_mut(&mut self) -> &mut Self::Target {
-            &mut self.0
-        }
-    }
-
-    const impl From<BTreeMap<StrId, DatumStr>> for DataMapStr {
-        fn from(value: BTreeMap<StrId, DatumStr>) -> Self {
-            Self(value)
-        }
-    }
 
     impl DataMapStr {
         pub fn into_data(self, interner: &mut IdInterner, fallback_namespace: Option<&str>) -> Result<DataMap, StrIdParseError> {

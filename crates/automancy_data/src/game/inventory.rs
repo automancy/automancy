@@ -1,8 +1,5 @@
 use core::{fmt::Display, ops::Neg};
-use std::{
-    collections::{BTreeMap, btree_map},
-    ops::{Deref, DerefMut},
-};
+use std::collections::BTreeMap;
 
 use crate::{id::ItemId, math::Int};
 
@@ -43,22 +40,23 @@ impl Display for ItemStack {
 
 #[must_use]
 #[repr(transparent)]
-#[derive(Debug, Default, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(
+    Debug,
+    Default,
+    Clone,
+    PartialOrd,
+    Ord,
+    derive_more::PartialEq,
+    derive_more::Eq,
+    derive_more::From,
+    derive_more::Into,
+    derive_more::AsRef,
+    derive_more::AsMut,
+    derive_more::Deref,
+    derive_more::DerefMut,
+    derive_more::IntoIterator,
+)]
 pub struct Inventory(BTreeMap<ItemId, ItemAmount>);
-
-const impl Deref for Inventory {
-    type Target = BTreeMap<ItemId, ItemAmount>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-const impl DerefMut for Inventory {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
 
 impl FromIterator<(ItemId, ItemAmount)> for Inventory {
     fn from_iter<T: IntoIterator<Item = (ItemId, ItemAmount)>>(iter: T) -> Self {
@@ -69,15 +67,6 @@ impl FromIterator<(ItemId, ItemAmount)> for Inventory {
 impl FromIterator<ItemStack> for Inventory {
     fn from_iter<T: IntoIterator<Item = ItemStack>>(iter: T) -> Self {
         Self(BTreeMap::from_iter(iter.into_iter().map(|stack| (stack.id, stack.amount))))
-    }
-}
-
-impl IntoIterator for Inventory {
-    type Item = (ItemId, ItemAmount);
-    type IntoIter = btree_map::IntoIter<ItemId, ItemAmount>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.0.into_iter()
     }
 }
 
@@ -151,8 +140,6 @@ impl Display for Inventory {
 }
 
 pub mod serialize {
-    use core::ops::{Deref, DerefMut};
-
     use serde::{Deserialize, Serialize};
 
     use crate::{
@@ -165,29 +152,22 @@ pub mod serialize {
 
     #[must_use]
     #[repr(transparent)]
-    #[derive(Debug, Default, Clone, Serialize, Deserialize)]
+    #[derive(
+        Debug,
+        Default,
+        Clone,
+        Serialize,
+        Deserialize,
+        derive_more::From,
+        derive_more::Into,
+        derive_more::AsRef,
+        derive_more::AsMut,
+        derive_more::Deref,
+        derive_more::DerefMut,
+        derive_more::IntoIterator,
+    )]
     #[serde(transparent)]
     pub struct InventoryRaw(Vec<(Id, ItemAmount)>);
-
-    const impl Deref for InventoryRaw {
-        type Target = Vec<(Id, ItemAmount)>;
-
-        fn deref(&self) -> &Self::Target {
-            &self.0
-        }
-    }
-
-    const impl DerefMut for InventoryRaw {
-        fn deref_mut(&mut self) -> &mut Self::Target {
-            &mut self.0
-        }
-    }
-
-    impl From<Vec<(Id, ItemAmount)>> for InventoryRaw {
-        fn from(value: Vec<(Id, ItemAmount)>) -> Self {
-            Self(value)
-        }
-    }
 
     impl InventoryRaw {
         pub fn into_inner(self) -> Vec<(Id, ItemAmount)> {
@@ -221,8 +201,6 @@ pub mod serialize {
 }
 
 pub mod deserialize {
-    use core::ops::{Deref, DerefMut};
-
     use serde::Deserialize;
     use serde_tuple::Deserialize_tuple;
 
@@ -243,29 +221,21 @@ pub mod deserialize {
 
     #[must_use]
     #[repr(transparent)]
-    #[derive(Debug, Default, Clone, Deserialize)]
+    #[derive(
+        Debug,
+        Default,
+        Clone,
+        Deserialize,
+        derive_more::From,
+        derive_more::Into,
+        derive_more::AsRef,
+        derive_more::AsMut,
+        derive_more::Deref,
+        derive_more::DerefMut,
+        derive_more::IntoIterator,
+    )]
     #[serde(transparent)]
     pub struct InventoryStr(Vec<(StrId, ItemAmount)>);
-
-    impl Deref for InventoryStr {
-        type Target = Vec<(StrId, ItemAmount)>;
-
-        fn deref(&self) -> &Self::Target {
-            &self.0
-        }
-    }
-
-    impl DerefMut for InventoryStr {
-        fn deref_mut(&mut self) -> &mut Self::Target {
-            &mut self.0
-        }
-    }
-
-    impl From<Vec<(StrId, ItemAmount)>> for InventoryStr {
-        fn from(value: Vec<(StrId, ItemAmount)>) -> Self {
-            Self(value)
-        }
-    }
 
     impl InventoryStr {
         pub fn into_inner(self) -> Vec<(StrId, ItemAmount)> {
