@@ -13,24 +13,46 @@ use gltf::animation::util::ReadOutputs;
 use crate::{AnimPrimitive, AnimationChannel, AnimationFrame, Interpolation, gpu};
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Zeroable, Pod)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialOrd,
+    Ord,
+    Hash,
+    Zeroable,
+    Pod,
+    derive_more::PartialEq,
+    derive_more::Eq,
+    derive_more::From,
+    derive_more::Into,
+    derive_more::AsRef,
+    derive_more::AsMut,
+    derive_more::Deref,
+    derive_more::DerefMut,
+)]
 struct GltfNodeId(u16);
 
-const impl From<u16> for GltfNodeId {
-    fn from(value: u16) -> Self {
-        Self(value)
-    }
-}
-
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Zeroable, Pod)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialOrd,
+    Ord,
+    Hash,
+    Zeroable,
+    Pod,
+    derive_more::PartialEq,
+    derive_more::Eq,
+    derive_more::From,
+    derive_more::Into,
+    derive_more::AsRef,
+    derive_more::AsMut,
+    derive_more::Deref,
+    derive_more::DerefMut,
+)]
 pub struct MeshId(u32);
-
-const impl From<u32> for MeshId {
-    fn from(value: u32) -> Self {
-        Self(value)
-    }
-}
 
 impl Display for MeshId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -118,7 +140,7 @@ impl ModelManager {
     #[inline]
     pub fn get_model_mesh_ids(&self, model_id: &ModelId) -> &[MeshId] {
         let Some(ids) = self.model_id_map.get(model_id) else {
-            panic!("ModelId({}) should contain meshes", model_id)
+            panic!("{} should contain meshes", model_id)
         };
 
         ids
@@ -134,7 +156,7 @@ impl ModelManager {
 
         for scene in document.scenes() {
             for node in scene.nodes() {
-                let node_id = GltfNodeId::from(node.index() as u16);
+                let node_id = GltfNodeId(node.index() as u16);
 
                 let transform = node.transform();
                 let transform = {
@@ -200,7 +222,7 @@ impl ModelManager {
         for animation in document.animations() {
             for channel in animation.channels() {
                 let node = channel.target().node();
-                let node_id = GltfNodeId::from(node.index() as u16);
+                let node_id = GltfNodeId(node.index() as u16);
 
                 let interpolation = Interpolation::from(channel.sampler().interpolation());
 

@@ -1,4 +1,3 @@
-#![feature(trim_prefix_suffix)]
 #![feature(iterator_try_collect)]
 #![feature(const_format_args)]
 #![feature(const_convert)]

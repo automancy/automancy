@@ -25,7 +25,6 @@ automancy_data = { path = "crates/automancy_data" }
 automancy_game = { path = "crates/automancy_game" }
 automancy_macros = { path = "crates/automancy_macros" }
 automancy_rendering = { path = "crates/automancy_rendering" }
-automancy_system = { path = "crates/automancy_system" }
 automancy_ui = { path = "crates/automancy_ui" }
 
 # logging / profiling / tracing
@@ -97,6 +96,8 @@ tokio = { version = "1.52.3", features = ["full"] }
 # utils
 anyhow = "1.0.98"
 chrono = "0.4.41"
+const_format = "0.2.36"
+derive_more = { version = "2.1.1", features = ["full"] }
 fuzzy-matcher = { version = "0.3.7", features = ["compact"] }
 include_dir = "0.7.4"
 interpolator = { version = "0.5.0", features = ["number"] }

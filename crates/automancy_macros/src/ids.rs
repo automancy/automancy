@@ -1,72 +1,86 @@
-use proc_macro2::{Literal, Span, TokenStream};
-use quote::quote;
-use syn::Ident;
+use proc_macro2::Literal;
+use quote::{ToTokens, quote};
+use syn::{Data, DeriveInput, Fields, Token, bracketed, parenthesized, parse, parse::Parse, parse_macro_input};
 
-use crate::parse_literal;
+mod kw {
+    use syn::custom_keyword;
 
-/**
-Derives an Id registry with a convenient constructor that interns static strings as Ids.
-
-Examples:
-```
-use automancy_macros::IdReg;
-use automancy_data::id::Id;
-
-#[derive(IdReg)]
-pub struct FooIds {
-    id_foo: Id,
-    #[namespace("core")]
-    id_bar: Id,
-    #[namespace("meowzer/")]
-    #[name("zoo")]
-    id_zoo: Id,
+    custom_keyword!(namespace);
+    custom_keyword!(name);
 }
-```
 
-Invalid usages:
-```compile_fail
-#[derive(automancy_macros::IdReg)]
-pub enum Foo {}
+enum IdRegArg {
+    Namespace(Literal),
+    Name(Literal),
+}
 
-#[derive(automancy_macros::IdReg)]
-pub struct Bar();
-```
-*/
-pub fn derive_id_reg(item: TokenStream) -> TokenStream {
-    let ast: syn::DeriveInput = syn::parse2(item).unwrap();
+impl Parse for IdRegArg {
+    fn parse(attr: syn::parse::ParseStream) -> syn::Result<Self> {
+        let _ = attr.parse::<Token![#]>();
 
-    let namespace_ident = Ident::new("namespace", Span::call_site());
-    let name_ident = Ident::new("name", Span::call_site());
+        let input;
+        bracketed!(input in attr);
 
-    let mut names = vec![];
-    let mut namespaces = vec![];
+        let lookahead = input.lookahead1();
+        if lookahead.peek(kw::namespace) {
+            let _kw = input.parse::<kw::namespace>()?;
+            let content;
+            parenthesized!(content in input);
+            let namespace = content.parse::<Literal>()?;
 
-    match ast.data {
-        syn::Data::Struct(data_struct) => match &data_struct.fields {
-            syn::Fields::Named(fields_named) => {
-                for field in fields_named.named.iter() {
-                    let mut iter = field.attrs.iter();
-                    let attrs @ [a, b] = [iter.next(), iter.next()];
+            Ok(IdRegArg::Namespace(namespace))
+        } else if lookahead.peek(kw::name) {
+            let _kw = input.parse::<kw::name>()?;
+            let content;
+            parenthesized!(content in input);
+            let name = content.parse::<Literal>()?;
 
-                    let [a_ident, b_ident] = attrs.map(|v| v.and_then(|v| v.path().get_ident().cloned()));
+            Ok(IdRegArg::Name(name))
+        } else {
+            Err(lookahead.error())
+        }
+    }
+}
 
-                    let name = field.ident.clone().unwrap();
+pub fn derive_id_reg(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
 
-                    namespaces.push(if Some(&namespace_ident) == a_ident.as_ref() {
-                        (name.clone(), parse_literal(a.unwrap()).into_iter().next().unwrap())
-                    } else if Some(&namespace_ident) == b_ident.as_ref() {
-                        (name.clone(), parse_literal(b.unwrap()).into_iter().next().unwrap())
-                    } else {
-                        (name.clone(), Literal::string("automancy"))
-                    });
+    let name = input.ident;
 
-                    names.push(if Some(&name_ident) == a_ident.as_ref() {
-                        parse_literal(a.unwrap()).into_iter().next().unwrap()
-                    } else if Some(&name_ident) == b_ident.as_ref() {
-                        parse_literal(b.unwrap()).into_iter().next().unwrap()
-                    } else {
-                        Literal::string(&name.to_string())
-                    });
+    let default_namespace = Literal::string("automancy");
+
+    let mut ids = vec![];
+    match input.data {
+        Data::Struct(data) => match &data.fields {
+            Fields::Named(fields) => {
+                for field in fields.named.iter() {
+                    let field_name = field.ident.clone().expect("field should be named");
+
+                    let mut namespace = None;
+                    let mut name = None;
+
+                    for arg in field
+                        .attrs
+                        .iter()
+                        .flat_map(|attr| parse::<IdRegArg>(attr.into_token_stream().into()))
+                    {
+                        match arg {
+                            IdRegArg::Namespace(v) => {
+                                assert!(namespace.is_none(), "namespace attribute should only be present once");
+                                namespace = Some(v);
+                            },
+                            IdRegArg::Name(v) => {
+                                assert!(name.is_none(), "namespace attribute should only be present once");
+                                name = Some(v);
+                            },
+                        }
+                    }
+
+                    ids.push((
+                        namespace.unwrap_or(default_namespace.clone()),
+                        name.unwrap_or(Literal::string(&field_name.to_string())),
+                        field_name,
+                    ))
                 }
             },
             _ => panic!("IdReg must be a struct with named fields"),
@@ -74,12 +88,9 @@ pub fn derive_id_reg(item: TokenStream) -> TokenStream {
         _ => panic!("IdReg must be a struct"),
     }
 
-    let name = ast.ident;
-
-    let items = namespaces
+    let items = ids
         .into_iter()
-        .zip(names)
-        .map(|((field, namespace), name)| {
+        .map(|(namespace, name, field)| {
             (
                 field,
                 format!(
@@ -95,7 +106,7 @@ pub fn derive_id_reg(item: TokenStream) -> TokenStream {
                 #field: interner.get_or_intern_static(#id).into(),
             }
         })
-        .collect::<TokenStream>();
+        .collect::<proc_macro2::TokenStream>();
 
     quote! {
         impl #name {
@@ -106,4 +117,5 @@ pub fn derive_id_reg(item: TokenStream) -> TokenStream {
             }
         }
     }
+    .into()
 }

@@ -1,5 +1,3 @@
-use yakui::flexible;
-
 use crate::*;
 
 /// Draws an Item's icon, with optional prefix and label text.

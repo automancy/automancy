@@ -24,8 +24,8 @@ pub mod storage {
         meta: MapMetadata,
     }
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     #[repr(transparent)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     struct MapMetadata {
         bounds: RadialTileBounds,
     }

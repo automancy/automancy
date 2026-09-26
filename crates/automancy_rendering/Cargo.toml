@@ -38,4 +38,5 @@ tokio = { workspace = true }
 
 # utils
 anyhow = { workspace = true }
+derive_more = { workspace = true }
 rand = { workspace = true }
