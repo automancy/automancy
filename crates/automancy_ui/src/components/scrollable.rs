@@ -387,11 +387,11 @@ impl Widget for ScrollableWidget {
             } => {
                 self.last_drag_pos = None;
                 if ctx.input.focus() == Some(ctx.dom.current()) {
-                    ctx.input.set_focus(None);
+                    ctx.input.set_focus(None, false);
                 }
 
                 if inside && down {
-                    ctx.input.set_focus(Some(ctx.dom.current()));
+                    ctx.input.set_focus(Some(ctx.dom.current()), false);
 
                     return EventResponse::Sink;
                 }
