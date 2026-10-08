@@ -301,6 +301,7 @@ macro_rules! define_datum {
             impl DataMap {
                 pub fn handle_change(&mut $handle_change_self, change: DatumChange) {
                     match change {
+                        DatumChange::None => {},
                         DatumChange::Add($handle_change_key, datum) => match datum {
                             $(
                                 Datum::$id_name(v) => {
@@ -637,8 +638,10 @@ define_datum! {
     };
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum DatumChange {
+    #[default]
+    None,
     Add(Id, Datum),
     Sub(Id, Datum),
     Set(Id, Datum),

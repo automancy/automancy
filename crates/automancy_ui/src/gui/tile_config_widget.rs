@@ -4,6 +4,7 @@ use crate::*;
 #[track_caller]
 pub fn tile_config_widget(ctx: &mut UiContext) {
     let mut closed = false;
+    let mut dirty = false;
 
     let config_open = ctx.game_data.config_open.read_latest().clone();
     if config_open.is_none() {
@@ -21,11 +22,15 @@ pub fn tile_config_widget(ctx: &mut UiContext) {
             section(|| {
                 Pad::horizontal(sizing::PADDING_MEDIUM).show(|| {
                     col(|| {
-                        if let Some((tile, data, ui)) = config_open {
-                            rhai_ui(ctx, tile.handle.clone(), &data, &ui);
+                        if let Some((tile, mut data, ui)) = config_open {
+                            rhai_ui(ctx, tile.handle.clone(), &mut data, &ui, &mut dirty);
                         }
                     });
                 });
             });
         });
+
+    if dirty {
+        ctx.game_data.config_open.reset();
+    }
 }

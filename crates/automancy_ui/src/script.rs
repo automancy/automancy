@@ -1,4 +1,4 @@
-use automancy_data::game::generic::DatumType;
+use automancy_data::game::generic::{DatumChange, DatumType};
 use automancy_game::script::UiElement;
 
 use crate::*;
@@ -25,7 +25,7 @@ fn add_direction(current: &mut Option<TileCoord>, dir: TileCoord) {
 
 #[cfg_attr(feature = "profile", profiling::function)]
 #[track_caller]
-fn takeable_items(ctx: &mut UiContext, mut buffer: Inventory, buffer_id: Id, tile_entity: ActorRef<TileMsg>) {
+fn takeable_items(ctx: &mut UiContext, buffer: &mut Inventory, buffer_id: Id, tile_entity: ActorRef<TileMsg>) -> bool {
     let mut dirty = false;
 
     for (id, amount) in buffer.clone() {
@@ -74,14 +74,22 @@ fn takeable_items(ctx: &mut UiContext, mut buffer: Inventory, buffer_id: Id, til
 
     if dirty {
         tile_entity
-            .send_message(TileMsg::SetDatum(buffer_id, Datum::Inventory(buffer)))
+            .send_message(TileMsg::ChangeData(DatumChange::Set(buffer_id, Datum::Inventory(buffer.clone()))))
             .unwrap();
     }
+
+    dirty
 }
 
 #[cfg_attr(feature = "profile", profiling::function)]
 #[track_caller]
-pub fn rhai_ui(ctx: &mut UiContext, tile_entity: ActorRef<TileMsg>, data: &DataMap, ui: &UiElement) {
+pub fn rhai_ui(ctx: &mut UiContext, tile_entity: ActorRef<TileMsg>, data: &mut DataMap, ui: &UiElement, dirty: &mut bool) {
+    let mut handle_change = |data: &mut DataMap, change: DatumChange| {
+        data.handle_change(change.clone());
+        tile_entity.send_message(TileMsg::ChangeData(change)).unwrap();
+        *dirty = true;
+    };
+
     match ui {
         &UiElement::Label {
             id,
@@ -105,7 +113,7 @@ pub fn rhai_ui(ctx: &mut UiContext, tile_entity: ActorRef<TileMsg>, data: &DataM
             let current_amount = data.int(id).copied().unwrap_or_default();
 
             if let Some(new_amount) = NumberInput::new_with_range(current_amount, 0..=max).show().value {
-                tile_entity.send_message(TileMsg::SetDatum(id, Datum::Int(new_amount))).unwrap();
+                handle_change(data, DatumChange::Set(id, Datum::Int(new_amount)));
             }
         },
         &UiElement::SliderAmount {
@@ -115,7 +123,7 @@ pub fn rhai_ui(ctx: &mut UiContext, tile_entity: ActorRef<TileMsg>, data: &DataM
             let current_amount = data.int(id).copied().unwrap_or_default();
 
             if let Some(new_amount) = slider_with_input(current_amount, 0..=max, None) {
-                tile_entity.send_message(TileMsg::SetDatum(id, Datum::Int(new_amount))).unwrap();
+                handle_change(data, DatumChange::Set(id, Datum::Int(new_amount)));
             }
         },
         &UiElement::HexDirInput {
@@ -152,9 +160,9 @@ pub fn rhai_ui(ctx: &mut UiContext, tile_entity: ActorRef<TileMsg>, data: &DataM
 
             if new_dir != current_dir {
                 if let Some(coord) = new_dir {
-                    tile_entity.send_message(TileMsg::SetDatum(id, Datum::TileCoord(coord))).unwrap();
+                    handle_change(data, DatumChange::Set(id, Datum::TileCoord(coord)));
                 } else {
-                    tile_entity.send_message(TileMsg::RemoveDatum(id, DatumType::TileCoord)).unwrap();
+                    handle_change(data, DatumChange::Remove(id, DatumType::TileCoord));
                 }
             }
         },
@@ -176,10 +184,8 @@ pub fn rhai_ui(ctx: &mut UiContext, tile_entity: ActorRef<TileMsg>, data: &DataM
                 |id| ctx.game_state.resource_man.item_name(id),
             );
 
-            if current_id != old_id
-                && let Some(id) = current_id
-            {
-                tile_entity.send_message(TileMsg::SetDatum(*data_id, Datum::ItemId(id))).unwrap();
+            if current_id != old_id {
+                handle_change(data, DatumChange::Set(*data_id, Datum::ItemId(current_id.unwrap_or_default())));
             }
         },
         UiElement::SelectableRecipes {
@@ -200,10 +206,8 @@ pub fn rhai_ui(ctx: &mut UiContext, tile_entity: ActorRef<TileMsg>, data: &DataM
                 |id| ctx.game_state.resource_man.recipe_name(id),
             );
 
-            if current_id != old_id
-                && let Some(id) = current_id
-            {
-                tile_entity.send_message(TileMsg::SetDatum(*data_id, Datum::RecipeId(id))).unwrap();
+            if current_id != old_id {
+                handle_change(data, DatumChange::Set(*data_id, Datum::RecipeId(current_id.unwrap_or_default())));
             }
 
             if let Some(recipe_id) = current_id {
@@ -215,10 +219,12 @@ pub fn rhai_ui(ctx: &mut UiContext, tile_entity: ActorRef<TileMsg>, data: &DataM
             empty_text,
         } => {
             col(|| {
-                let stacks = data.stacks(id);
+                let stacks = data.inventory_mut_or_default(id);
 
                 if !stacks.is_empty() {
-                    takeable_items(ctx, stacks, id, tile_entity.clone());
+                    if takeable_items(ctx, stacks, id, tile_entity.clone()) {
+                        *dirty = true;
+                    }
                 } else {
                     Text::normal(ctx.game_state.resource_man.gui_str(GuiTranslateId(empty_text))).show();
                 }
@@ -245,7 +251,7 @@ pub fn rhai_ui(ctx: &mut UiContext, tile_entity: ActorRef<TileMsg>, data: &DataM
         } => {
             row(|| {
                 for ui in e {
-                    rhai_ui(ctx, tile_entity.clone(), data, ui);
+                    rhai_ui(ctx, tile_entity.clone(), data, ui, dirty);
                 }
             });
         },
@@ -254,7 +260,7 @@ pub fn rhai_ui(ctx: &mut UiContext, tile_entity: ActorRef<TileMsg>, data: &DataM
         } => {
             row_cross_center(|| {
                 for ui in e {
-                    rhai_ui(ctx, tile_entity.clone(), data, ui);
+                    rhai_ui(ctx, tile_entity.clone(), data, ui, dirty);
                 }
             });
         },
@@ -263,7 +269,7 @@ pub fn rhai_ui(ctx: &mut UiContext, tile_entity: ActorRef<TileMsg>, data: &DataM
         } => {
             list_col().item_spacing(sizing::PADDING_XSMALL).show(|| {
                 for ui in e {
-                    rhai_ui(ctx, tile_entity.clone(), data, ui);
+                    rhai_ui(ctx, tile_entity.clone(), data, ui, dirty);
                 }
             });
         },
