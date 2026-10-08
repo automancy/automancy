@@ -24,7 +24,7 @@ fn load_recursively(path: &Path, extension: &OsStr) -> Vec<PathBuf> {
 }
 
 fn file_check(path: &Path, out_path: &Path) -> bool {
-    if std::env::var("SKIP_CHECK")
+    if std::env::var("AUTOMANCY_FORCE_BUILD_SCRIPT")
         .ok()
         .and_then(|v| bool::from_str(v.as_str()).ok())
         .unwrap_or(false)

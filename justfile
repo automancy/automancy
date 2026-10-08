@@ -1,6 +1,6 @@
 set dotenv-load
 
-skip_check := env('SKIP_CHECK', 'false')
+force_build_script := env('AUTOMANCY_FORCE_BUILD_SCRIPT', 'false')
 tracy_feature := if env('AUTOMANCY_TRACY', 'false') == 'true' { "profile-with-tracy" } else { "" }
 
 default:
@@ -13,7 +13,7 @@ cargo_cmd cmd profile:
 
 buildscript:
     @echo 'Running build script.'
-    SKIP_CHECK='{{skip_check}}' cargo run --package=build-script --release
+    AUTOMANCY_FORCE_BUILD_SCRIPT='{{force_build_script}}' cargo run --package=build-script --release
 
 build profile="dev": buildscript
     @echo
