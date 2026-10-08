@@ -38,7 +38,11 @@ macro_rules! impl_data_getters_others {
 
                 #[inline]
                 pub fn [<insert_ $fn_name>](&mut self, id: Id, value: $datum_type) {
-                    self.$field_name.push((id, value));
+                    if let Some((_, v)) = self.$field_name.iter_mut().find(|(k, _)| *k == id) {
+                        *v = value;
+                    } else {
+                        self.$field_name.push((id, value));
+                    }
                 }
 
                 #[inline]
@@ -104,7 +108,11 @@ macro_rules! impl_data_getters_ids {
 
                 #[inline]
                 pub fn [<insert_ $fn_name>](&mut self, id: Id, value: $datum_type) {
-                    self.$field_name.push((id, TransparentWrapper::peel(value)));
+                    if let Some((_, v)) = self.$field_name.iter_mut().find(|(k, _)| *k == id) {
+                        *v = TransparentWrapper::peel(value);
+                    } else {
+                        self.$field_name.push((id, TransparentWrapper::peel(value)));
+                    }
                 }
 
                 #[inline]
@@ -293,6 +301,7 @@ macro_rules! define_datum {
             impl DataMap {
                 pub fn handle_change(&mut $handle_change_self, change: DatumChange) {
                     match change {
+                        DatumChange::None => {},
                         DatumChange::Add($handle_change_key, datum) => match datum {
                             $(
                                 Datum::$id_name(v) => {
@@ -629,8 +638,10 @@ define_datum! {
     };
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum DatumChange {
+    #[default]
+    None,
     Add(Id, Datum),
     Sub(Id, Datum),
     Set(Id, Datum),

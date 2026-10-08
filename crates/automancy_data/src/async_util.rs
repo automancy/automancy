@@ -40,6 +40,7 @@ pub struct AsyncSwapBuf<T> {
     buf: [UnsafeCell<MaybeUninit<T>>; MAX_SIZE],
     current_index: Arc<AtomicUsize>,
     status: Arc<AtomicU8>,
+    reset: bool,
 }
 
 impl<T> Default for AsyncSwapBuf<T> {
@@ -48,6 +49,7 @@ impl<T> Default for AsyncSwapBuf<T> {
             buf: [const { UnsafeCell::new(MaybeUninit::uninit()) }; MAX_SIZE],
             current_index: Arc::new(AtomicUsize::new(0)),
             status: Arc::new(AtomicU8::new(BufStatus::Uninit as u8)),
+            reset: false,
         }
     }
 }
@@ -79,13 +81,32 @@ where
         unsafe { (*self.buf[index].get()).assume_init_ref() }
     }
 
+    pub fn reset(&mut self) {
+        self.reset = true;
+    }
+
     pub fn update<F: Future<Output = T> + Send + 'static>(&mut self, f: impl FnOnce() -> F) -> Option<JoinHandle<()>> {
+        // could probably be implemented better, but this works (i think)
+        if self.reset {
+            loop {
+                if self
+                    .status
+                    .compare_exchange(BufStatus::Idle as u8, BufStatus::Uninit as u8, Ordering::AcqRel, Ordering::Acquire)
+                    .is_ok()
+                {
+                    break;
+                }
+            }
+            self.reset = false;
+        }
+
         let status = self.status.load(Ordering::Relaxed);
         if status == BufStatus::Updating as u8 {
             return None;
         }
 
         let status = self.status.swap(BufStatus::Updating as u8, Ordering::Acquire);
+        debug_assert_ne!(status, BufStatus::Updating as u8);
         let curr_index = self.current_index.load(Ordering::Acquire);
         let new_index = (curr_index + 1) % MAX_SIZE;
 
@@ -100,10 +121,9 @@ where
             let fut = f();
             tokio::spawn(async move {
                 value.write(fut.await);
-                #[cfg(debug_assertions)]
-                debug_assert_eq!(BufStatus::Updating as u8, status.swap(BufStatus::Idle as u8, Ordering::Release));
-                #[cfg(not(debug_assertions))]
-                status.store(BufStatus::Idle as u8, Ordering::Release);
+                #[allow(unused)]
+                let prev_status = status.swap(BufStatus::Idle as u8, Ordering::Release);
+                debug_assert_eq!(prev_status, BufStatus::Updating as u8);
                 index.store(new_index, Ordering::Release);
             })
         };

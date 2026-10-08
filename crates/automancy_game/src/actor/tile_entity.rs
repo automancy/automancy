@@ -1,7 +1,11 @@
 use std::sync::Arc;
 
 use automancy_data::{
-    game::{coord::TileCoord, generic::DataMap, inventory::ItemStack},
+    game::{
+        coord::TileCoord,
+        generic::{DataMap, DatumChange},
+        inventory::ItemStack,
+    },
     id::{Id, TileId},
     id_map::IdSet,
     math::Int,
@@ -35,6 +39,7 @@ pub struct TileActorState {
     pub rendering: bool,
     // TODO axe this entire thing and let script side rerender itself, just send rerender message when changing config
     pub field_changes_since_render: IdSet<Id>,
+    pub datum_changes: Vec<DatumChange>,
 }
 
 #[cfg_attr(feature = "profile", profiling::all_functions)]
@@ -377,6 +382,11 @@ impl Actor for TileActor {
             TileMsg::Tick {
                 tick_count: _tick_count,
             } => {
+                for change in &mut state.datum_changes {
+                    state.data.handle_change(std::mem::take(change));
+                }
+                state.datum_changes.clear();
+
                 if let Some(script) = &state.rhai
                     && let Some(result) = run_rhai_tile_script(
                         &self.resource_man,
@@ -483,21 +493,21 @@ impl Actor for TileActor {
             },
             TileMsg::SetData(data) => {
                 state.field_changes_since_render.extend(state.data.keys());
+                state.field_changes_since_render.extend(data.keys());
                 state.data = data;
-                state.field_changes_since_render.extend(state.data.keys());
             },
             TileMsg::TakeData(reply) => {
                 state.field_changes_since_render.extend(state.data.keys());
                 reply.send(std::mem::take(&mut state.data))?;
             },
-            TileMsg::SetDatum(id, datum) => {
-                state.data.set(id, datum);
-            },
-            TileMsg::RemoveDatum(id, datum) => {
-                state.data.remove(id, datum);
-            },
             TileMsg::ChangeData(change) => {
-                state.data.handle_change(change);
+                match &change {
+                    DatumChange::None => {},
+                    DatumChange::Add(id, ..) | DatumChange::Sub(id, ..) | DatumChange::Set(id, ..) | DatumChange::Remove(id, ..) => {
+                        state.field_changes_since_render.insert(*id);
+                    },
+                }
+                state.datum_changes.push(change);
             },
             TileMsg::FnData(f) => {
                 state.field_changes_since_render.extend(state.data.keys());
