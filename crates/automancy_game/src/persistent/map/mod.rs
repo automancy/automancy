@@ -125,7 +125,7 @@ pub mod serialize {
             coord::TileCoord,
             generic::{
                 DataMap,
-                serailize::{DataMapRaw, IdMapping, IdMappingError},
+                serialize::{DataMapRaw, IdMapping, IdMappingError},
             },
         },
         id::{Id, IdInterner, TileId},

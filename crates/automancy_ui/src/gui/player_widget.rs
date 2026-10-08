@@ -440,7 +440,7 @@ pub fn player_widget(ctx: &mut UiContext) {
                                     .contains_research_id(ctx.game_state.resource_man.registry.data_ids.unlocked_researches, id)
                                 && let Some(research) = ctx.game_state.resource_man.get_research(id)
                             {
-                                divider(colors::BACKGROUND_3.yak(), sizing::DIVIER_HEIGHT, sizing::DIVIER_THICKNESS);
+                                divider(colors::BACKGROUND_3.yak(), sizing::DIVIDER_HEIGHT, sizing::DIVIDER_THICKNESS);
 
                                 Scrollable::vertical()
                                     .child_size(Constraints::loose(Vec2::new(460.0, 130.0)))

@@ -1,4 +1,4 @@
-use automancy_data::game::generic::serailize::IdMapping;
+use automancy_data::game::generic::serialize::IdMapping;
 
 use crate::*;
 
@@ -45,13 +45,13 @@ pub fn debug_widget(ctx: &mut UiContext) {
                     ))
                     .show();
 
-                    divider(colors::BACKGROUND_3.yak(), sizing::DIVIER_HEIGHT, sizing::DIVIER_THICKNESS);
+                    divider(colors::BACKGROUND_3.yak(), sizing::DIVIDER_HEIGHT, sizing::DIVIDER_THICKNESS);
 
                     Text::normal(resource_man_stats).show();
 
                     Text::normal(model_man_stats).show();
 
-                    divider(colors::BACKGROUND_3.yak(), sizing::DIVIER_HEIGHT, sizing::DIVIER_THICKNESS);
+                    divider(colors::BACKGROUND_3.yak(), sizing::DIVIDER_HEIGHT, sizing::DIVIDER_THICKNESS);
 
                     if let Some((map_id, map_info)) = ctx.game_data.loaded_map.read_latest() {
                         let map_data = map_info

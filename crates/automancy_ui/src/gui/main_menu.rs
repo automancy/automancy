@@ -22,7 +22,7 @@ pub fn main_menu(ctx: &mut UiContext) {
                         ctx.gui.state.switch_screen(Screen::Options(OptionsMenuState::default()))
                     };
 
-                    divider(colors::BACKGROUND_3.yak(), sizing::DIVIER_HEIGHT, sizing::DIVIER_THICKNESS);
+                    divider(colors::BACKGROUND_3.yak(), sizing::DIVIDER_HEIGHT, sizing::DIVIDER_THICKNESS);
 
                     if button(gui_str!(ctx.game_state, main_menu_source_button)).clicked {
                         open::that_detached("https://github.com/automancy/automancy").unwrap();

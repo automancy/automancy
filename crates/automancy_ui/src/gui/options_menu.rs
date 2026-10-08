@@ -223,7 +223,7 @@ pub fn options_menu(ctx: &mut UiContext, menu: OptionsMenuState) {
 
                                     Text::heading(ctx.game_state.resource_man.gui_str(title_text_id)).show();
 
-                                    divider(colors::BACKGROUND_3.yak(), sizing::DIVIER_HEIGHT, sizing::DIVIER_THICKNESS);
+                                    divider(colors::BACKGROUND_3.yak(), sizing::DIVIDER_HEIGHT, sizing::DIVIDER_THICKNESS);
 
                                     col_cross_center(|| {
                                         options_menu_items(ctx, menu, current_options, current_misc_options);

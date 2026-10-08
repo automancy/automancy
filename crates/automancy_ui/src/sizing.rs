@@ -7,8 +7,8 @@ pub const HEADING_TEXT: f32 = 24.0;
 pub const NORMAL_TEXT: f32 = 16.0;
 pub const SMALL_TEXT: f32 = 13.0;
 
-pub const DIVIER_THICKNESS: f32 = 2.0;
-pub const DIVIER_HEIGHT: f32 = 20.0;
+pub const DIVIDER_THICKNESS: f32 = 2.0;
+pub const DIVIDER_HEIGHT: f32 = 20.0;
 
 pub const PADDING_XSMALL: f32 = 2.0;
 pub const PADDING_SMALL: f32 = 4.0;

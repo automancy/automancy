@@ -251,11 +251,8 @@ impl AtlasManager {
             }
 
             for &key in self.packed_rects.keys() {
-                if let Some(object) = objects.get_mut(key as usize) {
-                    object.texture_id = self.packed_texture_id.unwrap();
-                } else {
-                    log::error!("fklsdjfkljsdlds {key}");
-                }
+                let object = objects.get_mut(key as usize).unwrap();
+                object.texture_id = self.packed_texture_id.unwrap();
             }
 
             vec![(self.unpacked_texture_id.unwrap(), self.packed_texture_id.unwrap())]

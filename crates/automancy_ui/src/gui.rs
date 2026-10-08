@@ -17,7 +17,7 @@ pub fn layout_ui(ctx: &mut UiContext) {
 
     match ctx.gui.state.popup.clone() {
         PopupState::None => match &ctx.gui.state.screen {
-            Screen::Ingame => {
+            Screen::InGame => {
                 info_widget::info_widget(ctx);
 
                 if matches!(ctx.game_data.loaded_map.read_latest(), Some((GameMapId::SaveFile(..), ..)))

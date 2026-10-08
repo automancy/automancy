@@ -9,7 +9,7 @@ pub enum Screen {
     MainMenu,
     MapLoad,
     Options(OptionsMenuState),
-    Ingame,
+    InGame,
     Paused,
 }
 

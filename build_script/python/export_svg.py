@@ -22,7 +22,7 @@ def main():
         styles.append(dict(
             map(
                 lambda p: p.split(":"),
-                (attrs.get("style") or "ihate:python").split(";"),
+                (attrs.get("style") or "i_hate:python").split(";"),
             )
         ))
     total = float(len(pathAttrs))
