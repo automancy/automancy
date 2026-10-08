@@ -19,12 +19,14 @@ def main():
     pathAttrs = [path.attrib for path in root.iter("{http://www.w3.org/2000/svg}path")]
     styles = []
     for attrs in pathAttrs:
-        styles.append(dict(
-            map(
-                lambda p: p.split(":"),
-                (attrs.get("style") or "i_hate:python").split(";"),
+        styles.append(
+            dict(
+                map(
+                    lambda p: p.split(":"),
+                    (attrs.get("style") or "i_hate:python").split(";"),
+                )
             )
-        ))
+        )
     total = float(len(pathAttrs))
 
     bpy.ops.import_curve.svg(filepath=src)
