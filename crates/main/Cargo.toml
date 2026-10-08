@@ -17,7 +17,11 @@ profile = [
     "tokio/tracing",
 ]
 profile-with-tracing = ["profile", "profiling/profile-with-tracing"]
-profile-with-tracy = ["profile", "profiling/profile-with-tracy", "tracing-tracy"]
+profile-with-tracy = [
+    "profile",
+    "profiling/profile-with-tracy",
+    "tracing-tracy",
+]
 
 [dependencies]
 automancy_data = { workspace = true }
