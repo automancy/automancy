@@ -38,7 +38,11 @@ macro_rules! impl_data_getters_others {
 
                 #[inline]
                 pub fn [<insert_ $fn_name>](&mut self, id: Id, value: $datum_type) {
-                    self.$field_name.push((id, value));
+                    if let Some((_, v)) = self.$field_name.iter_mut().find(|(k, _)| *k == id) {
+                        *v = value;
+                    } else {
+                        self.$field_name.push((id, value));
+                    }
                 }
 
                 #[inline]
@@ -104,7 +108,11 @@ macro_rules! impl_data_getters_ids {
 
                 #[inline]
                 pub fn [<insert_ $fn_name>](&mut self, id: Id, value: $datum_type) {
-                    self.$field_name.push((id, TransparentWrapper::peel(value)));
+                    if let Some((_, v)) = self.$field_name.iter_mut().find(|(k, _)| *k == id) {
+                        *v = TransparentWrapper::peel(value);
+                    } else {
+                        self.$field_name.push((id, TransparentWrapper::peel(value)));
+                    }
                 }
 
                 #[inline]
