@@ -26,7 +26,7 @@ pub fn error_widget(ctx: &mut UiContext) {
                 ))
                 .show();
 
-                divider(colors::BACKGROUND_2.yak(), sizing::DIVIER_HEIGHT, sizing::DIVIER_THICKNESS);
+                divider(colors::BACKGROUND_2.yak(), sizing::DIVIDER_HEIGHT, sizing::DIVIDER_THICKNESS);
 
                 Text::normal(gui_str!(
                     ctx.game_state,

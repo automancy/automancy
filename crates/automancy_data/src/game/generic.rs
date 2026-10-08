@@ -876,7 +876,7 @@ impl Display for DataMap {
     }
 }
 
-pub mod serailize {
+pub mod serialize {
     use std::collections::BTreeMap;
 
     use serde::{Deserialize, Serialize};

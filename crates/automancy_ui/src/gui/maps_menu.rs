@@ -93,7 +93,7 @@ pub fn map_create_popup(ctx: &mut UiContext) {
                     .load_map(ctx.game_data, GameMapId::SaveFile(SaveFileName::new(&name)))
                 {
                     AutomancyGameLoadResult::Loaded => {
-                        ctx.gui.state.switch_screen(Screen::Ingame);
+                        ctx.gui.state.switch_screen(Screen::InGame);
                     },
                     AutomancyGameLoadResult::LoadedMainMenu => {
                         ctx.gui.state.switch_screen(Screen::MainMenu);
@@ -208,7 +208,7 @@ pub fn map_menu(ctx: &mut UiContext) {
                                                     .load_map(ctx.game_data, GameMapId::SaveFile(SaveFileName::new(map_name)))
                                                 {
                                                     AutomancyGameLoadResult::Loaded => {
-                                                        ctx.gui.state.switch_screen(Screen::Ingame);
+                                                        ctx.gui.state.switch_screen(Screen::InGame);
                                                     },
                                                     AutomancyGameLoadResult::LoadedMainMenu => {
                                                         ctx.gui.state.switch_screen(Screen::MainMenu);

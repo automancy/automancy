@@ -1,0 +1,60 @@
+{
+    "version": "0.2",
+    "ignorePaths": [
+        ".git/{info,lfs,logs,refs,objects}/**",
+        ".git/{index,*refs,*HEAD}",
+        "*.blend",
+        "*.svg",
+        "*.log",
+        "*.nix",
+        "*.md",
+        "*LICENSE.txt"
+    ],
+    "useGitignore": true,
+    "language": "en,en-GB,la",
+    "dictionaryDefinitions": [
+        {
+            "name": "automancy/automancy",
+            "path": "./dicts/automancy.txt",
+            "addWords": true
+        },
+        {
+            "name": "automancy/libraries",
+            "path": "./dicts/libraries.txt",
+            "addWords": true
+        },
+        {
+            "name": "automancy/rendering",
+            "path": "./dicts/rendering.txt",
+            "addWords": true
+        },
+        {
+            "name": "automancy/names",
+            "path": "./dicts/names.txt",
+            "addWords": true
+        },
+        {
+            "name": "automancy/miscSoftware",
+            "path": "./dicts/miscSoftware.txt",
+            "addWords": true
+        },
+        {
+            "name": "automancy/misc",
+            "path": "./dicts/misc.txt",
+            "addWords": true
+        }
+    ],
+    "dictionaries": [
+        "softwareTerms",
+        "fonts",
+        "filetypes",
+        "misc",
+
+        "automancy/automancy",
+        "automancy/libraries",
+        "automancy/rendering",
+        "automancy/names",
+        "automancy/miscSoftware",
+        "automancy/misc"
+    ]
+}

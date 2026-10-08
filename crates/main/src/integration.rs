@@ -145,10 +145,10 @@ pub fn handle_winit_event(ctx: &mut AutomancyUiContext, event: Event<()>) -> any
                 && ctx.gui.state.linking_tile.take().is_none()
                 && ctx.gui.state.paste_from.take().is_none()
             {
-                if ctx.gui.state.switch_screen_if(Screen::Paused, &|s| s.screen == Screen::Ingame) {
+                if ctx.gui.state.switch_screen_if(Screen::Paused, &|s| s.screen == Screen::InGame) {
                     ctx.game_state.game_handle.send_message(GameMsg::SaveMap)?;
                 } else {
-                    ctx.gui.state.switch_screen_if(Screen::Ingame, &|s| s.screen == Screen::Paused);
+                    ctx.gui.state.switch_screen_if(Screen::InGame, &|s| s.screen == Screen::Paused);
                 }
             }
         }
@@ -183,7 +183,7 @@ pub fn handle_winit_event(ctx: &mut AutomancyUiContext, event: Event<()>) -> any
         }
 
         ctx.gui.state.input_hints.push(vec![ActionType::SelectMode]);
-        if ctx.game_state.input_handler.key_active(ActionType::SelectMode) && ctx.gui.state.screen == Screen::Ingame {
+        if ctx.game_state.input_handler.key_active(ActionType::SelectMode) && ctx.gui.state.screen == Screen::InGame {
             if ctx.gui.state.paste_from.is_none() {
                 ctx.gui.state.grouped_tiles.insert(ctx.game_state.camera.cursor_coord);
             }

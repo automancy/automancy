@@ -144,7 +144,7 @@ pub mod serialize {
 
     use crate::{
         game::{
-            generic::serailize::{IdMapping, IdMappingError},
+            generic::serialize::{IdMapping, IdMappingError},
             inventory::{Inventory, ItemAmount},
         },
         id::{Id, IdInterner, ItemId},

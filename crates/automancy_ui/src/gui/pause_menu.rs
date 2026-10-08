@@ -6,7 +6,7 @@ pub fn pause_menu(ctx: &mut UiContext) {
     Window::new(gui_str!(ctx.game_state, pause_menu_title)).show(Alignment::CENTER, || {
         col_cross_center(|| {
             if button(gui_str!(ctx.game_state, pause_menu_unpause_button)).clicked {
-                ctx.gui.state.switch_screen(Screen::Ingame)
+                ctx.gui.state.switch_screen(Screen::InGame)
             };
 
             if button(gui_str!(ctx.game_state, pause_menu_options_button)).clicked {
