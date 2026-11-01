@@ -6,9 +6,8 @@ fn has_category_item(game_state: &mut AutomancyGameState, map_data: &DataMap, id
 
     if !category.item.is_none() {
         map_data
-            .inventory_then(game_state.resource_man.registry.data_ids.player_inventory, |inventory| {
-                inventory.get(category.item) > 0
-            })
+            .items(game_state.resource_man.registry.data_ids.player_inventory)
+            .map(|inventory| inventory.get(category.item) > 0)
             .unwrap_or(false)
     } else {
         true

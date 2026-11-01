@@ -21,63 +21,37 @@ use crate::{
 fn data_into_dynamic(v: Datum) -> Dynamic {
     match v {
         Datum::Id(v) => Dynamic::from(v),
-        Datum::SetId(v) => Dynamic::from(v),
-        Datum::MapSetId(v) => Dynamic::from(v),
         Datum::MapCoordId(v) => Dynamic::from(v),
         Datum::TileId(v) => Dynamic::from(v),
-        Datum::SetTileId(v) => Dynamic::from(v),
-        Datum::MapSetTileId(v) => Dynamic::from(v),
         Datum::MapCoordTileId(v) => Dynamic::from(v),
         Datum::ItemId(v) => Dynamic::from(v),
-        Datum::SetItemId(v) => Dynamic::from(v),
-        Datum::MapSetItemId(v) => Dynamic::from(v),
         Datum::MapCoordItemId(v) => Dynamic::from(v),
         Datum::RecipeId(v) => Dynamic::from(v),
-        Datum::SetRecipeId(v) => Dynamic::from(v),
-        Datum::MapSetRecipeId(v) => Dynamic::from(v),
         Datum::MapCoordRecipeId(v) => Dynamic::from(v),
         Datum::TagId(v) => Dynamic::from(v),
-        Datum::SetTagId(v) => Dynamic::from(v),
-        Datum::MapSetTagId(v) => Dynamic::from(v),
         Datum::MapCoordTagId(v) => Dynamic::from(v),
         Datum::CategoryId(v) => Dynamic::from(v),
-        Datum::SetCategoryId(v) => Dynamic::from(v),
-        Datum::MapSetCategoryId(v) => Dynamic::from(v),
         Datum::MapCoordCategoryId(v) => Dynamic::from(v),
         Datum::ResearchId(v) => Dynamic::from(v),
-        Datum::SetResearchId(v) => Dynamic::from(v),
-        Datum::MapSetResearchId(v) => Dynamic::from(v),
         Datum::MapCoordResearchId(v) => Dynamic::from(v),
         Datum::ScriptId(v) => Dynamic::from(v),
-        Datum::SetScriptId(v) => Dynamic::from(v),
-        Datum::MapSetScriptId(v) => Dynamic::from(v),
         Datum::MapCoordScriptId(v) => Dynamic::from(v),
         Datum::ModelId(v) => Dynamic::from(v),
-        Datum::SetModelId(v) => Dynamic::from(v),
-        Datum::MapSetModelId(v) => Dynamic::from(v),
         Datum::MapCoordModelId(v) => Dynamic::from(v),
         Datum::RenderId(v) => Dynamic::from(v),
-        Datum::SetRenderId(v) => Dynamic::from(v),
-        Datum::MapSetRenderId(v) => Dynamic::from(v),
         Datum::MapCoordRenderId(v) => Dynamic::from(v),
 
         Datum::TileCoord(v) => Dynamic::from(v),
-        Datum::VecTileCoord(v) => Dynamic::from_iter(v),
         Datum::TileCoordBounds(v) => Dynamic::from(v),
 
-        Datum::ItemStack(v) => Dynamic::from(v),
-        Datum::Inventory(v) => Dynamic::from(v),
+        Datum::Items(v) => Dynamic::from(v),
 
         Datum::Color(v) => Dynamic::from(v),
-        Datum::VecColor(v) => Dynamic::from(v),
-
         Datum::Int(v) => Dynamic::from_int(v),
-        Datum::VecInt(v) => Dynamic::from(v),
-        Datum::UInt(v) => Dynamic::from(v),
-        Datum::VecUInt(v) => Dynamic::from(v),
         Datum::Float(v) => Dynamic::from(v),
-        Datum::VecFloat(v) => Dynamic::from(v),
         Datum::Bool(v) => Dynamic::from_bool(v),
+
+        Datum::Data(v) => Dynamic::from(v),
     }
 }
 
@@ -105,20 +79,19 @@ fn data_from_dynamic(v: Dynamic) -> Option<Datum> {
 
     impl_conv!(
         Datum::Id => Id,
-        Datum::SetId => IdSet<Id>,
-        Datum::MapSetId => IdMap<Id, IdSet<Id>>,
 
         Datum::MapCoordId => IdCoordMap<Id>,
         Datum::MapCoordModelId => IdCoordMap<ModelId>,
 
         Datum::TileCoord => TileCoord,
-        Datum::VecTileCoord => Vec<TileCoord>,
         Datum::TileCoordBounds => TileCoordBounds,
 
         Datum::Int => ItemAmount,
         Datum::Bool => bool,
         Datum::Color => Rgba,
-        Datum::Inventory => Inventory
+        Datum::Items => Inventory,
+
+        Datum::Data => Box<DataMap>
     )
 }
 
@@ -140,9 +113,7 @@ pub(crate) fn register_data_stuff(engine: &mut Engine) {
     engine
         .register_type_with_name::<DataMap>("DataMap")
         .register_indexer_get_set(rhai_get, rhai_set)
-        .register_fn("get_or_new_inventory", |v: &mut DataMap, id: Id| {
-            v.inventory_mut_or_default(id).clone()
-        });
+        .register_fn("get_or_new_inventory", |v: &mut DataMap, id: Id| v.items_mut_or_default(id).clone());
 
     engine
         .register_type_with_name::<Inventory>("Inventory")

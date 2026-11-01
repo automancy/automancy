@@ -4,7 +4,11 @@ use std::collections::BTreeMap;
 use bytemuck::TransparentWrapper;
 
 use crate::{
-    game::{coord::*, inventory::*},
+    game::{
+        coord::*,
+        generic::serialize::{DatumRaw, IdMapping},
+        inventory::*,
+    },
     id::*,
     id_map::*,
     math::*,
@@ -19,54 +23,29 @@ macro_rules! impl_data_getters_others {
         $(paste::paste! {
             impl $data_type {
                 #[inline]
+                fn [<$fn_name _index>](&mut self, id: Id) -> Option<usize> {
+                    self.$field_name.iter().enumerate().find_map(|(idx, (k, _))| if *k == id { Some(idx) } else { None })
+                }
+
+                #[inline]
                 pub fn $fn_name(&self, id: Id) -> Option<&$datum_type> {
-                    self.$field_name.iter().find(|(k, _)| *k == id).map(|(_, v)| v)
+                    self.$field_name.iter().find_map(|(k, v)| if *k == id { Some(v) } else { None })
                 }
 
                 #[inline]
                 pub fn [<$fn_name _mut>](&mut self, id: Id) -> Option<&mut $datum_type> {
-                    self.$field_name.iter_mut().find(|(k, _)| *k == id).map(|(_, v)| v)
-                }
-
-                #[inline]
-                pub fn [<remove_ $fn_name>](&mut self, id: Id) -> Option<$datum_type> {
-                    let index = self.$field_name.iter().enumerate().find(|(_, (k, _))| *k == id).map(|(idx, _)| idx)?;
-                    let (_, old) = self.$field_name.swap_remove(index);
-
-                    Some(old)
-                }
-
-                #[inline]
-                pub fn [<insert_ $fn_name>](&mut self, id: Id, value: $datum_type) {
-                    if let Some((_, v)) = self.$field_name.iter_mut().find(|(k, _)| *k == id) {
-                        *v = value;
-                    } else {
-                        self.$field_name.push((id, value));
-                    }
-                }
-
-                #[inline]
-                pub fn [<$fn_name _then>]<R>(&self, id: Id, f: impl FnOnce(&$datum_type) -> R) -> Option<R> {
-                    if let Some(v) = self.$fn_name(id) {
-                        Some(f(v))
-                    } else {
-                        None
-                    }
+                    self.$field_name.iter_mut().find_map(|(k, v)| if *k == id { Some(v) } else { None })
                 }
 
                 #[inline]
                 pub fn [<$fn_name _mut_or>](&mut self, id: Id, default: $datum_type) -> &mut $datum_type {
-                    if self.$field_name.iter().find(|(k, _)| *k == id).is_none() {
+                    if let Some(v) = self.[<$fn_name _mut>](id) {
+                        v
+                    } else {
                         self.$field_name.push((id, default));
                         let (_, pushed) = self.$field_name.last_mut().unwrap();
 
                         return pushed;
-                    }
-
-                    if let Some(v) = self.[<$fn_name _mut>](id) {
-                        v
-                    } else {
-                        unreachable!();
                     }
                 }
 
@@ -75,6 +54,23 @@ macro_rules! impl_data_getters_others {
                     where for<'a> $datum_type: Default
                 {
                     self.[<$fn_name _mut_or>](id, Default::default())
+                }
+
+                #[inline]
+                pub fn [<remove_ $fn_name>](&mut self, id: Id) -> Option<$datum_type> {
+                    let index = self.[<$fn_name _index>](id)?;
+                    let (_, old) = self.$field_name.swap_remove(index);
+
+                    Some(old)
+                }
+
+                #[inline]
+                pub fn [<insert_ $fn_name>](&mut self, id: Id, value: $datum_type) {
+                    if let Some(v) = self.[<$fn_name _mut>](id) {
+                        *v = value;
+                    } else {
+                        self.$field_name.push((id, value));
+                    }
                 }
             }
         })+
@@ -116,15 +112,6 @@ macro_rules! impl_data_getters_ids {
                 }
 
                 #[inline]
-                pub fn [<$fn_name _then>]<R>(&self, id: Id, f: impl FnOnce(&$datum_type) -> R) -> Option<R> {
-                    if let Some(v) = self.$fn_name(id) {
-                        Some(f(v))
-                    } else {
-                        None
-                    }
-                }
-
-                #[inline]
                 pub fn [<$fn_name _mut_or>](&mut self, id: Id, default: $datum_type) -> &mut $datum_type {
                     if self.$field_name.iter().find(|(k, _)| *k == id).is_none() {
                         self.$field_name.push((id, TransparentWrapper::peel(default)));
@@ -145,112 +132,6 @@ macro_rules! impl_data_getters_ids {
                     where for<'a> $datum_type: Default
                 {
                     self.[<$fn_name _mut_or>](id, Default::default())
-                }
-            }
-        })+
-    }
-}
-
-macro_rules! impl_data_of_collections_ids {
-    ($data_type:ty {
-        $(
-            $fn_name:ident: {
-                $datum_name_single:ident($datum_type_single:ty),
-                $datum_name_set:ident($datum_type_set:ty),
-            }
-        ),*
-        $(,)?
-    }) => {
-        $(paste::paste! {
-            impl $data_type {
-                pub fn [<contains_ $fn_name>](&self, key: Id, v: $datum_type_single) -> bool {
-                    if let Some(r) = self.$datum_name_single(key) {
-                        *r == v
-                    } else if let Some(r) = self.$datum_name_set(key) {
-                        r.contains(&v)
-                    } else {
-                        false
-                    }
-                }
-
-                pub fn [<$fn_name s>](&self, key: Id) -> $datum_type_set {
-                    if let Some(r) = self.$datum_name_single(key) {
-                        FromIterator::from_iter([*r])
-                    } else if let Some(r) = self.$datum_name_set(key) {
-                        r.clone()
-                    } else {
-                        Default::default()
-                    }
-                }
-
-                pub fn [<add_ $fn_name>](&mut self, key: Id, v: $datum_type_single) {
-                    if let Some(r) = self.$datum_name_single(key) {
-                        let r = *r;
-                        self.[<remove_ $datum_name_single>](key);
-                        self.[<insert_ $datum_name_set>](key, FromIterator::from_iter([r, v]));
-                    } else if let Some(r) = self.[<$datum_name_set _mut>](key) {
-                        r.push(v);
-                    } else {
-                        self.[<insert_ $datum_name_single>](key, v);
-                    }
-                }
-
-                pub fn [<sub_ $fn_name>](&mut self, key: Id, v: $datum_type_single) {
-                    if let Some(r) = self.$datum_name_single(key) {
-                        if (*r == v) {
-                            self.[<remove_ $datum_name_single>](key);
-                        }
-                    } else if let Some(r) = self.[<$datum_name_set _mut>](key) {
-                        r.remove(&v);
-                    } else {
-                        self.[<insert_ $datum_name_single>](key, v);
-                    }
-                }
-            }
-        })+
-    }
-}
-
-macro_rules! impl_data_of_collections_others {
-    ($data_type:ty {
-        $(
-            $fn_name:ident: {
-                $datum_name_single:ident($datum_type_single:ty),
-                $datum_name_set:ident($datum_type_set:ty),
-            }
-        ),*
-        $(,)?
-    }) => {
-        $(paste::paste! {
-            impl $data_type {
-                pub fn [<contains_ $fn_name>](&self, key: Id, v: $datum_type_single) -> bool {
-                    if let Some(r) = self.$datum_name_single(key) {
-                        *r == v
-                    } else if let Some(r) = self.$datum_name_set(key) {
-                        r.contains(&v)
-                    } else {
-                        false
-                    }
-                }
-
-                pub fn [<$fn_name s>](&self, key: Id) -> $datum_type_set {
-                    if let Some(r) = self.$datum_name_single(key) {
-                        FromIterator::from_iter([*r])
-                    } else if let Some(r) = self.$datum_name_set(key) {
-                        r.clone()
-                    } else {
-                        Default::default()
-                    }
-                }
-
-                pub fn [<add_ $fn_name>](&mut self, key: Id, v: $datum_type_single) {
-                    if let Some(r) = self.[<$datum_name_single _mut>](key) {
-                        *r += v;
-                    } else if let Some(r) = self.[<$datum_name_set _mut>](key) {
-                        r.push(v);
-                    } else {
-                        self.[<insert_ $datum_name_single>](key, v);
-                    }
                 }
             }
         })+
@@ -280,6 +161,13 @@ macro_rules! define_datum {
                 $(,)?
             };
         };
+
+        conv($id_map:ident, $interner:ident) {
+            into_raw: {
+                $( $into_raw_others_pat:pat => $into_raw_others_expr: expr, )*
+                $(,)?
+            };
+        }
     ) => {
         paste::paste! {
             /// Represents a generic Data type.
@@ -289,13 +177,39 @@ macro_rules! define_datum {
             pub enum Datum {
                 $(
                                $id_name  ($id_name),
-                         [<Set $id_name>](IdSet<$id_name>),
-                      [<MapSet $id_name>](IdMap<$id_name, IdSet<$id_name>>),
                     [<MapCoord $id_name>](IdCoordMap<$id_name>),
                 )*
                 $(
                     $name($type),
                 )*
+            }
+
+            impl Datum {
+                pub fn into_raw(self, $id_map: &mut IdMapping, $interner: &IdInterner) -> DatumRaw {
+                    match self {
+                        $(
+                            Datum::$id_name(v) => {
+                                $id_map.insert(v.into(), $interner);
+
+                                DatumRaw::Id(Id::from(v))
+                            },
+                            Datum::[<MapCoord $id_name>](v) => {
+                                let mut r = Vec::new();
+
+                                for (coord, id) in v {
+                                    $id_map.insert(id.into(), $interner);
+
+                                    r.push((coord, Id::from(id)));
+                                }
+
+                                DatumRaw::MapCoordId(r)
+                            },
+                        )*
+                        $(
+                            $into_raw_others_pat => $into_raw_others_expr,
+                        )*
+                    }
+                }
             }
 
             impl DataMap {
@@ -304,17 +218,8 @@ macro_rules! define_datum {
                         DatumChange::None => {},
                         DatumChange::Add($handle_change_key, datum) => match datum {
                             $(
-                                Datum::$id_name(v) => {
-                                    $handle_change_self.[<add_ $id_name:snake>]($handle_change_key, v);
-                                },
-                                Datum::[<Set $id_name>](v) => {
-                                    $handle_change_self.[<set_ $id_name:snake _mut_or_default>]($handle_change_key).extend(v);
-                                },
-                                Datum::[<MapSet $id_name>](v) => {
-                                    let id_map = $handle_change_self.[<map_set_ $id_name:snake _mut_or_default>]($handle_change_key);
-                                    for (id, set) in v {
-                                        id_map.entry(id).or_default().extend(set);
-                                    }
+                                Datum::$id_name(..) => {
+                                    panic!("cannot add {datum:?} to `DataMap`");
                                 },
                                 Datum::[<MapCoord $id_name>](v) => {
                                     $handle_change_self.[<map_coord_ $id_name:snake _mut_or_default>]($handle_change_key).extend(v);
@@ -327,22 +232,8 @@ macro_rules! define_datum {
                         },
                         DatumChange::Sub($handle_change_key, datum) => match datum {
                             $(
-                                Datum::$id_name(v) => {
-                                    $handle_change_self.[<sub_ $id_name:snake>]($handle_change_key, v);
-                                },
-                                Datum::[<Set $id_name>](v) => {
-                                    let set = $handle_change_self.[<set_ $id_name:snake _mut_or_default>]($handle_change_key);
-                                    for id in v {
-                                        set.remove(&id);
-                                    }
-                                },
-                                Datum::[<MapSet $id_name>](v) => {
-                                    let id_map = $handle_change_self.[<map_set_ $id_name:snake _mut_or_default>]($handle_change_key);
-                                    for (id, set) in v {
-                                        for v in set {
-                                            id_map.entry(id).or_default().remove(&v);
-                                        }
-                                    }
+                                Datum::$id_name(..) => {
+                                    panic!("cannot subtract {datum:?} from `DataMap`");
                                 },
                                 Datum::[<MapCoord $id_name>](v) => {
                                     let map = $handle_change_self.[<map_coord_ $id_name:snake _mut_or_default>]($handle_change_key);
@@ -363,12 +254,6 @@ macro_rules! define_datum {
                                 Datum::$id_name(v) => {
                                     $handle_change_self.[<insert_ $id_name:snake>]($handle_change_key, v);
                                 },
-                                Datum::[<Set $id_name>](v) => {
-                                    $handle_change_self.[<insert_set_ $id_name:snake>]($handle_change_key, v);
-                                },
-                                Datum::[<MapSet $id_name>](v) => {
-                                    $handle_change_self.[<insert_map_set_ $id_name:snake>]($handle_change_key, v);
-                                },
                                 Datum::[<MapCoord $id_name>](v) => {
                                     $handle_change_self.[<insert_map_coord_ $id_name:snake>]($handle_change_key, v);
                                 },
@@ -383,12 +268,6 @@ macro_rules! define_datum {
                             $(
                                 DatumType::$id_name => {
                                     $handle_change_self.[<remove_ $id_name:snake>]($handle_change_key);
-                                },
-                                DatumType::[<Set $id_name>] => {
-                                    $handle_change_self.[<remove_set_ $id_name:snake>]($handle_change_key);
-                                },
-                                DatumType::[<MapSet $id_name>] => {
-                                    $handle_change_self.[<remove_map_set_ $id_name:snake>]($handle_change_key);
                                 },
                                 DatumType::[<MapCoord $id_name>] => {
                                     $handle_change_self.[<remove_map_coord_ $id_name:snake>]($handle_change_key);
@@ -408,8 +287,6 @@ macro_rules! define_datum {
                 DataMap {
                     $(
                         id @                     [<$id_name:snake>]: $id_name,
-                        id_set @            [<set_ $id_name:snake>]: IdSet<$id_name>,
-                        id_sets @       [<map_set_ $id_name:snake>]: IdMap<$id_name, IdSet<$id_name>>,
                         coord_to_id @ [<map_coord_ $id_name:snake>]: IdCoordMap<$id_name>,
                     )*
                 }
@@ -421,51 +298,12 @@ macro_rules! define_datum {
                 }
             }
 
-            impl_data_of_collections_ids! {
-                DataMap {
-                    $(
-                        [<$id_name:snake>]: {
-                                 [<$id_name:snake>]($id_name),
-                            [<set_ $id_name:snake>](IdSet<$id_name>),
-                        },
-                    )*
-                }
-            }
-
-            impl_data_of_collections_others! {
-                DataMap {
-                    coord: {
-                        coord(TileCoord),
-                        vec_coord(Vec<TileCoord>),
-                    },
-
-                    color: {
-                        color(Rgba),
-                        vec_color(Vec<Rgba>),
-                    },
-                    int: {
-                        int(Int),
-                        vec_int(Vec<Int>),
-                    },
-                    uint: {
-                        uint(UInt),
-                        vec_uint(Vec<UInt>),
-                    },
-                    float: {
-                        float(Float),
-                        vec_float(Vec<Float>),
-                    },
-                }
-            }
-
             impl IntoIterator for DataMap {
                 type Item = (Id, Datum);
                 type IntoIter = impl Iterator<Item = (Id, Datum)>;
 
                 fn into_iter(self) -> Self::IntoIter {
                     self.id.into_iter().map(|(id, v)| (id, Datum::Id(v)))
-                        .chain(self.id_set.into_iter().map(|(id, v)| (id, Datum::SetId(v))))
-                        .chain(self.id_sets.into_iter().map(|(id, v)| (id, Datum::MapSetId(v))))
                         .chain(self.coord_to_id.into_iter().map(|(id, v)| (id, Datum::MapCoordId(v))))
                     $(
                         .chain(self.$field_name.into_iter().map(|(id, v)| (id, Datum::$name(v))))
@@ -474,10 +312,15 @@ macro_rules! define_datum {
             }
 
             impl DataMap {
+                $(
+                    #[inline]
+                    pub fn [<contains_ $id_name:snake>](&self, key: Id, id: $id_name) -> bool {
+                        self.data(key).map(|data| data.is_true(Id::from(id))).unwrap_or(false)
+                    }
+                )*
+
                 pub fn into_values(self) -> impl Iterator<Item = Datum> {
                     self.id.into_iter().map(|(_, v)| v).map(Datum::Id)
-                        .chain(self.id_set.into_iter().map(|(_, v)| v).map(Datum::SetId))
-                        .chain(self.id_sets.into_iter().map(|(_, v)| v).map(Datum::MapSetId))
                         .chain(self.coord_to_id.into_iter().map(|(_, v)| v).map(Datum::MapCoordId))
                     $(
                         .chain(self.$field_name.into_iter().map(|(_, v)| v).map(Datum::$name))
@@ -486,8 +329,6 @@ macro_rules! define_datum {
 
                 pub fn keys(&self) -> impl Iterator<Item = Id> {
                     self.id.iter().map(|(k, _)| k).copied()
-                        .chain(self.id_set.iter().map(|(k, _)| k).copied())
-                        .chain(self.id_sets.iter().map(|(k, _)| k).copied())
                         .chain(self.coord_to_id.iter().map(|(k, _)| k).copied())
                     $(
                         .chain(self.$field_name.iter().map(|(k, _)| k).copied())
@@ -497,8 +338,6 @@ macro_rules! define_datum {
                 #[deprecated(note="use individual methods instead.")]
                 pub fn get(&self, id: Id) -> Option<Datum> {
                     self.id.iter().find(|(k, _)| *k == id).map(|(_, v)| v.clone()).map(Datum::Id)
-                        .or_else(|| self.id_set.iter().find(|(k, _)| *k == id).map(|(_, v)| v.clone()).map(Datum::SetId))
-                        .or_else(|| self.id_sets.iter().find(|(k, _)| *k == id).map(|(_, v)| v.clone()).map(Datum::MapSetId))
                         .or_else(|| self.coord_to_id.iter().find(|(k, _)| *k == id).map(|(_, v)| v.clone()).map(Datum::MapCoordId))
                     $(
                         .or_else(|| self.$field_name.iter().find(|(k, _)| *k == id).map(|(_, v)| v.clone()).map(Datum::$name))
@@ -513,82 +352,50 @@ define_datum! {
     ids: [Id, TileId, ItemId, RecipeId, TagId, CategoryId, ResearchId, ScriptId, ModelId, RenderId];
     others: {
         coord: TileCoord(TileCoord),
-        vec_coord: VecTileCoord(Vec<TileCoord>),
         coord_bounds: TileCoordBounds(TileCoordBounds),
 
-        item: ItemStack(ItemStack),
-        inventory: Inventory(Inventory),
+        items: Items(Inventory),
 
         color: Color(Rgba),
-        vec_color: VecColor(Vec<Rgba>),
-
         int: Int(Int),
-        vec_int: VecInt(Vec<Int>),
-        uint: UInt(UInt),
-        vec_uint: VecUInt(Vec<UInt>),
         float: Float(Float),
-        vec_float: VecFloat(Vec<Float>),
-        bool: Bool(bool)
+        bool: Bool(bool),
+
+        data: Data(Box<DataMap>),
     };
 
     handle_change(self, key) {
         add: {
             datum @ (
                   Datum::TileCoordBounds(..)
+                | Datum::Color(..)
                 | Datum::Bool(..)
             ) => {
                 panic!("cannot add {datum:?} to `DataMap`");
             },
 
-            Datum::TileCoord(v) => {
-                self.add_coord(key, v);
-            },
-            Datum::VecTileCoord(v) => {
-                for v in v.into_iter() {
-                    self.add_coord(key, v);
-                }
-            },
-
-            Datum::ItemStack(v) => {
-                self.add_stack(key, v);
-            },
-            Datum::Inventory(v) => {
+            Datum::Items(v) => {
                 for v in v.into_stacks() {
                     self.add_stack(key, v);
                 }
             },
 
-            Datum::Color(v) => {
-                self.add_color(key, v);
+            Datum::TileCoord(v) => {
+                let n = self.coord_mut_or_default(key);
+                *n += v;
             },
-            Datum::VecColor(v) => {
-                for v in v.into_iter() {
-                    self.add_color(key, v);
-                }
-            },
-
             Datum::Int(v) => {
-                self.add_int(key, v);
-            },
-            Datum::VecInt(v) => {
-                for v in v.into_iter() {
-                    self.add_int(key, v);
-                }
-            },
-            Datum::UInt(v) => {
-                self.add_uint(key, v);
-            },
-            Datum::VecUInt(v) => {
-                for v in v.into_iter() {
-                    self.add_uint(key, v);
-                }
+                let n = self.int_mut_or_default(key);
+                *n = n.saturating_add(v);
             },
             Datum::Float(v) => {
-                self.add_float(key, v)
+                let n = self.float_mut_or_default(key);
+                *n += v;
             },
-            Datum::VecFloat(v) => {
-                for v in v.into_iter() {
-                    self.add_float(key, v);
+
+            Datum::Data(v) => {
+                for (k, v) in v.into_iter() {
+                    self.handle_change(DatumChange::Add(k, v));
                 }
             },
         };
@@ -597,43 +404,51 @@ define_datum! {
             datum @ (
                   Datum::TileCoordBounds(..)
                 | Datum::Color(..)
-                | Datum::VecColor(..)
-                | Datum::VecInt(..)
-                | Datum::VecUInt(..)
-                | Datum::VecFloat(..)
                 | Datum::Bool(..)
             ) => {
                 panic!("cannot subtract {datum:?} from `DataMap`");
             },
 
-            Datum::TileCoord(v) => {
-                self.add_coord(key, -v);
-            },
-            Datum::VecTileCoord(v) => {
-                for v in v.into_iter() {
-                    self.add_coord(key, -v);
-                }
-            },
-
-            Datum::ItemStack(v) => {
-                self.remove_stack(key, v);
-            },
-            Datum::Inventory(v) => {
+            Datum::Items(v) => {
                 for v in v.into_stacks() {
                     self.remove_stack(key, v);
                 }
             },
 
-            Datum::Int(v) => {
-                self.add_int(key, -v);
+            Datum::TileCoord(v) => {
+                let n = self.coord_mut_or_default(key);
+                *n -= v;
             },
-            Datum::UInt(v) => {
-                let uint = self.uint_mut_or_default(key);
-                *uint = uint.saturating_sub(v);
+            Datum::Int(v) => {
+                let n = self.int_mut_or_default(key);
+                *n = n.saturating_sub(v);
             },
             Datum::Float(v) => {
-                self.add_float(key, -v);
+                let n = self.float_mut_or_default(key);
+                *n -= v;
             },
+
+            Datum::Data(v) => {
+                for (k, v) in v.into_iter() {
+                    self.handle_change(DatumChange::Sub(k, v));
+                }
+            },
+        };
+    };
+
+    conv(id_map, interner) {
+        into_raw: {
+            Datum::TileCoord(v) => DatumRaw::TileCoord(v),
+            Datum::TileCoordBounds(v) => DatumRaw::TileCoordBounds(v),
+
+            Datum::Items(v) => DatumRaw::Items(v.into_raw(id_map, interner)),
+
+            Datum::Color(v) => DatumRaw::Color(colors::encode_rgba(v)),
+            Datum::Int(v) => DatumRaw::Int(v),
+            Datum::Float(v) => DatumRaw::Float(v),
+            Datum::Bool(v) => DatumRaw::Bool(v),
+
+            Datum::Data(v) => DatumRaw::Data(v.into_raw(id_map, interner)),
         };
     };
 }
@@ -652,27 +467,19 @@ pub enum DatumChange {
 #[derive(Debug, Clone, Default)]
 pub struct DataMap {
     id: Vec<(Id, Id)>,
-    id_set: Vec<(Id, IdSet<Id>)>,
-    id_sets: Vec<(Id, IdMap<Id, IdSet<Id>>)>,
     coord_to_id: Vec<(Id, IdCoordMap<Id>)>,
 
     coord: Vec<(Id, TileCoord)>,
-    vec_coord: Vec<(Id, Vec<TileCoord>)>,
     coord_bounds: Vec<(Id, TileCoordBounds)>,
 
-    item: Vec<(Id, ItemStack)>,
-    inventory: Vec<(Id, Inventory)>,
+    items: Vec<(Id, Inventory)>,
 
     color: Vec<(Id, Rgba)>,
-    vec_color: Vec<(Id, Vec<Rgba>)>,
-
     int: Vec<(Id, Int)>,
-    vec_int: Vec<(Id, Vec<Int>)>,
-    uint: Vec<(Id, UInt)>,
-    vec_uint: Vec<(Id, Vec<UInt>)>,
     float: Vec<(Id, Float)>,
-    vec_float: Vec<(Id, Vec<Float>)>,
     bool: Vec<(Id, bool)>,
+
+    data: Vec<(Id, Box<DataMap>)>,
 }
 
 impl DataMap {
@@ -683,26 +490,16 @@ impl DataMap {
 
     pub fn clear(&mut self) {
         self.id.clear();
-        self.id_set.clear();
-        self.id_sets.clear();
         self.coord_to_id.clear();
 
         self.coord.clear();
-        self.vec_coord.clear();
         self.coord_bounds.clear();
 
-        self.item.clear();
-        self.inventory.clear();
+        self.items.clear();
 
         self.color.clear();
-        self.vec_color.clear();
-
         self.int.clear();
-        self.vec_int.clear();
-        self.uint.clear();
-        self.vec_uint.clear();
         self.float.clear();
-        self.vec_float.clear();
         self.bool.clear();
     }
 
@@ -716,172 +513,81 @@ impl DataMap {
         self.handle_change(DatumChange::Remove(key, v));
     }
 
+    #[inline]
     pub fn contains_stack(&self, key: Id, v: ItemStack) -> bool {
-        if let Some(r) = self.item(key) {
-            r.id == v.id && r.amount >= v.amount
-        } else if let Some(r) = self.inventory(key) {
-            r.contains(v)
-        } else {
-            false
-        }
+        if let Some(r) = self.items(key) { r.contains(v) } else { false }
     }
-    pub fn stacks(&self, key: Id) -> Inventory {
-        if let Some(r) = self.item(key) {
-            FromIterator::from_iter([*r])
-        } else if let Some(r) = self.inventory(key) {
-            r.clone()
-        } else {
-            Default::default()
-        }
-    }
+    #[inline]
     pub fn add_stack(&mut self, key: Id, v: ItemStack) {
-        if let Some(r) = self.item_mut(key) {
-            if r.id == v.id {
-                r.amount += v.amount;
-            } else {
-                let r = *r;
-
-                self.remove_item(key);
-                self.insert_inventory(key, Inventory::from_iter([r, v]));
-            }
-        } else if let Some(r) = self.inventory_mut(key) {
+        if let Some(r) = self.items_mut(key) {
             r.add(v.id, v.amount);
         } else {
-            self.insert_item(key, v);
+            self.insert_items(key, Inventory::from_iter([v]));
         }
     }
+    #[inline]
     pub fn remove_stack(&mut self, key: Id, v: ItemStack) {
-        if let Some(r) = self.item_mut(key) {
-            if r.id == v.id {
-                r.amount -= v.amount;
-                if r.amount == 0 {
-                    self.remove_item(key);
-                }
-            } else {
-                let r = *r;
-
-                self.remove_item(key);
-                self.insert_inventory(key, Inventory::from_iter([r, -v]));
-            }
-        } else if let Some(r) = self.inventory_mut(key) {
+        if let Some(r) = self.items_mut(key) {
             r.add(v.id, -v.amount);
             if r.get(v.id) == 0 {
                 r.remove(&v.id);
             }
         } else {
-            self.insert_item(key, -v);
+            self.insert_items(key, Inventory::from_iter([-v]));
         }
+    }
+
+    #[inline]
+    pub fn is_true<Id: IdLike>(&self, key: Id) -> bool {
+        self.bool(key.into()).copied() == Some(true)
+    }
+
+    #[inline]
+    pub fn is_false<Id: IdLike>(&self, key: Id) -> bool {
+        self.bool(key.into()).copied() == Some(false)
     }
 }
 
 impl Display for DataMap {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("{")?;
-        f.write_fmt(format_args!(
-            "\n\tid: {{ {} }},",
-            self.id.iter().map(|(k, v)| format!("{k}: {v}")).collect::<Vec<_>>().join(", ")
-        ))?;
-        f.write_fmt(format_args!(
-            "\n\tid_set: {{ {} }},",
-            self.id_set.iter().map(|(k, v)| format!("{k}: {v}")).collect::<Vec<_>>().join(", ")
-        ))?;
-        f.write_fmt(format_args!(
-            "\n\tid_sets: {{ {} }},",
-            self.id_sets.iter().map(|(k, v)| format!("{k}: {v}")).collect::<Vec<_>>().join(", ")
-        ))?;
-        f.write_fmt(format_args!(
-            "\n\tcoord_to_id: {{ {} }},",
-            self.coord_to_id
-                .iter()
-                .map(|(k, v)| format!("{k}: {v}"))
-                .collect::<Vec<_>>()
-                .join(", ")
-        ))?;
-        f.write_fmt(format_args!(
-            "\n\tcoord: {{ {} }},",
-            self.coord.iter().map(|(k, v)| format!("{k}: {v}")).collect::<Vec<_>>().join(", ")
-        ))?;
-        f.write_fmt(format_args!(
-            "\n\tvec_coord: {{ {} }},",
-            self.vec_coord
-                .iter()
-                .map(|(k, v)| format!("{k}: [{}]", v.iter().map(ToString::to_string).collect::<Vec<_>>().join(", ")))
-                .collect::<Vec<_>>()
-                .join(", ")
-        ))?;
-        f.write_fmt(format_args!(
-            "\n\tcoord_bounds: {{ {} }},",
-            self.coord_bounds
-                .iter()
-                .map(|(k, v)| format!("{k}: {v}"))
-                .collect::<Vec<_>>()
-                .join(", ")
-        ))?;
-        f.write_fmt(format_args!(
-            "\n\titem: {{ {} }},",
-            self.item.iter().map(|(k, v)| format!("{k}: {v}")).collect::<Vec<_>>().join(", ")
-        ))?;
-        f.write_fmt(format_args!(
-            "\n\tinventory: {{ {} }},",
-            self.inventory
-                .iter()
-                .map(|(k, v)| format!("{k}: {v}"))
-                .collect::<Vec<_>>()
-                .join(", ")
-        ))?;
-        f.write_fmt(format_args!(
-            "\n\tcolor: {{ {} }},",
-            self.color.iter().map(|(k, v)| format!("{k}: {v}")).collect::<Vec<_>>().join(", ")
-        ))?;
-        f.write_fmt(format_args!(
-            "\n\tvec_color: {{ {} }},",
-            self.vec_color
-                .iter()
-                .map(|(k, v)| format!("{k}: [{}]", v.iter().map(ToString::to_string).collect::<Vec<_>>().join(", ")))
-                .collect::<Vec<_>>()
-                .join(", ")
-        ))?;
-        f.write_fmt(format_args!(
-            "\n\tint: {{ {} }},",
-            self.int.iter().map(|(k, v)| format!("{k}: {v}")).collect::<Vec<_>>().join(", ")
-        ))?;
-        f.write_fmt(format_args!(
-            "\n\tvec_int: {{ {} }},",
-            self.vec_int
-                .iter()
-                .map(|(k, v)| format!("{k}: [{}]", v.iter().map(ToString::to_string).collect::<Vec<_>>().join(", ")))
-                .collect::<Vec<_>>()
-                .join(", ")
-        ))?;
-        f.write_fmt(format_args!(
-            "\n\tuint: {{ {} }},",
-            self.uint.iter().map(|(k, v)| format!("{k}: {v}")).collect::<Vec<_>>().join(", ")
-        ))?;
-        f.write_fmt(format_args!(
-            "\n\tvec_uint: {{ {} }},",
-            self.vec_uint
-                .iter()
-                .map(|(k, v)| format!("{k}: [{}]", v.iter().map(ToString::to_string).collect::<Vec<_>>().join(", ")))
-                .collect::<Vec<_>>()
-                .join(", ")
-        ))?;
-        f.write_fmt(format_args!(
-            "\n\tfloat: {{ {} }},",
-            self.float.iter().map(|(k, v)| format!("{k}: {v}")).collect::<Vec<_>>().join(", ")
-        ))?;
-        f.write_fmt(format_args!(
-            "\n\tvec_float: {{ {} }},",
-            self.vec_float
-                .iter()
-                .map(|(k, v)| format!("{k}: [{}]", v.iter().map(ToString::to_string).collect::<Vec<_>>().join(", ")))
-                .collect::<Vec<_>>()
-                .join(", ")
-        ))?;
-        f.write_fmt(format_args!(
-            "\n\tbool: {{ {} }},",
-            self.bool.iter().map(|(k, v)| format!("{k}: {v}")).collect::<Vec<_>>().join(", ")
-        ))?;
-        f.write_str("\n}")?;
+        fn format_field<T: Display>(f: &mut std::fmt::Formatter<'_>, v: &[(Id, T)]) -> std::fmt::Result {
+            if v.is_empty() {
+                return f.write_str("{}, ");
+            }
+            let last_idx = v.len() - 1;
+
+            f.write_str("{ ")?;
+            for (idx, (k, v)) in v.iter().enumerate() {
+                f.write_fmt(format_args!("\"{k}\": {v}"))?;
+                if idx != last_idx {
+                    f.write_str(", ")?;
+                }
+            }
+            f.write_str(" }, ")?;
+
+            Ok(())
+        }
+
+        f.write_str("{ ")?;
+
+        {
+            format_field(f, &self.id)?;
+            format_field(f, &self.coord_to_id)?;
+
+            format_field(f, &self.coord)?;
+            format_field(f, &self.coord_bounds)?;
+
+            format_field(f, &self.items)?;
+
+            format_field(f, &self.color)?;
+            format_field(f, &self.int)?;
+            format_field(f, &self.float)?;
+            format_field(f, &self.bool)?;
+
+            format_field(f, &self.data)?;
+        }
+
+        f.write_str(" }")?;
 
         Ok(())
     }
@@ -965,12 +671,7 @@ pub mod serialize {
                     $( $into_datum_others_pat:pat => $into_datum_others_expr: expr, )*
                     $(,)?
                 };
-
-                into_raw: {
-                    $( $into_raw_others_pat:pat => $into_raw_others_expr: expr, )*
-                    $(,)?
-                };
-            }
+            };
         ) => {
             paste::paste! {
                 /// Represents a generic Data type.
@@ -979,8 +680,6 @@ pub mod serialize {
                 pub enum DatumRaw {
                     $(
                                     $id_name ($id_name),
-                             [<Set $id_name>](Vec<$id_name>),
-                          [<MapSet $id_name>](Vec<(Id, Vec<$id_name>)>),
                         [<MapCoord $id_name>](Vec<(TileCoord, $id_name)>),
                     )*
                     $(
@@ -993,30 +692,6 @@ pub mod serialize {
                         Ok(match self {
                             $(
                                 DatumRaw::$id_name(v) => Datum::$id_name($id_map.resolve(v.into(), $interner)?.into()),
-                                DatumRaw::[<Set $id_name>](v) => {
-                                    let mut r = IdSet::new();
-
-                                    for unmapped_id in v {
-                                        r.insert($id_map.resolve(unmapped_id.into(), $interner)?.into());
-                                    }
-
-                                    Datum::[<Set $id_name>](r)
-                                },
-                                DatumRaw::[<MapSet $id_name>](v) => {
-                                    let mut r = IdMap::new();
-
-                                    for (unmapped_id, unmapped_set) in v {
-                                        let mut ids = IdSet::new();
-
-                                        for unmapped_id in unmapped_set {
-                                            ids.insert($id_map.resolve(unmapped_id.into(), $interner)?.into());
-                                        }
-
-                                        r.insert($id_map.resolve(unmapped_id, $interner)?.into(), ids);
-                                    }
-
-                                    Datum::[<MapSet $id_name>](r)
-                                },
                                 DatumRaw::[<MapCoord $id_name>](v) => {
                                     let mut r = IdCoordMap::new();
 
@@ -1027,66 +702,10 @@ pub mod serialize {
                                     Datum::[<MapCoord $id_name>](r)
                                 },
                             )*
-
                             $(
                                 $into_datum_others_pat => $into_datum_others_expr,
                             )*
                         })
-                    }
-                }
-
-                impl Datum {
-                    pub fn into_raw(self, $id_map: &mut IdMapping, $interner: &IdInterner) -> DatumRaw {
-                        match self {
-                            $(
-                                Datum::$id_name(v) => {
-                                    $id_map.insert(v.into(), $interner);
-
-                                    DatumRaw::$id_name(v)
-                                },
-                                Datum::[<Set $id_name>](v) => {
-                                    let mut r = Vec::new();
-
-                                    for id in v {
-                                        $id_map.insert(id.into(), $interner);
-
-                                        r.push(id);
-                                    }
-
-                                    DatumRaw::[<Set $id_name>](r)
-                                },
-                                Datum::[<MapSet $id_name>](v) => {
-                                    let mut r = Vec::new();
-
-                                    for (id, set) in v {
-                                        $id_map.insert(id.into(), $interner);
-
-                                        for &id in &set {
-                                            $id_map.insert(id.into(), $interner);
-                                        }
-
-                                        r.push((id.into(), set.into_iter().collect::<Vec<_>>()));
-                                    }
-
-                                    DatumRaw::[<MapSet $id_name>](r)
-                                },
-
-                                Datum::[<MapCoord $id_name>](v) => {
-                                    let mut r = Vec::new();
-
-                                    for (coord, id) in v {
-                                        $id_map.insert(id.into(), $interner);
-
-                                        r.push((coord, id));
-                                    }
-
-                                    DatumRaw::[<MapCoord $id_name>](r)
-                                },
-                            )*
-                            $(
-                                $into_raw_others_pat => $into_raw_others_expr,
-                            )*
-                        }
                     }
                 }
             }
@@ -1094,78 +713,36 @@ pub mod serialize {
     }
 
     define_datum_raw! {
-        ids: [Id, TileId, ItemId, RecipeId, TagId, CategoryId, ResearchId, ScriptId, ModelId, RenderId];
+        ids: [Id];
         others: {
             TileCoord(TileCoord),
-            VecTileCoord(Vec<TileCoord>),
             TileCoordBounds(TileCoordBounds),
 
-            ItemStack((Id, ItemAmount)),
-            Inventory(InventoryRaw),
+            Items(InventoryRaw),
 
             Color(String),
-            VecColor(Vec<String>),
-
             Int(Int),
-            VecInt(Vec<Int>),
-            UInt(UInt),
-            VecUInt(Vec<UInt>),
             Float(Float),
-            VecFloat(Vec<Float>),
-            Bool(bool)
+            Bool(bool),
+
+            Data(DataMapRaw),
         };
 
         conv(id_map, interner) {
             into_datum: {
                 DatumRaw::TileCoord(v) => Datum::TileCoord(v),
-                DatumRaw::VecTileCoord(v) => Datum::VecTileCoord(v),
                 DatumRaw::TileCoordBounds(v) => Datum::TileCoordBounds(v),
 
-                DatumRaw::ItemStack((id, amount)) => {
-                    Datum::ItemStack(ItemStack::from(
-                        (
-                            ItemId(id_map.resolve(id, interner)?),
-                            amount
-                        )
-                    ))
-                },
-                DatumRaw::Inventory(v) => Datum::Inventory(v.into_inventory(id_map, interner)?),
+                DatumRaw::Items(v) => Datum::Items(v.into_inventory(id_map, interner)?),
 
                 DatumRaw::Color(v) => Datum::Color(colors::decode_rgba(&v)),
-                DatumRaw::VecColor(v) => Datum::VecColor(v.iter().map(|v| colors::decode_rgba(v)).collect()),
-
                 DatumRaw::Int(v) => Datum::Int(v),
-                DatumRaw::VecInt(v) => Datum::VecInt(v),
-                DatumRaw::UInt(v) => Datum::UInt(v),
-                DatumRaw::VecUInt(v) => Datum::VecUInt(v),
                 DatumRaw::Float(v) => Datum::Float(v),
-                DatumRaw::VecFloat(v) => Datum::VecFloat(v),
                 DatumRaw::Bool(v) => Datum::Bool(v),
+
+                DatumRaw::Data(v) => Datum::Data(Box::new(v.into_data(id_map, interner)?)),
             };
-
-            into_raw: {
-                Datum::TileCoord(v) => DatumRaw::TileCoord(v),
-                Datum::VecTileCoord(v) => DatumRaw::VecTileCoord(v),
-                Datum::TileCoordBounds(v) => DatumRaw::TileCoordBounds(v),
-
-                Datum::ItemStack(v) => {
-                    id_map.insert(*v.id, interner);
-                    DatumRaw::ItemStack((*v.id, v.amount))
-                },
-                Datum::Inventory(v) => DatumRaw::Inventory(v.into_raw(id_map, interner)),
-
-                Datum::Color(v) => DatumRaw::Color(colors::encode_rgba(v)),
-                Datum::VecColor(v) => DatumRaw::VecColor(v.iter().map(|v| colors::encode_rgba(*v)).collect()),
-
-                Datum::Int(v) => DatumRaw::Int(v),
-                Datum::VecInt(v) => DatumRaw::VecInt(v),
-                Datum::UInt(v) => DatumRaw::UInt(v),
-                Datum::VecUInt(v) => DatumRaw::VecUInt(v),
-                Datum::Float(v) => DatumRaw::Float(v),
-                Datum::VecFloat(v) => DatumRaw::VecFloat(v),
-                Datum::Bool(v) => DatumRaw::Bool(v),
-            };
-        }
+        };
     }
 
     #[must_use]
@@ -1233,7 +810,7 @@ pub mod deserialize {
 
     use super::*;
     use crate::{
-        game::inventory::deserialize::{InventoryStr, ItemStackStr},
+        game::inventory::deserialize::InventoryStr,
         id::deserialize::{StrId, StrIdParseError},
     };
 
@@ -1265,8 +842,6 @@ pub mod deserialize {
                 pub enum DatumStr {
                     $(
                                      $id_name(StrId),
-                             [<$id_name Set>](Vec<StrId>),
-                          [<$id_name SetMap>](Vec<(StrId, Vec<StrId>)>),
                             [<$id_name Grid>](Vec<(TileCoord, StrId)>),
                           [<$id_name GridXY>](Vec<([TileUnit; 2], StrId)>),
                     )*
@@ -1281,26 +856,11 @@ pub mod deserialize {
                         $interner: &mut IdInterner,
                         $fallback_namespace: Option<&str>,
                     ) -> Result<Datum, StrIdParseError> {
-                        use $crate::id::parse::{parse_ids, parse_map_item_id};
+                        use $crate::id::parse::parse_map_item_id;
 
                         Ok(match self {
                             $(
                                 DatumStr::$id_name(v) => Datum::$id_name($interner.get_or_intern(&v, $fallback_namespace)?.into()),
-                                DatumStr::[<$id_name Set>](v) => {
-                                    Datum::[<Set $id_name>](parse_ids(v.into_iter(), $interner, $fallback_namespace).try_collect()?)
-                                },
-                                DatumStr::[<$id_name SetMap>](v) => {
-                                    let mut r = IdMap::new();
-
-                                    for (id, set) in v {
-                                        r.insert(
-                                            $interner.get_or_intern(&id, $fallback_namespace)?.into(),
-                                            parse_ids(set.into_iter(), $interner, $fallback_namespace).try_collect()?,
-                                        );
-                                    }
-
-                                    Datum::[<MapSet $id_name>](r)
-                                },
                                 DatumStr::[<$id_name Grid>](v) => {
                                     Datum::[<MapCoord $id_name>](parse_map_item_id(v.into_iter(), $interner, $fallback_namespace).try_collect()?)
                                 },
@@ -1331,8 +891,6 @@ pub mod deserialize {
                         match variant_name {
                             $(
                                 DatumStrType::$id_name => Ok(DatumStr::$id_name(variant_data.newtype_variant()?)),
-                                DatumStrType::[<$id_name Set>] => Ok(DatumStr::[<$id_name Set>](variant_data.newtype_variant()?)),
-                                DatumStrType::[<$id_name SetMap>] => Ok(DatumStr::[<$id_name SetMap>](variant_data.newtype_variant()?)),
                                 DatumStrType::[<$id_name Grid>] => Ok(DatumStr::[<$id_name Grid>](variant_data.newtype_variant()?)),
                                 DatumStrType::[<$id_name GridXY>] => Ok(DatumStr::[<$id_name GridXY>](variant_data.newtype_variant()?)),
                             )*
@@ -1348,58 +906,56 @@ pub mod deserialize {
     }
 
     define_datum_str! {
-        ids: [Id, TileId, ItemId, RecipeId, TagId, CategoryId, ResearchId, ScriptId, ModelId, RenderId];
+        ids: [Id];
         others: {
             Coord(TileCoord),
             CoordXY([TileUnit; 2]),
-            CoordList(Vec<TileCoord>),
-            CoordListXY(Vec<[TileUnit; 2]>),
             CoordBounds(TileCoordBounds),
 
-            ItemStack(ItemStackStr),
-            Inventory(InventoryStr),
+            Items(InventoryStr),
 
             Color(String),
-
             Int(Int),
-            UInt(UInt),
             Float(Float),
             Bool(bool),
+
+            Data(DataMapStr),
         };
 
         conv(interner, fallback_namespace) {
             into_datum: {
                 DatumStr::Coord(v) => Datum::TileCoord(v),
                 DatumStr::CoordXY([col, row]) => Datum::TileCoord(TileCoord::from_offset(OffsetCoord::new(col, row))),
-                DatumStr::CoordList(v) => Datum::VecTileCoord(v),
-                DatumStr::CoordListXY(v) => Datum::VecTileCoord(
-                    v.into_iter()
-                        .map(|[col, row]| TileCoord::from_offset(OffsetCoord::new(col, row)))
-                        .collect(),
-                ),
                 DatumStr::CoordBounds(v) => Datum::TileCoordBounds(v),
 
-                DatumStr::ItemStack(v) =>  Datum::ItemStack(ItemStack { id: ItemId(interner.get_or_intern(&v.id, fallback_namespace)?), amount: v.amount }),
-                DatumStr::Inventory(v) => Datum::Inventory(v.into_inventory(interner, fallback_namespace)?),
+                DatumStr::Items(v) => Datum::Items(v.into_inventory(interner, fallback_namespace)?),
 
                 DatumStr::Color(v) => Datum::Color(colors::decode_rgba(&v)),
-
                 DatumStr::Int(v) => Datum::Int(v),
-                DatumStr::UInt(v) => Datum::UInt(v),
                 DatumStr::Float(v) => Datum::Float(v),
                 DatumStr::Bool(v) => Datum::Bool(v),
+
+                DatumStr::Data(v) => Datum::Data(Box::new(v.into_data(interner, fallback_namespace)?)),
             };
         }
     }
 
     mod serde_impl {
+        use std::borrow::Cow;
+
         use serde::{
             Deserialize,
-            de::{EnumAccess, Error, Expected, Unexpected, Visitor, value::StrDeserializer},
+            de::{EnumAccess, Error, Visitor, value::StrDeserializer},
         };
         use strum::VariantNames;
 
-        use crate::game::generic::deserialize::{DatumStr, DatumStrType};
+        use crate::{
+            game::{
+                coord::TileUnit,
+                generic::deserialize::{DataMapStr, DatumStr, DatumStrType},
+            },
+            id::deserialize::StrId,
+        };
 
         struct DatumStrVisitor;
 
@@ -1416,7 +972,7 @@ pub mod deserialize {
             {
                 enum EnumTag {
                     Variant(DatumStrType),
-                    Other(String),
+                    ParsedVariant(DatumStr),
                 }
 
                 struct EnumTagVisitor;
@@ -1439,13 +995,79 @@ pub mod deserialize {
                         Ok(())
                     }
 
+                    fn visit_map<A>(self, mut v: A) -> Result<Self::Value, A::Error>
+                    where
+                        A: serde::de::MapAccess<'de>,
+                    {
+                        #[derive(Debug, Deserialize)]
+                        #[serde(untagged)]
+                        enum MapKey {
+                            Id(String),
+                            Coord([TileUnit; 2]),
+                        }
+
+                        let mut data_map = DataMapStr::default();
+                        let mut id_coord_map = Vec::default();
+
+                        while let Ok(Some(k)) = v.next_key::<MapKey>() {
+                            match k {
+                                MapKey::Id(k) => {
+                                    data_map.insert(Cow::Owned(k), v.next_value::<DatumStr>()?);
+                                },
+                                MapKey::Coord(coord) => {
+                                    id_coord_map.push((coord, v.next_value::<StrId>()?));
+                                },
+                            }
+                        }
+
+                        if !data_map.is_empty() {
+                            Ok(EnumTag::ParsedVariant(DatumStr::Data(data_map)))
+                        } else if !id_coord_map.is_empty() {
+                            Ok(EnumTag::ParsedVariant(DatumStr::IdGridXY(id_coord_map)))
+                        } else {
+                            Err(A::Error::custom(
+                                "expected either a map of string to Datum, or a map of coord to Id",
+                            ))
+                        }
+                    }
+
+                    fn visit_seq<A>(self, mut v: A) -> Result<Self::Value, A::Error>
+                    where
+                        A: serde::de::SeqAccess<'de>,
+                    {
+                        let mut map = DataMapStr::default();
+
+                        while let Ok(Some(v)) = v.next_element::<String>() {
+                            map.insert(Cow::Owned(v), DatumStr::Bool(true));
+                        }
+
+                        Ok(EnumTag::ParsedVariant(DatumStr::Data(map)))
+                    }
+
+                    fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E>
+                    where
+                        E: Error,
+                    {
+                        Ok(EnumTag::ParsedVariant(DatumStr::Bool(v)))
+                    }
+
+                    fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+                    where
+                        E: Error,
+                    {
+                        match DatumStrType::deserialize(StrDeserializer::<E>::new(&v)) {
+                            Ok(variant) => Ok(EnumTag::Variant(variant)),
+                            Err(_) => Ok(EnumTag::ParsedVariant(DatumStr::Id(Cow::Owned(v)))),
+                        }
+                    }
+
                     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
                     where
                         E: Error,
                     {
                         match DatumStrType::deserialize(StrDeserializer::<E>::new(v)) {
                             Ok(variant) => Ok(EnumTag::Variant(variant)),
-                            Err(_) => Ok(EnumTag::Other(v.to_string())),
+                            Err(_) => Ok(EnumTag::ParsedVariant(DatumStr::Id(Cow::Owned(v.to_string())))),
                         }
                     }
                 }
@@ -1455,54 +1077,15 @@ pub mod deserialize {
                     where
                         D: serde::Deserializer<'de>,
                     {
-                        deserializer.deserialize_identifier(EnumTagVisitor)
+                        deserializer.deserialize_any(EnumTagVisitor)
                     }
                 }
 
-                let (variant_name, variant_data): (EnumTag, _) = data.variant()?;
+                let (v, variant_data): (EnumTag, _) = data.variant()?;
 
-                match variant_name {
+                match v {
                     EnumTag::Variant(variant_name) => DatumStr::parse_serde_enum_variant::<A>(variant_name, variant_data),
-                    EnumTag::Other(v) => {
-                        struct ExpectedLiteral;
-                        impl Expected for ExpectedLiteral {
-                            fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                                formatter.write_str("bool or number literal")
-                            }
-                        }
-
-                        match v.as_str() {
-                            // fast-track these because they're simple literals
-                            "true" => Ok(DatumStr::Bool(true)),
-                            "false" => Ok(DatumStr::Bool(false)),
-                            _ => match ron::from_str::<ron::Value>(&v) {
-                                Ok(v) => match v {
-                                    ron::Value::Bool(v) => Ok(DatumStr::Bool(v)),
-                                    ron::Value::Number(number) => Ok(match number {
-                                        ron::Number::I8(v) => DatumStr::Int(v as _),
-                                        ron::Number::I16(v) => DatumStr::Int(v as _),
-                                        ron::Number::I32(v) => DatumStr::Int(v as _),
-                                        ron::Number::I64(v) => DatumStr::Int(v as _),
-                                        ron::Number::U8(v) => DatumStr::UInt(v as _),
-                                        ron::Number::U16(v) => DatumStr::UInt(v as _),
-                                        ron::Number::U32(v) => DatumStr::UInt(v as _),
-                                        ron::Number::U64(v) => DatumStr::UInt(v as _),
-                                        ron::Number::F32(v) => DatumStr::Float(v.0 as _),
-                                        ron::Number::F64(v) => DatumStr::Float(v.0 as _),
-                                        ron::Number::__NonExhaustive(never) => never.never(),
-                                    }),
-                                    ron::Value::Char(v) => Err(Error::invalid_value(Unexpected::Char(v), &ExpectedLiteral)),
-                                    ron::Value::String(v) => Err(Error::invalid_value(Unexpected::Str(&v), &ExpectedLiteral)),
-                                    ron::Value::Bytes(v) => Err(Error::invalid_value(Unexpected::Bytes(&v), &ExpectedLiteral)),
-                                    ron::Value::Option(_) => Err(Error::invalid_value(Unexpected::Option, &ExpectedLiteral)),
-                                    ron::Value::Seq(_) => Err(Error::invalid_value(Unexpected::Seq, &ExpectedLiteral)),
-                                    ron::Value::Map(_) => Err(Error::invalid_value(Unexpected::Map, &ExpectedLiteral)),
-                                    ron::Value::Unit => Err(Error::invalid_value(Unexpected::Unit, &ExpectedLiteral)),
-                                },
-                                Err(e) => Err(Error::custom(e)),
-                            },
-                        }
-                    },
+                    EnumTag::ParsedVariant(v) => Ok(v),
                 }
             }
         }

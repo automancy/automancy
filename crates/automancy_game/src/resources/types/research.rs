@@ -189,9 +189,9 @@ impl ResourceManager {
             return false;
         };
 
-        if let Some(unlocked) = map_data.set_research_id(self.registry.data_ids.unlocked_researches) {
+        if let Some(unlocked) = map_data.data(self.registry.data_ids.unlocked_researches) {
             for research in researches {
-                if unlocked.contains(&research) {
+                if unlocked.is_true(research) {
                     return true;
                 }
             }

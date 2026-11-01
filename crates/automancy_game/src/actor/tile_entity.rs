@@ -500,14 +500,6 @@ impl Actor for TileActor {
                 state.field_changes_since_render.extend(state.data.keys());
                 reply.send(std::mem::take(&mut state.data))?;
             },
-            TileMsg::SetDatum(id, datum) => {
-                state.field_changes_since_render.insert(id);
-                state.datum_changes.push(DatumChange::Set(id, datum));
-            },
-            TileMsg::RemoveDatum(id, datum_type) => {
-                state.field_changes_since_render.insert(id);
-                state.datum_changes.push(DatumChange::Remove(id, datum_type));
-            },
             TileMsg::ChangeData(change) => {
                 match &change {
                     DatumChange::None => {},
