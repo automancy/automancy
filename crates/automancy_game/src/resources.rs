@@ -3,7 +3,6 @@ pub mod types;
 
 use core::cell::{Cell, RefCell};
 use std::{
-    collections::BTreeMap,
     ffi::OsStr,
     fmt::Debug,
     path::{Path, PathBuf},
@@ -23,7 +22,6 @@ use walkdir::{DirEntry, WalkDir};
 use crate::resources::{
     registry::{MutableRegistry, Registry},
     types::{
-        font::FontData,
         script::RhaiScriptData,
         translate::{MutableTranslateDef, TranslateDef},
     },
@@ -62,8 +60,6 @@ pub enum ResourceError {
     #[error("file \"{0}\" is invalid: path cannot contain '.' (dot), please rename your files")]
     PathContainsDot(PathBuf),
 
-    #[error("font file \"{0}\" is invalid: could not parse font: {1}")]
-    CouldNotParseFont(PathBuf, ttf_parser::FaceParsingError),
     #[error("font file \"{0}\" is invalid: could not get font name")]
     CouldNotGetFontName(PathBuf),
 
@@ -139,7 +135,7 @@ pub struct ResourceManager {
     pub models: ImmutableIdMap<ModelId, (gltf::Document, Vec<gltf::buffer::Data>)>,
     pub audio: HashMap<String, StaticSoundData>,
     pub shaders: HashMap<String, String>,
-    pub fonts: BTreeMap<String, Vec<FontData>>,
+    pub fonts: fontdb::Database,
 
     pub ordered_tiles: Vec<TileId>,
     pub ordered_items: Vec<ItemId>,
@@ -167,8 +163,7 @@ pub struct MutableResourceManager {
     pub(crate) models: IdMap<ModelId, (gltf::Document, Vec<gltf::buffer::Data>)>,
     pub(crate) audio: HashMap<String, StaticSoundData>,
     pub(crate) shaders: HashMap<String, String>,
-    // uses a BTreeMap so font iterations stay sorted and ordered
-    pub(crate) fonts: BTreeMap<String, Vec<FontData>>,
+    pub(crate) fonts: fontdb::Database,
 }
 
 #[cfg_attr(feature = "profile", profiling::all_functions)]

@@ -19,7 +19,7 @@ mod yakui_shorthands {
         stack,
         widgets::{
             Button, ButtonResponse, Circle, ColoredBox, ConstrainedBox, CountGrid, DynamicButtonStyle, Flexible, Image, ImageFit, Layer,
-            List, Opaque, Pad, Text, TextBox, TextBoxResponse, TextResponse, measure_text_width,
+            List, Opaque, Pad, Text, TextBox, TextBoxResponse, TextResponse, measure_text_size,
         },
     };
 }
@@ -224,15 +224,21 @@ impl AutomancyGui {
         let fonts = self.yak.dom().get_global_or_init(Fonts::default);
         static_fonts::load_static_fonts(&fonts);
 
-        let mut font_families = vec![];
-        for (font_family, font_data_list) in &resource_man.fonts {
-            for font_data in font_data_list {
-                fonts.load_font_source(cosmic_text::fontdb::Source::Binary(font_data.bytes.clone()));
-            }
-            // TODO leak at loading instead
-            font_families.push(Cow::Borrowed(font_family.clone().leak()));
+        let mut font_families = BTreeSet::new();
+        for face in resource_man.fonts.faces() {
+            fonts.load_font_source(face.source.clone());
+
+            // TODO choose based on language
+            font_families.insert(Cow::Borrowed(
+                face.families
+                    .first()
+                    .map(|(name, _lang)| name)
+                    .unwrap_or(&face.post_script_name)
+                    .clone()
+                    .leak(),
+            ));
         }
-        self.font_families = StaticList::rc(font_families);
+        self.font_families = StaticList::rc(font_families.into_iter().collect::<Vec<_>>());
 
         log::info!("Loaded built-in fonts.");
         self.using_system_font = Some(false);

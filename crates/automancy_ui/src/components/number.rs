@@ -90,7 +90,7 @@ where
             self.max_text_len.set(max_text.len());
 
             let fonts = context::dom().get_global_or_init(Fonts::default);
-            let max_width = fonts.with_inner(|fonts| {
+            let (max_width, _) = fonts.with_inner(|fonts| {
                 let mut buffer = cosmic_text::Buffer::new(&mut fonts.font_system, self.style.to_metrics(1.0));
                 buffer.set_text(
                     &max_text,
@@ -99,7 +99,7 @@ where
                     None,
                 );
 
-                measure_text_width(&mut buffer, &mut fonts.font_system, None)
+                measure_text_size(&mut buffer, &mut fonts.font_system, None)
             });
 
             self.max_text_width.set(max_width);

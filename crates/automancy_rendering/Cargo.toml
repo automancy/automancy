@@ -31,8 +31,6 @@ smallvec = { workspace = true }
 wgpu = { workspace = true }
 
 # scripting / game logic / async runtime
-async-stream = { workspace = true }
-futures-util = { workspace = true }
 ractor = { workspace = true }
 tokio = { workspace = true }
 

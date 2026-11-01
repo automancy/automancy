@@ -22,7 +22,7 @@ approx = { workspace = true }
 gltf = { workspace = true }
 ron = { workspace = true }
 serde = { workspace = true }
-ttf-parser = { workspace = true }
+fontdb = { workspace = true }
 zstd = { workspace = true }
 
 # specialized data storage types
