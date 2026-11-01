@@ -93,7 +93,7 @@ impl GameActor {
                     .map
                     .map_info
                     .data
-                    .inventory_mut_or_default(self.resource_man.registry.data_ids.player_inventory);
+                    .items_mut_or_default(self.resource_man.registry.data_ids.player_inventory);
 
                 inventory.add(item, 1);
             });
@@ -172,7 +172,7 @@ impl GameActor {
                 .map
                 .map_info
                 .data
-                .inventory_mut_or_default(self.resource_man.registry.data_ids.player_inventory);
+                .items_mut_or_default(self.resource_man.registry.data_ids.player_inventory);
 
             if inventory.get(item) > 0 {
                 inventory.take(item, 1);

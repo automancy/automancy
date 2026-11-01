@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use automancy_data::{
     game::{
         coord::{TileCoord, TileCoordBounds},
-        generic::{DataMap, Datum, DatumChange, DatumType},
+        generic::{DataMap, DatumChange},
         inventory::ItemStack,
     },
     id::{Id, TileId},
@@ -157,8 +157,6 @@ pub enum TileMsg {
     GetData(RpcReplyPort<Box<DataMap>>),
     SetData(Box<DataMap>),
     TakeData(RpcReplyPort<Box<DataMap>>),
-    SetDatum(Id, Datum),
-    RemoveDatum(Id, DatumType),
     ChangeData(DatumChange),
     FnData(Box<dyn FnOnce(&mut DataMap) + Send + Sync>),
     FnDataStatic(&'static (dyn Fn(&mut DataMap) + Send + Sync)),

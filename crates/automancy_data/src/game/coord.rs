@@ -273,7 +273,7 @@ pub type OffsetCoord = vek::Vec2<TileUnit>;
 /// A Tile coordinate, in [Axial](https://www.redblobgames.com/grids/hexagons/#coordinates-axial) coordinate system.
 #[must_use]
 #[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize_tuple, Deserialize_tuple, Pod, Zeroable)]
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize_tuple, Deserialize_tuple, Pod, Zeroable)]
 pub struct TileCoord {
     pub q: TileUnit,
     pub r: TileUnit,

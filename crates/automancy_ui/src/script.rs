@@ -54,10 +54,10 @@ fn takeable_items(ctx: &mut UiContext, buffer: &mut Inventory, buffer_id: Id, ti
 
                 ctx.game_data.add_map_datum(
                     ctx.game_state.resource_man.registry.data_ids.player_inventory,
-                    Datum::ItemStack(ItemStack {
+                    Datum::Items(Inventory::from_iter([ItemStack {
                         id,
                         amount,
-                    }),
+                    }])),
                 );
 
                 if let Some(rect) = rect {
@@ -74,7 +74,7 @@ fn takeable_items(ctx: &mut UiContext, buffer: &mut Inventory, buffer_id: Id, ti
 
     if dirty {
         tile_entity
-            .send_message(TileMsg::ChangeData(DatumChange::Set(buffer_id, Datum::Inventory(buffer.clone()))))
+            .send_message(TileMsg::ChangeData(DatumChange::Set(buffer_id, Datum::Items(buffer.clone()))))
             .unwrap();
     }
 
@@ -214,12 +214,12 @@ pub fn rhai_ui(ctx: &mut UiContext, tile_entity: ActorRef<TileMsg>, data: &mut D
                 draw_recipe_info(ctx.game_state, recipe_id, sizing::SMALL_ICON_SIZE);
             }
         },
-        &UiElement::Inventory {
+        &UiElement::Items {
             id,
             empty_text,
         } => {
             col(|| {
-                let stacks = data.inventory_mut_or_default(id);
+                let stacks = data.items_mut_or_default(id);
 
                 if !stacks.is_empty() {
                     if takeable_items(ctx, stacks, id, tile_entity.clone()) {

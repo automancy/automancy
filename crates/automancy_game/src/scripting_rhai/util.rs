@@ -38,6 +38,7 @@ fn item_ids_of_tag(resource_man: &ResourceManager, id: Id) -> IdSet<ItemId> {
 
 #[export_module]
 mod utils {
+    use automancy_data::game::generic::{DataMap, Datum};
     use rhai::Array;
 
     use crate::resources;
@@ -69,7 +70,12 @@ mod utils {
     }
 
     pub fn item_ids_of_tag(id: Id) -> Dynamic {
-        Dynamic::from(super::item_ids_of_tag(&resources::global::resource_man(), id))
+        let v = super::item_ids_of_tag(&resources::global::resource_man(), id);
+        let mut map = DataMap::new();
+        for id in v {
+            map.insert_bool(Id::from(id), true);
+        }
+        Dynamic::from(Box::new(map))
     }
 }
 

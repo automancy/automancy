@@ -19,7 +19,7 @@ fn player_inventory(ctx: &mut UiContext, closed: bool) {
     let inventory = ctx
         .game_data
         .map_data
-        .stacks(ctx.game_state.resource_man.registry.data_ids.player_inventory);
+        .items_mut_or_default(ctx.game_state.resource_man.registry.data_ids.player_inventory);
 
     Scrollable::vertical()
         .child_size(Constraints::loose(Vec2::new(f32::INFINITY, 200.0)))
@@ -161,7 +161,7 @@ fn current_research(ctx: &mut UiContext) {
             {
                 ctx.game_data.sub_map_datum(
                     ctx.game_state.resource_man.registry.data_ids.player_inventory,
-                    Datum::Inventory(Inventory::from_iter(stacks.iter().copied())),
+                    Datum::Items(Inventory::from_iter(stacks.iter().copied())),
                 );
 
                 ctx.game_data.add_map_datum(

@@ -35,6 +35,6 @@ pub enum UiElement {
     HexDirInput { id: Id },
     SelectableItems { data_id: Id, hint_id: Id, ids: IdSet<ItemId> },
     SelectableRecipes { data_id: Id, hint_id: Id, ids: IdSet<RecipeId> },
-    Inventory { id: Id, empty_text: Id },
+    Items { id: Id, empty_text: Id },
     Linkage { id: Id, coord: TileCoord, button_text: Id },
 }

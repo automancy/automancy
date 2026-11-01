@@ -7,7 +7,7 @@ use rhai::{Engine, exported_module, plugin::*};
 #[allow(non_snake_case)]
 #[export_module]
 mod ui {
-    use automancy_data::id_map::IdSet;
+    use automancy_data::game::generic::DataMap;
     use rhai::Array;
 
     use crate::script::UiElement;
@@ -59,22 +59,22 @@ mod ui {
             id,
         }
     }
-    pub fn SelectableItems(data_id: Id, hint_id: Id, ids: IdSet<ItemId>) -> UiElement {
+    pub fn SelectableItems(data_id: Id, hint_id: Id, ids: Box<DataMap>) -> UiElement {
         UiElement::SelectableItems {
             data_id,
             hint_id,
-            ids,
+            ids: ids.into_iter().map(|(key, _)| ItemId(key)).collect(),
         }
     }
-    pub fn SelectableRecipes(data_id: Id, hint_id: Id, ids: IdSet<RecipeId>) -> UiElement {
+    pub fn SelectableRecipes(data_id: Id, hint_id: Id, ids: Box<DataMap>) -> UiElement {
         UiElement::SelectableRecipes {
             data_id,
             hint_id,
-            ids,
+            ids: ids.into_iter().map(|(key, _)| RecipeId(key)).collect(),
         }
     }
-    pub fn Inventory(id: Id, empty_text: Id) -> UiElement {
-        UiElement::Inventory {
+    pub fn Items(id: Id, empty_text: Id) -> UiElement {
+        UiElement::Items {
             id,
             empty_text,
         }
