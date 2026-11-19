@@ -35,6 +35,16 @@ pub enum TileResult {
 }
 
 #[derive(Debug, Clone, Copy)]
+pub struct TileTransaction {
+    pub stack: ItemStack,
+    pub source_coord: TileCoord,
+    pub source_id: TileId,
+    pub root_coord: TileCoord,
+    pub root_id: TileId,
+    pub hidden: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
 pub enum TileTransactionResult {
     PassOn {
         coord: TileCoord,
@@ -58,7 +68,7 @@ pub enum TileTransactionResult {
     },
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum OnFailAction {
     None,
     RemoveTile,
@@ -66,7 +76,7 @@ pub enum OnFailAction {
     RemoveData(Id),
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum PlaceTileResponse {
     Placed,
     Removed,
@@ -128,7 +138,12 @@ pub enum GameMsg {
     },
 }
 
+#[derive(Default)]
 pub enum TileMsg {
+    /// Dummy default value to allow for things like std::mem::take
+    #[default]
+    None,
+
     Tick {
         tick_count: TickUnit,
     },
@@ -136,14 +151,7 @@ pub enum TileMsg {
     StartRendering(RpcReplyPort<Vec<RenderCommand>>),
     StopRendering(RpcReplyPort<Vec<RenderCommand>>),
 
-    Transaction {
-        stack: ItemStack,
-        source_coord: TileCoord,
-        source_id: TileId,
-        root_coord: TileCoord,
-        root_id: TileId,
-        hidden: bool,
-    },
+    Transaction(TileTransaction),
     TransactionResult {
         result: ItemStack,
     },

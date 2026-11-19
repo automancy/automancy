@@ -16,7 +16,7 @@ use rhai::{Dynamic, Scope};
 use thiserror::Error;
 
 use crate::{
-    actor::message::{GameMsg, TileMsg, TileResult, TileTransactionResult},
+    actor::message::{GameMsg, TileMsg, TileResult, TileTransaction, TileTransactionResult},
     resources::{ResourceManager, types::script::RhaiScriptData},
     script::RenderCommand,
     scripting_rhai,
@@ -45,12 +45,12 @@ pub struct TileActorState {
 #[cfg_attr(feature = "profile", profiling::all_functions)]
 impl TileActor {
     #[inline]
-    fn send_to_tile(&self, state: &mut TileActorState, coord: TileCoord, msg: TileMsg) {
+    fn send_to_tile(&self, data: &mut DataMap, field_changes_since_render: &mut IdSet<Id>, coord: TileCoord, msg: TileMsg) {
         match self.game.send_message(GameMsg::SendTileMsg(coord, msg)) {
             Ok(_) => {},
             Err(_) => {
-                state.field_changes_since_render.extend(state.data.keys());
-                *state.data = Default::default();
+                field_changes_since_render.extend(data.keys());
+                *data = Default::default();
             },
         }
     }
@@ -66,16 +66,17 @@ impl TileActor {
                 root_id,
             } => {
                 self.send_to_tile(
-                    state,
+                    &mut state.data,
+                    &mut state.field_changes_since_render,
                     coord,
-                    TileMsg::Transaction {
+                    TileMsg::Transaction(TileTransaction {
                         stack,
                         source_id: self.id,
                         source_coord: self.coord,
                         root_id,
                         root_coord,
                         hidden: false,
-                    },
+                    }),
                 );
 
                 None
@@ -89,16 +90,17 @@ impl TileActor {
                 root_id,
             } => {
                 self.send_to_tile(
-                    state,
+                    &mut state.data,
+                    &mut state.field_changes_since_render,
                     coord,
-                    TileMsg::Transaction {
+                    TileMsg::Transaction(TileTransaction {
                         stack,
                         source_id,
                         source_coord,
                         root_id,
                         root_coord,
                         hidden: false,
-                    },
+                    }),
                 );
 
                 None
@@ -109,7 +111,8 @@ impl TileActor {
                 root_coord,
             } => {
                 self.send_to_tile(
-                    state,
+                    &mut state.data,
+                    &mut state.field_changes_since_render,
                     root_coord,
                     TileMsg::TransactionResult {
                         result: consumed,
@@ -132,16 +135,17 @@ impl TileActor {
             } => {
                 for stack in stacks {
                     self.send_to_tile(
-                        state,
+                        &mut state.data,
+                        &mut state.field_changes_since_render,
                         coord,
-                        TileMsg::Transaction {
+                        TileMsg::Transaction(TileTransaction {
                             stack,
                             source_coord,
                             source_id,
                             root_coord: source_coord,
                             root_id: source_id,
                             hidden: false,
-                        },
+                        }),
                     );
                 }
             },
@@ -152,7 +156,8 @@ impl TileActor {
                 on_fail_action,
             } => {
                 self.send_to_tile(
-                    state,
+                    &mut state.data,
+                    &mut state.field_changes_since_render,
                     coord,
                     TileMsg::ExtractRequest {
                         requested_from_id,
@@ -359,8 +364,8 @@ impl Actor for TileActor {
 
         let mut state = TileActorState::default();
 
-        if let Some(data) = self.resource_man.rhai_scripts.get(&tile_def.script) {
-            state.rhai = Some(data.clone());
+        if let Some(script) = self.resource_man.rhai_scripts.get(&tile_def.script) {
+            state.rhai = Some(script.clone());
         }
 
         Ok(state)
@@ -368,6 +373,9 @@ impl Actor for TileActor {
 
     async fn handle(&self, _myself: ActorRef<Self::Msg>, message: Self::Msg, state: &mut Self::State) -> Result<(), ActorProcessingErr> {
         match message {
+            TileMsg::None => {
+                log::warn!("TileMsg::None should not be used!");
+            },
             TileMsg::StartRendering(reply) => {
                 state.rendering = true;
                 let commands = self.collect_render_commands(state, true, false).unwrap_or_default();
@@ -406,24 +414,22 @@ impl Actor for TileActor {
                     let commands = self.collect_render_commands(state, false, false).unwrap_or_default();
 
                     if !commands.is_empty() {
-                        self.game
-                            .cast(GameMsg::PushRenderCommands {
-                                coord: self.coord,
-                                commands,
-                            })
-                            .unwrap();
+                        self.game.cast(GameMsg::PushRenderCommands {
+                            coord: self.coord,
+                            commands,
+                        })?;
                     }
                 }
             },
 
-            TileMsg::Transaction {
+            TileMsg::Transaction(TileTransaction {
                 stack,
                 source_coord,
                 source_id,
                 root_coord,
                 root_id,
                 hidden,
-            } => {
+            }) => {
                 if let Some(record) = self.transaction(state, stack, source_coord, source_id, root_coord, root_id)
                     && !hidden
                 {
