@@ -167,7 +167,7 @@ macro_rules! define_datum {
                 $( $into_raw_others_pat:pat => $into_raw_others_expr: expr, )*
                 $(,)?
             };
-        }
+        };
     ) => {
         paste::paste! {
             /// Represents a generic Data type.
