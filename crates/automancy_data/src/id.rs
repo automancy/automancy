@@ -189,7 +189,7 @@ macro_rules! impl_id_newtype {
             impl $ty {
                 /// Returns the internal integer Id as an `u32`.
                 #[inline]
-                pub const fn into_inner(self) -> u32 {
+                pub const fn into_inner(self) -> InnerId {
                     self.0.into_inner()
                 }
 
@@ -262,11 +262,55 @@ macro_rules! impl_id_newtype {
     };
 }
 
+#[repr(transparent)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Pod, Zeroable)]
+#[serde(transparent)]
+pub struct InnerId(Option<NonZeroU32>);
+
+const impl From<u32> for InnerId {
+    fn from(value: u32) -> Self {
+        Self(NonZeroU32::new(value))
+    }
+}
+
+const impl From<NonZeroU32> for InnerId {
+    fn from(value: NonZeroU32) -> Self {
+        Self(Some(value))
+    }
+}
+
+const impl From<InnerId> for u32 {
+    fn from(value: InnerId) -> Self {
+        match value.0 {
+            Some(v) => v.get(),
+            None => 0,
+        }
+    }
+}
+
 #[must_use]
 #[repr(transparent)]
 #[derive(Clone, Copy, Eq, PartialOrd, Ord, Serialize, Deserialize, Pod, Zeroable)]
 #[serde(transparent)]
-pub struct Id(Option<NonZeroU32>);
+pub struct Id(InnerId);
+
+const impl From<u32> for Id {
+    fn from(value: u32) -> Self {
+        Self(InnerId::from(value))
+    }
+}
+
+const impl From<NonZeroU32> for Id {
+    fn from(value: NonZeroU32) -> Self {
+        Self(InnerId::from(value))
+    }
+}
+
+const impl From<InnerId> for Id {
+    fn from(value: InnerId) -> Self {
+        Self(value)
+    }
+}
 
 /// Helper trait for blanket impl for [`Id`] + all [`Id`] new-types.
 ///
@@ -281,7 +325,7 @@ pub trait IdNewType: IdLike {}
 
 impl Hash for Id {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        state.write_u32(self.into_inner());
+        state.write_u32(self.into_inner().into());
     }
 }
 
@@ -300,19 +344,16 @@ impl Default for Id {
 }
 
 impl Id {
-    /// Returns the internal integer Id as an `u32`.
+    /// Returns the internal integer Id as an [`InnerId`].
     #[inline]
-    pub const fn into_inner(self) -> u32 {
-        match self.0 {
-            Some(v) => v.get(),
-            None => 0,
-        }
+    pub const fn into_inner(self) -> InnerId {
+        self.0
     }
 
     /// Represents an invalid Id.
     #[inline]
     pub const fn invalid() -> Self {
-        Self(Some(NonZeroU32::MAX))
+        Self::from(u32::MAX)
     }
 
     /// Static Id named [`none`](deserialize::NONE), with no namespace.
@@ -320,7 +361,7 @@ impl Id {
     /// Any Ids with the same *name* will be converted to this, regardless of namespace.
     #[inline]
     pub const fn none() -> Self {
-        Self(None)
+        Self::from(0)
     }
 
     /// Static Id named [`any`](deserialize::ANY), with no namespace.
@@ -328,7 +369,7 @@ impl Id {
     /// Any Ids with the same *name* will be converted to this, regardless of namespace.
     #[inline]
     pub const fn any() -> Self {
-        Self(NonZeroU32::new(1))
+        Self::from(1)
     }
 
     #[inline]
@@ -352,19 +393,13 @@ impl Id {
     }
 }
 
-const impl From<u32> for Id {
-    fn from(value: u32) -> Self {
-        Self(NonZeroU32::new(value))
-    }
-}
-
 impl InternSymbol for Id {
     fn try_from_usize(index: usize) -> Option<Self> {
         Some(Self::from(index as u32))
     }
 
     fn to_usize(self) -> usize {
-        self.into_inner() as usize
+        u32::from(self.into_inner()) as usize
     }
 }
 
@@ -376,7 +411,7 @@ macro_rules! impl_id {
 
         impl Debug for $ty {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                f.write_fmt(format_args!(concat!(stringify!($ty), "({})"), self.into_inner()))
+                f.write_fmt(format_args!(concat!(stringify!($ty), "({})"), u32::from(self.into_inner())))
             }
         }
 
