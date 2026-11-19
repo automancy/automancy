@@ -19,6 +19,7 @@ pub mod input;
 pub mod persistent;
 pub mod resources;
 pub mod script;
+pub mod scripting_lua;
 pub mod scripting_rhai;
 pub mod state;
 

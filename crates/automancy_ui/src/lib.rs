@@ -89,8 +89,9 @@ mod prelude {
     };
     #[allow(unused)]
     pub use yakui::{
-        Alignment, Border, BorderRadius, Color, Constraints, CrossAxisAlignment, Dim, Dim2, Direction, FlexFit, Flow, MainAxisAlignItems,
-        MainAxisAlignment, MainAxisSize, Pivot, Rect, Response, URect, UVec2, Vec2, Vec4, WidgetId, Yakui, context, cosmic_text,
+        Alignment, Border, BorderRadius, Color, Constraints, CrossAxisAlignment, Dim, Dim2, Direction, FlexFit, Flow, IVec2,
+        MainAxisAlignItems, MainAxisAlignment, MainAxisSize, Pivot, Rect, Response, URect, UVec2, Vec2, Vec4, WidgetId, Yakui, context,
+        cosmic_text,
         event::*,
         font::*,
         input::*,

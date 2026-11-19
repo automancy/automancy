@@ -9,5 +9,6 @@ pub mod async_util;
 pub mod game;
 pub mod id;
 pub mod id_map;
+pub mod lua;
 pub mod math;
 pub mod rendering;

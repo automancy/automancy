@@ -207,7 +207,7 @@ pub fn radio<T: Eq>(current: &mut T, this: T, children: impl FnOnce()) -> Respon
         row_cross_center(|| {
             Pad::horizontal(sizing::PADDING_MEDIUM).show(|| {
                 Circle::new()
-                    .min_radius(12.0f32)
+                    .min_radius(12.0)
                     .color(if hovered.get() {
                         colors::BACKGROUND_3.yak()
                     } else {
@@ -223,7 +223,7 @@ pub fn radio<T: Eq>(current: &mut T, this: T, children: impl FnOnce()) -> Respon
                                 } else {
                                     colors::BACKGROUND_2.yak()
                                 },
-                                6.0f32,
+                                6.0,
                             );
                         });
                     });

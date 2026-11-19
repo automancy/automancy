@@ -549,3 +549,90 @@ pub mod parse {
         })
     }
 }
+
+pub mod lua {
+    use super::*;
+    use crate::{
+        fake_static, gen_object_doc,
+        lua::doc::{LuaAliasDoc, LuaObjectDoc, LuaTypeName},
+    };
+
+    macro_rules! impl_id {
+        ($($ty:ident,)*) => {
+            const impl LuaTypeName for InnerId {
+                fn lua_name() -> &'static str {
+                    "AnyId"
+                }
+            }
+
+            impl LuaAliasDoc for InnerId {
+                fn lua_alias_doc() -> &'static str {
+                    fake_static!({
+                        let mut newtypes = vec![];
+                        $(
+                            newtypes.push($ty::lua_name());
+                        )*
+
+                        format!("---@alias AnyId {}", newtypes.join(" | "))
+                    })
+                }
+            }
+
+            impl mlua::IntoLua for InnerId {
+                fn into_lua(self, _lua: &mlua::Lua) -> mlua::Result<mlua::Value> {
+                    Ok(mlua::Value::Integer(
+                        self.0.map(NonZeroU32::get).unwrap_or_default() as mlua::Integer
+                    ))
+                }
+            }
+
+            impl mlua::FromLua for InnerId {
+                fn from_lua(value: mlua::Value, _lua: &mlua::Lua) -> mlua::Result<Self> {
+                    let v = value.as_integer().ok_or(mlua::Error::FromLuaConversionError {
+                        from: value.type_name(),
+                        to: Self::lua_name().to_string(),
+                        message: None,
+                    })?;
+
+                    Ok(InnerId(NonZeroU32::new(v as u32)))
+                }
+            }
+
+            $(
+                const impl LuaTypeName for $ty {
+                    fn lua_name() -> &'static str {
+                        stringify!($ty)
+                    }
+                }
+
+                impl LuaObjectDoc for $ty {
+                    fn lua_object_doc() -> &'static str {
+                        gen_object_doc!()
+                    }
+                }
+
+                impl mlua::IntoLua for $ty {
+                    fn into_lua(self, _lua: &mlua::Lua) -> mlua::Result<mlua::Value> {
+                        Ok(mlua::Value::Integer(u32::from(self.into_inner()) as mlua::Integer))
+                    }
+                }
+
+                impl mlua::FromLua for $ty {
+                    fn from_lua(value: mlua::Value, _lua: &mlua::Lua) -> mlua::Result<Self> {
+                        let v = value.as_integer().ok_or(mlua::Error::FromLuaConversionError {
+                            from: value.type_name(),
+                            to: Self::lua_name().to_string(),
+                            message: None,
+                        })?;
+
+                        Ok(Self::from(Id::from(v as u32)))
+                    }
+                }
+            )*
+        };
+    }
+
+    all_ids! {
+        impl_id!(..);
+    }
+}

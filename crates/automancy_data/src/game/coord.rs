@@ -869,7 +869,7 @@ impl OffsetRectTileBounds {
 }
 
 #[must_use]
-#[derive(Debug, Default, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, Eq, PartialEq, Serialize, Deserialize, mlua::UserData, mlua::FromLua)]
 pub enum TileCoordBounds {
     #[default]
     Empty,
@@ -1145,5 +1145,176 @@ impl IntoIterator for TileCoordBounds {
 
     fn into_iter(self) -> Self::IntoIter {
         ExactSizeCoordIterator::new(self)
+    }
+}
+
+pub mod lua {
+    use const_format::formatcp;
+
+    use super::*;
+    use crate::{
+        gen_field_doc, gen_object_doc, gen_operator_doc,
+        lua::doc::{LuaField, LuaFieldDoc, LuaObjectDoc, LuaOperator, LuaOperatorDoc, LuaTypeName, MetaMethodExt},
+    };
+
+    pub mod fields {
+        pub const Q: &str = "q";
+        pub const R: &str = "r";
+    }
+
+    const impl LuaTypeName for TileCoord {
+        fn lua_name() -> &'static str {
+            "TileCoord"
+        }
+    }
+
+    impl LuaFieldDoc<2> for TileCoord {
+        fn fields() -> [LuaField; 2] {
+            [
+                LuaField {
+                    name: fields::Q,
+                    ty: TileUnit::lua_name(),
+                    optional: false,
+                },
+                LuaField {
+                    name: fields::R,
+                    ty: TileUnit::lua_name(),
+                    optional: false,
+                },
+            ]
+        }
+
+        fn lua_field_doc() -> &'static str {
+            gen_field_doc!()
+        }
+    }
+
+    impl LuaOperatorDoc<1, 5> for TileCoord {
+        fn operators() -> [LuaOperator<1>; 5] {
+            [
+                LuaOperator {
+                    name: mlua::MetaMethod::Add.doc_name(),
+                    args: [TileCoord::lua_name()],
+                    return_ty: TileCoord::lua_name(),
+                },
+                LuaOperator {
+                    name: mlua::MetaMethod::Sub.doc_name(),
+                    args: [TileCoord::lua_name()],
+                    return_ty: TileCoord::lua_name(),
+                },
+                LuaOperator {
+                    name: mlua::MetaMethod::Mul.doc_name(),
+                    args: [TileUnit::lua_name()],
+                    return_ty: TileCoord::lua_name(),
+                },
+                LuaOperator {
+                    name: mlua::MetaMethod::Div.doc_name(),
+                    args: [TileUnit::lua_name()],
+                    return_ty: TileCoord::lua_name(),
+                },
+                LuaOperator {
+                    name: mlua::MetaMethod::Unm.doc_name(),
+                    args: [""],
+                    return_ty: TileCoord::lua_name(),
+                },
+            ]
+        }
+
+        fn lua_operator_doc() -> &'static str {
+            gen_operator_doc!()
+        }
+    }
+
+    impl LuaObjectDoc for TileCoord {
+        fn lua_object_doc() -> &'static str {
+            gen_object_doc!(fields, operators)
+        }
+    }
+
+    const impl LuaTypeName for Vec<TileCoord> {
+        fn lua_name() -> &'static str {
+            formatcp!("{}[]", TileCoord::lua_name())
+        }
+    }
+
+    const METATABLE_TILE_COORD: &str = formatcp!("__metatable_{}", TileCoord::lua_name());
+
+    impl mlua::IntoLua for TileCoord {
+        fn into_lua(self, lua: &mlua::Lua) -> mlua::Result<mlua::Value> {
+            use fields::*;
+
+            let metatable = match lua.globals().raw_get::<mlua::Table>(METATABLE_TILE_COORD) {
+                Ok(v) => v,
+                _ => {
+                    let table = lua.create_table()?;
+
+                    table.raw_set(
+                        mlua::MetaMethod::Eq.name(),
+                        lua.create_function(|_lua, (a, b): (TileCoord, TileCoord)| Ok(a == b))?,
+                    )?;
+                    table.raw_set(
+                        mlua::MetaMethod::Add.name(),
+                        lua.create_function(|_lua, (a, b): (TileCoord, TileCoord)| Ok(a + b))?,
+                    )?;
+                    table.raw_set(
+                        mlua::MetaMethod::Sub.name(),
+                        lua.create_function(|_lua, (a, b): (TileCoord, TileCoord)| Ok(a - b))?,
+                    )?;
+                    table.raw_set(
+                        mlua::MetaMethod::Mul.name(),
+                        lua.create_function(|_lua, (a, b): (TileCoord, TileUnit)| Ok(a * b))?,
+                    )?;
+                    table.raw_set(
+                        mlua::MetaMethod::Div.name(),
+                        lua.create_function(|_lua, (a, b): (TileCoord, TileUnit)| Ok(a / b))?,
+                    )?;
+                    table.raw_set(mlua::MetaMethod::Unm.name(), lua.create_function(|_lua, v: TileCoord| Ok(-v))?)?;
+                    table.raw_set(
+                        mlua::MetaMethod::ToString.name(),
+                        lua.create_function(|_lua, v: TileCoord| Ok(v.to_minimal_string()))?,
+                    )?;
+
+                    lua.globals().raw_set(METATABLE_TILE_COORD, table.clone())?;
+
+                    table
+                },
+            };
+
+            let table = lua.create_table_from([(Q, mlua::Value::Integer(self.q as _)), (R, mlua::Value::Integer(self.r as _))])?;
+            table.set_metatable(Some(metatable))?;
+
+            Ok(mlua::Value::Table(table))
+        }
+    }
+
+    impl mlua::FromLua for TileCoord {
+        fn from_lua(value: mlua::Value, _lua: &mlua::Lua) -> mlua::Result<Self> {
+            use fields::*;
+
+            let Some(v) = value.as_table() else {
+                return Err(mlua::Error::FromLuaConversionError {
+                    from: value.type_name(),
+                    to: Self::lua_name().to_string(),
+                    message: None,
+                });
+            };
+
+            Ok(TileCoord {
+                q: v.raw_get::<TileUnit>(Q)?,
+                r: v.raw_get::<TileUnit>(R)?,
+            })
+        }
+    }
+
+    const impl LuaTypeName for TileCoordBounds {
+        fn lua_name() -> &'static str {
+            "TileCoordBounds"
+        }
+    }
+
+    impl LuaObjectDoc for TileCoordBounds {
+        fn lua_object_doc() -> &'static str {
+            gen_object_doc!()
+        }
     }
 }

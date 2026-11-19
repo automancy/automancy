@@ -29,3 +29,13 @@ uvec
 conv
 aabr
 aabb
+metatable
+newindex
+tostring
+todebugstring
+modname
+dofile
+loadstring
+setfenv
+getfenv
+elems

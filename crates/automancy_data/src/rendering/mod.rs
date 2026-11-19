@@ -80,3 +80,13 @@ pub mod deserialize {
         }
     }
 }
+
+pub mod lua {
+    use crate::{lua::doc::LuaTypeName, rendering::GenericModel};
+
+    impl LuaTypeName for GenericModel {
+        fn lua_name() -> &'static str {
+            "GenericModel"
+        }
+    }
+}

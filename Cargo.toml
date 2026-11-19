@@ -77,6 +77,13 @@ yakui-wgpu = { git = "https://github.com/automancy/yakui.git" }
 yakui-winit = { git = "https://github.com/automancy/yakui.git" }
 
 # scripting / game logic / async runtime
+mlua = { version = "=0.12.2", features = [
+    "luajit",
+    "macros",
+    "async",
+    "send",
+    "error-send",
+] }
 ractor = "0.16.5"
 rayon = "1.12.0"
 rhai = { version = "1.27.0", features = [

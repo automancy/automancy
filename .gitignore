@@ -6,6 +6,7 @@
 
 /map
 /rhai
+/lua
 /result
 
 /options.ron

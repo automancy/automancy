@@ -333,3 +333,105 @@ pub const TEXT_BG_SELECTED: ComplexRgba = ComplexRgba::from_str("#c0f2ff");
 pub const INPUT: ComplexRgba = ComplexRgba::from_str("#61d0ff");
 pub const OUTPUT: ComplexRgba = ComplexRgba::from_str("#ff9f50");
 pub const IMPORTANT: ComplexRgba = ComplexRgba::from_str("#ff2e2e");
+
+pub mod lua {
+    use const_format::formatcp;
+
+    use super::{ColorExt, Rgba, SRgbaU8};
+    use crate::{
+        gen_field_doc, gen_object_doc,
+        lua::doc::{LuaField, LuaFieldDoc, LuaObjectDoc, LuaTypeName},
+    };
+
+    pub mod fields {
+        pub const R: &str = "r";
+        pub const G: &str = "g";
+        pub const B: &str = "b";
+        pub const A: &str = "a";
+    }
+
+    const impl LuaTypeName for Rgba {
+        fn lua_name() -> &'static str {
+            "Rgba"
+        }
+    }
+
+    impl LuaFieldDoc<4> for Rgba {
+        fn fields() -> [LuaField; 4] {
+            [
+                LuaField {
+                    name: fields::R,
+                    ty: u8::lua_name(),
+                    optional: false,
+                },
+                LuaField {
+                    name: fields::G,
+                    ty: u8::lua_name(),
+                    optional: false,
+                },
+                LuaField {
+                    name: fields::B,
+                    ty: u8::lua_name(),
+                    optional: false,
+                },
+                LuaField {
+                    name: fields::A,
+                    ty: u8::lua_name(),
+                    optional: false,
+                },
+            ]
+        }
+
+        fn lua_field_doc() -> &'static str {
+            gen_field_doc!()
+        }
+    }
+
+    impl LuaObjectDoc for Rgba {
+        fn lua_object_doc() -> &'static str {
+            gen_object_doc!(fields)
+        }
+    }
+
+    const impl LuaTypeName for Vec<Rgba> {
+        fn lua_name() -> &'static str {
+            formatcp!("{}[]", Rgba::lua_name())
+        }
+    }
+
+    impl mlua::IntoLua for Rgba {
+        fn into_lua(self, lua: &mlua::Lua) -> mlua::Result<mlua::Value> {
+            use fields::*;
+
+            let rgba = self.to_srgb_u8();
+
+            Ok(mlua::Value::Table(lua.create_table_from([
+                (R, rgba.r),
+                (G, rgba.g),
+                (B, rgba.b),
+                (A, rgba.a),
+            ])?))
+        }
+    }
+
+    impl mlua::FromLua for Rgba {
+        fn from_lua(value: mlua::Value, _lua: &mlua::Lua) -> mlua::Result<Self> {
+            use fields::*;
+
+            let Some(v) = value.as_table() else {
+                return Err(mlua::Error::FromLuaConversionError {
+                    from: value.type_name(),
+                    to: Self::lua_name().to_string(),
+                    message: None,
+                });
+            };
+
+            Ok(Rgba::from_srgb_u8(SRgbaU8 {
+                r: v.raw_get(R)?,
+                g: v.raw_get(G)?,
+                b: v.raw_get(B)?,
+                a: v.raw_get(A)?,
+            }))
+        }
+    }
+}

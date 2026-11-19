@@ -5,7 +5,7 @@ use automancy_data::{
     math::Matrix4,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, mlua::UserData)]
 pub enum RenderCommand {
     Track {
         render_id: RenderId,
@@ -22,7 +22,7 @@ pub enum RenderCommand {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, mlua::UserData)]
 pub enum UiElement {
     Row { e: Vec<UiElement> },
     CenterRow { e: Vec<UiElement> },

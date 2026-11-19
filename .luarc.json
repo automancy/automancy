@@ -1,0 +1,26 @@
+{
+    "$schema": "https://raw.githubusercontent.com/LuaLS/vscode-lua/master/setting/schema.json",
+    "workspace.library": ["${workspaceFolder}/lua"],
+    "workspace.ignoreSubmodules": false,
+    "runtime.version": "LuaJIT",
+    "runtime.path": [],
+    "runtime.plugin": "${workspaceFolder}/plugin.lua",
+    "runtime.builtin": {
+        "coroutine": "disable",
+        "debug": "disable",
+        "ffi": "disable",
+        "io": "disable",
+        "jit": "disable",
+        "os": "disable"
+    },
+    "completion.callSnippet": "Both",
+    "diagnostics.neededFileStatus": {
+        "no-unknown": "Any"
+    },
+    "hint.enable": true,
+    "hint.arrayIndex": "Enable",
+    "hint.setType": true,
+    "hover.expandAlias": false,
+    "type.checkTableShape": true,
+    "type.inferTableSize": 30
+}

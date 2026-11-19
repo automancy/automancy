@@ -168,6 +168,11 @@ macro_rules! define_datum {
                 $(,)?
             };
         };
+
+        into_lua($into_lua_self:ident, $into_lua_lua:ident) {
+            $( $into_lua_pat:pat => $into_lua_expr: expr ),*
+            $(,)?
+        };
     ) => {
         paste::paste! {
             /// Represents a generic Data type.
@@ -345,6 +350,165 @@ macro_rules! define_datum {
                 }
             }
         }
+
+        #[allow(non_upper_case_globals)]
+        pub mod lua {
+            use super::*;
+            use crate::{
+                gen_field_doc, gen_object_doc,
+                lua::doc::{LuaField, LuaFieldDoc, LuaObjectDoc, LuaTypeName},
+            };
+
+            pub mod fields {
+                pub const ID: &str = "id";
+                pub const COORD_TO_ID: &str = "coord_to_id";
+
+                pub const COORD: &str = "coord";
+                pub const COORD_BOUNDS: &str = "coord_bounds";
+
+                pub const ITEMS: &str = "items";
+
+                pub const COLOR: &str = "color";
+                pub const INT: &str = "int";
+                pub const FLOAT: &str = "float";
+                pub const BOOL: &str = "bool";
+
+                pub const DATA: &str = "data";
+            }
+
+            const impl LuaTypeName for DataMap {
+                fn lua_name() -> &'static str {
+                    "DataMap"
+                }
+            }
+
+            const impl LuaTypeName for Box<DataMap> {
+                fn lua_name() -> &'static str {
+                    "DataMap"
+                }
+            }
+
+            impl LuaFieldDoc<10> for DataMap {
+                fn fields() -> [LuaField; 10] {
+                    [
+                        LuaField {
+                            name: stringify!(id),
+                            ty: IdMap::<Id, Id>::lua_name(),
+                            optional: false,
+                        },
+                        LuaField {
+                            name: stringify!(coord_to_id),
+                            ty: IdMap::<Id, IdCoordMap<Id>>::lua_name(),
+                            optional: false,
+                        },
+                        $(LuaField {
+                            name: stringify!($field_name),
+                            ty: IdMap::<Id, $type>::lua_name(),
+                            optional: false,
+                        },)*
+                    ]
+                }
+
+                fn lua_field_doc() -> &'static str {
+                    gen_field_doc!()
+                }
+            }
+
+            impl LuaObjectDoc for DataMap {
+                fn lua_object_doc() -> &'static str {
+                    gen_object_doc!(fields)
+                }
+            }
+
+            impl mlua::IntoLua for Datum {
+                fn into_lua($into_lua_self, $into_lua_lua: &mlua::Lua) -> mlua::Result<mlua::Value> {
+                    paste::paste!{
+                        match $into_lua_self {
+                            $(
+                                Datum::$id_name(v) => {
+                                    v.into_lua($into_lua_lua)
+                                },
+                                Datum::[<MapCoord $id_name>](v) => {
+                                    Ok(mlua::Value::Table($into_lua_lua.create_table_from(v.into_iter())?))
+                                },
+                            )*
+
+
+                            $(
+                                $into_lua_pat => $into_lua_expr,
+                            )*
+                        }
+                    }
+                }
+            }
+
+            impl mlua::IntoLua for DataMap {
+                fn into_lua(self, lua: &mlua::Lua) -> mlua::Result<mlua::Value> {
+                    use fields::*;
+
+                    Ok(mlua::Value::Table(lua.create_table_from([
+                        (ID, lua.create_table_from(self.id)?),
+                        (COORD_TO_ID, lua.create_table_from(self.coord_to_id)?),
+
+                        (COORD, lua.create_table_from(self.coord)?),
+                        (COORD_BOUNDS, lua.create_table_from(self.coord_bounds)?),
+
+                        (ITEMS, lua.create_table_from(self.items)?),
+
+                        (COLOR, lua.create_table_from(self.color)?),
+                        (INT, lua.create_table_from(self.int)?),
+                        (FLOAT, lua.create_table_from(self.float)?),
+                        (BOOL, lua.create_table_from(self.bool)?),
+
+                        (DATA, lua.create_table_from(self.data)?),
+                    ])?))
+                }
+            }
+
+            impl mlua::IntoLua for Box<DataMap> {
+                fn into_lua(self, lua: &mlua::Lua) -> mlua::Result<mlua::Value> {
+                    (*self).into_lua(lua)
+                }
+            }
+
+            impl mlua::FromLua for DataMap {
+                fn from_lua(value: mlua::Value, _lua: &mlua::Lua) -> mlua::Result<Self> {
+                    use fields::*;
+
+                    let Some(table) = value.as_table() else {
+                        return Err(mlua::Error::FromLuaConversionError {
+                            from: value.type_name(),
+                            to: Self::lua_name().to_string(),
+                            message: None,
+                        });
+                    };
+
+                    Ok(Self {
+                        id: table.raw_get::<mlua::Table>(ID)?.pairs().flatten().collect(),
+                        coord_to_id: table.raw_get::<mlua::Table>(COORD_TO_ID)?.pairs().flatten().collect(),
+
+                        coord: table.raw_get::<mlua::Table>(COORD)?.pairs().flatten().collect(),
+                        coord_bounds: table.raw_get::<mlua::Table>(COORD_BOUNDS)?.pairs().flatten().collect(),
+
+                        items: table.raw_get::<mlua::Table>(ITEMS)?.pairs().flatten().collect(),
+
+                        color: table.raw_get::<mlua::Table>(COLOR)?.pairs().flatten().collect(),
+                        int: table.raw_get::<mlua::Table>(INT)?.pairs().flatten().collect(),
+                        float: table.raw_get::<mlua::Table>(FLOAT)?.pairs().flatten().collect(),
+                        bool: table.raw_get::<mlua::Table>(BOOL)?.pairs().flatten().collect(),
+
+                        data: table.raw_get::<mlua::Table>(DATA)?.pairs().flatten().collect(),
+                    })
+                }
+            }
+
+
+            impl mlua::FromLua for Box<DataMap> {
+                fn from_lua(value: mlua::Value, lua: &mlua::Lua) -> mlua::Result<Self> {
+                    Ok(Box::new(DataMap::from_lua(value, lua)?))
+                }
+            }
+        }
     }
 }
 
@@ -450,6 +614,38 @@ define_datum! {
 
             Datum::Data(v) => DatumRaw::Data(v.into_raw(id_map, interner)),
         };
+    };
+
+    into_lua(self, lua) {
+        Datum::TileCoord(v) => {
+            v.into_lua(lua)
+        },
+        Datum::TileCoordBounds(v) => {
+            v.into_lua(lua)
+        },
+
+        Datum::Items(v) => {
+            v.into_lua(lua)
+        },
+
+        Datum::Color(v) => {
+            use colors::ColorExt;
+
+            Ok(mlua::Value::Integer(v.to_packed() as mlua::Integer))
+        },
+        Datum::Int(v) => {
+            Ok(mlua::Value::Integer(v as _))
+        },
+        Datum::Float(v) => {
+            Ok(mlua::Value::Number(v as _))
+        },
+        Datum::Bool(v) => {
+            Ok(mlua::Value::Boolean(v))
+        },
+
+        Datum::Data(v) => {
+            v.into_lua(lua)
+        },
     };
 }
 

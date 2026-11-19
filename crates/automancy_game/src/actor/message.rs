@@ -138,7 +138,7 @@ pub enum GameMsg {
     },
 }
 
-#[derive(Default)]
+#[derive(Default, mlua::UserData)]
 pub enum TileMsg {
     /// Dummy default value to allow for things like std::mem::take
     #[default]
@@ -168,4 +168,105 @@ pub enum TileMsg {
     ChangeData(DatumChange),
     FnData(Box<dyn FnOnce(&mut DataMap) + Send + Sync>),
     FnDataStatic(&'static (dyn Fn(&mut DataMap) + Send + Sync)),
+}
+
+pub mod lua {
+    use automancy_data::{
+        game::{coord::TileCoord, inventory::ItemStack},
+        gen_field_doc, gen_object_doc,
+        id::TileId,
+        lua::doc::{LuaField, LuaFieldDoc, LuaObjectDoc, LuaTypeName},
+    };
+    use const_format::formatcp;
+
+    use crate::actor::message::{TileMsg, TileTransaction};
+
+    pub mod fields {
+        pub const STACK: &str = "stack";
+        pub const SOURCE_COORD: &str = "source_coord";
+        pub const SOURCE_ID: &str = "source_id";
+        pub const ROOT_COORD: &str = "root_coord";
+        pub const ROOT_ID: &str = "root_id";
+    }
+
+    const impl LuaTypeName for TileMsg {
+        fn lua_name() -> &'static str {
+            "TileMsg"
+        }
+    }
+
+    impl LuaObjectDoc for TileMsg {
+        fn lua_object_doc() -> &'static str {
+            gen_object_doc!()
+        }
+    }
+
+    const impl LuaTypeName for TileTransaction {
+        fn lua_name() -> &'static str {
+            formatcp!("{}_Transaction", TileMsg::lua_name())
+        }
+    }
+
+    impl LuaFieldDoc<5> for TileTransaction {
+        fn fields() -> [LuaField; 5] {
+            [
+                LuaField {
+                    name: fields::STACK,
+                    ty: ItemStack::lua_name(),
+                    optional: false,
+                },
+                LuaField {
+                    name: fields::SOURCE_COORD,
+                    ty: TileCoord::lua_name(),
+                    optional: false,
+                },
+                LuaField {
+                    name: fields::SOURCE_ID,
+                    ty: TileId::lua_name(),
+                    optional: false,
+                },
+                LuaField {
+                    name: fields::ROOT_COORD,
+                    ty: TileCoord::lua_name(),
+                    optional: false,
+                },
+                LuaField {
+                    name: fields::ROOT_ID,
+                    ty: TileId::lua_name(),
+                    optional: false,
+                },
+            ]
+        }
+
+        fn lua_field_doc() -> &'static str {
+            gen_field_doc!()
+        }
+    }
+
+    impl LuaObjectDoc for TileTransaction {
+        fn lua_object_doc() -> &'static str {
+            gen_object_doc!(fields)
+        }
+    }
+
+    impl mlua::FromLua for TileTransaction {
+        fn from_lua(value: mlua::Value, _lua: &mlua::Lua) -> mlua::Result<Self> {
+            let Some(v) = value.as_table() else {
+                return Err(mlua::Error::FromLuaConversionError {
+                    from: value.type_name(),
+                    to: core::any::type_name::<Self>().to_string(),
+                    message: None,
+                });
+            };
+
+            Ok(TileTransaction {
+                stack: v.raw_get(fields::STACK).unwrap(),
+                source_coord: v.raw_get(fields::SOURCE_COORD).unwrap(),
+                source_id: v.raw_get(fields::SOURCE_ID).unwrap(),
+                root_coord: v.raw_get(fields::ROOT_COORD).unwrap(),
+                root_id: v.raw_get(fields::ROOT_ID).unwrap(),
+                hidden: false,
+            })
+        }
+    }
 }

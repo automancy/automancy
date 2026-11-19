@@ -24,3 +24,5 @@ nohash
 petgraph
 mlua
 rhai
+luajit
+formatcp

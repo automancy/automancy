@@ -1,10 +1,16 @@
+pub(crate) mod lua;
 pub mod registry;
 pub mod types;
 
-use core::cell::{Cell, RefCell};
+use core::{
+    cell::{Cell, RefCell},
+    fmt,
+};
 use std::{
     ffi::OsStr,
     fmt::Debug,
+    fs,
+    io::prelude::Write,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -13,18 +19,23 @@ use automancy_data::{
     self, id,
     id::{CategoryId, GLOBAL_INTERNER, IdInterner, ItemId, MUTABLE_GLOBAL_INTERNER, ModelId, ScriptId, TileId},
     id_map::{IdMap, ImmutableIdMap},
+    lua::doc::LuaTypeName,
 };
 use hashbrown::HashMap;
 use kira::sound::static_sound::StaticSoundData;
+use mlua::ObjectLike;
 use thiserror::Error;
 use walkdir::{DirEntry, WalkDir};
 
-use crate::resources::{
-    registry::{MutableRegistry, Registry},
-    types::{
-        script::RhaiScriptData,
-        translate::{MutableTranslateDef, TranslateDef},
+use crate::{
+    resources::{
+        registry::{MutableRegistry, Registry},
+        types::{
+            script::{LuaScriptData, RhaiScriptData},
+            translate::{MutableTranslateDef, TranslateDef},
+        },
     },
+    scripting_lua,
 };
 
 pub static RESOURCES_PATH: &str = "resources";
@@ -33,6 +44,11 @@ pub static RESOURCES_AUTOMANCY_PATH: &str = "automancy";
 
 pub(crate) static SCRIPTS_PATH: &str = "scripts";
 pub(crate) static RHAI_EXT: &str = "rhai";
+pub(crate) static LUA_EXT: &str = "lua";
+
+pub(crate) static LUA_TYPE_DEF_FOLDER: &str = "lua";
+pub(crate) static LUA_TYPE_DEF_FILE: &str = "automancy";
+pub(crate) static LUA_TYPE_DEF_EXT: &str = "d.lua";
 
 pub(crate) static FONT_EXTS: [&str; 4] = ["ttf", "otf", "ttc", "otc"];
 pub(crate) static RON_EXTS: [&str; 1] = ["ron"];
@@ -79,6 +95,8 @@ pub enum ResourceError {
     #[error(transparent)]
     RhaiParseError(#[from] rhai::ParseError),
     #[error(transparent)]
+    LuaError(#[from] mlua::Error),
+    #[error(transparent)]
     KiraParseError(#[from] kira::sound::FromFileError),
 }
 
@@ -96,6 +114,9 @@ impl ResourceError {
             },
             err @ ResourceError::RhaiEvalError(..) => {
                 log::error!("Error evaluating rhai: {err}.");
+            },
+            err @ ResourceError::LuaError(..) => {
+                log::error!("Error with lua script: {err}.");
             },
             err @ ResourceError::KiraParseError(..) => {
                 log::error!("Error loading audio file: {err}.");
@@ -130,6 +151,8 @@ pub struct ResourceManager {
 
     pub rhai: rhai::Engine,
     pub rhai_scripts: ImmutableIdMap<ScriptId, RhaiScriptData>,
+    pub lua: mlua::Lua,
+    pub lua_scripts: ImmutableIdMap<ScriptId, LuaScriptData>,
 
     pub translates: TranslateDef,
     pub models: ImmutableIdMap<ModelId, (gltf::Document, Vec<gltf::buffer::Data>)>,
@@ -158,6 +181,8 @@ pub struct MutableResourceManager {
     pub(crate) registry: MutableRegistry,
 
     pub(crate) rhai_scripts: IdMap<ScriptId, RhaiScriptData>,
+    pub(crate) lua_scripts: IdMap<ScriptId, LuaScriptData>,
+    pub(crate) lua_registered_modules: HashMap<String, mlua::Table>,
 
     pub(crate) translates: MutableTranslateDef,
     pub(crate) models: IdMap<ModelId, (gltf::Document, Vec<gltf::buffer::Data>)>,
@@ -173,7 +198,7 @@ impl MutableResourceManager {
         UNIT_TESTS_ENABLED.set(true);
     }
 
-    pub fn setup(rhai: &mut rhai::Engine) {
+    pub fn setup(rhai: &mut rhai::Engine, lua: &mlua::Lua) {
         let mut interner = IdInterner::new();
         let registry = MutableRegistry::new(&mut interner);
         // make sure to immediately set the interner after initialization
@@ -194,10 +219,14 @@ impl MutableResourceManager {
             scripting_rhai::util::register_script_stuff(rhai);
         }
 
+        scripting_lua::setup(lua).unwrap();
+
         MUTABLE_RESOURCE_MAN.set(Some(Self {
             registry,
 
             rhai_scripts: Default::default(),
+            lua_scripts: Default::default(),
+            lua_registered_modules: Default::default(),
 
             translates: Default::default(),
             audio: Default::default(),
@@ -238,13 +267,22 @@ impl MutableResourceManager {
         })
     }
 
-    pub fn compile(rhai: rhai::Engine) -> Arc<ResourceManager> {
+    pub fn compile(rhai: rhai::Engine, lua: mlua::Lua) -> Arc<ResourceManager> {
         {
             rhai.definitions()
                 .with_headers(true)
                 .include_standard_packages(false)
                 .write_to_dir("rhai")
                 .unwrap();
+        }
+
+        {
+            // don't allow loading Ids at runtime
+            lua.unload_module(scripting_lua::id::IdClass::MODULE_NAME).unwrap();
+
+            // don't allow importing at runtime
+            lua.globals().raw_remove("require").unwrap();
+            lua.globals().raw_remove("package").unwrap();
         }
 
         let mut resource_man = MUTABLE_RESOURCE_MAN.take().unwrap();
@@ -278,6 +316,8 @@ impl MutableResourceManager {
 
             rhai,
             rhai_scripts: resource_man.rhai_scripts.into(),
+            lua,
+            lua_scripts: resource_man.lua_scripts.into(),
 
             translates: TranslateDef {
                 none: resource_man.translates.none,
@@ -305,6 +345,41 @@ impl MutableResourceManager {
 
         global::set_resource_man(resource_man.clone());
         *GLOBAL_INTERNER.write().unwrap() = resource_man.interner.clone();
+
+        {
+            use crate::scripting_lua::HEADER;
+
+            let mut type_def = String::from(HEADER);
+            fmt::write(
+                &mut type_def,
+                const_format_args!(
+                    "---@meta _
+
+"
+                ),
+            )
+            .unwrap();
+
+            scripting_lua::resource_man::compile(&resource_man, &mut type_def).unwrap();
+            fs::File::create(
+                Path::new(LUA_TYPE_DEF_FOLDER)
+                    .join(ResourceManager::lua_name())
+                    .with_extension(LUA_TYPE_DEF_EXT),
+            )
+            .unwrap()
+            .write_all(type_def.as_bytes())
+            .unwrap();
+        }
+
+        {
+            for (_, script) in resource_man.lua_scripts.iter() {
+                if let Ok(table) = script.module.raw_get::<mlua::Table>(scripting_lua::script::Script::lua_name())
+                    && table.contains_key(scripting_lua::script::fields::POST_LOAD).unwrap()
+                {
+                    table.call_method::<()>(scripting_lua::script::fields::POST_LOAD, ()).unwrap();
+                }
+            }
+        }
 
         resource_man
     }

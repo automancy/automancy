@@ -8,8 +8,10 @@ use automancy_data::{
     },
     id::{Id, TileId},
     id_map::IdSet,
+    lua::doc::LuaTypeName,
     math::Int,
 };
+use mlua::ObjectLike;
 use ractor::{Actor, ActorProcessingErr, ActorRef};
 use rand::Rng;
 use rhai::{Dynamic, Scope};
@@ -17,8 +19,13 @@ use thiserror::Error;
 
 use crate::{
     actor::message::{GameMsg, TileMsg, TileResult, TileTransaction, TileTransactionResult},
-    resources::{ResourceManager, types::script::RhaiScriptData},
+    resources::{
+        ResourceManager,
+        types::script::{LuaScriptData, RhaiScriptData},
+    },
     script::RenderCommand,
+    scripting_lua,
+    scripting_lua::tile_entity::{TileEntity, fields},
     scripting_rhai,
 };
 
@@ -36,6 +43,8 @@ pub struct TileActor {
 pub struct TileActorState {
     pub data: Box<DataMap>,
     pub rhai: Option<RhaiScriptData>,
+    pub lua: Option<LuaScriptData>,
+    pub message_queue: Vec<(TileCoord, TileMsg)>,
     pub rendering: bool,
     // TODO axe this entire thing and let script side rerender itself, just send rerender message when changing config
     pub field_changes_since_render: IdSet<Id>,
@@ -211,6 +220,51 @@ impl TileActor {
 #[cfg_attr(feature = "profile", profiling::function)]
 #[allow(clippy::too_many_arguments)]
 #[inline]
+pub async fn run_lua_tile_script<Out: mlua::FromLuaMulti>(
+    coord: TileCoord,
+    data: &mut DataMap,
+    field_changes_since_render: &mut IdSet<Id>,
+    script: &LuaScriptData,
+    function_name: &'static str,
+    message_queue: &mut Vec<(TileCoord, TileMsg)>,
+) -> Option<Out> {
+    if let Ok(table) = script.module.raw_get::<mlua::Table>(TileEntity::lua_name()) {
+        let old_keys = data.keys().collect::<IdSet<_>>();
+
+        table.raw_set(fields::DATA, std::mem::take(data)).unwrap();
+        let result = table.call_async_method::<Out>(function_name, ()).await;
+        *data = table.raw_get::<DataMap>(fields::DATA).unwrap();
+
+        {
+            let messages = table.raw_get::<mlua::Table>(fields::MESSAGES).unwrap();
+            while let Ok(message) = messages.raw_pop::<mlua::Table>() {
+                let coord = message.raw_get::<TileCoord>(fields::MSG_COORD).unwrap();
+                let msg = message.raw_get::<mlua::AnyUserData>(fields::MSG_MSG).unwrap();
+                message_queue.push((coord, msg.take().unwrap()));
+            }
+        }
+
+        for key in data.keys() {
+            if !old_keys.contains(&key) {
+                field_changes_since_render.insert(key);
+            }
+        }
+
+        match result {
+            Ok(result) => Some(result),
+            Err(err) => {
+                scripting_lua::lua_log_err(function_name, script.metadata.str_id, &err, Some(coord));
+                None
+            },
+        }
+    } else {
+        None
+    }
+}
+
+#[cfg_attr(feature = "profile", profiling::function)]
+#[allow(clippy::too_many_arguments)]
+#[inline]
 pub fn run_rhai_tile_script<Out: 'static, const SIZE: usize>(
     resource_man: &ResourceManager,
     id: TileId,
@@ -364,6 +418,26 @@ impl Actor for TileActor {
 
         let mut state = TileActorState::default();
 
+        if let Some(script) = self.resource_man.lua_scripts.get(&tile_def.script) {
+            let script = script.deep_clone(&self.resource_man.lua)?;
+            {
+                let tile_entity = script.module.raw_get::<mlua::Table>(TileEntity::lua_name())?;
+                tile_entity.raw_set(fields::ID, self.id)?;
+                tile_entity.raw_set(fields::COORD, self.coord)?;
+                tile_entity.raw_set(fields::MESSAGES, self.resource_man.lua.create_table()?)?;
+
+                if tile_entity.contains_key(fields::LOAD)? {
+                    let result = tile_entity.call_async_method::<()>(fields::LOAD, ()).await;
+
+                    if let Err(err) = result {
+                        scripting_lua::lua_log_err(fields::LOAD, script.metadata.str_id, &err, Some(self.coord));
+                    }
+                }
+            }
+
+            state.lua = Some(script);
+        }
+
         if let Some(script) = self.resource_man.rhai_scripts.get(&tile_def.script) {
             state.rhai = Some(script.clone());
         }
@@ -408,6 +482,23 @@ impl Actor for TileActor {
                     )
                 {
                     self.handle_rhai_result(state, result);
+                }
+
+                if let Some(script) = &state.lua {
+                    run_lua_tile_script::<()>(
+                        self.coord,
+                        &mut state.data,
+                        &mut state.field_changes_since_render,
+                        script,
+                        fields::HANDLE_TICK,
+                        &mut state.message_queue,
+                    )
+                    .await;
+
+                    for (coord, msg) in &mut state.message_queue {
+                        self.send_to_tile(&mut state.data, &mut state.field_changes_since_render, *coord, std::mem::take(msg));
+                    }
+                    state.message_queue.clear();
                 }
 
                 if state.rendering {

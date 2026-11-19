@@ -31,6 +31,7 @@ nohash-hasher = { workspace = true }
 string-interner = { workspace = true }
 
 # scripting / game logic / async runtime
+mlua = { workspace = true }
 tokio = { workspace = true }
 
 # utils
