@@ -38,7 +38,7 @@ fn item_ids_of_tag(resource_man: &ResourceManager, id: Id) -> IdSet<ItemId> {
 
 #[export_module]
 mod utils {
-    use automancy_data::game::generic::{DataMap, Datum};
+    use automancy_data::game::generic::DataMap;
     use rhai::Array;
 
     use crate::resources;
