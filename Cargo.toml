@@ -100,7 +100,7 @@ fuzzy-matcher = { version = "0.3.7", features = ["compact"] }
 include_dir = "0.7.4"
 interpolator = { version = "0.5.0", features = ["number"] }
 paste = "1.0"
-rand = "0.10.3"
+rand = "0.10.4"
 sanitize-filename = "0.6.0"
 strum = { version = "0.28.0", features = ["derive"] }
 thiserror = "2.0.21"
