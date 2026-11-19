@@ -9,6 +9,7 @@ use automancy_data::{
     },
     id::{Id, ItemId, ModelId, RecipeId, RenderId, TagId, TileId},
     id_map::{IdCoordMap, IdMap, IdSet},
+    math::Int,
     rendering::colors::Rgba,
 };
 use rhai::{Dynamic, Engine};
@@ -86,7 +87,7 @@ fn data_from_dynamic(v: Dynamic) -> Option<Datum> {
         Datum::TileCoord => TileCoord,
         Datum::TileCoordBounds => TileCoordBounds,
 
-        Datum::Int => ItemAmount,
+        Datum::Int => Int,
         Datum::Bool => bool,
         Datum::Color => Rgba,
         Datum::Items => Inventory,
@@ -129,36 +130,42 @@ pub(crate) fn register_data_stuff(engine: &mut Engine) {
         .register_fn("IdSet", IdSet::<Id>::new)
         .register_type_with_name::<TileId>("TileId")
         .register_fn("TileId", |v: Id| TileId(v))
+        .register_fn("TileId", |_: ()| TileId::none())
         .register_fn("==", |a: TileId, b: TileId| a == b)
         .register_fn("!=", |a: TileId, b: TileId| a != b)
         .register_type_with_name::<IdSet<TileId>>("TileIdSet")
         .register_fn("TileIdSet", IdSet::<TileId>::new)
         .register_type_with_name::<ItemId>("ItemId")
         .register_fn("ItemId", |v: Id| ItemId(v))
+        .register_fn("ItemId", |_: ()| ItemId::none())
         .register_fn("==", |a: ItemId, b: ItemId| a == b)
         .register_fn("!=", |a: ItemId, b: ItemId| a != b)
         .register_type_with_name::<IdSet<ItemId>>("ItemIdSet")
         .register_fn("ItemIdSet", IdSet::<ItemId>::new)
         .register_type_with_name::<ModelId>("ModelId")
         .register_fn("ModelId", |v: Id| ModelId(v))
+        .register_fn("ModelId", |_: ()| ModelId::none())
         .register_fn("==", |a: ModelId, b: ModelId| a == b)
         .register_fn("!=", |a: ModelId, b: ModelId| a != b)
         .register_type_with_name::<IdSet<ModelId>>("ModelIdSet")
         .register_fn("ModelIdSet", IdSet::<ModelId>::new)
         .register_type_with_name::<RecipeId>("RecipeId")
         .register_fn("RecipeId", |v: Id| RecipeId(v))
+        .register_fn("RecipeId", |_: ()| RecipeId::none())
         .register_fn("==", |a: RecipeId, b: RecipeId| a == b)
         .register_fn("!=", |a: RecipeId, b: RecipeId| a != b)
         .register_type_with_name::<IdSet<RecipeId>>("RecipeIdSet")
         .register_fn("RecipeIdSet", IdSet::<RecipeId>::new)
         .register_type_with_name::<TagId>("TagId")
         .register_fn("TagId", |v: Id| TagId(v))
+        .register_fn("TagId", |_: ()| TagId::none())
         .register_fn("==", |a: TagId, b: TagId| a == b)
         .register_fn("!=", |a: TagId, b: TagId| a != b)
         .register_type_with_name::<IdSet<TagId>>("TagIdSet")
         .register_fn("TagIdSet", IdSet::<TagId>::new)
         .register_type_with_name::<RenderId>("RenderId")
         .register_fn("RenderId", |v: Id| RenderId(v))
+        .register_fn("RenderId", |_: ()| RenderId::none())
         .register_fn("==", |a: RenderId, b: RenderId| a == b)
         .register_fn("!=", |a: RenderId, b: RenderId| a != b)
         .register_type_with_name::<IdSet<RenderId>>("RenderIdSet")
