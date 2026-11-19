@@ -79,7 +79,6 @@ mod prelude {
     pub use chrono::{DateTime, Local};
     pub use easing_function::{Easing, EasingFunction, easings};
     pub use fuzzy_matcher::FuzzyMatcher;
-    pub use glam::{FloatExt, Vec2Swizzles};
     pub use hashbrown::HashMap;
     pub use interpolator::Formattable;
     pub use ractor::ActorRef;
