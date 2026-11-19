@@ -423,7 +423,7 @@ impl Widget for ScrollableWidget {
                 modifiers,
             } => {
                 if modifiers.shift() {
-                    delta = delta.yx();
+                    delta = Vec2::new(delta.y, delta.x);
                 }
 
                 if modifiers.ctrl() {
@@ -437,7 +437,7 @@ impl Widget for ScrollableWidget {
                         }
                     },
                     ScrollDirection::X => {
-                        delta = delta.yx();
+                        delta = Vec2::new(delta.y, delta.x);
 
                         if delta.x.abs() < 0.01 {
                             return EventResponse::Bubble;
