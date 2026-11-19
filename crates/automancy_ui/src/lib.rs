@@ -1,4 +1,3 @@
-#![feature(string_into_chars)]
 #![feature(const_trait_impl)]
 
 #[allow(unused)]
